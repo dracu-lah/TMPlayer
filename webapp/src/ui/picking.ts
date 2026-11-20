@@ -125,6 +125,25 @@ export const adding = (ticked: ReadonlySet<number>, visible: readonly number[]) 
 /** Whether ticking that many at once is worth a word first. */
 export const needsConfirm = (count: number) => count > CONFIRM_OVER
 
+/** Saved Messages' id, or null while the list has not brought it (core's ChatPicking.savedId). */
+export const savedId = (chats: readonly PickChat[]): number | null => chats.find((c) => c.self)?.id ?? null
+
+/** The ticks a visitor who never answered starts with (HX86): Saved Messages alone. */
+export const freshTicks = (chats: readonly PickChat[]): Set<number> => {
+    const id = savedId(chats)
+    return id === null ? new Set() : new Set([id])
+}
+
+/**
+ * The ticks that come back when "All chats" is switched off: the kept ones minus a chat since left
+ * (dropped quietly, only once the list is whole), and never an empty set: with nothing left, Saved Messages.
+ */
+export function afterAllOff(kept: ReadonlySet<number>, chats: readonly PickChat[], listComplete: boolean): Set<number> {
+    const here = new Set(chats.map((c) => c.id))
+    const back = new Set([...kept].filter((id) => !listComplete || here.has(id)))
+    return back.size ? back : freshTicks(chats)
+}
+
 /** Whether the ticks differ from the choice the picker opened with. */
 export function changed(start: ReadonlySet<number>, now: ReadonlySet<number>): boolean {
     if (start.size !== now.size) return true

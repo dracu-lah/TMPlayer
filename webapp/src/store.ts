@@ -713,7 +713,7 @@ export function addedView(): number[] | null {
 }
 
 /** The whole choice, as the picker's Done writes it: the ids with the names they had. */
-export function setAddedChats(chats: readonly { chatId: number; title: string }[]) {
+export function setAddedChats(chats: readonly { chatId: number; title: string }[], all = false) {
     const now = Date.now()
     const next = new Set<number>()
     for (const c of chats) {
@@ -722,7 +722,8 @@ export function setAddedChats(chats: readonly { chatId: number; title: string }[
     }
     for (const id of addedIds() ?? []) if (!next.has(id)) remove(`added:${id}`)
     setAddedIdsSignal(next)
-    setAddedMode('picked')
+    // "All chats" (HX86) is the mode 'all' with the ticks kept beside it, so switching it off brings them back.
+    setAddedMode(all ? 'all' : 'picked')
 }
 
 function setAddedMode(mode: AddedMode) {
