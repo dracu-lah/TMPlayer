@@ -190,6 +190,11 @@ Phase B, per platform:
 
 ## Phase B1: the shared screens and Android
 
+Still to tag the same way (they resolve the open profile when they write, phase A's list): the
+sync file (`ResumeSync`, `SyncScheduler`), SubMaker's translation polls, history edits from the
+players. Each runs for the open profile and is cancelled or dropped by `Accounts.profileScope` and
+the scoped stores on a switch, but a write in flight is not yet tied to its owner.
+
 Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
 
 - `WhoIsWatching` draws the row; `ProfileFlow` (one per process, held by the platform) is every
@@ -239,8 +244,10 @@ Two choke points, one rule each:
   ones neutral or real, the profile's results taken down). Each post says its kind: `Ongoing`,
   `Result` or `Device` (the device's, never changed). Each is tagged with the profile it was
   posted for: a switch takes down every profile notification of the profile left, a sign out
-  all of its own, and a cold start with the open profile hidden takes down the profile notifications an
-  earlier process left (each carries `ProfileNotifications.PROFILE_EXTRA`; the device's stay). The neutral copy keeps the tap, auto cancel and the swipe's delete intent.
+  all of its own, and a cold start with the open profile hidden takes down every notification an earlier
+  process left but the device's (marked `DEVICE_EXTRA`, or on the updates, low storage or news
+  channel); an unmarked one is taken for a profile's. The first run after the upgrade clears the
+  shade once (a versioned flag), since older versions marked nothing. The neutral copy keeps the tap, auto cancel and the swipe's delete intent.
 - `ProfileNotificationsPolicyTest` scans every source set under app/src but the tests (main,
   cast, nocast, vlc, novlc, dev, debug, preview, promo, fdroid) for posts, media sessions and
   their metadata, cast items, widgets and shortcuts; each hit routes through the wrapper or
@@ -258,7 +265,7 @@ Two choke points, one rule each:
 | Playback stopped notice (`PlaybackService`) | `Result` |
 | Cast to a TV (`DlnaCastService`, both builds): notification and media session | `Ongoing`, and `ProfileMedia`: the app's name only while hidden |
 | Google Cast (regular build, app/src/cast `CastBuild`): the framework's own notification, lock screen and Bluetooth controls, and the TV's screen | with a PIN profile open the item is loaded with the app's name only (`OutsideWrites.castTitles`), from the load on: the framework cannot change a loaded item's titles, so a PIN profile's casts stay neutral even while unlocked (accepted, 2026-11-20; the profile's options say so: "a cast started from it shows only TMPlayer's name"); other profiles' casts name the video |
-| Long jobs of a profile (Save to folder, moving downloads, an external player's stream, a cast to a TV, transfers, downloads) | each takes its owner (`Accounts.stamp`) when it starts and posts for it; a post whose owner is no longer the open profile is dropped (a foreground one goes up neutral); the first switch, sign out or remove stops the job and takes its foreground notification down (`ProfileJobs.stopOnSwitch`) |
+| Long jobs of a profile (Save to folder, moving downloads, an external player's stream, a cast to a TV, Google Cast, transfers, downloads) | each takes its owner (`Accounts.stamp`) when it starts and runs as that owner (`AccountOwner`), so every store write is the owner's; before a switch, a sign out (Settings' too) or Remove all accounts the `BeforeSwitch` hooks stop Save to folder and the move of downloads between two files and wait for them (`ProfileJobs.beforeSwitch`, 60 s at most); TDLib calls and removals are skipped once the owner is not open (`ProfileJobs.mayWrite`); a moved file's record is written at once, never cut off by the cancel; a post whose owner is no longer open is dropped (a foreground one goes up neutral and is kept neutral, so no flip brings its titles back); the first switch also stops their services and ends a cast (`ProfileJobs.stopOnSwitch`, at once for a service started after the switch) |
 | The dev build's name dump (app/src/dev `NameDumpService`) | a fixed title, nothing of a profile |
 | External player stream (`ExternalStreams`) | `Ongoing` |
 | Updates, update installed, low storage, the sponsor card | `Device`: unchanged, nothing of a profile in them |
