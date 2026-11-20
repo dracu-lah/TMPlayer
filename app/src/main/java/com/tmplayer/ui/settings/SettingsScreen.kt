@@ -515,7 +515,12 @@ fun SettingsScreen(
             // sign in when it was the last. On the app's scope: the switch rebuilds this screen.
             val flow = com.tmplayer.ui.profiles.AndroidProfiles.flow(context)
             if (flow != null) {
-                flow.signOutOpen(deleteDownloads) { onLoggedOut() }
+                // Signed out: the shell moves on. Not (cancelled while it waited, refused): the page
+                // stays as it was, its "Signing out" line cleared.
+                flow.signOutOpen(deleteDownloads) { result ->
+                    busy = null
+                    if (result is com.tmplayer.data.SignOutResult.SignedOut) onLoggedOut()
+                }
             } else {
                 forgetAccount(context, settings, watchedStore, deleteDownloads)
                 Td.logOut()

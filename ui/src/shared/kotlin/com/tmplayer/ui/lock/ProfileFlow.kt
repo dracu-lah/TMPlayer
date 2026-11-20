@@ -619,8 +619,14 @@ class ProfileFlow(
     private fun confirmSignOutWith(id: String, deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         val name = nameOf(id)
         work(L.profilesSwitching(name = name)) {
-            // Settings' sign out too: the profile's long jobs stop and are waited for first.
-            stopFirst()
+            try {
+                // Settings' sign out too: the profile's long jobs stop and are waited for first.
+                stopFirst()
+            } catch (e: CancellationException) {
+                // Cancelled while it waited: nothing was signed out, and Settings is told so.
+                done(SignOutResult.Unknown)
+                throw e
+            }
             ProfileUnlock.lock()
             val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             if (result is SignOutResult.SignedOut) {

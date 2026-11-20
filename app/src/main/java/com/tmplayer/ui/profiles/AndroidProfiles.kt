@@ -64,6 +64,9 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
         // The downloads pause alongside the other work, under the same deadline.
         pausedForSwitch = OfflineDownloads.active.value.values.filter { it.busy }.map { it.fileId }
         pausedFor = com.tmplayer.data.Accounts.stamp
+        // Kept on the device too: they go on again when this profile is open next, even after the
+        // process died while the switch waited.
+        PausedForSwitch.record(app, com.tmplayer.data.Accounts.stamp.folder, pausedForSwitch)
         if (downloading()) withContext(Dispatchers.Main) { runCatching { OfflineDownloads.pauseAll(app) } }
         val pausing = downloading()
         BeforeSwitch.runAll(onWaiting = { what -> onWaiting(if (pausing && downloading()) what + com.tmplayer.i18n.L.profilesWaitingDownloads else what) })
@@ -79,6 +82,18 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
         pausedFor = null
         // Only into the profile they belong to, while it is still the open one.
         if (ids.isEmpty() || owner != com.tmplayer.data.Accounts.stamp) return
+        PausedForSwitch.take(app, owner.folder)
+        resume(ids)
+    }
+
+    /** The profile now open had downloads a switch paused (a switch away, or a process that died then): they go on. */
+    suspend fun resumeLeftPaused() {
+        val ids = PausedForSwitch.take(app, com.tmplayer.data.Accounts.stamp.folder)
+        if (ids.isNotEmpty()) resume(ids.filter { it in OfflineDownloads.active.value.keys })
+    }
+
+    private suspend fun resume(ids: List<Int>) {
+        if (ids.isEmpty()) return
         val runner = com.tmplayer.data.AndroidDownloadRunner(app)
         withContext(Dispatchers.Main) { for (id in ids) runCatching { OfflineDownloads.resume(runner, id) } }
     }

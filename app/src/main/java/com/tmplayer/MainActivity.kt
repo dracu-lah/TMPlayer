@@ -929,7 +929,11 @@ private fun Root() {
     // as paused rows. Waits for TDLib, because restoring asks it how much of each file is actually
     // on disk, and a queue restored against a closed database would claim every video was at zero.
     LaunchedEffect(auth) {
-        if (auth is AuthState.Ready) OfflineDownloads.restore(context)
+        if (auth is AuthState.Ready) {
+            OfflineDownloads.restore(context)
+            // What a switch away from this profile paused goes on now it is open again (HX88).
+            runCatching { com.tmplayer.ui.profiles.AndroidProfilePlatform(context.applicationContext).resumeLeftPaused() }
+        }
     }
 
     // Downloads from before they had a folder, moved into it once, after sign in: it asks TDLib

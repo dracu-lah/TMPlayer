@@ -411,6 +411,25 @@ class ProfilesGateTest {
         rule.onNodeWithText(L.profilesSwitchPlayBody).assertDoesNotExist()
     }
 
+    @Test
+    fun `a Settings sign out cancelled while it waits tells Settings, so its line clears`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.platform.hold = kotlinx.coroutines.CompletableDeferred()
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        var told: com.tmplayer.data.SignOutResult? = null
+        flow.signOutOpen(deleteDownloads = false) { told = it }
+        rule.waitUntil(5_000) { flow.waitCancellable }
+        flow.cancelWaiting()
+        rule.waitUntil(5_000) { told != null }
+        k.platform.hold?.complete(Unit)
+        assertEquals(com.tmplayer.data.SignOutResult.Unknown, told)
+        assertEquals("nobody was signed out", 2, k.book.list.value.profiles.size)
+        assertTrue(k.platform.wiped.isEmpty())
+    }
+
     private companion object {
         const val HOME = "The shell of the open profile"
     }
