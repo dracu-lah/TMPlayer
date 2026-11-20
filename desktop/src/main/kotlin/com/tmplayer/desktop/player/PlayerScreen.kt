@@ -430,6 +430,9 @@ fun PlayerScreen(
     var showOnline by remember { mutableStateOf(onlineOpen) }
     // Which search the online panel runs: OpenSubtitles and SubDL, or MSone.
     var onlineMsone by remember { mutableStateOf(false) }
+    var onlineSubMaker by remember { mutableStateOf(false) }
+    // The video SubMaker translations were started for, so they end with it (leaving the player or another video).
+    var translatingVideo by remember { mutableStateOf<String?>(null) }
     var showShortcuts by remember { mutableStateOf(shortcutsOpen) }
     var showEpisodes by remember { mutableStateOf(episodesOpen) }
     var flash by remember { mutableStateOf<Flash?>(null) }
@@ -479,6 +482,12 @@ fun PlayerScreen(
     var keysOnPlayer by remember { mutableStateOf(true) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val item = current.item
+    DisposableEffect(item.fileId) {
+        onDispose {
+            translatingVideo?.let { video -> OnlineSubtitles.current?.let { it.translations.cancelVideo(it.translationPrefix(video)) } }
+            translatingVideo = null
+        }
+    }
     val seriesKey = remember(item) { seriesKeyOf(item) }
     // Where a speed picked for this video is remembered, and read back from. See [SpeedMemory].
     val speedScopes = remember(item, seriesKey) { SpeedMemory.scopesOf(item, seriesKey) }
@@ -2116,10 +2125,17 @@ fun PlayerScreen(
                         }
                         MenuAction.SearchOnline -> {
                             onlineMsone = false
+                            onlineSubMaker = false
                             showOnline = true
                         }
                         MenuAction.SearchMsone -> {
                             onlineMsone = true
+                            onlineSubMaker = false
+                            showOnline = true
+                        }
+                        MenuAction.SearchSubMaker -> {
+                            onlineMsone = false
+                            onlineSubMaker = true
                             showOnline = true
                         }
                         is MenuAction.ChatSubtitle -> scope.launch {
@@ -2259,7 +2275,23 @@ fun PlayerScreen(
                             languages = OnlineSubtitles.languagesFor(null),
                             imdb = ids.imdb,
                             tmdb = ids.tmdb,
+                            durationMs = engine.state.value.durationMs.takeIf { it > 0 },
                         )
+                    },
+                    onTranslate = { hit, wanted ->
+                        val online = OnlineSubtitles.current
+                        translatingVideo = wanted.videoKey
+                        val started = online?.translate(wanted.videoKey, hit, wanted.durationMs) { file, final ->
+                            scope.launch {
+                                // The same file reloads the one track in place; the finished file is another name.
+                                if (engine.replaceSubtitle(file.absolutePath) && final) {
+                                    OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(item), hit, file)
+                                    showFlash(Flash.Kind.Text, L.submakerDone(hit.translateTo))
+                                }
+                            }
+                        } == true
+                        if (started) showFlash(Flash.Kind.Text, L.submakerStarted(hit.translateTo))
+                        started
                     },
                     onLoaded = { file, label ->
                         if (engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(label))
@@ -2281,6 +2313,7 @@ fun PlayerScreen(
                         }
                     },
                     msone = onlineMsone,
+                    submaker = onlineSubMaker,
                     preset = onlinePreset,
                 )
             }

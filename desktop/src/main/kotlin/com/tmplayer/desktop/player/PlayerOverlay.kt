@@ -223,6 +223,9 @@ internal sealed interface MenuAction {
     /** MSone's search, on a device where it was switched on by hand while MSone is being set up. */
     data object SearchMsone : MenuAction
 
+    /** The viewer's own SubMaker: ready subtitles and AI translations. */
+    data object SearchSubMaker : MenuAction
+
     /** A subtitle file from the disk, through the system's file dialog; dropping one does the same. */
     data object LoadSubtitleFile : MenuAction
 
@@ -1189,6 +1192,7 @@ internal fun PlayerMenu(
                 if (LocalChatSubtitles.current.isNotEmpty()) Entry(s.tracksInChat, detail = s.tracksInChatDetail, icon = TmIcons.Folder) { page(MenuPage.ChatSubtitles) }
                 if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
                 if (com.tmplayer.online.OnlineSubtitles.current?.msoneShown == true) Entry(s.msoneSearch) { pick(MenuAction.SearchMsone) }
+                if (com.tmplayer.online.OnlineSubtitles.current?.submakerOn == true) Entry(s.submakerSearch) { pick(MenuAction.SearchSubMaker) }
                 Entry(s.playerLoadSubtitleFile) { pick(MenuAction.LoadSubtitleFile) }
                 HorizontalDivider()
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }

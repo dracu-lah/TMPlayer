@@ -106,6 +106,13 @@ interface PlaybackEngine {
     fun addSubtitle(path: String): Boolean
 
     /**
+     * A subtitle file that grows (SubMaker's translation): the same [path] again reloads the track
+     * loaded from it in place, with no new entry in the list and no gap in the picture; another
+     * path loads like [addSubtitle].
+     */
+    fun replaceSubtitle(path: String): Boolean = addSubtitle(path)
+
+    /**
      * Writes the frame on screen to [file], a PNG at the size it is drawn, with the subtitles as
      * drawn when [withSubtitles] or the bare picture otherwise. True once the file is there.
      */

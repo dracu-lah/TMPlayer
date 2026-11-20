@@ -55,6 +55,7 @@ internal fun OnlineSubtitlesGroup() {
     val toast = rememberToast()
     var signingIn by remember { mutableStateOf(false) }
     var editingKey by remember { mutableStateOf(false) }
+    var editingSubMaker by remember { mutableStateOf(false) }
     var clearingCache by remember { mutableStateOf(false) }
     var signingOut by remember { mutableStateOf(false) }
     var bytes by remember { mutableLongStateOf(0L) }
@@ -90,6 +91,11 @@ internal fun OnlineSubtitlesGroup() {
         TmIcons.Lock,
     ) { editingKey = true }
     MsoneSetting()
+    Action(
+        s.submakerSettingsTitle,
+        if (account.submakerBase.isBlank()) s.submakerSettingsNone else s.submakerSettingsSet,
+        TmIcons.Lock,
+    ) { editingSubMaker = true }
     Action(
         s.onlineClearCache,
         if (bytes > 0) s.onlineCacheDetail(Translator.messages.formatter.size(bytes)) else s.onlineCacheEmpty,
@@ -130,6 +136,7 @@ internal fun OnlineSubtitlesGroup() {
     }
     if (signingIn) SignInDialog(onClose = { signingIn = false })
     if (editingKey) SubdlKeyDialog(onClose = { editingKey = false })
+    if (editingSubMaker) SubMakerDialog(onClose = { editingSubMaker = false })
 }
 
 /**
@@ -264,6 +271,62 @@ private fun SubdlKeyDialog(onClose: () -> Unit) {
         confirmButton = {
             TextButton(onClick = { save() }) { Text(s.commonOk) }
         },
+        dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
+    )
+    FocusWhenShown(field)
+}
+
+/**
+ * The viewer's own SubMaker address, pasted in. It holds a private token, so the field starts empty
+ * and masked, and the saved one is never shown; an empty field removes it.
+ */
+@Composable
+internal fun SubMakerDialog(onClose: () -> Unit) {
+    val s = LocalStrings.current
+    val online = OnlineSubtitles.current ?: return
+    val toast = rememberToast()
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val field = remember { FocusRequester() }
+    fun save() {
+        if (text.isBlank() && !online.submakerOn) return onClose()
+        when (online.setSubMakerUrl(text)) {
+            OnlineSubtitles.SubMakerSet.Invalid -> error = s.submakerSettingsInvalid
+            OnlineSubtitles.SubMakerSet.Cleared -> {
+                toast(s.submakerSettingsRemoved)
+                onClose()
+            }
+            OnlineSubtitles.SubMakerSet.Saved -> {
+                toast(s.submakerSettingsSaved)
+                onClose()
+                scope.launch {
+                    val problem = online.checkSubMaker()
+                    toast(if (problem == null) s.submakerSettingsOk else OnlineWords.notice(problem))
+                }
+            }
+        }
+    }
+    TmAlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(s.submakerSettingsTitle) },
+        text = {
+            Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(s.submakerSettingsMessage)
+                OutlinedTextField(
+                    text,
+                    { text = it; error = null },
+                    label = { Text(s.submakerSettingsTitle) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
+                error?.let { Text(it, color = Tone.danger, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = { TextButton(onClick = { save() }) { Text(s.commonOk) } },
         dismissButton = { TextButton(onClick = onClose) { Text(s.commonCancel) } },
     )
     FocusWhenShown(field)

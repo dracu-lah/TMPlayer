@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,11 +72,18 @@ internal fun BoxScope.OnlineSubtitlesPanel(
     onPicked: (com.tmplayer.online.SubtitleHit, File) -> Unit = { _, _ -> },
     onPickFile: () -> Unit = {},
     msone: Boolean = false,
+    /** Search the viewer's own SubMaker: ready subtitles, and "Make <Language>" entries that run as [onTranslate] jobs. */
+    submaker: Boolean = false,
+    /** Starts the translation of a "Make <Language>" hit in the background; false when one runs for it already. */
+    onTranslate: (SubtitleHit, SubtitleTarget) -> Boolean = { _, _ -> false },
     /** For the render test: a result to show without searching. */
     preset: SearchResult? = null,
 ) {
     val s = LocalStrings.current
     val online = OnlineSubtitles.current ?: return
+    val jobs by online.translations.states.collectAsState()
+    // The language whose first translation is waiting for the viewer's yes (it spends their own AI quota).
+    var asking by remember { mutableStateOf<SubtitleHit?>(null) }
     val scope = rememberCoroutineScope()
     var result by remember { mutableStateOf(preset) }
     var notice by remember { mutableStateOf<SubtitleNotice?>(null) }
@@ -96,6 +104,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
         result = when {
             t == null -> SearchResult(emptyList())
             msone -> online.searchMsone(t)
+            submaker -> online.searchSubMaker(t)
             else -> online.search(t)
         }
     }
@@ -107,7 +116,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (msone) s.msoneTitle else s.onlineResultsTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(if (msone) s.msoneTitle else if (submaker) s.submakerTitle else s.onlineResultsTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 OverlayButton(TmIcons.Close, s.commonClose, onClose, size = 32)
             }
             Spacer(Modifier.height(8.dp))
@@ -116,7 +125,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text(if (msone) s.msoneSearching else s.onlineSearching, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                    Text(if (msone) s.msoneSearching else if (submaker) s.submakerSearching else s.onlineSearching, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
                 }
                 // A search that runs long says so, with Try again, rather than spinning in silence.
                 var slow by remember(attempt) { mutableStateOf(false) }
@@ -148,20 +157,59 @@ internal fun BoxScope.OnlineSubtitlesPanel(
             Row {
                 if (reason is SubtitleNotice.MsoneOff) {
                     TextButton(onClick = { force = true; attempt++ }) { Text(s.msoneCheckAgain) }
-                } else if (reason == SubtitleNotice.Offline || reason == SubtitleNotice.Busy || reason == SubtitleNotice.MsoneBusy) {
+                } else if (reason == SubtitleNotice.Offline || reason == SubtitleNotice.Busy || reason == SubtitleNotice.MsoneBusy || reason == SubtitleNotice.SubMakerBusy) {
                     TextButton(onClick = { attempt++ }) { Text(s.commonTryAgain) }
                 }
                 // MSone that cannot search, or found nothing: a subtitle file of the viewer's own.
                 if (msone && shown.hits.isEmpty()) TextButton(onClick = onPickFile) { Text(s.msonePickFile) }
             }
+            fun begin(hit: SubtitleHit) {
+                val t = wanted ?: return
+                online.translations.clear(online.translationKey(t.videoKey, hit))
+                onTranslate(hit, t)
+            }
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                asking?.let { question ->
+                    // The first translation into a language says it spends the viewer's own AI quota.
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0x33FFFFFF)).padding(10.dp)) {
+                        Text(s.submakerAskTitle(question.translateTo), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(s.submakerAskMessage, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        Row {
+                            TextButton(onClick = {
+                                online.markSubMakerAsked(question.translateTo)
+                                asking = null
+                                begin(question)
+                            }) { Text(s.submakerAskConfirm) }
+                            TextButton(onClick = { asking = null }) { Text(s.commonCancel) }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 shown.hits.forEach { hit ->
+                    val jobKey = wanted?.let { online.translationKey(it.videoKey, hit) }
+                    val job = if (hit.translateTo.isNotEmpty() && jobKey != null) jobs[jobKey] else null
+                    if (job != null) {
+                        // The progress line, with the control that ends a running job or tries a stopped one again.
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+                            Text(OnlineWords.translation(hit.translateTo, job), color = Color.White, fontSize = 14.sp, maxLines = 2)
+                            when {
+                                job.active -> TextButton(onClick = { online.translations.cancel(jobKey!!) }) { Text(s.submakerCancel) }
+                                job is com.tmplayer.online.TranslationState.Failed -> TextButton(onClick = { begin(hit) }) { Text(s.commonTryAgain) }
+                                else -> TextButton(onClick = { online.translations.clear(jobKey!!) }) { Text(s.commonOk) }
+                            }
+                        }
+                        return@forEach
+                    }
                     val enabled = online.blockedFor(hit) == null && busy == null
                     val hitInteractions = remember { MutableInteractionSource() }
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                             .overlayFocusRing(hitInteractions, RoundedCornerShape(8.dp))
                             .clickable(interactionSource = hitInteractions, indication = LocalIndication.current, enabled = enabled, role = Role.Button) {
+                                if (hit.translateTo.isNotEmpty()) {
+                                    if (online.submakerAsked(hit.translateTo)) begin(hit) else asking = hit
+                                    return@clickable
+                                }
                                 busy = hit
                                 scope.launch {
                                     when (val done = online.download(hit, wanted)) {
@@ -179,7 +227,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
                     ) {
                         val alpha = if (online.blockedFor(hit) == null) 1f else 0.4f
                         Text(
-                            hit.release.ifBlank { hit.fileName },
+                            OnlineWords.hitTitle(hit),
                             color = Color.White.copy(alpha = alpha),
                             fontSize = 14.sp,
                             maxLines = 1,
