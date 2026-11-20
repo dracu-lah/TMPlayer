@@ -18,6 +18,8 @@ import dev.g000sha256.tdl.dto.MessageText
 import dev.g000sha256.tdl.dto.SearchMessagesFilterDocument
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -142,11 +144,16 @@ object ResumeSync {
             foreground = { foreground },
             lowEnd = lowEnd,
             lastRunAt = { lastAutoAt },
-            job = { why -> sync(settings, manual = why == SyncScheduler.Why.Manual) != Outcome.Off },
-            onRan = { at ->
-                lastAutoAt = at
-                Background.scope.launch { runCatching { settings.setResumeSyncWroteAt(at) } }
+            // As the profile open when the run starts (HX88): its stamp of when it last wrote goes to
+            // that profile's store, or nowhere once another profile is open.
+            job = { why ->
+                withContext(AccountOwner(Accounts.stamp)) {
+                    val ran = sync(settings, manual = why == SyncScheduler.Why.Manual) != Outcome.Off
+                    if (ran) runCatching { settings.setResumeSyncWroteAt(System.currentTimeMillis()) }
+                    ran
+                }
             },
+            onRan = { at -> lastAutoAt = at },
         ).also {
             scheduler = it
             // Where the last run stood before this process: a restart does not start the pause over.
@@ -178,17 +185,48 @@ object ResumeSync {
         push: Boolean = true,
         manual: Boolean = false,
         replace: Boolean = false,
-    ): Outcome = lock.withLock {
-        withContext(Dispatchers.IO) {
-            _running.value = true
-            try {
-                val outcome = run(settings, push, manual, replace)
-                if (outcome != Outcome.Off) runCatching { settings.setResumeSyncStatus(statusOf(outcome)) }
-                outcome
-            } finally {
-                _running.value = false
+    ): Outcome {
+        // The profile this run is for (HX88): taken when it is asked, before it waits for the lock.
+        // Every store write of the run is that profile's, and dropped once another is open, so a
+        // switch part way never puts one account's lists into another's stores or file.
+        val owner = currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+        return lock.withLock {
+            if (owner != Accounts.stamp) return@withLock Outcome.Off
+            withContext(Dispatchers.IO + AccountOwner(owner)) {
+                _running.value = true
+                current = currentCoroutineContext()[Job]
+                try {
+                    val outcome = run(settings, push, manual, replace)
+                    if (outcome != Outcome.Off) runCatching { settings.setResumeSyncStatus(statusOf(outcome)) }
+                    outcome
+                } finally {
+                    current = null
+                    _running.value = false
+                }
             }
         }
+    }
+
+    /** The run under way, for a switch to stop and wait for. */
+    @Volatile private var current: Job? = null
+
+    /**
+     * Before a switch (HX88): the run under way is cancelled where it can be and waited for, up to
+     * [SWITCH_WAIT_MS]; past that the switch goes on, and the run's later writes are dropped (they
+     * carry their owner), so a late finish is harmless.
+     */
+    private val stopBeforeSwitch: suspend () -> Unit = {
+        current?.let { job ->
+            job.cancel()
+            withTimeoutOrNull(SWITCH_WAIT_MS) { job.join() }
+        }
+    }
+
+    /** How long a switch waits for a sync to stop. */
+    const val SWITCH_WAIT_MS = 20_000L
+
+    init {
+        BeforeSwitch.add(stopBeforeSwitch)
     }
 
     /**
@@ -199,8 +237,9 @@ object ResumeSync {
      * place: it reads what is there first, then merges, so a channel already holding a file from
      * another device loses nothing.
      */
-    suspend fun changeDestination(settings: SettingsStore, choice: SyncChannelChoice?): String? = lock.withLock {
-        SyncDestinations.applyChoice(settings, choice)
+    suspend fun changeDestination(settings: SettingsStore, choice: SyncChannelChoice?): String? {
+        val owner = currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+        return lock.withLock { withContext(AccountOwner(owner)) { SyncDestinations.applyChoice(settings, choice) } }
     }
 
     /**
@@ -208,8 +247,13 @@ object ResumeSync {
      * Messages, and from the chosen channel too when there is one. This device's lists stay. True
      * when there was nothing left to delete afterwards.
      */
-    suspend fun turnOffAndDelete(settings: SettingsStore): Boolean = lock.withLock {
-        withContext(Dispatchers.IO) {
+    suspend fun turnOffAndDelete(settings: SettingsStore): Boolean {
+        val owner = currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+        return turnOffAndDelete(settings, owner)
+    }
+
+    private suspend fun turnOffAndDelete(settings: SettingsStore, owner: AccountStamp): Boolean = lock.withLock {
+        withContext(Dispatchers.IO + AccountOwner(owner)) {
             val known = runCatching { settings.resumeSyncFileNow() }.getOrDefault(0L)
             val knownFileChat = runCatching { settings.syncFileChatNow() }.getOrDefault(0L)
             val knownLegacy = runCatching { settings.resumeSyncMessageNow() }.getOrDefault(0L)

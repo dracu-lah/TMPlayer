@@ -3263,6 +3263,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[DOWNLOADS_MIGRATED] = true }
     }
 
+    /**
+     * Where every profile's downloads are (HX88), not only the open one's: a folder grant is the
+     * device's, and one profile's change must not let go of a folder another profile's downloads
+     * are in.
+     */
+    suspend fun downloadPathsOfEveryProfileNow(): List<String> {
+        val views = (prefs as? AccountScopedDataStore)?.everyProfileNow()?.values ?: listOf(prefs.data.first())
+        return views.flatMap { view -> decodeDownloads(view).mapNotNull { it.localPath } }
+    }
+
     private fun decodeDownloads(prefs: Preferences): List<ResumeRecord> = buildList {
         for ((key, value) in prefs.asMap()) {
             val ids = key.name.removePrefixOrNull("dl_") ?: continue

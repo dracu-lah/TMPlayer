@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 
 /**
  * A preferences store as the open profile sees it (HX88, docs/agents/multi-account.md).
@@ -44,9 +45,11 @@ class AccountScopedDataStore(
      */
     override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences {
         val owner = currentCoroutineContext()[AccountOwner]?.stamp
-        val f = owner?.folder ?: folder.value
+        // A write addressed to one profile's keys on purpose (AccountAddress): always that profile's.
+        val address = currentCoroutineContext()[AccountAddress]
+        val f = if (address != null) address.folder else owner?.folder ?: folder.value
         val stored = delegate.updateData { stored ->
-            if (owner != null && owner != stamp()) {
+            if (address == null && owner != null && owner != stamp()) {
                 Logger.i(TAG, "a write for a profile no longer open was dropped")
                 stored
             } else {
@@ -54,6 +57,15 @@ class AccountScopedDataStore(
             }
         }
         return AccountViews.view(stored, f, isAccount)
+    }
+
+    /** Every profile's view of the store now: the adopted one's (null) and each `@folder:` one's. */
+    suspend fun everyProfileNow(): Map<String?, Preferences> {
+        val raw = delegate.data.first()
+        val folders = listOf<String?>(null) + raw.asMap().keys
+            .mapNotNull { key -> key.name.takeIf { it.startsWith(AccountKeys.MARK) }?.drop(1)?.substringBefore(':') }
+            .distinct()
+        return folders.associateWith { AccountViews.view(raw, it, isAccount) }
     }
 
     /** Takes a removed profile's keys out ([folder] "" is the adopted profile's plain account keys). */
@@ -138,4 +150,13 @@ internal object AccountViews {
             is Set<*> -> this[stringSetPreferencesKey(name)] = value.mapTo(HashSet()) { it.toString() }
         }
     }
+}
+
+/**
+ * A store write addressed to one profile's keys on purpose (HX88): the record of a file that a
+ * job of that profile has already moved, written for its owner even after a switch, so the record
+ * never points at the original that is gone. Only for that: everything else carries [AccountOwner].
+ */
+class AccountAddress(val folder: String?) : kotlin.coroutines.AbstractCoroutineContextElement(Key) {
+    companion object Key : kotlin.coroutines.CoroutineContext.Key<AccountAddress>
 }

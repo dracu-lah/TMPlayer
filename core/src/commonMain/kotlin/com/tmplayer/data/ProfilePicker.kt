@@ -121,6 +121,21 @@ object BeforeSwitch {
         }
     }
 
-    /** How many are registered: a player or runner that is open now. */
+    /** How many are registered: players and long jobs. */
     val count: Int get() = hooks.size
+
+    private val players = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** A player's hook: it also counts as something playing, which a switch asks about first. */
+    fun addPlayer(hook: suspend () -> Unit) {
+        add(hook)
+        players.incrementAndGet()
+    }
+
+    fun removePlayer(hook: suspend () -> Unit) {
+        if (hooks.remove(hook)) players.decrementAndGet()
+    }
+
+    /** How many players are open now (a long job's hook is not one). */
+    val playerCount: Int get() = players.get()
 }
