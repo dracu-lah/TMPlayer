@@ -123,6 +123,12 @@ export function cleanName(name: string): string {
 
 export const find = (book: Book, id: string | null | undefined): Profile | undefined => (id ? book.profiles.find((p) => p.id === id) : undefined)
 
+/**
+ * Whether this page answers a stream read the Service Worker passed on: one tagged with this page's
+ * profile, or an untagged one (an older worker) only while the browser has a single profile, as before.
+ */
+export const streamReadAllowed = (tag: unknown, activeId: string, profileCount: number): boolean => (typeof tag === 'string' ? tag === activeId : profileCount <= 1)
+
 /** A profile's place in the book, from 1, found by its id (a copy read from storage is another object); 0 when it is gone. */
 export const profileNumber = (book: Book, id: string): number => book.profiles.findIndex((p) => p.id === id) + 1
 

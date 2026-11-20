@@ -338,22 +338,34 @@ export const removeAllNeeds = (): B.Profile[] => B.pinsForRemoveAll(freshBook(),
 export async function removeAll(): Promise<boolean> {
     // Every locked profile's PIN first: one missing and nothing goes.
     if (removeAllNeeds().length) return false
-    // A profile open in another tab would stop it half way: none may be, before anything is wiped.
+    if (!(await removeAllClear())) return false
+    const ok = await askConfirm({
+        title: t('accounts.remove_all_title'),
+        message: t('accounts.remove_all_message'),
+        confirm: t('accounts.remove_all_confirm'),
+        busy: t('settings.signing_out'),
+        // Checked again right before anything is wiped: a tab opened, a profile added or a PIN set while the question was up stops it.
+        run: async () => {
+            if (await removeAllClear()) await continueRemoveAll()
+        },
+    })
+    verified.clear()
+    return ok
+}
+
+/**
+ * Whether Remove all may wipe now: every locked profile's PIN entered (this picker's), and none of the
+ * other profiles open in another tab (it would stop half way on the other-tab card). Says why not.
+ */
+async function removeAllClear(): Promise<boolean> {
+    if (removeAllNeeds().length) return false
     for (const p of freshBook().profiles) {
         if (p.id !== activeId && (await heldElsewhere(p.id))) {
             showToast({ text: t('accounts.remove_all_elsewhere') })
             return false
         }
     }
-    const ok = await askConfirm({
-        title: t('accounts.remove_all_title'),
-        message: t('accounts.remove_all_message'),
-        confirm: t('accounts.remove_all_confirm'),
-        busy: t('settings.signing_out'),
-        run: () => continueRemoveAll(),
-    })
-    verified.clear()
-    return ok
+    return true
 }
 
 async function continueRemoveAll() {

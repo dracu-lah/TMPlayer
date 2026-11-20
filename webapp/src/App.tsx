@@ -1,10 +1,11 @@
+import { onGlobal } from './ui/globalInput'
 import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type Component, type ParentProps } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online, unreachable, watchReach } from './net'
 import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
-import { closeTopLayer, picker } from './accounts'
+import { closeTopLayer, locked, picker, shieldPage } from './accounts'
 import { holdClose, openModal } from './ui/confirmCore'
 import { afterSessionRead, attachSignedIn, cleanStaleProfiles, sessionUnreadable, showCarriedNotice } from './accountFlows'
 import { loadSubmaker } from './submakerBase'
@@ -197,11 +198,18 @@ function Shell(props: ParentProps) {
             go: (path) => navigate(path),
             back: () => back(navigate),
             searchLabel: () => t('browse.search_chat'),
+            listen: (onKey) => onGlobal(window, 'keydown', onKey),
         })
         onCleanup(off)
     })
     // The picker's code, the first time it is wanted (at launch, from the menu, or locking again).
     createEffect(() => picker() && loadProfiles())
+    // Locked (HX88): the rest of the page is inert and hidden, and the player closes, so its streams,
+    // decoders and sound go (accounts.ts stopped its media and kept its place first).
+    createEffect(() => shieldPage(locked()))
+    createEffect(() => {
+        if (locked() && location.pathname.startsWith('/watch/')) navigate('/', { replace: true })
+    })
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 

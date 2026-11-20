@@ -187,3 +187,24 @@ Phase B, per platform:
 - Sign out: call `AccountSwitcher.signOutProfile` with the platform's wipe instead of
   `forgetAccount` plus `Td.logOut()`, and the picker after it.
 - The picker, the PIN pad, Add account, Remove all accounts, the strings.
+
+## The web player (phase B3)
+
+The web keeps its own book (`webapp/src/ui/accountBook.ts`, `accounts.ts`, `accountFlows.ts`) with
+the same rules: three profiles, the adopted one keeps the old storage names, other profiles' keys
+are `@<folder>:<key>` in `tmplayer-app`, one mtcute client per page, and a switch reloads the page
+into the next profile.
+
+- The PIN unlock lives in the tab only (sessionStorage), bound to the page holding it by a token in
+  memory and a Web Lock of that name. A reload of the tab, or a page the tab started itself, takes it
+  over; a duplicated tab, a restored session or an address typed into the tab asks the PIN again.
+- The unlock carries a time and runs out after a minute unless the shown tab keeps it fresh (every
+  20 s). A tab hidden for more than a minute locks at once when it shows again. One hidden for 40 to
+  60 s stays open, but its unlock has run out, so its next reload asks the PIN: this fails safe, and
+  the PIN pad says so ("asked again after a minute away").
+- Locked (the picker at launch or locked again): every page-wide input listener goes through
+  `onGlobal` (`ui/globalInput.ts`, enforced by `globalInput.test.ts`), the page is inert and hidden
+  from screen readers, no dialog of the profile opens (`showModal` refuses), picture in picture, full
+  screen and the Media Session end, the media is unloaded and the player closes after saving its place.
+- Stream reads carry the profile (`p=`); a page answers only its own, and an untagged one only while
+  there is a single profile. The Service Worker never hands a read to another profile's tab.

@@ -251,6 +251,7 @@ function ProfileTile(props: { profile: B.Profile; name: string; editing: boolean
 
 function askSignOut(p: B.Profile, name: string) {
     return askConfirm({
+        whileLocked: true,
         title: t('accounts.sign_out_title', { name }),
         message: t('accounts.sign_out_message', { name }),
         confirm: t('settings.sign_out_confirm'),
@@ -332,6 +333,7 @@ function OptionsDialog(props: { profile: B.Profile; name: string; onClose: () =>
                             onClick={then(
                                 () =>
                                     void askConfirm({
+                                        whileLocked: true,
                                         title: t('accounts.remove_title', { name: props.name }),
                                         message: t('accounts.remove_message', { name: props.name }),
                                         confirm: t('common.remove'),
@@ -446,6 +448,9 @@ function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinRe
                 <Keypad label={t('accounts.pin_digits')} onDigit={digit} onDelete={erase} />
             </div>
             <p class="muted small" id="pin-honest">{t('accounts.pin_honest')}</p>
+            <Show when={!props.entering}>
+                <p class="muted small pin-relock">{t('accounts.pin_relock')}</p>
+            </Show>
             <Show when={props.entering}>
                 <p class="muted small pin-forgot">{t('accounts.pin_forgot')}</p>
             </Show>

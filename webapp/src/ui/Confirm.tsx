@@ -7,6 +7,7 @@
 import { createEffect, createSignal, onMount, Show } from 'solid-js'
 import { render } from 'solid-js/web'
 import { t } from '../i18n'
+import { locked } from '../accounts'
 import { closeModal, holdClose, isOpen, onlyOne, openModal } from './confirmCore'
 import './confirm.css'
 
@@ -26,6 +27,8 @@ export interface ConfirmOptions {
     danger?: boolean
     /** Closes the question as Cancel when this turns true (the list it is about emptied, went). */
     closeWhen?: () => boolean
+    /** Asked by the profiles' picker itself, which may ask while the profile is locked. */
+    whileLocked?: boolean
 }
 
 interface Pending {
@@ -44,6 +47,8 @@ export const confirmOpen = () => pending() !== null
 /** Asks; resolves true when the viewer confirmed (and `run` has ended), false for anything else. */
 export function askConfirm(options: ConfirmOptions): Promise<boolean> {
     // One question at a time: a second ask is a "no" (it must never run on the first one's yes).
+    // While a profile is locked (HX88) only the picker's own questions are asked: anything else is a "no", queued nowhere.
+    if (locked() && !options.whileLocked) return Promise.resolve(false)
     return onlyOne(pending() !== null, () => {
         if (!drawn) {
             drawn = true
@@ -105,6 +110,7 @@ function Question(props: { p: Pending }) {
     return (
         <dialog
             classList={{ 'confirm confirm-ask': true, 'confirm-fallback': !native() }}
+            data-while-locked={o.whileLocked ? '' : undefined}
             ref={dialog}
             aria-labelledby="confirm-title"
             aria-describedby="confirm-message"

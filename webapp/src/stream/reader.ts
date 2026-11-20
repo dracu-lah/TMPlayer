@@ -1,5 +1,6 @@
 import { api, call } from '../tg/rpc'
-import { activeId } from '../accounts'
+import { activeId, book } from '../accounts'
+import { streamReadAllowed } from '../ui/accountBook'
 import type { PieceSet } from '../tg/types'
 import { JoinedFile } from './joined'
 
@@ -400,7 +401,8 @@ export function serveStreams() {
         const port = ev.ports[0]
         if (!port || typeof msg.key !== 'string') return
         // A read for another profile's page (HX88): this page says so and the Service Worker asks on.
-        if (typeof msg.p === 'string' && msg.p !== activeId) return port.postMessage({ error: 'other' })
+        // An untagged read is answered only while there is one profile: with several it could be another's.
+        if (!streamReadAllowed(msg.p, activeId, book().profiles.length)) return port.postMessage({ error: 'other' })
         asked.add(msg.key)
         const file = streams.get(msg.key)
         if (!file) return port.postMessage({ error: 'gone' })

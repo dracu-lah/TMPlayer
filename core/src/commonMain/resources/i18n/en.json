@@ -99,6 +99,7 @@
     "pin_honest": "The PIN only locks this profile on this browser. It does not encrypt what is stored here.",
     "pin_mismatch": "The two PINs did not match. Choose one again.",
     "pin_new": "Choose a four-digit PIN for {name}",
+    "pin_relock": "It is asked again after a minute away from this tab, in a new tab, and in a tab the browser restores.",
     "pin_remove": "Remove the PIN",
     "pin_removed_toast": "PIN removed",
     "pin_repeat": "Enter the same PIN again",

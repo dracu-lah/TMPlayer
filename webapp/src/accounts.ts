@@ -192,18 +192,107 @@ if (typeof window !== 'undefined') {
     if (unlockedId()) {
         freshening = setInterval(freshenUnlock, 20_000)
         // Another live page still holds this token: this page is a copy of it (a duplicated tab), and locks.
-        holdToken(token!, () => {
-            relock()
-            runBeforeSwitch()
-            closeTopLayer()
-            setPicker((p) => p ?? 'lock')
-        })
+        holdToken(token!, () => lockNow())
     }
     // A reload (or a closing tab) stamps it now: the next page of this tab finds it fresh, a copy restored later does not.
     window.addEventListener('pagehide', () => {
         const id = unlockedId()
         if (id === activeId) setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now(), token!))
     })
+}
+
+// ---- Locking a running page ----
+
+/** Every Media Session action a page can take, so a lock leaves none (unknown ones are skipped). */
+const MEDIA_ACTIONS = ['play', 'pause', 'stop', 'seekbackward', 'seekforward', 'seekto', 'previoustrack', 'nexttrack', 'skipad', 'enterpictureinpicture', 'togglemicrophone', 'togglecamera', 'hangup', 'previousslide', 'nextslide', 'voiceactivity'] as const
+
+/**
+ * Nothing of the profile plays on under a lock: picture in picture and full screen end, the Media
+ * Session (the OS's player, the hardware keys, Chrome's media hub) is emptied, and every video and
+ * sound on the page is stopped and unloaded. The player itself is closed by the Shell (App.tsx), so its
+ * streams, decoders and sound graph go with it; its place was saved first (runBeforeSwitch), and the
+ * unlock starts again from there.
+ */
+export function stopMediaForLock() {
+    if (typeof document === 'undefined') return
+    try {
+        if (document.pictureInPictureElement) void document.exitPictureInPicture().catch(() => {})
+    } catch {}
+    try {
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+    } catch {}
+    try {
+        const session = navigator.mediaSession
+        if (session) {
+            session.metadata = null
+            session.playbackState = 'none'
+            for (const action of MEDIA_ACTIONS)
+                try {
+                    session.setActionHandler(action as MediaSessionAction, null)
+                } catch {}
+        }
+    } catch {}
+    for (const media of document.querySelectorAll<HTMLMediaElement>('video, audio')) {
+        try {
+            media.pause()
+            media.removeAttribute('src')
+            media.srcObject = null
+            media.load()
+        } catch {}
+    }
+}
+
+/** Locks the open profile again (a minute away, or this page found to be a copy): its place kept, its media stopped, the picker over all. */
+function lockNow() {
+    relock()
+    runBeforeSwitch()
+    stopMediaForLock()
+    closeTopLayer()
+    setPicker((p) => (p === 'launch' ? p : 'lock'))
+}
+
+/**
+ * While locked, no dialog of the profile opens, however late it was asked for (an answer coming
+ * back after the lock): only the picker's own (inside it, or marked `data-while-locked`) and its cover.
+ */
+const mayOpenWhileLocked = (d: Element) => d.matches('.profiles, .lock-cover, [data-while-locked]') || !!d.closest('dialog.profiles')
+if (typeof HTMLDialogElement !== 'undefined') {
+    const proto = HTMLDialogElement.prototype
+    const showModal = proto.showModal
+    const show = proto.show
+    if (showModal)
+        proto.showModal = function (this: HTMLDialogElement) {
+            if (untrack(locked) && !mayOpenWhileLocked(this)) return
+            return showModal.call(this)
+        }
+    if (show)
+        proto.show = function (this: HTMLDialogElement) {
+            if (untrack(locked) && !mayOpenWhileLocked(this)) return
+            return show.call(this)
+        }
+}
+
+/**
+ * While locked the rest of the page is inert and hidden from screen readers, beside the top layer:
+ * every child of the body but the app root, and inside the root everything but the picker or its cover.
+ */
+const shielded = new Set<Element>()
+export function shieldPage(on: boolean) {
+    if (typeof document === 'undefined') return
+    if (!on) {
+        for (const el of shielded) (el.removeAttribute('inert'), el.removeAttribute('aria-hidden'))
+        shielded.clear()
+        return
+    }
+    const app = document.getElementById('app')
+    const keep = (el: Element) => el.matches('.profiles, .lock-cover, [data-while-locked], dialog.confirm-ask') || !!el.querySelector('dialog.profiles, dialog.lock-cover')
+    const children = [...document.body.children].filter((el) => el !== app).concat(app ? [...app.children] : [])
+    for (const el of children) {
+        if (keep(el) || el.hasAttribute('inert') || el.tagName === 'SCRIPT') continue
+        el.setAttribute('inert', '')
+        el.setAttribute('aria-hidden', 'true')
+        shielded.add(el)
+    }
 }
 
 /**
@@ -239,6 +328,11 @@ const [picker, setPicker] = createSignal<'launch' | 'lock' | 'menu' | null>(plan
 export { picker }
 export const openPicker = () => setPicker((p) => p ?? 'menu')
 export const closePicker = () => setPicker(null)
+/** The profile's screens are locked away: the picker at launch, or locked again (nothing of the page may answer input or play). */
+export const locked = () => {
+    const p = picker()
+    return p === 'launch' || p === 'lock'
+}
 
 /** Records the tab's choice: a reload stays on it, a new tab asks again. */
 export const chooseInTab = (id: string | null) => setSession(TAB_KEY, id)
@@ -303,12 +397,7 @@ if (typeof document !== 'undefined')
         const away = hiddenAt()
         setSession(HIDDEN_KEY, null)
         if (pendingWork || !B.relockDue(untrack(book), activeId, away, Date.now())) return freshenUnlock()
-        relock()
-        // What plays keeps its place and stops under the picker.
-        runBeforeSwitch()
-        // Nothing of the profile may stand above the picker: the top layer is closed first.
-        closeTopLayer()
-        setPicker('lock')
+        lockNow()
     })
 
 // ---- Photos ----

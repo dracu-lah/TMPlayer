@@ -13,6 +13,7 @@ import {
     checkPinIn,
     acceptUnlock,
     profileNumber,
+    streamReadAllowed,
     readUnlock,
     writeUnlock,
     cleanName,
@@ -433,6 +434,15 @@ test('an unnamed profile is numbered by its place, found by id even in a copy of
     assert.equal(profileNumber(book, copy.profiles[2].id), 3)
     assert.equal(profileNumber(book, ADOPTED), 1)
     assert.equal(profileNumber(book, 'gone00'), 0)
+})
+
+test('a page answers only its own profile stream reads; an untagged one only with a single profile', () => {
+    assert.ok(streamReadAllowed('abc123', 'abc123', 2))
+    assert.ok(!streamReadAllowed('main', 'abc123', 2))
+    assert.ok(!streamReadAllowed(undefined, 'abc123', 2))
+    assert.ok(!streamReadAllowed(null, 'main', 3))
+    assert.ok(streamReadAllowed(undefined, 'main', 1))
+    assert.ok(!streamReadAllowed(42, 'main', 2))
 })
 
 test('a tab hidden for more than a minute locks its PIN profile again', async () => {
