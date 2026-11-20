@@ -223,13 +223,35 @@ driven by marks as they are made (`WatchedMarks`, raised only by `WatchedStore.m
 lists: a switch, a sign out, the app starting, a restore from a backup and a sync import delete
 nothing. A sync import marking videos watched on another device does not delete their downloads
 here (the conservative answer, user to confirm): only the viewer finishing or marking a video on
-this device does, and only while that profile is open. The others only mirror the open
+this device does, the first time it is marked (a replay of a video already watched keeps its
+download), and only while that profile is open. The players' marks are written as the profile
+the player opened under, and a switch waits for them. The others only mirror the open
 profile's state and act on no difference: the kids lock and the chats added (`ChatGate.follow`,
 `AddedChats.follow`), the viewer's corrections (`VideoCorrections.follow`), the widget's tile, the
 TV's channels (cleared on every switch), the notifications (taken down on every switch), and gone
 videos (`GoneVideos`, which forgets on a switch). The rest of App.kt's collectors read device
 settings (language, low storage, mobile data, pictures, motion, haptics, the downloads folder,
 frame rate matching).
+
+File walkers, trimmers and cleaners (audited, HX88), each over the open profile's own folders:
+
+- The watch cache (`WatchCacheRules`, Android's `WatchCache`): its folder is the open profile's
+  (`Td.paths.filesDir`), never the adopted one's for everyone; a sweep and Clear cache take the
+  profile when they start and stop before the walk and before each delete once another is open.
+- TDLib's own trims (`Td.trimStorage`, `clearPicturesAndPreviews`): on the live client, which is
+  the open profile's and sees only its own database and files.
+- The downloads: written to and listed in the open profile's folder (`profileDownloadsDir`); a
+  moved file's delete (`DownloadFinisher`), the old downloads' one-time move (`LegacyDownloads`)
+  and Remove after watching's legacy delete check their owner before deleting.
+- Moving downloads (`DownloadRelocation`): the open profile's own folder only, as its owner.
+- Free up space and the storage figures (`RoomOnDisk`, `StorageSplit`): the open profile's, on
+  its screen.
+- The picture, TMDB and online subtitle caches: the device's, shared by every profile (one budget),
+  nothing of an account in them; the TDLib cache budget is shared too (`Td.cacheCeilingBytes`).
+
+The downloads a switch paused are kept per profile on the device (`PausedForSwitch`): they go on
+again when that profile is open next, after a Cancel, a switch back, or a process that died while
+the switch waited.
 
 The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
 background scope as the profile open when they were asked (`AccountOwner`), so one that lands
