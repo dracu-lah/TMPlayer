@@ -36,6 +36,11 @@ import kotlinx.coroutines.sync.withLock
  */
 object GoneVideos {
 
+    init {
+        // Another profile opened (HX88): ids are per account, so what was gone is nobody's now.
+        Accounts.onSwitch { clear() }
+    }
+
     /** One video found gone, with its ids for the stores and why, for what the viewer is told. */
     data class Gone(val chatId: Long, val messageId: Long, val reason: GoneReason) {
         val key: String get() = ProgressKeys.of(chatId, messageId)

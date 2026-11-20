@@ -19,16 +19,23 @@ class ChatGridDisk(private val base: File) : GridStore {
     @Volatile
     private var written: Pair<File, String>? = null
 
+    /** The open profile's file. */
     private val file: File get() = Accounts.scopedFile(base)
 
     override fun load(): List<SavedGrid> =
         runCatching { file.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull().orEmpty()
 
-    override fun save(grids: List<SavedGrid>) {
+    /**
+     * Writes [grids] to the file of [stamp]'s profile, the one they were gathered for. Dropped when
+     * that profile is no longer open: checked under the lock the write holds, so a switch between
+     * gathering and writing never puts one profile's listings in another's file.
+     */
+    override fun save(grids: List<SavedGrid>, stamp: AccountStamp) {
         val text = encode(grids)
-        val file = file
+        val file = Accounts.scopedFile(base, stamp)
         if (written == (file to text)) return
         synchronized(this) {
+            if (!stamp.isCurrent) return
             runCatching {
                 file.parentFile?.mkdirs()
                 val temp = File(file.parentFile, file.name + ".tmp")
