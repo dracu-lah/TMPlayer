@@ -69,6 +69,8 @@ fun ChoiceRow(
     enabled: Boolean = true,
     /** Format pills under the words (a sound track's Atmos, 5.1): text only, not a stop of their own. */
     tags: List<FormatFacts.Tag> = emptyList(),
+    /** The service this line is about: its [ServiceBadge] takes the [icon]'s place. */
+    service: Service? = null,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(Corner.Medium)
@@ -102,7 +104,11 @@ fun ChoiceRow(
             selected != null -> RadioButton(selected = selected, onClick = null, enabled = enabled)
             // The radio's own 24 dp, so an action's words line up with the choices' above it.
             else -> Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                if (icon != null) Icon(icon, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(22.dp))
+                if (service != null) {
+                    ServiceBadge(service, size = ServiceBadgeSize.Line)
+                } else if (icon != null) {
+                    Icon(icon, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(22.dp))
+                }
             }
         }
         Spacer(Modifier.width(16.dp))
@@ -140,7 +146,15 @@ fun SettingIconChip(
     modifier: Modifier = Modifier,
     tint: Color = Tone.accent,
     inverted: Boolean = false,
+    /** The service the row is about: its [ServiceBadge] fills the chip's place and the icon is unused. */
+    service: Service? = null,
 ) {
+    if (service != null) {
+        Box(modifier.size(SettingIconChipSize), contentAlignment = Alignment.Center) {
+            ServiceBadge(service, size = ServiceBadgeSize.Row)
+        }
+        return
+    }
     val chip = if (inverted) Tone.onFocusFill else tint.copy(alpha = ICON_CHIP_ALPHA)
     val glyph = if (inverted) Tone.focusFill else tint
     Box(
