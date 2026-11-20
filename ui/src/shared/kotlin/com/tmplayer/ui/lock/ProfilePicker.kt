@@ -592,7 +592,10 @@ fun ProfileOptions(
     }
     ProfilePanel(
         title = name,
-        body = ProfileWords.status(tile),
+        // What a PIN changes beyond the picker: a cast from this profile names only the app (HX88).
+        body = listOfNotNull(ProfileWords.status(tile), if (tile.status != TileStatus.NeedsAttention) L.profilesPinCastNote else null)
+            .joinToString("\n\n")
+            .ifEmpty { null },
         actions = actions,
         onDismiss = onDismiss,
         header = { ProfileAvatar(name, tile.photo, 72.dp, Modifier.padding(bottom = 12.dp)) },
