@@ -2029,6 +2029,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // An update that installs while this is open (picture in picture, the sound playing on)
         // ends the process: the place is written first (HX5).
         com.tmplayer.data.SelfInstaller.addBeforeInstall(saveBeforeInstall)
+        // A profile switch (HX88) saves the place here, for this profile, and closes the player.
+        com.tmplayer.data.BeforeSwitch.add(stopBeforeSwitch)
         // Before the first layout pass, on purpose: a window that turns after it has drawn is a
         // lurch the viewer sees. Almost every video is landscape, so landscape is what the loader
         // opens in, and a portrait clip turns once, later.
@@ -10558,6 +10560,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         endTranslations()
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
+        com.tmplayer.data.BeforeSwitch.remove(stopBeforeSwitch)
         loopHandler.removeCallbacks(watchTick)
         remedies.stop()
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
@@ -10668,6 +10671,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** [saveResumePosition] before an update ends the process, waited for until it is written. */
     private val saveBeforeInstall: suspend () -> Unit = {
         withContext(Dispatchers.Main) { saveResumePosition() }?.join()
+    }
+
+    /**
+     * Before a profile switch (HX88): the place is written while this profile's stores are still
+     * the open ones, waited for, and the player closes, since its video belongs to the profile
+     * that is closing.
+     */
+    private val stopBeforeSwitch: suspend () -> Unit = {
+        withContext(Dispatchers.Main) { saveResumePosition(leaving = true) }?.join()
+        withContext(Dispatchers.Main) {
+            // Written already: the close must not write again, for the next profile.
+            savedForHandOver = true
+            if (!isFinishing) finish()
+        }
     }
 
     /** Writes the place; returns the write, for a caller that must wait for it ([saveBeforeInstall]). */

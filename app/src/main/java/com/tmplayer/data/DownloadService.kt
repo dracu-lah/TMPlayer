@@ -27,6 +27,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -71,6 +72,16 @@ class DownloadService : Service() {
      * must not hold up the rest of the queue for the length of a film. Guarded by [lock] too.
      */
     private val heldMoves = LinkedHashMap<Int, Job>()
+
+    /**
+     * The profile each request was asked under (HX88, review LOW 2), taken when it is queued, not
+     * when the queue reaches it: a request asked before a switch never starts in the next profile,
+     * whose database knows nothing of its file id. Guarded by [lock].
+     */
+    private val stamps = HashMap<Int, com.tmplayer.data.AccountStamp>()
+
+    /** The stamp [id] was queued under, recorded now when it has none. Call under [lock]. */
+    private fun stampOf(id: Int): com.tmplayer.data.AccountStamp = stamps.getOrPut(id) { com.tmplayer.data.Accounts.stamp }
 
     /** Counts requests in, so a row keeps the place in the list it was given when it was asked for. */
     private var arrivals = 0L
@@ -134,6 +145,35 @@ class DownloadService : Service() {
         NetworkMonitor.start(this)
         watchTheNetwork()
         yieldToPlayback()
+        followProfiles()
+    }
+
+    /**
+     * A profile switch (HX88) ends this profile's downloads here: the picker paused them first
+     * (their queue is written for the profile that asked), and what is still in memory belongs to
+     * a database that is closed now. Nothing of it is started, finished or written in the next one.
+     */
+    private fun followProfiles() {
+        scope.launch {
+            com.tmplayer.data.Accounts.activeFolder.drop(1).collect { stopForSwitch() }
+        }
+    }
+
+    private fun stopForSwitch() {
+        val jobs = synchronized(lock) {
+            val all = running.values.toList() + heldMoves.values.toList()
+            running.clear()
+            heldMoves.clear()
+            waiting.clear()
+            requests.clear()
+            stamps.clear()
+            all
+        }
+        jobs.forEach { it.cancel() }
+        lines.clear()
+        Log.i(TAG, "A profile switch: ${jobs.size} download(s) of the last profile stopped")
+        refresh()
+        stopWhenIdle()
     }
 
     /**
@@ -191,6 +231,7 @@ class DownloadService : Service() {
             synchronized(lock) {
                 if (running.containsKey(progress.fileId) || waiting.contains(progress.fileId)) return@forEach
                 requests[progress.fileId] = progress.request
+                stampOf(progress.fileId)
                 waiting.addLast(progress.fileId)
             }
             OfflineDownloads.stage(progress.fileId, OfflineDownloads.Stage.Queued)
@@ -320,6 +361,7 @@ class DownloadService : Service() {
     private fun adoptExistingQueue() = synchronized(lock) {
         for (progress in OfflineDownloads.ordered) {
             requests[progress.fileId] = progress.request
+            stampOf(progress.fileId)
             arrivals = maxOf(arrivals, progress.order + 1)
         }
     }
@@ -342,6 +384,7 @@ class DownloadService : Service() {
         val position = synchronized(lock) {
             if (running.containsKey(request.fileId) || waiting.contains(request.fileId)) return
             requests[request.fileId] = request
+            stamps[request.fileId] = com.tmplayer.data.Accounts.stamp
             if (held == null) waiting.addLast(request.fileId)
             known?.order ?: arrivals++
         }
@@ -449,6 +492,7 @@ class DownloadService : Service() {
             synchronized(lock) {
                 if (running.containsKey(progress.fileId) || waiting.contains(progress.fileId)) return@forEach
                 requests[progress.fileId] = progress.request
+                stampOf(progress.fileId)
                 waiting.addLast(progress.fileId)
             }
             OfflineDownloads.stage(progress.fileId, OfflineDownloads.Stage.Queued)
@@ -490,12 +534,17 @@ class DownloadService : Service() {
                 if (running.size >= MAX_PARALLEL) return@synchronized null
                 val id = waiting.removeFirstOrNull() ?: return@synchronized null
                 val request = requests[id]
-                if (request == null) {
+                // Asked under another profile than the open one: its file id means nothing to this
+                // database, so it never starts here. It is that profile's paused row again there.
+                val stamp = stampOf(id)
+                if (request == null || stamp != com.tmplayer.data.Accounts.stamp) {
                     stale = id
+                    requests.remove(id)
+                    stamps.remove(id)
                     return@synchronized null
                 }
                 // As the work of the profile it was asked under (HX88): its writes never land in another.
-                val job = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { fetch(request) }
+                val job = scope.launch(com.tmplayer.data.AccountOwner(stamp)) { fetch(request) }
                 running[id] = job
                 // Registered before the job can finish, so a fetch that fails immediately still
                 // finds its own entry to clear and still pumps whatever is behind it.
@@ -721,7 +770,7 @@ class DownloadService : Service() {
         OfflineDownloads.moving(id, heldByPlayer = true)
         synchronized(lock) {
             if (heldMoves.containsKey(id)) return
-            heldMoves[id] = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) {
+            heldMoves[id] = scope.launch(com.tmplayer.data.AccountOwner(stampOf(id))) {
                 try {
                     // Cancellable while it only waits: Pause and Cancel reach it here.
                     while (WatchCache.isPlaying(id)) delay(DownloadFinisher.POLL_MS)
@@ -757,12 +806,15 @@ class DownloadService : Service() {
         val id = request.fileId
         val outcome = DownloadFinisher(
             settings = SettingsStore(applicationContext),
-            downloadsDir = { AndroidPaths(applicationContext).downloadsDir },
+            downloadsDir = { AndroidStorage.profileDownloadsDir(applicationContext) },
             tree = { pickedFolder() },
         ).finish(request, onProgress = { _, _ -> refresh() })
         when (outcome) {
             is DownloadFinisher.Outcome.Moved, is DownloadFinisher.Outcome.MovedToTree -> {
-                synchronized(lock) { requests.remove(id) }
+                synchronized(lock) {
+                    requests.remove(id)
+                    stamps.remove(id)
+                }
                 OfflineDownloads.forget(id)
                 lines.remove(id)
                 runCatching { notifier().cancel(id.notificationId()) }

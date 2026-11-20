@@ -100,7 +100,7 @@ fun TvHomeChannels(
     // without asking, but a channel made again after a delete waits in the launcher's settings.
     LaunchedEffect(enabled) {
         if (enabled == false) written[0] = null
-        if (enabled == false) App.backgroundScope.launch { TvChannelsPublisher.clearPrograms(context) }
+        if (enabled == false) com.tmplayer.data.Accounts.profileScope.launch { TvChannelsPublisher.clearPrograms(context) }
     }
 
     // What the default channel is drawn from, asked for whether or not Home is on screen: the
@@ -122,7 +122,7 @@ fun TvHomeChannels(
     val locked = allowed != null
     LaunchedEffect(locked, enabled) {
         if (locked && enabled == true) written[0] = null
-        if (locked && enabled == true) App.backgroundScope.launch { TvChannelsPublisher.clearPrograms(context) }
+        if (locked && enabled == true) com.tmplayer.data.Accounts.profileScope.launch { TvChannelsPublisher.clearPrograms(context) }
     }
 
     // The plan is worked out off the main thread, and only once the rows have been still for
@@ -153,7 +153,9 @@ fun TvHomeChannels(
         } ?: return@LaunchedEffect
         if (plan == written[0]) return@LaunchedEffect
         written[0] = plan
-        App.backgroundScope.launch {
+        // The open profile's work (HX88): a switch part way cancels it, so the launcher never gets
+        // one profile's cards once another is open; the next profile's Home writes its own.
+        com.tmplayer.data.Accounts.profileScope.launch {
             TvChannelsPublisher.publish(context, plan) { channel ->
                 when (channel) {
                     TvChannels.Channel.Recent -> L.homeChannelRecent

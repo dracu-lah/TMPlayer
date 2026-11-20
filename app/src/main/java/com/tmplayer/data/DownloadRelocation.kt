@@ -254,8 +254,9 @@ object DownloadRelocation {
 
     /** The folder on the disk a destination writes into; null for a picked folder, which is written through the system. */
     private fun dirOf(context: Context, destination: Destination): File? = when (destination) {
-        Destination.Internal -> File(context.filesDir, AndroidPaths.DOWNLOADS)
-        is Destination.Volume -> AndroidStorage.downloadsDirOf(destination.root)
+        // The open profile's own folder on the destination (HX88): only its downloads move.
+        Destination.Internal -> AndroidStorage.forProfile(File(context.filesDir, AndroidPaths.DOWNLOADS))
+        is Destination.Volume -> AndroidStorage.forProfile(AndroidStorage.downloadsDirOf(destination.root))
         is Destination.Tree -> null
     }
 
@@ -280,7 +281,7 @@ object DownloadRelocation {
     private suspend fun run(context: Context, settings: SettingsStore, destination: Destination, label: String): Outcome {
         OfflineDownloads.pauseAll(context)
         awaitNothingMoving()
-        val oldDownloadsDir = AndroidStorage.downloadsDir(context)
+        val oldDownloadsDir = AndroidStorage.profileDownloadsDir(context)
         val pending = StorageRelocationPlan.Pending(root = destination.key, oldCache = "", oldDownloads = oldDownloadsDir.path)
         settings.setDownloadRootPending(pending.encode())
         settings.setDownloadRoot(destination.key)

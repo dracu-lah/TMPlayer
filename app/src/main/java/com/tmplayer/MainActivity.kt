@@ -388,7 +388,11 @@ class MainActivity : ComponentActivity() {
                         // On a remote, a list keeps still while the focused item is in full view.
                         com.tmplayer.ui.components.StillWhenVisible(enabled = !com.tmplayer.ui.components.isTouch()) {
                             // Trailers play in the app's own full screen player (TRAILERS-PLAN T3), from every detail page.
-                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.trailer.TrailerPlayerRoot { com.tmplayer.ui.browse.OfflineDownloadsHost { Root() } }
+                            // The profiles (HX88): Who's watching? at launch with two or more, the
+                            // shell keyed on the open profile. One profile: Root as it always was.
+                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.trailer.TrailerPlayerRoot {
+                                com.tmplayer.ui.browse.OfflineDownloadsHost { ProfilesRoot { Root() } }
+                            }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
                         }
@@ -518,6 +522,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (SearchKeyGuard.swallows(keyCode)) return true
+        // The remote's Menu key, when no screen took it (a tile's actions do): the profiles, with
+        // two or more on this device (HX88). One profile: the key does what it always did.
+        if (keyCode == android.view.KeyEvent.KEYCODE_MENU) {
+            val flow = com.tmplayer.ui.profiles.AndroidProfiles.flow(this)
+            if (flow != null && com.tmplayer.data.ProfilePicker.atLaunch(flow.switcher.profiles.value) && flow.entered && !flow.asked) {
+                flow.ask()
+                return true
+            }
+        }
         if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && !FormFactor.isTv(this)) {
             if (event.isTracking && !event.isCanceled) onBackPressedDispatcher.onBackPressed()
             return true
@@ -634,7 +647,36 @@ class MainActivity : ComponentActivity() {
  * tip. A sign out still empties them, through the auth effect in [Root].
  */
 private object ShellViewModels : ViewModelStoreOwner {
-    override val viewModelStore = ViewModelStore()
+    private var profile: String? = null
+    private var store = ViewModelStore()
+
+    /**
+     * The open profile's (HX88): a switch clears the last profile's view models, so the chat list
+     * and Home are built again for the profile the shell is now keyed on, never shown from the
+     * last one's memory.
+     */
+    override val viewModelStore: ViewModelStore
+        get() = synchronized(this) {
+            val now = com.tmplayer.data.Accounts.active.id
+            if (profile != null && profile != now) {
+                store.clear()
+                store = ViewModelStore()
+            }
+            profile = now
+            store
+        }
+}
+
+/**
+ * [content] behind the profiles (HX88, [com.tmplayer.ui.lock.ProfilesGate]): the picker at launch
+ * with two profiles or more, and the shell keyed on the open profile. With one, nothing changes.
+ */
+@Composable
+private fun ProfilesRoot(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val flow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
+    val auth by Td.auth.collectAsStateWithLifecycle()
+    com.tmplayer.ui.lock.ProfilesGate(flow, signInStep = Setup.isSignInStep(auth), content = content)
 }
 
 @Composable
@@ -881,7 +923,7 @@ private fun Root() {
             runCatching {
                 LegacyDownloads(
                     settings = settings,
-                    downloadsDir = { AndroidPaths(context).downloadsDir },
+                    downloadsDir = { com.tmplayer.data.AndroidStorage.profileDownloadsDir(context) },
                     notifier = CoalescingTransferNotifier(AndroidTransferNotifier(context)),
                 ).migrateOnce()
             }.getOrNull()
@@ -986,6 +1028,12 @@ private fun Root() {
         }
     }
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
+    // The profiles (HX88): Switch profile in the account's menu with two or more.
+    val profileFlow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
+    val profileList by remember(profileFlow) {
+        profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+    }.collectAsStateWithLifecycle()
+    val severalProfiles = profileList?.let { com.tmplayer.data.ProfilePicker.atLaunch(it) } == true
 
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
@@ -1000,8 +1048,10 @@ private fun Root() {
             if (!com.tmplayer.data.Td.sessionEnded.value) runCatching { settings.armSetup() }
             // A sign in screen means the account is gone, however it went: signed out here, or
             // from Telegram's Devices list, which is the way back from a forgotten PIN. The lock
-            // was that account's.
-            runCatching { settings.clearAppLock() }
+            // was that account's. Unless other profiles share the device (HX88): the lock is the
+            // device's, and a new profile's sign in, or one profile's ended login, is not theirs.
+            val others = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.profiles?.size ?: 1
+            if (others <= 1) runCatching { settings.clearAppLock() }
         }
     }
 
@@ -1952,6 +2002,7 @@ private fun Root() {
                 browseTo(BrowseSection.of(BrowseTab.History))
             },
             onUpdate = { showUpdate = true },
+            onSwitchProfile = profileFlow?.takeIf { severalProfiles }?.let { flow -> { flow.ask() } },
         )
 
         // The television's top bar over Downloads, as it is over the browser's pages. Settings has

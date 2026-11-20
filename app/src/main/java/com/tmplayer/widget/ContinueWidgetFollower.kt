@@ -110,7 +110,9 @@ object ContinueWidgetFollower {
     internal fun tiles(context: Context): Flow<Tile> {
         val store = settings(context)
         val account = auth().map { ContinueWidget.accountOf(it) }.distinctUntilChanged()
-        return combine(store.continueWatching, store.appLock, account) { records, lock, who ->
+        // The open profile's records (HX88): its store's view moves with a switch, and the tile is
+        // worked out again for the next profile even when its list reads the same.
+        return combine(store.continueWatching, store.appLock, account, com.tmplayer.data.Accounts.activeFolder) { records, lock, who, _ ->
             // A video this session learnt is gone is skipped unless the viewer downloaded it.
             val gone = records.filter { GoneVideos.reasonFor(it.chatId, it.messageId) != null }
                 .mapTo(HashSet()) { "${it.chatId}:${it.messageId}" }

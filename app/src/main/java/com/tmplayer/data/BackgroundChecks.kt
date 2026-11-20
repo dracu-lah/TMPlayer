@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -188,25 +189,32 @@ class BackgroundChecks : JobService() {
             val pieces = settings.noticeOnNow(Notice.MissingPieces)
             if (!newVideos && !episodes && !pieces) return
             Td.start(context)
-            val session = withTimeoutOrNull(CONNECT_WAIT_MS) { Td.awaitConnectedSession() } ?: return
-            // The kids lock and the chats the viewer added (HX27): no alert comes from a chat
-            // they never added.
-            val allowed = ChatGate.awaitBrowsing()
-            if (newVideos) {
-                val alert = NewVideoAlerts.check(session.client, settings, allowed)
-                // With the app on screen the lists already show what came in.
-                if (alert != null && !App.inFront) postNewVideos(context, alert)
-            }
-            if (episodes) {
-                val alert = EpisodeAlerts.check(session.client, settings, WatchedStore(context), allowed)
-                if (alert != null && !App.inFront && AppNotices.allowed(context, Notice.NewEpisodes)) {
-                    AppNotices.postEpisode(context, alert)
+            // The open profile's alone (HX88): its client, its starred chats, its bookkeeping. The
+            // check runs as that profile's work, so a switch part way stops its writes, and nothing
+            // is posted once another profile is open: a sleeping profile is never checked.
+            val stamp = Accounts.stamp
+            withContext(AccountOwner(stamp)) {
+                val session = withTimeoutOrNull(CONNECT_WAIT_MS) { Td.awaitConnectedSession() } ?: return@withContext
+                if (!stamp.isCurrent) return@withContext
+                // The kids lock and the chats the viewer added (HX27): no alert comes from a chat
+                // they never added.
+                val allowed = ChatGate.awaitBrowsing()
+                if (newVideos) {
+                    val alert = NewVideoAlerts.check(session.client, settings, allowed)
+                    // With the app on screen the lists already show what came in.
+                    if (alert != null && !App.inFront && stamp.isCurrent) postNewVideos(context, alert)
                 }
-            }
-            if (pieces) {
-                val alerts = PieceAlerts.check(session.client, settings, allowed, System.currentTimeMillis())
-                if (!App.inFront && AppNotices.allowed(context, Notice.MissingPieces)) {
-                    alerts.forEachIndexed { index, alert -> AppNotices.postPieces(context, alert, index) }
+                if (episodes) {
+                    val alert = EpisodeAlerts.check(session.client, settings, WatchedStore(context), allowed)
+                    if (alert != null && !App.inFront && stamp.isCurrent && AppNotices.allowed(context, Notice.NewEpisodes)) {
+                        AppNotices.postEpisode(context, alert)
+                    }
+                }
+                if (pieces) {
+                    val alerts = PieceAlerts.check(session.client, settings, allowed, System.currentTimeMillis())
+                    if (!App.inFront && stamp.isCurrent && AppNotices.allowed(context, Notice.MissingPieces)) {
+                        alerts.forEachIndexed { index, alert -> AppNotices.postPieces(context, alert, index) }
+                    }
                 }
             }
         }

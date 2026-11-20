@@ -231,6 +231,12 @@ class App : Application() {
         // And the chats opened most recently, so a cold start opens one of them at once (PageQueries).
         com.tmplayer.data.PageQueries.store = com.tmplayer.data.ChatGridDisk(java.io.File(filesDir, "home/chat-grids.json"))
         if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.PageQueries.preload() } }
+        // Every store that keeps a profile's data is open now (HX88, review LOW 1): the first sweep
+        // of a removed profile's folders may clear its keys and cache files from all of them.
+        SettingsStore(this)
+        com.tmplayer.data.WatchedStore(this)
+        com.tmplayer.data.BookmarkStore(this)
+        com.tmplayer.data.Accounts.storesRegistered()
         OnlineMetadata.current = OnlineMetadata(
             buildKey = BuildConfig.TMDB_API_KEY,
             store = MetadataStore(java.io.File(filesDir, "online/metadata.properties")),

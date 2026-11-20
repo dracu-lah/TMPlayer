@@ -170,6 +170,8 @@ internal class TouchNav(
     val onDownloads: () -> Unit,
     val onHistory: (HistoryTab) -> Unit,
     val onUpdate: () -> Unit,
+    /** Switch profile (HX88): the picker, with two profiles or more on the device; null hides the row. */
+    val onSwitchProfile: (() -> Unit)? = null,
 )
 
 /**
@@ -457,6 +459,7 @@ internal fun TouchNavHost(
                     onWatchLater = { chrome.youOpen = false; nav.onHistory(HistoryTab.WatchLater) },
                     onSettings = { chrome.youOpen = false; nav.onSettings() },
                     onUpdate = { chrome.youOpen = false; nav.onUpdate() },
+                    onSwitchProfile = nav.onSwitchProfile?.let { switch -> { chrome.youOpen = false; switch() } },
                 )
             }
         }
@@ -961,6 +964,7 @@ private fun YouPopover(
     onWatchLater: () -> Unit,
     onSettings: () -> Unit,
     onUpdate: () -> Unit,
+    onSwitchProfile: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     AnimatedVisibility(
@@ -1026,6 +1030,7 @@ private fun YouPopover(
                     add { m -> PopoverRow(TmIcons.History, s.browseTabHistory, null, modifier = m, onClick = onHistory) }
                     add { m -> PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, modifier = m, onClick = onWatchLater) }
                     add { m -> PopoverRow(TmIcons.Settings, s.navSettings, null, modifier = m, onClick = onSettings) }
+                    if (onSwitchProfile != null) add { m -> PopoverRow(TmIcons.Person, s.profilesSwitchProfile, null, modifier = m, onClick = onSwitchProfile) }
                     if (updateVersion != null) {
                         // Amber, as on the television's rail and the desktop's side bar: the one row that is news.
                         add { m -> PopoverRow(TmIcons.Refresh, s.navUpdate, updateVersion, ink = Tone.caution, modifier = m, onClick = onUpdate) }

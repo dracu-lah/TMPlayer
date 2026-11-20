@@ -244,6 +244,9 @@ private sealed interface Prompt {
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
 
+    /** Remove all accounts (HX88): every profile signed out, asked first. */
+    data object RemoveAllAccounts : Prompt
+
     /** "Turn off and delete the sync file", which takes the file out of Saved Messages. */
     data object DeleteResumeSync : Prompt
 
@@ -507,12 +510,25 @@ fun SettingsScreen(
             alsoDeleteDownloads = false
             backupFirst = true
             busy = s.settingsSigningOut
-            // The downloads stay unless the box was ticked (forgetAccount says the rest).
-            forgetAccount(context, settings, watchedStore, deleteDownloads)
-            Td.logOut()
-            onLoggedOut()
+            // The downloads stay unless the box was ticked (forgetProfile says the rest). Through
+            // the profiles (HX88): only this profile goes, then the picker, the one left, or the
+            // sign in when it was the last. On the app's scope: the switch rebuilds this screen.
+            val flow = com.tmplayer.ui.profiles.AndroidProfiles.flow(context)
+            if (flow != null) {
+                flow.signOutOpen(deleteDownloads) { onLoggedOut() }
+            } else {
+                forgetAccount(context, settings, watchedStore, deleteDownloads)
+                Td.logOut()
+                onLoggedOut()
+            }
         }
     }
+    // The profiles on this device (HX88), for Switch profile, Add account and Remove all accounts.
+    val profileFlow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
+    val profileList by remember(profileFlow) {
+        profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+    }.collectAsState()
+    val severalProfiles = profileList?.let { com.tmplayer.data.ProfilePicker.atLaunch(it) } == true
     // Resume on other devices' switch, where focus goes when the rows under it go (TV).
     val resumeSyncRow = remember { FocusRequester() }
     // Where focus lands on a TV when a page opens: on every page a row that Left and Right cannot
@@ -1918,6 +1934,43 @@ fun SettingsScreen(
                         onClick = { syncChannelOpen = true },
                     )
                 }
+                // The profiles (HX88): Switch profile and Remove all accounts once there are two,
+                // Add account while there is room.
+                profileList?.let { list ->
+                    if (severalProfiles) {
+                        item {
+                            ActionRow(
+                                title = s.profilesSwitchProfile,
+                                subtitle = list.active?.shownName.orEmpty(),
+                                icon = TmIcons.Person,
+                                onClick = { profileFlow?.ask() },
+                            )
+                        }
+                    }
+                    if (com.tmplayer.data.AccountRules.canAdd(list)) {
+                        item {
+                            ActionRow(
+                                title = s.profilesAdd,
+                                subtitle = s.profilesAddDetail(count = com.tmplayer.data.AccountRules.MAX),
+                                icon = TmIcons.PersonAdd,
+                                onClick = {
+                                    profileFlow?.ask()
+                                    profileFlow?.add()
+                                },
+                            )
+                        }
+                    }
+                    if (severalProfiles) {
+                        item {
+                            ActionRow(
+                                title = s.profilesRemoveAll,
+                                subtitle = s.profilesRemoveAllDetail,
+                                icon = TmIcons.Delete,
+                                onClick = { prompt = Prompt.RemoveAllAccounts },
+                            )
+                        }
+                    }
+                }
                 // Last, under the cards rather than in one: the one press here that ends the
                 // session, asked first (Prompt.SignOut).
                 settingsNote {
@@ -2648,6 +2701,17 @@ fun SettingsScreen(
                 alsoDeleteDownloads = false
                 backupFirst = true
             },
+        )
+
+        Prompt.RemoveAllAccounts -> TvConfirm(
+            title = s.profilesRemoveAllTitle,
+            message = s.profilesRemoveAllBody,
+            confirmLabel = s.profilesRemoveAll,
+            onConfirm = {
+                prompt = null
+                profileFlow?.removeAll(deleteDownloads = false) { onLoggedOut() }
+            },
+            onDismiss = { prompt = null },
         )
 
         Prompt.SignOutSaving -> TvConfirm(
