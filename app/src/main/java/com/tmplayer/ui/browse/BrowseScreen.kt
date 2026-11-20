@@ -2604,7 +2604,10 @@ internal fun ChatSection(
     // On a phone a chip, a sort or a search moves the rows to their new places and fades newcomers
     // in. Not past a few hundred chats, where the bookkeeping costs more than the motion is worth.
     val animateRows = rowsAreFullBleed && !(rememberReducedMotion() || Motion.reduced) && chats.size <= ANIMATED_ROWS_MAX
-    Box(Modifier.fillMaxSize()) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        // A tablet's or an open foldable's chat list stands in a centred column (U17); zero on a
+        // phone and on the television, whose two columns already use the width.
+        val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth, touch = rowsAreFullBleed)
         when {
             twoColumns -> LazyVerticalGrid(
                 columns = GridCells.Fixed(TV_CHAT_COLUMNS),
@@ -2642,7 +2645,7 @@ internal fun ChatSection(
                 // they sit against each other with no gap: the list is one surface, not a stack of
                 // cards. The television keeps both, because its cards need room to grow a border.
                 contentPadding = if (rowsAreFullBleed) {
-                    PaddingValues(bottom = insets.bottom)
+                    PaddingValues(start = gutter, end = gutter, bottom = insets.bottom)
                 } else {
                     PaddingValues(start = insets.start, end = insets.end, bottom = insets.bottom)
                 },

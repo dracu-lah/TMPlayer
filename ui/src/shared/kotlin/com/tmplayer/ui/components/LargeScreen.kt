@@ -26,9 +26,17 @@ object LargeScreen {
      * [side], so it is at most [ColumnMax] wide and centred: zero on a phone, and zero on a large
      * screen narrow enough already.
      */
-    fun extraGutter(width: Dp, height: Dp, side: Dp): Dp {
-        if (!isLarge(width, height)) return 0.dp
-        val extra = (width - side * 2 - ColumnMax) / 2
+    fun extraGutter(width: Dp, height: Dp, side: Dp): Dp = paneGutter(width, width, height, side)
+
+    /**
+     * The same for a list in a pane [paneWidth] wide inside a window [windowWidth] by
+     * [windowHeight]: beside the tablet's rail, or in half of a split screen. Whether the screen is
+     * large is the window's to say, not the pane's, so the keyboard coming up (which shortens the
+     * pane, never the window) does not make the column jump; how far it is moved in is the pane's.
+     */
+    fun paneGutter(paneWidth: Dp, windowWidth: Dp, windowHeight: Dp, side: Dp = 0.dp): Dp {
+        if (!isLarge(windowWidth, windowHeight)) return 0.dp
+        val extra = (paneWidth - side * 2 - ColumnMax) / 2
         return if (extra > 0.dp) extra else 0.dp
     }
 }

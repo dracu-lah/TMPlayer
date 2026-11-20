@@ -33,6 +33,20 @@ class LargeScreenTest {
     }
 
     @Test
+    fun `a pane beside the rail is centred in itself, and the window says whether it is large`() {
+        // A tablet on its side with an 80 dp rail: the pane is 1200 wide, its column 720 in the middle of it.
+        assertEquals(240.dp, LargeScreen.paneGutter(1200.dp, 1280.dp, 800.dp))
+        // A phone on its side is never large, however wide its pane.
+        assertEquals(0.dp, LargeScreen.paneGutter(830.dp, 914.dp, 411.dp))
+        // Half of a split screen, or an open foldable: large, but narrow enough already.
+        assertEquals(0.dp, LargeScreen.paneGutter(640.dp, 640.dp, 800.dp))
+        assertEquals(0.dp, LargeScreen.paneGutter(673.dp, 673.dp, 841.dp))
+        // A zero or nonsense width never gives a negative gutter.
+        assertEquals(0.dp, LargeScreen.paneGutter(0.dp, 1280.dp, 800.dp))
+        assertEquals(LargeScreen.extraGutter(1280.dp, 800.dp, 16.dp), LargeScreen.paneGutter(1280.dp, 1280.dp, 800.dp, 16.dp))
+    }
+
+    @Test
     fun `a large screen already narrow enough keeps its margin`() {
         assertEquals(0.dp, LargeScreen.extraGutter(673.dp, 841.dp, 16.dp))
         assertEquals(0.dp, LargeScreen.extraGutter(752.dp, 900.dp, 16.dp))
