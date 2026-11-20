@@ -213,6 +213,13 @@ class SettingsGroupsTvTest {
         // The sheet's line and the dialog's button both read Forget all; the dialog is the last.
         rule.onAllNodes(hasText("Forget all") and hasClickAction()).onLast().performClick()
         rule.waitForIdle()
+        // The write runs in the screen's own scope after the click, so wait for it instead of reading
+        // the store the instant the UI is idle (a loaded machine reads the old value).
+        val deadline = System.currentTimeMillis() + 5_000
+        while (kotlinx.coroutines.runBlocking { store.learntLanguages.first().size } != 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50)
+            rule.waitForIdle()
+        }
         org.junit.Assert.assertEquals(0, kotlinx.coroutines.runBlocking { store.learntLanguages.first().size })
     }
 
