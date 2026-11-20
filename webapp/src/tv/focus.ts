@@ -14,6 +14,7 @@
 // at the foot. Inside, Left and Right walk its buttons, and Back, or an arrow off its edge back
 // the way the remote came, puts the remote back where it was; so does the notice going away.
 import { createSignal } from 'solid-js'
+import { locked } from '../accounts'
 
 export type Dir = 'up' | 'down' | 'left' | 'right'
 
@@ -661,7 +662,8 @@ export function createFocusMap(host: Host) {
             return
         }
 
-        if (PLAY_KEYS.has(e.key) || PLAY_CODES.has(code)) {
+        // Play would start the locked profile's video: nothing while it is locked (HX88).
+        if ((PLAY_KEYS.has(e.key) || PLAY_CODES.has(code)) && !locked()) {
             // Play on a card plays it, past its page (OK opens the page); on Home's or the page's Play it presses it.
             if (active?.matches('.card, [data-tv-first]')) {
                 e.preventDefault()
@@ -672,7 +674,8 @@ export function createFocusMap(host: Host) {
             return
         }
 
-        const to = COLOUR_KEYS[e.key] ?? COLOUR_CODES[code]
+        // Not while the profile is locked (HX88): the colour keys would open its pages behind the picker.
+        const to = locked() ? undefined : COLOUR_KEYS[e.key] ?? COLOUR_CODES[code]
         if (to) {
             e.preventDefault()
             const item = bar()?.querySelector(`a[href="${to}"]`) as HTMLElement | null

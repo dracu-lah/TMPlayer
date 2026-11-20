@@ -1,3 +1,4 @@
+import { onGlobal } from '../ui/globalInput'
 import { batch, createMemo, createSignal, lazy, Match, onCleanup, onMount, Show, Suspense, Switch } from 'solid-js'
 import { renderSVG } from 'uqr'
 import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
@@ -360,8 +361,7 @@ export function SignIn() {
         padDigit(e.key)
         e.preventDefault()
     }
-    onMount(() => tv && window.addEventListener('keydown', remoteDigit))
-    onCleanup(() => window.removeEventListener('keydown', remoteDigit))
+    onMount(() => tv && onCleanup(onGlobal(window, 'keydown', remoteDigit)))
 
     const resend = async () => {
         const s = step()

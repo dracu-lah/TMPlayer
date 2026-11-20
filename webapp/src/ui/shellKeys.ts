@@ -178,6 +178,8 @@ export interface ShellDeps {
     /** The words of the search button a chat page keeps, when its search field is closed. */
     searchLabel: () => string
     mac?: boolean
+    /** Hears the page's keys: the app's onGlobal (ui/globalInput.ts), which hears nothing while a profile is locked. */
+    listen: (onKey: (e: KeyboardEvent) => void) => () => void
 }
 
 /** A control the keyboard can take: the first link, button or field of an item. */
@@ -250,6 +252,5 @@ export function installShellKeys(deps: ShellDeps): () => void {
         }
         if (took) e.preventDefault()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return deps.listen(onKey)
 }

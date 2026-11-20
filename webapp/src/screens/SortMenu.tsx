@@ -1,3 +1,4 @@
+import { onGlobal } from '../ui/globalInput'
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js'
 import { ShuffleIcon, Sorting01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
@@ -70,12 +71,8 @@ export function SortMenu(props: {
         if (!open()) return
         // The keyboard starts on the first line (a ring shows only where it came by keys).
         queueMicrotask(() => box.querySelector<HTMLElement>('[role^=menuitem]')?.focus({ preventScroll: true }))
-        document.addEventListener('pointerdown', close)
-        document.addEventListener('keydown', close)
-        onCleanup(() => {
-            document.removeEventListener('pointerdown', close)
-            document.removeEventListener('keydown', close)
-        })
+        onCleanup(onGlobal(document, 'pointerdown', close))
+        onCleanup(onGlobal(document, 'keydown', close))
     })
     const label = () => (props.filtersOn ? t('grid.filter_on') : t('grid.sort_label'))
     const glyph = () => (
