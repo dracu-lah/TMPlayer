@@ -216,6 +216,17 @@ video alerts take theirs there, and check `OwnedSessions.ensure()` again before 
 write. `TdSessionPolicyTest` lists every other wait and why it is safe (a read for the screen on
 screen, or the player, which closes before a switch).
 
+App-wide collectors over a profile's flows (audited, HX88): a switch must never read as a
+change of that profile's data. "Remove after watching" (`RemoveAfterWatching`, both apps) takes a
+new starting point whenever the open profile changes, deleting nothing, and deletes only as the
+profile whose marks they are, stopping if it is no longer open. The others only mirror the open
+profile's state and act on no difference: the kids lock and the chats added (`ChatGate.follow`,
+`AddedChats.follow`), the viewer's corrections (`VideoCorrections.follow`), the widget's tile, the
+TV's channels (cleared on every switch), the notifications (taken down on every switch), and gone
+videos (`GoneVideos`, which forgets on a switch). The rest of App.kt's collectors read device
+settings (language, low storage, mobile data, pictures, motion, haptics, the downloads folder,
+frame rate matching).
+
 The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
 background scope as the profile open when they were asked (`AccountOwner`), so one that lands
 after a switch is dropped.
