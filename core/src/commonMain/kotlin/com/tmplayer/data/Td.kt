@@ -1445,6 +1445,17 @@ object Td {
         withTimeoutOrNull(timeoutMs) { awaitConnectedSession() }
 
     /**
+     * The live client of [owner]'s account (HX88), connected, or null: null while a switch is
+     * under way, once another profile is open, and when the client that came up meanwhile is the
+     * next profile's. Every job that writes to Telegram takes its session here, never through
+     * [awaitConnectedSessionOrNull], so a run of one profile never sends into another's account.
+     */
+    suspend fun sessionFor(owner: AccountStamp, timeoutMs: Long = CONNECT_TIMEOUT_MS): TdSession? =
+        OwnedSessions.await(owner, mayAct = { OwnedSessions.mayAct(owner) }, ownerOf = { it.owner }, timeoutMs = timeoutMs) {
+            awaitConnectedSession()
+        }
+
+    /**
      * When Telegram's flood wait expires, as a wall-clock stamp, or zero when nothing is waiting.
      *
      * Recorded rather than only humanised, so a manual Refresh can decline to make things worse.
@@ -1881,6 +1892,8 @@ object Td {
 class TdSession internal constructor(
     val client: TdlClient,
     val generation: Long,
+    /** The profile open when this client was made (HX88): the one whose account it is. */
+    val owner: AccountStamp = Accounts.stamp,
 ) {
     fun isCurrent(): Boolean = Td.isCurrent(this)
 }

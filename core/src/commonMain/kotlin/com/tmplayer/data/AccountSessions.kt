@@ -164,12 +164,15 @@ object AccountSessions {
      * case where the list cannot be read to tell.
      */
     suspend fun end(id: Long): String? {
-        val td = runCatching { Td.awaitAuthorizedSession().client }.getOrElse { return L.errorsNotConnected }
+        // The open profile's own client (HX88): never the next one's if a switch lands meanwhile.
+        val owner = Accounts.stamp
+        val td = Td.sessionFor(owner)?.client ?: return L.errorsNotConnected
         val listed = when (val read = td.getActiveSessions()) {
             is TdlResult.Success -> read.result.sessions.orEmpty()
             is TdlResult.Failure -> return Failures.humanise(read.message)
         }
         if (endsThisDevice(listed, id)) return L.sessionsEndThisDevice
+        if (!OwnedSessions.mayAct(owner)) return L.errorsNotConnected
         val result = td.terminateSession(id)
         return (result as? TdlResult.Failure)?.let { Failures.humanise(it.message) }
     }
@@ -180,12 +183,14 @@ object AccountSessions {
      * went wrong first.
      */
     suspend fun endAllOthers(): String? {
-        val td = runCatching { Td.awaitAuthorizedSession().client }.getOrElse { return L.errorsNotConnected }
+        val owner = Accounts.stamp
+        val td = Td.sessionFor(owner)?.client ?: return L.errorsNotConnected
         val sessions = when (val result = td.getActiveSessions()) {
             is TdlResult.Success -> result.result.sessions.orEmpty()
             is TdlResult.Failure -> return Failures.humanise(result.message)
         }
         for (session in sessions.filter { !it.isCurrent && ours(it) }) {
+            if (!OwnedSessions.mayAct(owner)) return L.errorsNotConnected
             val result = td.terminateSession(session.id)
             if (result is TdlResult.Failure) return Failures.humanise(result.message)
         }

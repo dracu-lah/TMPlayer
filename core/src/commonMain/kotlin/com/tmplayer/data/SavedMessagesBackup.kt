@@ -54,7 +54,9 @@ object SavedMessagesBackup : BackupSender {
      * not a reason to keep the viewer from signing out, so Saved Messages takes it then.
      */
     suspend fun send(text: String, fileName: String, settings: SettingsStore?): BackupSend {
-        val session = Td.awaitConnectedSessionOrNull() ?: return BackupSend.Failed(L.signoutBackupOffline)
+        // The profile signing out's own client (HX88), never another's that came up meanwhile.
+        val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+        val session = Td.sessionFor(owner) ?: return BackupSend.Failed(L.signoutBackupOffline)
         var folder: File? = null
         return try {
             val td = session.client
@@ -103,6 +105,7 @@ object SavedMessagesBackup : BackupSender {
             }
             try {
                 val sent = waitingOutFlood(3, 60, { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
+                    OwnedSessions.ensure()
                     td.sendMessage(chat, null, null, options, null, content)
                 }
                 if (sent !is TdlResult.Success) return@coroutineScope PostOutcome(BackupSend.Failed(Failures.humanise(sent.errorMessage ?: "send")), sent.errorMessage)

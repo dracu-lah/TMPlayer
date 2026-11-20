@@ -181,3 +181,39 @@ object OutsideWrites {
         return book.list.map { it.active?.pin != null }.distinctUntilChanged()
     }
 }
+
+/**
+ * A Telegram session bound to the profile a job works for (HX88). [Td.sessionFor] is this over
+ * the live client; apart from Td so a test drives it with fake sessions and a fake switch.
+ */
+object OwnedSessions {
+    /** [owner] is the open profile's turn and no switch is under way. */
+    fun mayAct(owner: AccountStamp, current: AccountStamp = Accounts.stamp, switching: Boolean = Accounts.book?.list?.value?.switchingTo != null): Boolean =
+        owner == current && !switching
+
+    /**
+     * The session [next] gives, kept only when it is [owner]'s ([ownerOf]) and [owner] may still
+     * act; null when it times out, or when the session that came up is another profile's (the
+     * client of the last profile closed slowly and the next one's came up while this waited).
+     */
+    suspend fun <S : Any> await(
+        owner: AccountStamp,
+        mayAct: () -> Boolean,
+        ownerOf: (S) -> AccountStamp,
+        timeoutMs: Long,
+        next: suspend () -> S,
+    ): S? {
+        if (!mayAct()) return null
+        val session = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { next() } ?: return null
+        return session.takeIf { ownerOf(it) == owner && mayAct() }
+    }
+
+    /** Thrown before a Telegram write of a job whose profile is no longer open: the job stops there. */
+    class ProfileGone : IllegalStateException("another profile is open")
+
+    /** Before each Telegram write and store write of an owned job: stops it when its profile is gone. */
+    suspend fun ensure() {
+        val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: return
+        if (!mayAct(owner)) throw ProfileGone()
+    }
+}

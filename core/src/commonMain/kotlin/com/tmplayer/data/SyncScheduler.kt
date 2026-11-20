@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -76,7 +77,15 @@ class SyncScheduler(
             // Only the wait is cancelled by a newer ask: a sync under way finishes.
             withContext(NonCancellable) {
                 runs++
-                if (runCatching { job(why) }.getOrDefault(true)) onRan(clock())
+                // A run that was cancelled (a switch) did not run: its pause does not start.
+                val ran = try {
+                    job(why)
+                } catch (e: CancellationException) {
+                    false
+                } catch (e: Exception) {
+                    true
+                }
+                if (ran) onRan(clock())
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.launch
+
 /**
  * What the "Who's watching?" picker shows (HX88), worked out apart from any screen so the phone,
  * the TV, the desktop and iOS draw the same thing: one tile per profile in the list's order, then
@@ -98,28 +100,52 @@ object ProfilePicker {
  * after the viewer has agreed to stop what plays.
  */
 object BeforeSwitch {
-    private val hooks = java.util.concurrent.CopyOnWriteArrayList<suspend () -> Unit>()
+    private class Entry(val hook: suspend () -> Unit, val label: () -> String?)
 
-    fun add(hook: suspend () -> Unit) {
-        hooks += hook
+    private val hooks = java.util.concurrent.CopyOnWriteArrayList<Entry>()
+
+    /** [hook] runs before each switch; [label] says what it waits for while it does ("a sync"), null for nothing to say. */
+    fun add(hook: suspend () -> Unit, label: () -> String? = { null }) {
+        hooks += Entry(hook, label)
     }
 
-    fun remove(hook: suspend () -> Unit) {
-        hooks -= hook
-    }
+    fun remove(hook: suspend () -> Unit): Boolean = hooks.removeAll { it.hook === hook }
 
-    /** Every hook in turn; one that fails is logged and the rest still run. */
-    suspend fun runAll() {
-        for (hook in hooks) {
-            try {
-                hook()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                com.tmplayer.platform.Logger.w("BeforeSwitch", "a hook before a profile switch failed", e)
+    /**
+     * Every hook at once, all under one [deadlineMs] (HX88): a switch never waits longer than that
+     * for the slowest, and a job that has not stopped by then is abandoned safely, since every
+     * write of it carries its owner. [onWaiting] hears what is still being waited for, as it goes.
+     * One that fails is logged; the rest still run.
+     */
+    suspend fun runAll(deadlineMs: Long = DEADLINE_MS, onWaiting: (List<String>) -> Unit = {}) {
+        val entries = hooks.toList()
+        if (entries.isEmpty()) return
+        val left = java.util.concurrent.ConcurrentHashMap<Int, String>()
+        entries.forEachIndexed { index, entry -> runCatching { entry.label() }.getOrNull()?.let { left[index] = it } }
+        fun say() = runCatching { onWaiting(left.entries.sortedBy { it.key }.map { it.value }) }
+        say()
+        kotlinx.coroutines.withTimeoutOrNull(deadlineMs) {
+            kotlinx.coroutines.coroutineScope {
+                entries.forEachIndexed { index, entry ->
+                    launch {
+                        try {
+                            entry.hook()
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            com.tmplayer.platform.Logger.w("BeforeSwitch", "a hook before a profile switch failed", e)
+                        } finally {
+                            left.remove(index)
+                            say()
+                        }
+                    }
+                }
             }
-        }
+        } ?: com.tmplayer.platform.Logger.w("BeforeSwitch", "some work before a profile switch did not stop in time; its writes are dropped")
     }
+
+    /** The longest a switch waits for everything before it, together. */
+    const val DEADLINE_MS = 30_000L
 
     /** How many are registered: players and long jobs. */
     val count: Int get() = hooks.size
@@ -127,13 +153,13 @@ object BeforeSwitch {
     private val players = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** A player's hook: it also counts as something playing, which a switch asks about first. */
-    fun addPlayer(hook: suspend () -> Unit) {
-        add(hook)
+    fun addPlayer(hook: suspend () -> Unit, label: () -> String? = { null }) {
+        add(hook, label)
         players.incrementAndGet()
     }
 
     fun removePlayer(hook: suspend () -> Unit) {
-        if (hooks.remove(hook)) players.decrementAndGet()
+        if (remove(hook)) players.decrementAndGet()
     }
 
     /** How many players are open now (a long job's hook is not one). */

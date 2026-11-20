@@ -56,7 +56,10 @@ import java.io.File
 object ResumeSync {
 
     private val lock = Mutex()
-    @Volatile private var lastAutoAt = 0L
+    /** When each profile's sync last ran in this process (HX88): one profile's run never makes another wait. */
+    private val lastAutoAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun lastAutoAtNow(): Long = lastAutoAt[Accounts.stamp.folder.orEmpty()] ?: 0L
     @Volatile private var lastPullAt = 0L
     @Volatile private var lastSendAt = 0L
     @Volatile private var lastSendChat = 0L
@@ -143,21 +146,35 @@ object ResumeSync {
             clock = System::currentTimeMillis,
             foreground = { foreground },
             lowEnd = lowEnd,
-            lastRunAt = { lastAutoAt },
-            // As the profile open when the run starts (HX88): its stamp of when it last wrote goes to
-            // that profile's store, or nowhere once another profile is open.
+            lastRunAt = { lastAutoAtNow() },
+            // As the profile open when the run starts (HX88): when it ran is that profile's, kept
+            // here and in its store, or nowhere once another profile is open.
             job = { why ->
-                withContext(AccountOwner(Accounts.stamp)) {
+                val owner = Accounts.stamp
+                withContext(AccountOwner(owner)) {
                     val ran = sync(settings, manual = why == SyncScheduler.Why.Manual) != Outcome.Off
-                    if (ran) runCatching { settings.setResumeSyncWroteAt(System.currentTimeMillis()) }
+                    if (ran) {
+                        val now = System.currentTimeMillis()
+                        lastAutoAt[owner.folder.orEmpty()] = now
+                        runCatching { settings.setResumeSyncWroteAt(now) }
+                    }
                     ran
                 }
             },
-            onRan = { at -> lastAutoAt = at },
         ).also {
             scheduler = it
-            // Where the last run stood before this process: a restart does not start the pause over.
-            Background.scope.launch { lastAutoAt = maxOf(lastAutoAt, runCatching { settings.resumeSyncWroteAtNow() }.getOrDefault(0L)) }
+            // Where each profile's last run stood before this process: a restart, or a switch to
+            // it, does not start its pause over.
+            fun load() {
+                val owner = Accounts.stamp
+                Background.scope.launch(AccountOwner(owner)) {
+                    val stored = runCatching { settings.resumeSyncWroteAtNow() }.getOrDefault(0L)
+                    val key = owner.folder.orEmpty()
+                    lastAutoAt[key] = maxOf(lastAutoAt[key] ?: 0L, stored)
+                }
+            }
+            load()
+            Accounts.onSwitch { load() }
         }
     }
 
@@ -191,7 +208,8 @@ object ResumeSync {
         // switch part way never puts one account's lists into another's stores or file.
         val owner = currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
         return lock.withLock {
-            if (owner != Accounts.stamp) return@withLock Outcome.Off
+            // Not for a profile no longer open, nor while a switch is under way.
+            if (!OwnedSessions.mayAct(owner)) return@withLock Outcome.Off
             withContext(Dispatchers.IO + AccountOwner(owner)) {
                 _running.value = true
                 current = currentCoroutineContext()[Job]
@@ -226,7 +244,7 @@ object ResumeSync {
     const val SWITCH_WAIT_MS = 20_000L
 
     init {
-        BeforeSwitch.add(stopBeforeSwitch)
+        BeforeSwitch.add(stopBeforeSwitch) { if (current != null) com.tmplayer.i18n.L.profilesWaitingSync else null }
     }
 
     /**
@@ -254,13 +272,15 @@ object ResumeSync {
 
     private suspend fun turnOffAndDelete(settings: SettingsStore, owner: AccountStamp): Boolean = lock.withLock {
         withContext(Dispatchers.IO + AccountOwner(owner)) {
+          current = currentCoroutineContext()[Job]
+          try {
             val known = runCatching { settings.resumeSyncFileNow() }.getOrDefault(0L)
             val knownFileChat = runCatching { settings.syncFileChatNow() }.getOrDefault(0L)
             val knownLegacy = runCatching { settings.resumeSyncMessageNow() }.getOrDefault(0L)
             val choice = runCatching { settings.syncChannelNow() }.getOrNull()
             settings.setResumeSync(false)
             settings.setSyncOldCopy("")
-            val session = Td.awaitConnectedSessionOrNull() ?: return@withContext false
+            val session = Td.sessionFor(owner) ?: return@withContext false
             try {
                 val td = session.client
                 val myId = Td.myId().takeIf { it != 0L } ?: return@withContext false
@@ -282,6 +302,9 @@ object ResumeSync {
                 Logger.w(TAG, "Deleting the sync file failed", e)
                 false
             }
+          } finally {
+            current = null
+          }
         }
     }
 
@@ -290,7 +313,9 @@ object ResumeSync {
         val watched = watchedStore ?: return Outcome.Failed("not ready")
         val bookmarks = bookmarkStore
         if (!manual && holdForLine(settings)) return Outcome.WaitingForUnmetered
-        val session = Td.awaitConnectedSessionOrNull(connectWaitMs) ?: return Outcome.NoConnection
+        // The owner's own client, never the next profile's that came up while this waited.
+        val runOwner = currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+        val session = Td.sessionFor(runOwner, connectWaitMs) ?: return Outcome.NoConnection
         val td = session.client
         return try {
             val myId = Td.myId().takeIf { it != 0L } ?: return Outcome.NoConnection
@@ -566,7 +591,10 @@ object ResumeSync {
             if (confirmed != null) {
                 settings.setResumeSyncFile(confirmed.id)
                 // A pin in a channel adds a line to it; the file is found by its caption there.
-                if (pin) runCatching { td.pinChatMessage(chatId, confirmed.id, true, false) }
+                if (pin) runCatching {
+                    OwnedSessions.ensure()
+                    td.pinChatMessage(chatId, confirmed.id, true, false)
+                }
                 return WriteResult.Written
             }
         }
@@ -682,8 +710,14 @@ object ResumeSync {
      * [call], with a FLOOD_WAIT waited out by this call alone, up to [MAX_FLOOD_WAIT_S] and
      * [TRIES] times; any other answer, or a longer wait, is handed back as it came.
      */
-    private suspend fun <T> waited(call: suspend () -> TdlResult<T>): TdlResult<T> =
-        waitingOutFlood(TRIES, MAX_FLOOD_WAIT_S, { result -> (result as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }, call = call)
+    private suspend fun <T> waited(call: suspend () -> TdlResult<T>): TdlResult<T> {
+        // Each call of a run: only while its profile is open (HX88), checked before every try.
+        OwnedSessions.ensure()
+        return waitingOutFlood(TRIES, MAX_FLOOD_WAIT_S, { result -> (result as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
+            OwnedSessions.ensure()
+            call()
+        }
+    }
 
     /** The caption the file is found by; a hashtag, so Telegram's search finds it at once. */
     const val FILE_TAG = "#TMPlayerSyncFile"
