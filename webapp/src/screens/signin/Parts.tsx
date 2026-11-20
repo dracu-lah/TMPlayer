@@ -1,4 +1,4 @@
-import { createSignal, Show, type JSX } from 'solid-js'
+import { Show, type JSX } from 'solid-js'
 import { ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
 import { iosBrowser } from '../../install'
 import { t } from '../../i18n'
@@ -35,13 +35,12 @@ export function StepLinks(props: { onChangeNumber: () => void; onStartOver: () =
     )
 }
 
-/** The two-step password with its eye button. */
-export function PasswordField(props: { value: string; onInput: (value: string) => void }) {
-    const [shown, setShown] = createSignal(false)
+/** The two-step password with its eye button; whether it is shown is kept by the caller, so it survives Start over. */
+export function PasswordField(props: { value: string; onInput: (value: string) => void; shown: boolean; onToggle: () => void }) {
     return (
         <div class="password-field">
             <input
-                type={shown() ? 'text' : 'password'}
+                type={props.shown ? 'text' : 'password'}
                 aria-label={t('login.password')}
                 placeholder={t('login.password')}
                 autocomplete="current-password"
@@ -52,10 +51,10 @@ export function PasswordField(props: { value: string; onInput: (value: string) =
             <button
                 type="button"
                 class="icon-button"
-                aria-label={shown() ? t('login.hide_password') : t('login.show_password')}
-                onClick={() => setShown(!shown())}
+                aria-label={props.shown ? t('login.hide_password') : t('login.show_password')}
+                onClick={() => props.onToggle()}
             >
-                <Icon icon={shown() ? ViewOffSlashIcon : ViewIcon} size={20} />
+                <Icon icon={props.shown ? ViewOffSlashIcon : ViewIcon} size={20} />
             </button>
         </div>
     )

@@ -397,6 +397,7 @@ export function SignIn() {
 
     // ---- Two-step password ----
     const [password, setPassword] = createSignal('')
+    const [showPassword, setShowPassword] = createSignal(false)
     const sendPassword = async (e: Event) => {
         e.preventDefault()
         if (!password() || busy()) return
@@ -566,7 +567,7 @@ export function SignIn() {
                         <>
                             <StepHead title={t('login.telegram_password_title')} blurb={t('login.password_blurb')} />
                             <form onSubmit={sendPassword}>
-                                <PasswordField value={password()} onInput={(v) => (setPassword(v), setError(null))} />
+                                <PasswordField value={password()} onInput={(v) => (setPassword(v), setError(null))} shown={showPassword()} onToggle={() => setShowPassword(!showPassword())} />
                                 <Show when={s().hint}>
                                     <p class="muted">{t('login.password_hint', { hint: s().hint! })}</p>
                                 </Show>
