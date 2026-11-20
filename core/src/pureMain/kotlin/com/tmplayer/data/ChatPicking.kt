@@ -213,6 +213,28 @@ object ChatPicking {
     fun toggle(ticked: Set<Long>, id: Long): Set<Long> =
         if (id in ticked) ticked.filterTo(LinkedHashSet()) { it != id } else LinkedHashSet(ticked).apply { add(id) }
 
+    /** Saved Messages' id in [chats], or null while the list has not brought it. */
+    fun savedId(chats: List<ChatSummary>): Long? = chats.firstOrNull { it.kind == ChatKind.Saved }?.id
+
+    /**
+     * The ticks a viewer who has never answered starts with (HX86): Saved Messages, which every
+     * account has and where a forwarded video lands, so the setup's Done works at once. Empty
+     * while the list has not brought Saved Messages yet.
+     */
+    fun freshTicks(chats: List<ChatSummary>): Set<Long> = savedId(chats)?.let { setOf(it) }.orEmpty()
+
+    /**
+     * The ticks that come back when "All chats" is switched off (HX86): the ones kept, minus a chat
+     * the viewer has since left (dropped quietly, but only once the list is whole, so a chat still
+     * on its way is never called gone). Never empty: with nothing kept, or nothing left of it, the
+     * answer is Saved Messages, as for a fresh install, when the list has it.
+     */
+    fun afterAllOff(kept: Set<Long>, chats: List<ChatSummary>, listComplete: Boolean): Set<Long> {
+        val here = if (listComplete) chats.mapTo(HashSet()) { it.id } else null
+        val back = if (here == null) kept else kept.filterTo(LinkedHashSet()) { it in here }
+        return back.ifEmpty { freshTicks(chats) }
+    }
+
     /**
      * Above this many chats in one go, the viewer is asked first: every added chat is read, and
      * two hundred of them is a wait worth warning about rather than discovering.

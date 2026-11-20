@@ -452,10 +452,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * answer is an answer. The key is NOT removed when the list empties, since an absent key
      * means "never asked".
      */
-    suspend fun setAddedChats(chats: List<AddedChat>) {
+    suspend fun setAddedChats(chats: List<AddedChat>) = setAddedChoice(AddedChoice(AddedMode.Picked, chats))
+
+    /**
+     * Stores the picker's whole answer in one edit (HX86): under [AddedMode.All], the "All chats"
+     * switch is on and the ticked chats are kept beside it, untouched, so switching it off brings
+     * them back. The switch flipped on and off before Done writes once, the last state.
+     */
+    suspend fun setAddedChoice(choice: AddedChoice) {
         prefs.edit { prefs ->
-            prefs[ADDED_CHATS] = AddedChats.encode(chats)
-            prefs[ADDED_CHATS_MODE] = AddedChats.MODE_PICKED
+            prefs[ADDED_CHATS] = AddedChats.encode(choice.chats)
+            prefs[ADDED_CHATS_MODE] = if (choice.mode == AddedMode.All) AddedChats.MODE_ALL else AddedChats.MODE_PICKED
         }
     }
 
