@@ -354,6 +354,8 @@ const LAST_KEY = names.lastPosition
 type Last = { key: string; resume?: Resume; watched?: number }
 
 function keepLast(last: Last) {
+    // A save as the page closes, after it began leaving its profile (a sign out wiped it), lands nowhere.
+    if (!writesOpen()) return
     try {
         localStorage.setItem(LAST_KEY, JSON.stringify(last))
     } catch {}

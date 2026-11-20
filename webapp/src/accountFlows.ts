@@ -38,7 +38,7 @@ import {
     unlockedId,
     type Intent,
 } from './accounts'
-import { api, openSession, stopSession } from './tg/rpc'
+import { api, openSession, sessionOpen, stopSession } from './tg/rpc'
 import { clearAll, clearProfileData, flushWrites } from './store'
 import { wipeAllPicks } from './player/subpicks-db'
 import { clearThumbs } from './cacheBounds'
@@ -239,11 +239,20 @@ export async function signOutLast() {
 export async function signOutProfile(id: string): Promise<boolean> {
     if (needsPin(id)) return false
     verified.delete(id)
-    if (id === activeId) {
+    // The profile this page runs, with its client open: here and now.
+    if (id === activeId && sessionOpen()) {
         await signOutThisProfile()
         return true
     }
-    if (await heldElsewhere(id)) {
+    return pendingSignOut(id)
+}
+
+/**
+ * A sign out done in the profile's own page, with no screen of it shown: for a sleeping profile, and
+ * for the one this page would run but has not opened (the picker at launch, where no client runs).
+ */
+async function pendingSignOut(id: string): Promise<boolean> {
+    if (await heldElsewhere(id, true)) {
         showToast({ text: t('accounts.open_elsewhere') })
         return false
     }
@@ -259,10 +268,11 @@ export async function signOutProfile(id: string): Promise<boolean> {
 export async function removeProfile(id: string): Promise<boolean> {
     if (needsPin(id)) return false
     verified.delete(id)
-    if (id === activeId) {
+    if (id === activeId && sessionOpen()) {
         await signOutThisProfile()
         return true
     }
+    if (id === activeId) return pendingSignOut(id)
     if (await heldElsewhere(id)) {
         showToast({ text: t('accounts.open_elsewhere') })
         return false
@@ -473,9 +483,8 @@ export async function fetchPhoto() {
 export const pinsWork = () => typeof crypto !== 'undefined' && !!crypto.subtle
 
 export async function tryPin(id: string, pin: string): Promise<B.PinAnswer> {
-    const answer = await B.checkPin(freshBook(), id, pin, Date.now(), crypto)
-    saveBook(answer.book)
-    return answer
+    // Counted on the book as it is once the PIN is derived: tries in another tab meanwhile still count.
+    return B.checkPinIn(freshBook, saveBook, id, pin, Date.now(), crypto)
 }
 
 /** Sets or clears a PIN: only on the profile open and unlocked here, or one whose PIN was just entered. */

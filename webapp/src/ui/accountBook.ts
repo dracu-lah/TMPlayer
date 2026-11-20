@@ -411,22 +411,72 @@ export function lockLeft(p: Profile, now: number): number {
  * not reset it; a locked profile checks nothing. A profile without a PIN opens.
  */
 export async function checkPin(book: Book, id: string, pin: string, now: number, crypto: Crypto): Promise<PinAnswer> {
-    const p = find(book, id)
-    if (!p) return { ok: false, left: 0, book }
-    if (!p.pin) return { ok: true, book }
-    const wait = lockLeft(p, now)
-    if (wait > 0) return { locked: now + wait, book }
-    const salt = unb64(p.pin.salt)
-    const want = unb64(p.pin.hash)
+    let current = book
+    return checkPinIn(
+        () => current,
+        (next) => void (current = next),
+        id,
+        pin,
+        now,
+        crypto,
+    )
+}
+
+/**
+ * The same check against a book that other tabs write too: the PIN is derived first (the slow part),
+ * then the try is counted on the book as it is THEN (`read` again), and written at once, so two tabs
+ * trying at the same time both count and the five-try lock cannot be outrun.
+ */
+export async function checkPinIn(read: () => Book, write: (book: Book) => void, id: string, pin: string, now: number, crypto: Crypto): Promise<PinAnswer> {
+    const before = find(read(), id)
+    if (!before) return { ok: false, left: 0, book: read() }
+    if (!before.pin) return { ok: true, book: read() }
+    const wait = lockLeft(before, now)
+    if (wait > 0) return { locked: now + wait, book: read() }
+    const salt = unb64(before.pin.salt)
+    const want = unb64(before.pin.hash)
     let good = false
-    if (salt && want && validPin(pin)) good = sameBytes(await derive(crypto.subtle, pin, salt, p.pin.rounds), want)
-    if (good) return { ok: true, book: patch(book, id, { fails: 0, lockedUntil: 0 }) }
-    const fails = p.fails + 1
-    if (fails >= PIN_TRIES) {
-        const until = now + PIN_LOCK_MS
-        return { locked: until, book: patch(book, id, { fails: 0, lockedUntil: until }) }
+    if (salt && want && validPin(pin)) good = sameBytes(await derive(crypto.subtle, pin, salt, before.pin.rounds), want)
+    // Counted on the book as it is now: another tab's tries meanwhile are kept.
+    const book = read()
+    const p = find(book, id)
+    if (!p || !p.pin) return { ok: false, left: 0, book }
+    // The PIN changed meanwhile (another tab): this one was checked against the old one, so it opens nothing.
+    if (p.pin.hash !== before.pin.hash) good = false
+    const held = lockLeft(p, now)
+    if (held > 0) return { locked: now + held, book }
+    let answer: PinAnswer
+    if (good) answer = { ok: true, book: patch(book, id, { fails: 0, lockedUntil: 0 }) }
+    else {
+        const fails = p.fails + 1
+        if (fails >= PIN_TRIES) {
+            const until = now + PIN_LOCK_MS
+            answer = { locked: until, book: patch(book, id, { fails: 0, lockedUntil: until }) }
+        } else answer = { ok: false, left: PIN_TRIES - fails, book: patch(book, id, { fails }) }
     }
-    return { ok: false, left: PIN_TRIES - fails, book: patch(book, id, { fails }) }
+    write(answer.book)
+    return answer
+}
+
+/** An unlock as the tab keeps it: the profile and when it was last confirmed (refreshed while the tab is shown). */
+export function writeUnlock(id: string, at: number): string {
+    return JSON.stringify({ id, at })
+}
+
+/**
+ * The profile a stored unlock opens, or null: one that does not hold up, or older than RELOCK_HIDDEN_MS
+ * (a duplicated tab or a session restored after a crash carries an old one), or stamped ahead of now.
+ */
+export function readUnlock(text: string | null | undefined, now: number): string | null {
+    if (!text || text.length > 200) return null
+    try {
+        const v = JSON.parse(text) as { id?: unknown; at?: unknown }
+        if (typeof v.id !== 'string' || !validId(v.id) || typeof v.at !== 'number' || !Number.isFinite(v.at)) return null
+        const age = now - v.at
+        return age >= 0 && age <= RELOCK_HIDDEN_MS ? v.id : null
+    } catch {
+        return null
+    }
 }
 
 /** A cached small photo, as stored: a JPEG or PNG data address of a sensible size, else none. */

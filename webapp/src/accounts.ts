@@ -55,9 +55,9 @@ const tabChoice = session(TAB_KEY)
 if (B.relockDue(first, B.find(first, tabChoice)?.id ?? first.active, hiddenAt(), Date.now())) setSession(UNLOCK_KEY, null)
 setSession(HIDDEN_KEY, null)
 // The unlock holds the tab's own profile only.
-if (session(UNLOCK_KEY) !== null && session(UNLOCK_KEY) !== tabChoice) setSession(UNLOCK_KEY, null)
+if (session(UNLOCK_KEY) !== null && B.readUnlock(session(UNLOCK_KEY), Date.now()) !== tabChoice) setSession(UNLOCK_KEY, null)
 
-const plan = B.bootPlan(first, tabChoice, session(UNLOCK_KEY), B.readPending(session(PENDING_KEY), first))
+const plan = B.bootPlan(first, tabChoice, B.readUnlock(session(UNLOCK_KEY), Date.now()), B.readPending(session(PENDING_KEY), first))
 if (!plan.pending) setSession(PENDING_KEY, null)
 
 /** The profile this page runs, for its whole life. */
@@ -105,11 +105,38 @@ export function closeWrites() {
 // ---- Unlocking ----
 
 /** The PIN profile this tab may open now, or null. */
-export const unlockedId = () => session(UNLOCK_KEY)
+export const unlockedId = () => B.readUnlock(session(UNLOCK_KEY), Date.now())
 /** The PIN was entered for `id` in this tab, which is about to open it: the one unlock the tab holds. */
-export const unlock = (id: string) => setSession(UNLOCK_KEY, id)
+export function unlock(id: string) {
+    setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now()))
+    freshening ??= setInterval(freshenUnlock, 20_000)
+}
 /** Locks again: a switch away, a sign out, a remove, an add, a minute hidden. */
 export const relock = () => setSession(UNLOCK_KEY, null)
+
+/**
+ * The unlock is stamped with a time and runs out after RELOCK_HIDDEN_MS unless the tab, shown, keeps
+ * it fresh: a copy of it (a duplicated tab, a session restored after a crash) or a tab hidden too
+ * long finds it run out. The timer stops by itself once nothing is unlocked.
+ */
+let freshening: ReturnType<typeof setInterval> | undefined
+function freshenUnlock() {
+    const id = unlockedId()
+    if (!id) {
+        clearInterval(freshening)
+        freshening = undefined
+        return
+    }
+    if (id === activeId && document.visibilityState === 'visible') setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now()))
+}
+if (typeof window !== 'undefined') {
+    if (unlockedId()) freshening = setInterval(freshenUnlock, 20_000)
+    // A reload (or a closing tab) stamps it now: the next page of this tab finds it fresh, a copy restored later does not.
+    window.addEventListener('pagehide', () => {
+        const id = unlockedId()
+        if (id === activeId) setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now()))
+    })
+}
 
 // ---- The picker ----
 
@@ -185,7 +212,7 @@ if (typeof document !== 'undefined')
         if (document.visibilityState === 'hidden') return setSession(HIDDEN_KEY, String(Date.now()))
         const away = hiddenAt()
         setSession(HIDDEN_KEY, null)
-        if (pendingWork || !B.relockDue(untrack(book), activeId, away, Date.now())) return
+        if (pendingWork || !B.relockDue(untrack(book), activeId, away, Date.now())) return freshenUnlock()
         relock()
         // What plays keeps its place and stops under the picker.
         runBeforeSwitch()
@@ -216,8 +243,9 @@ export function keepPhoto(id: string, dataUrl: string | null) {
 // ---- Tabs ----
 
 /** Whether another tab runs this profile's Telegram client now. Browsers without Web Locks say no. */
-export async function heldElsewhere(id: string): Promise<boolean> {
-    if (id === activeId) return false
+export async function heldElsewhere(id: string, evenThisOne = false): Promise<boolean> {
+    // This page's own profile: its lock is this tab's, unless the page has not opened its client (`evenThisOne`).
+    if (id === activeId && !evenThisOne) return false
     try {
         const state = await navigator.locks?.query()
         return !!state?.held?.some((l) => l.name === namesFor(id).lock)

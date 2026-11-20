@@ -119,6 +119,8 @@ const LOCK = names.lock
 const STEAL = 'tmplayer-use-here'
 
 let claimed = false
+/** Whether this tab started its profile's client (false on the picker at launch, before a choice). */
+export const sessionOpen = () => claimed && !stopped
 /** Set once the page let its client go (a sign out of this profile): nothing starts it again. */
 let stopped = false
 

@@ -10,6 +10,9 @@ import {
     backTarget,
     bootPlan,
     checkPin,
+    checkPinIn,
+    readUnlock,
+    writeUnlock,
     cleanName,
     cleanPhoto,
     defaultBook,
@@ -361,6 +364,51 @@ test('Cancel on a new account goes back only to a profile that needs no PIN agai
     assert.equal(addingFromFor(book, ADOPTED, false, null), null)
     assert.equal(addingFromFor(book, locked, true, null), null)
     assert.equal(addingFromFor(book, locked, true, locked), locked)
+})
+
+test('wrong PINs tried at the same time in two tabs both count, and five lock', async () => {
+    const { book, locked } = await lockedPair()
+    // One book every tab reads and writes (localStorage), stored as text.
+    let stored = writeBook(book)
+    const read = () => readBook(stored)
+    const write = (b: Book) => void (stored = writeBook(b))
+    const two = await Promise.all([checkPinIn(read, write, locked, '0000', 1000, crypto), checkPinIn(read, write, locked, '0001', 1000, crypto)])
+    assert.equal(find(read(), locked)?.fails, 2)
+    assert.deepEqual(two.map((a) => ('left' in a ? a.left : -1)).sort(), [3, 4])
+    const three = await Promise.all([1, 2, 3].map((n) => checkPinIn(read, write, locked, `000${n + 1}`, 1000, crypto)))
+    assert.ok(three.some((a) => 'locked' in a))
+    assert.ok(find(read(), locked)!.lockedUntil > 1000)
+    // While locked, even the right one does nothing.
+    const held = await checkPinIn(read, write, locked, '4821', 2000, crypto)
+    assert.ok('locked' in held)
+})
+
+test('a PIN changed in another tab while one was checked opens nothing', async () => {
+    const { book, locked } = await lockedPair()
+    let stored = writeBook(book)
+    const read = () => readBook(stored)
+    let first = true
+    const write = (b: Book) => void (stored = writeBook(b))
+    const changed = setPin(book, locked, await makePin('9999', crypto, 2000))
+    const reading = () => {
+        // The second read (after deriving) sees the new PIN.
+        if (first) return ((first = false), read())
+        stored = writeBook(changed)
+        return read()
+    }
+    const answer = await checkPinIn(reading, write, locked, '4821', 0, crypto)
+    assert.ok('ok' in answer && !answer.ok)
+})
+
+test('an unlock runs out: a copy restored later, or one stamped ahead, opens nothing', () => {
+    const at = 5_000_000
+    const text = writeUnlock('abc123', at)
+    assert.equal(readUnlock(text, at), 'abc123')
+    assert.equal(readUnlock(text, at + RELOCK_HIDDEN_MS), 'abc123')
+    assert.equal(readUnlock(text, at + RELOCK_HIDDEN_MS + 1), null)
+    assert.equal(readUnlock(text, at - 1), null)
+    // An unlock without a time (an older build's, a hand edit) is none.
+    for (const bad of [null, '', 'abc123', '{"id":"abc123"}', '{"id":"../x","at":5000000}', '{"id":"abc123","at":"5"}', 'x'.repeat(300)]) assert.equal(readUnlock(bad, at), null, String(bad))
 })
 
 test('a tab hidden for more than a minute locks its PIN profile again', async () => {
