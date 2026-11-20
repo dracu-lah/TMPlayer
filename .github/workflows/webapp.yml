@@ -123,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [chromium, webkit]
+        project: [chromium, webkit, webkit-iphone]
 
     steps:
       - uses: actions/checkout@v7
