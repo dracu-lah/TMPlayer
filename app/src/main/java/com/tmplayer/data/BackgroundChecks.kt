@@ -196,6 +196,9 @@ class BackgroundChecks : JobService() {
             withContext(AccountOwner(stamp)) {
                 val session = withTimeoutOrNull(CONNECT_WAIT_MS) { Td.awaitConnectedSession() } ?: return@withContext
                 if (!stamp.isCurrent) return@withContext
+                // A profile behind its PIN (HX88) gets no alert at all: a notification would show
+                // its chats' titles and counts on the lock screen and in the shade.
+                if (ProfileUnlock.hiddenNow() && Accounts.active.pin != null) return@withContext
                 // The kids lock and the chats the viewer added (HX27): no alert comes from a chat
                 // they never added.
                 val allowed = ChatGate.awaitBrowsing()

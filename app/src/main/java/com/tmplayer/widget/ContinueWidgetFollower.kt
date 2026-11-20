@@ -112,14 +112,22 @@ object ContinueWidgetFollower {
         val account = auth().map { ContinueWidget.accountOf(it) }.distinctUntilChanged()
         // The open profile's records (HX88): its store's view moves with a switch, and the tile is
         // worked out again for the next profile even when its list reads the same.
-        return combine(store.continueWatching, store.appLock, account, com.tmplayer.data.Accounts.activeFolder) { records, lock, who, _ ->
+        // And locked while the open profile's PIN was not given in this process (HX88): a PIN
+        // locked profile's titles and posters never reach the home screen.
+        return combine(
+            store.continueWatching,
+            store.appLock,
+            account,
+            com.tmplayer.data.Accounts.activeFolder,
+            com.tmplayer.data.ProfileUnlock.hidden(),
+        ) { records, lock, who, _, profileLocked ->
             // A video this session learnt is gone is skipped unless the viewer downloaded it.
             val gone = records.filter { GoneVideos.reasonFor(it.chatId, it.messageId) != null }
                 .mapTo(HashSet()) { "${it.chatId}:${it.messageId}" }
             val downloaded = if (gone.isEmpty()) emptySet() else runCatching { LocalDownloads.presentIds(store) }.getOrDefault(emptySet())
             ContinueWidget.decide(
                 account = who,
-                locked = ContinueWidget.lockedBy(lock),
+                locked = ContinueWidget.lockedBy(lock, profileLocked),
                 records = records,
                 unavailable = { r ->
                     val id = "${r.chatId}:${r.messageId}"

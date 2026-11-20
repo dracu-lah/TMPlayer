@@ -156,6 +156,8 @@ fun TvHomeChannels(
         // The open profile's work (HX88): a switch part way cancels it, so the launcher never gets
         // one profile's cards once another is open; the next profile's Home writes its own.
         com.tmplayer.data.Accounts.profileScope.launch {
+            // A profile locked again meanwhile (HX88) puts nothing on the launcher.
+            if (com.tmplayer.data.ProfileUnlock.hiddenNow()) return@launch
             TvChannelsPublisher.publish(context, plan) { channel ->
                 when (channel) {
                     TvChannels.Channel.Recent -> L.homeChannelRecent
