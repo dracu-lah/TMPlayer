@@ -454,7 +454,7 @@ fun EpisodeRow(
  * television control does.
  */
 @Composable
-fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, description: String = label) {
+fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, description: String = label, enabled: Boolean = true) {
     val tv = !isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
@@ -470,11 +470,12 @@ fun CopyChip(label: String, chosen: Boolean, onClick: () -> Unit, modifier: Modi
         },
         maxLines = 1,
         modifier = modifier
+            .then(if (enabled) Modifier else Modifier.alpha(0.4f))
             .semantics {
                 contentDescription = description
                 selected = chosen
             }
-            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, role = Role.Button, enabled = enabled, onClick = onClick)
             // A finger's 48 dp, round a pill that stays as slim as it was: the press lands on the
             // taller box, the fill and ring are drawn on the pill inside it.
             .then(if (tv) Modifier else Modifier.minimumInteractiveComponentSize())

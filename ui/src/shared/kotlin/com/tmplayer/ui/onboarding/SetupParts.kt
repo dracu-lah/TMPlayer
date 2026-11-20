@@ -49,6 +49,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -126,6 +127,8 @@ internal fun SetupButton(
     primary: Boolean = false,
     tonal: Boolean = false,
     modifier: Modifier = Modifier,
+    /** False draws the button dimmed, takes no press and no focus (the picker's band button while every chat counts). */
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -133,6 +136,7 @@ internal fun SetupButton(
     val touch = deviceForm() == DeviceForm.Phone
     Row(
         modifier
+            .then(if (enabled) Modifier else Modifier.alpha(0.4f))
             // A finger needs 48 dp to hit (HX56: the picker's Done was 37).
             .then(if (touch) Modifier.heightIn(min = 48.dp) else Modifier)
             // Sinks a little under a finger or a click, and comes back up on release.
@@ -154,6 +158,7 @@ internal fun SetupButton(
                 interactionSource = interactions,
                 indication = if (touch) LocalIndication.current else null,
                 role = Role.Button,
+                enabled = enabled,
                 onClick = onClick,
             )
             .padding(horizontal = 18.dp, vertical = 10.dp),

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tmplayer.data.AddedChat
 import com.tmplayer.data.AddedChats
+import com.tmplayer.data.AddedChoice
 import com.tmplayer.data.AddedMode
 import com.tmplayer.data.ChatCount
 import com.tmplayer.data.ChatCountCalls
@@ -38,17 +39,23 @@ import kotlinx.coroutines.withTimeoutOrNull
  *   the promo build): the rows then say nothing about videos rather than spin.
  * @param write where Done writes the choice: the store's own [SettingsStore.setAddedChats], or a
  *   test's stand in; null leaves Done doing nothing, as with no store.
+ * @param writeChoice where Done writes the choice while "All chats" is on (HX86): the mode and the
+ *   kept ticks together ([SettingsStore.setAddedChoice]). Without it [write] gets the kept ticks.
  */
 class AddChatsViewModel(
     private val settings: SettingsStore? = null,
     private val counts: ChatCountCalls? = null,
     private val write: (suspend (List<AddedChat>) -> Unit)? = settings?.let { store -> store::setAddedChats },
+    private val writeChoice: (suspend (AddedChoice) -> Unit)? = settings?.let { store -> store::setAddedChoice },
     /** Whether [countRest] counts the whole account in the background; a test of the row counts turns it off. */
     private val countsRest: Boolean = true,
 ) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("AddChats")) {
 
     /**
-     * @param ticked the chats that will be added when Done is pressed.
+     * @param ticked the chats that will be added when Done is pressed. While [allChats] is on they
+     *   are the kept ticks: not counted, not editable, and back in force when it is switched off.
+     * @param allChats the "All chats" switch (HX86): every chat counts, archived, muted, bots and
+     *   people included, and the per-chat ticks are disabled.
      * @param counted each chat's videos as they arrive; a chat absent from here is still counting.
      * @param added the chats the viewer had added when the picker opened (the stored choice when
      *   it is a pick), fixed for the opening: the Added band, and what Recommended leaves out.
@@ -68,6 +75,7 @@ class AddChatsViewModel(
         val scope: ChatPicking.Scope = ChatPicking.Scope.All,
         val folder: Int? = null,
         val ticked: Set<Long> = emptySet(),
+        val allChats: Boolean = false,
         val counted: Map<Long, ChatCount> = emptyMap(),
         val added: Set<Long> = emptySet(),
         val recommended: List<Long> = emptyList(),
@@ -83,6 +91,21 @@ class AddChatsViewModel(
 
     /** What was ticked when the picker opened, so Back knows whether anything changed. */
     private var opened: Set<Long>? = null
+
+    /** Whether "All chats" was on when the picker opened, for the same question. */
+    private var openedAll = false
+
+    /** True once the viewer has touched the switch, so a stored answer that lands late never overrules it. */
+    private var touchedAll = false
+
+    /**
+     * A viewer who has never answered starts with Saved Messages ticked (HX86), once the list has
+     * brought it. True from the start with no store to read (a preview, a test), else once the
+     * stored answer has been read and was none.
+     */
+    private var fresh = settings == null
+    private var seeded = false
+    private var savedId: Long? = null
 
     /** The chats the viewer had added, with their names, so one that is gone keeps its row. */
     private var addedNames: List<AddedChat> = emptyList()
@@ -122,21 +145,67 @@ class AddChatsViewModel(
         viewModelScope.launch {
             val choice = store.addedChats.first()
             addedNames = choice.chats
-            if (choice.mode == AddedMode.Picked) {
+            if (choice.mode != AddedMode.Unanswered) {
+                // Picked, or All with the ticks kept beside the switch (HX86).
                 val ids = choice.chats.mapTo(LinkedHashSet()) { it.id }
                 opened = ids
+                openedAll = choice.mode == AddedMode.All
                 _state.update {
                     it.copy(
                         ticked = it.ticked + ids,
+                        // A switch the viewer already touched is theirs, whatever was stored.
+                        allChats = if (touchedAll) it.allChats else openedAll,
                         added = ids,
                         // Adding one more chat to a choice already made needs no wait for the band.
                         recommending = it.recommending && ids.isEmpty(),
                     )
                 }
             } else {
-                // Nothing picked yet: nothing is ticked until the counts recommend something, and
-                // Back from an untouched picker leaves the account as it was.
+                // Never answered: Saved Messages is ticked once the list has it (HX86), so Done
+                // works at once, and Back from the untouched picker leaves the account as it was.
                 opened = emptySet()
+                fresh = true
+                seedFresh()
+            }
+        }
+    }
+
+    /** Tells the model which chat is Saved Messages, as the list brings it, for the fresh start. */
+    fun knowSaved(id: Long?) {
+        savedId = id
+        seedFresh()
+    }
+
+    /**
+     * Ticks Saved Messages for a viewer who has never answered (HX86), once, and only on an empty
+     * choice: a tick made first is theirs. The untouched picker then counts as unchanged, so Back
+     * does not ask about a tick nobody made.
+     */
+    private fun seedFresh() {
+        val id = savedId ?: return
+        if (!fresh || seeded) return
+        seeded = true
+        // Not under the switch either: with every chat counting there is nothing to start on.
+        if (_state.value.ticked.isNotEmpty() || _state.value.allChats) return
+        _state.update { it.copy(ticked = setOf(id)) }
+        if (opened?.isEmpty() == true) opened = setOf(id)
+    }
+
+    /**
+     * The "All chats" switch (HX86). On: every chat counts and the ticks are disabled but kept.
+     * Off: the kept ticks come back ([ChatPicking.afterAllOff]), never an empty set, and a chat the
+     * viewer has since left is dropped quietly. Pending until Done, like a tick: flipped on and off
+     * again, the last state is what is written, once.
+     */
+    fun setAllChats(on: Boolean, chats: List<ChatSummary>, listComplete: Boolean) {
+        if (locked) return
+        touchedAll = true
+        settled = true
+        _state.update { now ->
+            when {
+                now.allChats == on -> now
+                on -> now.copy(allChats = true)
+                else -> now.copy(allChats = false, ticked = ChatPicking.afterAllOff(now.ticked, chats, listComplete))
             }
         }
     }
@@ -146,6 +215,7 @@ class AddChatsViewModel(
      * seconds of a cold open rather than after the whole account is read.
      */
     fun start(chats: List<ChatSummary>) {
+        knowSaved(ChatPicking.savedId(chats))
         if (headStart != null || chats.isEmpty() || counts == null) return
         scanned = chats
         if (_state.value.recommended.isEmpty() && _state.value.added.isEmpty()) _state.update { it.copy(recommending = true) }
@@ -221,7 +291,8 @@ class AddChatsViewModel(
         List(atOnce.coerceAtLeast(1)) {
             launch {
                 for (id in queue) {
-                    while (held) delay(HOLD_POLL_MS)
+                    // Not while "All chats" is on: nothing is recommended then, so nothing is asked of Telegram.
+                    while (held || _state.value.allChats) delay(if (_state.value.allChats) ALL_POLL_MS else HOLD_POLL_MS)
                     if (_state.value.counted.containsKey(id) || pending.containsKey(id)) continue
                     count(id, batched = true)
                     counting[id]?.join()
@@ -302,6 +373,8 @@ class AddChatsViewModel(
      * since simply is not there next time.
      */
     fun folder(id: Int?) {
+        // The folder chips are greyed while "All chats" is on (HX86), whatever asks.
+        if (id != null && _state.value.allChats) return
         settled = true
         _state.update { it.copy(folder = id, scope = ChatPicking.Scope.All) }
     }
@@ -311,7 +384,8 @@ class AddChatsViewModel(
 
     fun toggle(chatId: Long) {
         settled = true
-        if (!locked) _state.update { it.copy(ticked = ChatPicking.toggle(it.ticked, chatId)) }
+        // Disabled while "All chats" is on: the kept ticks are not edited behind the switch.
+        if (!locked && !_state.value.allChats) _state.update { it.copy(ticked = ChatPicking.toggle(it.ticked, chatId)) }
     }
 
     /**
@@ -328,19 +402,19 @@ class AddChatsViewModel(
     /** Select all, or Clear, over the rows on screen. [visible] is [ChatPicking.visible]. */
     fun selectAll(visible: Set<Long>) {
         settled = true
-        if (!locked) _state.update { it.copy(ticked = ChatPicking.selectAll(it.ticked, visible)) }
+        if (!locked && !_state.value.allChats) _state.update { it.copy(ticked = ChatPicking.selectAll(it.ticked, visible)) }
     }
 
     fun clear(visible: Set<Long>) {
         settled = true
-        if (!locked) _state.update { it.copy(ticked = ChatPicking.clear(it.ticked, visible)) }
+        if (!locked && !_state.value.allChats) _state.update { it.copy(ticked = ChatPicking.clear(it.ticked, visible)) }
     }
 
     /** How many chats Select all would add, for the word before a very large one. */
     fun adding(visible: Set<Long>): Int = visible.count { it !in _state.value.ticked }
 
     /** Whether leaving now would lose a change, which is the only time Back asks. */
-    val changed: Boolean get() = opened?.let { it != _state.value.ticked } ?: false
+    val changed: Boolean get() = opened?.let { it != _state.value.ticked || openedAll != _state.value.allChats } ?: false
 
     /**
      * Writes the choice. The names are kept with the ids, so a chat later left or deleted still
@@ -352,18 +426,24 @@ class AddChatsViewModel(
      * Nothing is tried again on its own.
      */
     fun done(chats: List<ChatSummary>) {
-        val save = write ?: return
+        if (write == null && writeChoice == null) return
         if (locked) return
         // Taken now, with the press: a tick that lands while the write runs is not part of it, and
         // the screen cannot make one (the selection is fixed until the write ends in an error).
         val ticked = _state.value.ticked
+        val all = _state.value.allChats
         _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
             val byId = chats.associateBy { it.id }
             val known = addedNames.associate { it.id to it.title }
             val chosen = ticked.map { id -> AddedChat(id, byId[id]?.title ?: known[id].orEmpty()) }
             try {
-                save(chosen)
+                // "All chats" on keeps the ticks beside the switch; off writes a plain pick (HX86).
+                when {
+                    all && writeChoice != null -> writeChoice.invoke(AddedChoice(AddedMode.All, chosen))
+                    write != null -> write.invoke(chosen)
+                    else -> writeChoice?.invoke(AddedChoice(AddedMode.Picked, chosen))
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
@@ -371,6 +451,7 @@ class AddChatsViewModel(
                 return@launch
             }
             opened = ticked
+            openedAll = all
             _state.update { it.copy(saving = false, saved = true) }
         }
     }
@@ -408,6 +489,7 @@ class AddChatsViewModel(
         private const val RETRY_MAX = 100
         const val BATCH_ON_TV_MS = 5_000L
         private const val HOLD_POLL_MS = 150L
+        private const val ALL_POLL_MS = 1_000L
 
         /**
          * How long the Recommended band waits for the head start before it is taken from whatever
