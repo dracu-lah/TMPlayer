@@ -82,6 +82,7 @@ private fun TrailersInAppToggleRow() {
         title = s.metadataTrailersInApp,
         subtitle = s.metadataTrailersInAppDetail,
         icon = TmIcons.Trailer,
+        service = com.tmplayer.ui.components.Service.YouTube,
         checked = settings.trailersInApp,
         onToggle = { online.setTrailersInApp(!settings.trailersInApp) },
     )
@@ -118,6 +119,8 @@ private fun MetadataKeyRow(onEditKey: () -> Unit) {
         subtitle = MetaWords.key(state),
         icon = TmIcons.Lock,
         tint = if (trouble) Tone.caution else Color.Unspecified,
+        // The caution tint is the signal while the key is in trouble, so the logo waits.
+        service = if (trouble) null else com.tmplayer.ui.components.Service.Tmdb,
         onClick = onEditKey,
     )
 }
@@ -134,6 +137,7 @@ private fun OmdbKeyRow(onEdit: () -> Unit) {
         subtitle = MetaWords.omdbKey(state),
         icon = TmIcons.Lock,
         tint = if (state == OmdbState.OwnKeyRefused) Tone.caution else Color.Unspecified,
+        service = if (state == OmdbState.OwnKeyRefused) null else com.tmplayer.ui.components.Service.Omdb,
         onClick = onEdit,
     )
 }

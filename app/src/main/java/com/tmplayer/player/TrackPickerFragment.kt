@@ -129,6 +129,8 @@ class TrackPickerFragment : Fragment() {
         val detail: String? = null,
         /** What a sound track declares (Atmos, DTS, 5.1 and so on), drawn as pills under the name; empty for the rest. */
         val tags: List<FormatFacts.Tag> = emptyList(),
+        /** The service the line is about, drawn as its badge in the icon's place (HX93). */
+        val service: com.tmplayer.ui.components.Service? = null,
     )
 
     private enum class Page { Tracks, Online, Msone, SubMaker, Chat }
@@ -151,6 +153,8 @@ class TrackPickerFragment : Fragment() {
         val enabled: Boolean = true,
         val group: Group = Group.Tracks,
         val tags: List<FormatFacts.Tag> = emptyList(),
+        /** The service the line is about, drawn as its badge in the icon's place (HX93). */
+        val service: com.tmplayer.ui.components.Service? = null,
         val onClick: () -> Unit,
     )
 
@@ -349,7 +353,7 @@ class TrackPickerFragment : Fragment() {
     /** "Search online", in a build that carries the OpenSubtitles key. */
     private fun onlineLine(onOnline: () -> Unit): Line? {
         if (!OnlineSubtitles.available) return null
-        return Line("online", L.onlineSearchOnline, L.onlineSearchOnlineDetail, icon = TmIcons.Search, group = Group.Online, onClick = onOnline)
+        return Line("online", L.onlineSearchOnline, L.onlineSearchOnlineDetail, icon = TmIcons.Search, service = com.tmplayer.ui.components.Service.OpenSubtitles, group = Group.Online, onClick = onOnline)
     }
 
     /**
@@ -358,13 +362,13 @@ class TrackPickerFragment : Fragment() {
      */
     private fun msoneLine(onMsone: () -> Unit): Line? {
         if (OnlineSubtitles.current?.msoneShown != true) return null
-        return Line("msone", L.msoneSearch, L.msoneSearchDetail, icon = TmIcons.Search, group = Group.Online, onClick = onMsone)
+        return Line("msone", L.msoneSearch, L.msoneSearchDetail, icon = TmIcons.Search, service = com.tmplayer.ui.components.Service.MSone, group = Group.Online, onClick = onMsone)
     }
 
     /** SubMaker's list, once the viewer has set the address of their own under Settings, Online subtitles. */
     private fun submakerLine(onSubmaker: () -> Unit): Line? {
         if (OnlineSubtitles.current?.submakerOn != true) return null
-        return Line("submaker", L.submakerSearch, L.submakerSearchDetail, icon = TmIcons.Search, group = Group.Online, onClick = onSubmaker)
+        return Line("submaker", L.submakerSearch, L.submakerSearchDetail, icon = TmIcons.Search, service = com.tmplayer.ui.components.Service.SubMaker, group = Group.Online, onClick = onSubmaker)
     }
 
     /** The offset now in force, under each timing line, so a press shows where it got to. */
@@ -487,6 +491,15 @@ class TrackPickerFragment : Fragment() {
             closeFocus = closeFocus,
             fullScreen = true,
         ) {
+            // Whose list this is: the service's logo and name, drawn only, never a focus stop.
+            com.tmplayer.ui.components.ServiceBadge(
+                if (msone) com.tmplayer.ui.components.Service.MSone
+                else if (submaker) com.tmplayer.ui.components.Service.SubMaker
+                else com.tmplayer.ui.components.Service.OpenSubtitles,
+                modifier = Modifier.padding(bottom = 8.dp),
+                size = com.tmplayer.ui.components.ServiceBadgeSize.Credit,
+                showName = true,
+            )
             val shown = result
             if (shown == null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -934,6 +947,7 @@ class TrackPickerFragment : Fragment() {
                 icon = line.icon,
                 enabled = line.enabled,
                 tags = line.tags,
+                service = line.service,
                 modifier = if (line.key == focusKey) Modifier.focusRequester(firstFocus) else Modifier,
                 onClick = line.onClick,
             )

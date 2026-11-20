@@ -87,6 +87,7 @@ private fun MsoneRow() {
         },
         icon = TmIcons.Language,
         tint = if (account.msoneState == com.tmplayer.online.MsoneState.On) androidx.compose.ui.graphics.Color.Unspecified else Tone.muted,
+        service = com.tmplayer.ui.components.Service.MSone,
         onClick = {
             if (!checking) {
                 checking = true
@@ -114,6 +115,7 @@ private fun SubMakerRow(onDialog: (OnlineDialog) -> Unit) {
         title = s.submakerSettingsTitle,
         subtitle = if (account.submakerBase.isBlank()) s.submakerSettingsNone else s.submakerSettingsSet,
         icon = TmIcons.Lock,
+        service = com.tmplayer.ui.components.Service.SubMaker,
         onClick = { onDialog(OnlineDialog.SubMakerUrl) },
     )
 }
@@ -137,12 +139,14 @@ private fun AccountRow(onDialog: (OnlineDialog) -> Unit) {
             title = s.onlineSignIn,
             subtitle = OnlineWords.status(status),
             icon = TmIcons.Account,
+            service = com.tmplayer.ui.components.Service.OpenSubtitles,
             onClick = { onDialog(OnlineDialog.SignIn) },
         )
         is OnlineStatus.SignedIn, is OnlineStatus.QuotaUsed -> ActionRow(
             title = s.onlineSignOut,
             subtitle = OnlineWords.status(status),
             icon = TmIcons.Account,
+            service = com.tmplayer.ui.components.Service.OpenSubtitles,
             onClick = { onDialog(OnlineDialog.SignOut) },
         )
     }
@@ -195,6 +199,7 @@ private fun SubdlRow(onDialog: (OnlineDialog) -> Unit) {
         },
         icon = TmIcons.Lock,
         tint = if (account.subdlRefused) Tone.muted else androidx.compose.ui.graphics.Color.Unspecified,
+        service = com.tmplayer.ui.components.Service.SubDl,
         onClick = { onDialog(OnlineDialog.SubdlKey) },
     )
 }
@@ -255,6 +260,7 @@ fun OnlineSubtitlesDialog(dialog: OnlineDialog, onClose: () -> Unit) {
                 confirmLabel = s.onlineSignInButton,
                 destructive = false,
                 icon = TmIcons.Account,
+                service = com.tmplayer.ui.components.Service.OpenSubtitles,
                 onDismiss = onClose,
                 onConfirm = {
                     if (busy || username.isBlank() || password.isEmpty()) return@TvConfirm
@@ -307,6 +313,7 @@ fun OnlineSubtitlesDialog(dialog: OnlineDialog, onClose: () -> Unit) {
             confirmLabel = s.onlineSignOut,
             destructive = false,
             onDismiss = onClose,
+            service = com.tmplayer.ui.components.Service.OpenSubtitles,
             onConfirm = {
                 scope.launch {
                     online.signOut()
@@ -324,6 +331,7 @@ fun OnlineSubtitlesDialog(dialog: OnlineDialog, onClose: () -> Unit) {
                 confirmLabel = s.commonOk,
                 destructive = false,
                 icon = TmIcons.Lock,
+                service = com.tmplayer.ui.components.Service.SubMaker,
                 onDismiss = onClose,
                 onConfirm = {
                     if (text.isBlank() && !online.submakerOn) return@TvConfirm onClose()
@@ -366,6 +374,7 @@ fun OnlineSubtitlesDialog(dialog: OnlineDialog, onClose: () -> Unit) {
                 confirmLabel = s.commonOk,
                 destructive = false,
                 icon = TmIcons.Lock,
+                service = com.tmplayer.ui.components.Service.SubDl,
                 onDismiss = onClose,
                 onConfirm = {
                     // `msone` is the hidden switch for MSone's search, not a key.
