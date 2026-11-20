@@ -435,6 +435,13 @@ class GarbageInputTest {
             survive("HomeCache.decode", text) { HomeCache.decode(text) }
             survive("ChatGridDisk.decode", text) { ChatGridDisk.decode(text) }
             survive("ChatSnapshot.decode", text) { ChatSnapshot.decode(text) }
+            // HX88: the profile list, whole, as one profile entry, and with a PIN line that is garbage.
+            survive("AccountCodec.decode", text) {
+                AccountCodec.decode(text)?.let { list -> AccountRules.recovered(list); AccountCodec.encode(list) }
+                AccountCodec.decode("{\"v\":1,\"active\":\"main\",\"profiles\":[{\"id\":\"main\",\"folder\":null,\"name\":" + org.json.JSONObject.quote(text) + "},$text]}")
+                AccountCodec.decode("{\"v\":1,\"profiles\":[{\"id\":\"p1\",\"folder\":\"p1\",\"pin\":" + org.json.JSONObject.quote(text) + "}]}")
+                    ?.profiles?.firstOrNull()?.let { ProfilePin.check(it, "1234", 0L) }
+            }
             survive("ResumeSyncDoc.decode", text) { ResumeSyncDoc.decode(text) }
             // HX87: the stored reason a sync channel is not used, and Telegram's words for a refused post.
             survive("SyncChannelBlock.decode", text) {
