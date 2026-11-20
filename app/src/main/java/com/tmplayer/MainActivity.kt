@@ -351,6 +351,8 @@ class MainActivity : ComponentActivity() {
             com.tmplayer.ui.browse.DebugFakeChats.on = intent.getBooleanExtra("fakechats", false)
         }
         Td.start(this)
+        // A PIN profile stays out of the recents screen (HX88).
+        com.tmplayer.ui.profiles.SecureWindow.follow(this)
         // A debug or promo build can force the support card on, to check it by eye:
         // `adb shell am start -n com.tmplayer/.MainActivity --ez support_reminder true`.
         if (BuildConfig.DEBUG && intent?.getBooleanExtra(EXTRA_SUPPORT_REMINDER, false) == true) {
@@ -390,10 +392,16 @@ class MainActivity : ComponentActivity() {
                             // Trailers play in the app's own full screen player (TRAILERS-PLAN T3), from every detail page.
                             // The profiles (HX88): Who's watching? at launch with two or more, the
                             // shell keyed on the open profile. One profile: Root as it always was.
-                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.trailer.TrailerPlayerRoot {
-                                // Inside the profiles, so it is keyed on the open profile like
-                                // the shell: a switch while offline never shows the last one's downloads.
-                                ProfilesRoot { com.tmplayer.ui.browse.OfflineDownloadsHost { Root() } }
+                            // Trailers, offline downloads and title reports inside the profiles, keyed
+                            // on the open profile like the shell: a switch or a lock closes them, and
+                            // nothing of one profile is drawn over the PIN pad or the next profile.
+                            if (holding) StartupCrashQuestion() else ProfilesRoot {
+                                com.tmplayer.ui.trailer.TrailerPlayerRoot {
+                                    com.tmplayer.ui.browse.OfflineDownloadsHost {
+                                        Root()
+                                        com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
+                                    }
+                                }
                             }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
@@ -405,12 +413,7 @@ class MainActivity : ComponentActivity() {
                         LayoutNudgeHost()
                         // "Wrong title?" and the question after a rename (N1): one place, over every
                         // screen, so it outlives the page whose rename asked it.
-                        // Keyed on the open profile (HX88): a report asked for one profile's video
-                        // never stays up over the next profile.
-                        val openFolder by com.tmplayer.data.Accounts.activeFolder.collectAsStateWithLifecycle()
-                        androidx.compose.runtime.key(openFolder) {
-                            com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
-                        }
+                        // "Wrong title?" is drawn inside the profiles above (HX88).
                     }
                 }
             }

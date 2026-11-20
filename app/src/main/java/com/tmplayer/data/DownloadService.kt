@@ -157,7 +157,15 @@ class DownloadService : Service() {
         scope.launch {
             com.tmplayer.data.Accounts.activeFolder.drop(1).collect { stopForSwitch() }
         }
+        // The shade's titles follow the open profile's lock: the app's name while it is hidden.
+        scope.launch {
+            ProfileUnlock.hidden().drop(1).collect { refresh() }
+        }
     }
+
+    /** [title], or only the app's name while the open profile is hidden behind its PIN (HX88). */
+    private fun shownTitle(title: String): String =
+        if (ProfileUnlock.hiddenNow()) applicationInfo.loadLabel(packageManager).toString() else title
 
     private fun stopForSwitch() {
         val jobs = synchronized(lock) {
@@ -902,7 +910,9 @@ class DownloadService : Service() {
         // The app's scope, not this service's: the service may be stopping as the last one lands.
         val app = applicationContext
         com.tmplayer.App.backgroundScope.launch {
-            runCatching { AppNotices.postDownloadResult(app, result, reason.takeIf { result.total == 1 }) }
+            // Hidden behind its PIN (HX88): no result with its titles in the shade; the Downloads
+            // screen has it once the profile is open again.
+            if (!ProfileUnlock.hiddenNow()) runCatching { AppNotices.postDownloadResult(app, result, reason.takeIf { result.total == 1 }) }
         }
     }
 
@@ -1116,7 +1126,7 @@ class DownloadService : Service() {
         val running = row.stage == OfflineDownloads.Stage.Running
         val fraction = row.fraction
         return builder()
-            .setContentTitle(row.title)
+            .setContentTitle(shownTitle(row.title))
             .setContentText(line)
             .setGroup(GROUP)
             .setOngoing(row.busy)
@@ -1262,7 +1272,7 @@ class DownloadService : Service() {
         ).joinToString(DOT)
 
         return builder
-            .setContentTitle(current.title)
+            .setContentTitle(shownTitle(current.title))
             .setContentText(line)
             .setSubText(Translator.messages.formatter.eta(current.remainingSeconds).ifEmpty { null })
             .setProgress(100, ((fraction ?: 0f) * 100).toInt(), fraction == null)

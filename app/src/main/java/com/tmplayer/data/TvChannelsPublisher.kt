@@ -115,10 +115,13 @@ object TvChannelsPublisher {
      * Makes the channels hold [programs]: missing channels created, cards inserted, rewritten or
      * removed as [TvChannels.diff] says. [names] gives each channel its title in the UI language.
      */
-    suspend fun publish(context: Context, programs: List<TvChannels.Program>, names: (Channel) -> String) {
+    suspend fun publish(context: Context, programs: List<TvChannels.Program>, stamp: com.tmplayer.data.AccountStamp? = null, names: (Channel) -> String) {
         if (!supported(context)) return
         withContext(Dispatchers.IO) {
             lock.withLock {
+                // The one choke point (HX88): asked under the lock, so a publish that waited behind
+                // a clear for a hidden or no longer open profile never puts its cards back.
+                if (!com.tmplayer.data.OutsideWrites.mayWriteNow(stamp)) return@withLock
                 runCatching { publishLocked(context, programs, names) }.onFailure { Log.w(TAG, "channels not written", it) }
             }
         }

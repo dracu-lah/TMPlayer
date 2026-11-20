@@ -2031,6 +2031,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         com.tmplayer.data.SelfInstaller.addBeforeInstall(saveBeforeInstall)
         // A profile switch (HX88) saves the place here, for this profile, and closes the player.
         com.tmplayer.data.BeforeSwitch.add(stopBeforeSwitch)
+        // A PIN profile's video stays out of the recents screen (HX88).
+        com.tmplayer.ui.profiles.SecureWindow.follow(this)
         // Before the first layout pass, on purpose: a window that turns after it has drawn is a
         // lurch the viewer sees. Almost every video is landscape, so landscape is what the loader
         // opens in, and a portrait clip turns once, later.
@@ -2215,8 +2217,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // phone up, and a title on the lock screen would tell them what was on.
         lifecycleScope.launch {
             runCatching {
-                settings.appLock.collect { lock ->
-                    val private = lock.pinSet && lock.onOpen
+                // And while the open profile is hidden behind its PIN (HX88): away from the app,
+                // or locked again, the controls name only the app.
+                kotlinx.coroutines.flow.combine(settings.appLock, com.tmplayer.data.ProfileUnlock.hidden()) { lock, hidden -> lock to hidden }.collect { (lock, hidden) ->
+                    val private = (lock.pinSet && lock.onOpen) || hidden
                     if (private == sessionPrivate) return@collect
                     sessionPrivate = private
                     refreshSessionMetadata()
@@ -10767,7 +10771,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     supported = true,
                     otherCopies = otherCopies,
                 )
-                WatchNextPublisher.apply(context, changes)
+                // Its profile's turn, and only while that profile may show outside the app.
+                WatchNextPublisher.apply(context, changes, stamp = accountOwner)
             }
         }
     }

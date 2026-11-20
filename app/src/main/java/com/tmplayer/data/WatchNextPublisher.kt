@@ -70,7 +70,7 @@ object WatchNextPublisher {
     internal var mediaLookup: suspend (chatId: Long, messageId: Long) -> com.tmplayer.data.MediaItem? =
         { chat, message -> TdHomeSource.mediaItem(chat, message) }
 
-    suspend fun apply(context: Context, changes: List<WatchNext.Change>) {
+    suspend fun apply(context: Context, changes: List<WatchNext.Change>, stamp: com.tmplayer.data.AccountStamp? = null) {
         // The Play next row is Android 8's TV provider; an older television has none to fill.
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         if (changes.isEmpty()) return
@@ -78,6 +78,10 @@ object WatchNextPublisher {
             lock.withLock {
                 val existing = ownRows(context)
                 for (change in changes) {
+                    // The one choke point (HX88): nothing of a profile hidden behind its PIN, or of
+                    // a profile no longer open ([stamp]), goes on the launcher; removing always may.
+                    // Asked under the lock, per change, so a write queued before the clear never lands after it.
+                    if (!com.tmplayer.data.OutsideWrites.mayWriteNow(stamp, removing = change is WatchNext.Change.Remove)) continue
                     runCatching {
                         when (change) {
                             is WatchNext.Change.Remove -> existing[change.internalId]?.let { delete(context, it.id) }
