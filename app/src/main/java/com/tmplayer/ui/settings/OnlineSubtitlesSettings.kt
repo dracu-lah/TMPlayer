@@ -42,7 +42,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 
 /** Which of the section's prompts is open over Settings. */
-enum class OnlineDialog { SignIn, SignOut, SubdlKey }
+enum class OnlineDialog { SignIn, SignOut, SubdlKey, SubMakerUrl }
 
 /**
  * Settings, Online subtitles: the viewer's OpenSubtitles account with what is left of today's
@@ -57,6 +57,7 @@ internal fun LazyListScope.onlineSubtitlesSection(onDialog: (OnlineDialog) -> Un
     item { MachineRow() }
     item { SubdlRow(onDialog) }
     item { MsoneRow() }
+    item { SubMakerRow(onDialog) }
     item { CacheRow() }
 }
 
@@ -96,6 +97,24 @@ private fun MsoneRow() {
                 }
             }
         },
+    )
+}
+
+/**
+ * The viewer's own SubMaker (a Stremio subtitles addon): only "Set" or "Not set" is shown, never
+ * the address, which holds a private token. A press opens the field for a new address; an empty
+ * one removes it. Typed or pasted like the SubDL key, which is also how a television gets it.
+ */
+@Composable
+private fun SubMakerRow(onDialog: (OnlineDialog) -> Unit) {
+    val s = LocalStrings.current
+    val online = OnlineSubtitles.current ?: return
+    val account by online.account.collectAsState()
+    ActionRow(
+        title = s.submakerSettingsTitle,
+        subtitle = if (account.submakerBase.isBlank()) s.submakerSettingsNone else s.submakerSettingsSet,
+        icon = TmIcons.Lock,
+        onClick = { onDialog(OnlineDialog.SubMakerUrl) },
     )
 }
 
@@ -295,6 +314,50 @@ fun OnlineSubtitlesDialog(dialog: OnlineDialog, onClose: () -> Unit) {
                 }
             },
         )
+        OnlineDialog.SubMakerUrl -> {
+            // Never filled in with the saved address: it is a secret and stays out of the field.
+            var text by remember { mutableStateOf("") }
+            var error by remember { mutableStateOf<String?>(null) }
+            TvConfirm(
+                title = s.submakerSettingsTitle,
+                message = s.submakerSettingsMessage,
+                confirmLabel = s.commonOk,
+                destructive = false,
+                icon = TmIcons.Lock,
+                onDismiss = onClose,
+                onConfirm = {
+                    if (text.isBlank() && !online.submakerOn) return@TvConfirm onClose()
+                    when (online.setSubMakerUrl(text)) {
+                        OnlineSubtitles.SubMakerSet.Invalid -> error = s.submakerSettingsInvalid
+                        OnlineSubtitles.SubMakerSet.Cleared -> {
+                            toast(s.submakerSettingsRemoved)
+                            onClose()
+                        }
+                        OnlineSubtitles.SubMakerSet.Saved -> {
+                            toast(s.submakerSettingsSaved)
+                            onClose()
+                            scope.launch {
+                                val problem = online.checkSubMaker()
+                                toast(if (problem == null) s.submakerSettingsOk else OnlineWords.notice(problem))
+                            }
+                        }
+                    }
+                },
+                extra = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PaneField(
+                            value = text,
+                            onValueChange = { text = it; error = null },
+                            placeholder = s.submakerSettingsTitle,
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, autoCorrectEnabled = false),
+                            visualTransformation = PasswordVisualTransformation(),
+                        )
+                        error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Danger) }
+                    }
+                },
+            )
+        }
         OnlineDialog.SubdlKey -> {
             var key by remember { mutableStateOf(online.store.now.subdlKey) }
             TvConfirm(

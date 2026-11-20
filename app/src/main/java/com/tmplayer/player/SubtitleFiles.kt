@@ -118,6 +118,37 @@ class SubtitleFiles(
     }
 
     /**
+     * A subtitle that grows (SubMaker's translation): the file loaded under [label] before is
+     * swapped for [file] in place, so the track list keeps one entry, and the item is rebuilt at
+     * the current position as for any loaded file. Loaded like [attachFile] when there is none yet.
+     */
+    fun replaceFile(file: File, label: String) {
+        val mime = ExternalSubtitle.mimeTypeOf(ExternalSubtitle.extensionOf(file.name))
+        if (mime == null) {
+            say(L.onlineNoticeUnreadable)
+            return
+        }
+        val at = loaded.indexOfFirst { it.label == label }
+        if (at < 0) {
+            attach(Copy.Done(file, mime), label)
+            return
+        }
+        val exo = player() ?: return
+        val video = exo.currentMediaItem?.localConfiguration?.uri ?: return
+        val id = loaded[at].id ?: "external-${at + 1}"
+        loaded[at] = Media3Item.SubtitleConfiguration.Builder(Uri.fromFile(file))
+            .setMimeType(mime)
+            .setLabel(label)
+            .setId(id)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+        if (onCastFile?.invoke(file, mime, label) == true) return
+        pending = id to label
+        exo.setMediaItem(item(video), exo.currentPosition)
+        if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
+    }
+
+    /**
      * A subtitle file posted in the video's chat, already downloaded and read ([ChatSubtitleLoad]):
      * written under the cache as UTF-8 (a MicroDVD `.sub` as SubRip) and laid over the video like a
      * picked one. [handover] is false for a chat or message that withholds saving: the file plays

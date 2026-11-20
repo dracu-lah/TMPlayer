@@ -5153,6 +5153,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** What belonged to the last video, cleared for the next one played in place. */
     private fun forgetTheLastVideo() {
+        endTranslations()
         // The scrub card's pictures were of the last video.
         trickplay?.forget()
         scrubArt = null
@@ -6859,10 +6860,43 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             languages = OnlineSubtitles.languagesFor(tracks.textLanguage),
             imdb = ids.imdb,
             tmdb = ids.tmdb,
+            durationMs = player?.duration?.takeIf { it > 0 && it != C.TIME_UNSET },
         )
     }
 
     override fun attachOnlineSubtitle(file: File, label: String) = subtitleFiles.attachFile(file, label)
+
+    /** The video whose SubMaker translations are running, so they end with it. */
+    private var translatingVideo: String? = null
+
+    private fun endTranslations() {
+        val video = translatingVideo ?: return
+        translatingVideo = null
+        OnlineSubtitles.current?.let { it.translations.cancelVideo(it.translationPrefix(video)) }
+    }
+
+    /**
+     * Runs a SubMaker "Make <Language>" entry as a background job: the video plays on, and the
+     * loaded track is swapped in place as lines arrive (at most about once a minute, each swap
+     * rebuilds the item at this position), the finished one remembered for the video.
+     */
+    override fun startTranslation(hit: com.tmplayer.online.SubtitleHit, target: SubtitleTarget): Boolean {
+        val online = OnlineSubtitles.current ?: return false
+        val label = OnlineSubtitles.label(hit)
+        translatingVideo = target.videoKey
+        val started = online.translate(target.videoKey, hit, target.durationMs) { file, final ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                subtitleFiles.replaceFile(file, label)
+                if (final) {
+                    onlineSubtitlePicked(hit, file)
+                    showGestureFeedback(L.submakerDone(hit.translateTo))
+                }
+            }
+        }
+        if (started) showGestureFeedback(L.submakerStarted(hit.translateTo))
+        return started
+    }
 
     override fun onlineSubtitlePicked(hit: com.tmplayer.online.SubtitleHit, file: File) {
         OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem()), hit, file)
@@ -10464,6 +10498,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // Back in front: the session comes home from the notification, the sound never stopped,
         // and the picture comes back on (turned off only while nobody could see it).
         endBackgroundAudio()
+        OnlineSubtitles.current?.translations?.setForeground(true)
         showVideoAgain()
         PlaybackService.clearStopped(this)
         // It stopped out of sight for a reason that was not the viewer's ([stopUnseen]), and the
@@ -10492,6 +10527,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         super.onStop()
         // A key that was held when the window went away never reports its release.
         endRemoteHold()
+        // A SubMaker translation waits while nobody can see it, and carries on when they are back.
+        OnlineSubtitles.current?.translations?.setForeground(false)
         // Counted again from the start when the viewer is back ([onStart]).
         openingWatch?.cancel()
         rebufferWatch?.cancel()
@@ -10508,6 +10545,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun onDestroy() {
+        // A translation belongs to the video on screen: it ends with the player.
+        endTranslations()
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
         loopHandler.removeCallbacks(watchTick)
