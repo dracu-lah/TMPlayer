@@ -83,7 +83,15 @@ internal class KitPlatform : ProfilePlatform {
     override fun say(text: String) {
         said += text
     }
-    override val appLock: Flow<AppLockSettings?> get() = lock
+    /** What the store says as it changes; a test may make it say nothing for a while. */
+    @Volatile var lockFlow: Flow<AppLockSettings?>? = null
+
+    /** False: the store cannot be read at once (a slow first read). */
+    @Volatile var readable = true
+
+    override val appLock: Flow<AppLockSettings?> get() = lockFlow ?: lock
+
+    override fun appLockNow(): AppLockSettings? = if (readable) lock.value ?: AppLockSettings() else null
 
     /** The app lock's PIN for this test, or null for none. */
     @Volatile var appPin: String? = null

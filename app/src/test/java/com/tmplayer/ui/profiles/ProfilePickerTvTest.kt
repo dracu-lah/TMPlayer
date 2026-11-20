@@ -169,6 +169,26 @@ class ProfilePickerTvTest {
         assertTrue(rule.activity.isFinishing)
     }
 
+    @Test
+    fun `a notice keeps the remote in it and gives the focus back to the tile when it closes`() {
+        val k = ProfileKit("Asha", "Ben", "Cleo").also { kit = it }
+        val flow = k.flow()
+        show(flow)
+        tile("Asha").assertIsFocused()
+        // Add account at the limit: the notice says so.
+        flow.add()
+        rule.waitUntil(15_000) { flow.notice != null }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.commonOk).assertIsFocused()
+        press(rule.onNodeWithText(L.commonOk), Key.DirectionUp)
+        rule.onNodeWithText(L.commonOk).assertIsFocused()
+        press(rule.onNodeWithText(L.commonOk), Key.DirectionDown)
+        rule.onNodeWithText(L.commonOk).assertIsFocused()
+        press(rule.onNodeWithText(L.commonOk), Key.DirectionCenter)
+        rule.waitForIdle()
+        tile("Asha").assertIsFocused()
+    }
+
     private companion object {
         const val HOME = "The shell of the open profile"
     }

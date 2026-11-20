@@ -157,6 +157,7 @@ class ProfilesGateTest {
         rule.onNodeWithText(L.profilesRemove).performClick()
         rule.waitUntil(15_000) { k.book.list.value.byId(k.ids[2]) == null }
         rule.waitForIdle()
+        assertEquals("a remove locks the open profile too", null, ProfileUnlock.unlockedId.value)
         rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
         rule.onNodeWithContentDescription("Ben", substring = true).performClick()
         rule.waitForIdle()
@@ -323,6 +324,58 @@ class ProfilesGateTest {
         assertTrue("nothing wiped before every PIN", k.platform.wiped.isEmpty())
         typePin("4321")
         rule.waitUntil(15_000) { k.book.list.value.profiles.size == 1 && k.platform.wiped.size == 2 }
+    }
+
+    @Test
+    fun `the app lock not read yet keeps the picker away until it is`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        val later = kotlinx.coroutines.flow.MutableSharedFlow<com.tmplayer.data.AppLockSettings?>(replay = 1)
+        k.platform.readable = false
+        k.platform.lockFlow = later
+        val flow = k.flow()
+        assertTrue("fail closed: everything asks the app lock", flow.appLockPin)
+        show(flow)
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertDoesNotExist()
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+        later.tryEmit(com.tmplayer.data.AppLockSettings())
+        waitFor(L.profilesWhoIsWatching)
+        assertFalse(flow.appLockPin)
+    }
+
+    @Test
+    fun `with one profile Add account asks first while a video plays`() {
+        val k = ProfileKit("Asha").also { kit = it }
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithText(HOME).assertExists()
+        k.platform.playing = true
+        flow.add()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesSwitchPlayTitle(name = L.profilesAdd)).assertExists()
+        rule.onNodeWithText(L.commonCancel).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(HOME).assertExists()
+        assertEquals(1, k.book.list.value.profiles.size)
+    }
+
+    @Test
+    fun `a PIN pad without a checker refuses every PIN`() {
+        var done = 0
+        rule.setContent {
+            TmMaterialTheme(dark = true) {
+                com.tmplayer.ui.lock.PinPad(
+                    checker = null,
+                    purpose = com.tmplayer.ui.lock.PinPurpose.Check,
+                    title = "PIN",
+                    onDone = { done++ },
+                    onCancel = null,
+                )
+            }
+        }
+        rule.waitForIdle()
+        typePin("1234")
+        rule.waitUntil(5_000) { runCatching { rule.onNodeWithText(L.lockWrong(left = 0), substring = true).assertExists() }.isSuccess }
+        assertEquals(0, done)
     }
 
     private companion object {
