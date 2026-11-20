@@ -98,7 +98,7 @@ function scope(): Element {
     })
     if (modal) return modal
     // Another tab holds the session, or "Who's watching?" (HX88) is up: a screen of its own.
-    const other = document.querySelector('.other-tab') ?? document.querySelector('.profiles')
+    const other = document.querySelector('.other-tab') ?? document.querySelector('.profiles, .lock-cover')
     if (other) return other
     // A menu that is open (the player keeps its own, hidden, in the page).
     const menu = [...document.querySelectorAll('[role=menu]')].find((m) => m.getClientRects().length && !m.closest('[hidden], .player'))

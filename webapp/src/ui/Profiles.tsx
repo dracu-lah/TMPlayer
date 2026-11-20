@@ -145,6 +145,7 @@ export function Profiles() {
                         return (
                             <PinDialog
                                 title={t('accounts.pin_enter', { name: nameOf(p) })}
+                                entering
                                 onPin={async (pin) => {
                                     const answer = await tryPin(p.id, pin)
                                     if ('locked' in answer) return { locked: answer.locked }
@@ -374,7 +375,7 @@ function RenameDialog(props: { name: string; onClose: () => void; onSave: (name:
 type PinReply = { error: string } | { locked: number } | null
 
 /** Four digits by the pad, the keyboard or the remote's number keys; the dots say how many, never which. */
-function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinReply>; lockedUntil: number; onClose: () => void; note?: string }) {
+function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinReply>; lockedUntil: number; onClose: () => void; note?: string; entering?: boolean }) {
     const d = useDialog(props.onClose)
     const [digits, setDigits] = createSignal('')
     const [error, setError] = createSignal<string | null>(null)
@@ -428,6 +429,9 @@ function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinRe
                 <Keypad label={t('accounts.pin_digits')} onDigit={digit} onDelete={erase} />
             </div>
             <p class="muted small" id="pin-honest">{t('accounts.pin_honest')}</p>
+            <Show when={props.entering}>
+                <p class="muted small pin-forgot">{t('accounts.pin_forgot')}</p>
+            </Show>
             <div class="confirm-buttons">
                 <button class="link" type="button" onClick={() => d.close()}>
                     {t('common.cancel')}
@@ -496,6 +500,7 @@ function askPin(p: B.Profile, name: string): Promise<boolean> {
             () => (
                 <PinDialog
                     title={t('accounts.pin_enter', { name })}
+                    entering
                     lockedUntil={B.lockLeft(p, Date.now()) > 0 ? Date.now() + B.lockLeft(p, Date.now()) : 0}
                     onClose={() => done(false)}
                     onPin={async (pin) => {
@@ -516,8 +521,13 @@ function askPin(p: B.Profile, name: string): Promise<boolean> {
 /** Remove all accounts: only where there is more than one. Every locked profile's PIN first: one left out and nothing is wiped. */
 export function RemoveAllButton() {
     const start = async () => {
-        for (const p of removeAllNeeds()) if (!(await askPin(p, p.name || t('accounts.unnamed', { number: book().profiles.indexOf(p) + 1 })))) return
-        await removeAll()
+        try {
+            for (const p of removeAllNeeds()) if (!(await askPin(p, p.name || t('accounts.unnamed', { number: book().profiles.indexOf(p) + 1 })))) return
+            await removeAll()
+        } finally {
+            // Cancelled or done: the PINs entered for it count for nothing after.
+            forgetVerified()
+        }
     }
     return (
         <Show when={many()}>

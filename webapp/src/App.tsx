@@ -1,4 +1,5 @@
-import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Suspense, Switch, type ParentProps } from 'solid-js'
+import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type Component, type ParentProps } from 'solid-js'
+import { Dynamic } from 'solid-js/web'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online, unreachable, watchReach } from './net'
@@ -54,8 +55,35 @@ const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSe
 const loadTv = () => import('./tv')
 const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
 const TvBar = lazy(() => loadTv().then((m) => ({ default: m.TvBar })))
-// "Who's watching?" (HX88): only fetched where a browser has profiles to choose from.
-const Profiles = lazy(() => import('./ui/Profiles').then((m) => ({ default: m.Profiles })))
+// "Who's watching?" (HX88): only fetched where a browser has profiles to choose from. Until it is in
+// (or when it cannot come, offline) an opaque cover stands in its place, so a locked profile's
+// screens never show under it.
+const [ProfilesView, setProfilesView] = createSignal<Component | null>(null)
+const [profilesFailed, setProfilesFailed] = createSignal(false)
+let profilesAsked = false
+function loadProfiles() {
+    if (profilesAsked) return
+    profilesAsked = true
+    import('./ui/Profiles').then(
+        (m) => setProfilesView(() => m.Profiles),
+        () => setProfilesFailed(true),
+    )
+}
+
+/** What covers the page while the picker loads, or when it could not: nothing of the profile, and Try again. */
+function LockCover() {
+    return (
+        <div class="lock-cover" role="dialog" aria-modal="true" aria-label={t('accounts.cover_loading')}>
+            <Show when={profilesFailed()} fallback={<div class="loader" role="progressbar" aria-label={t('accounts.cover_loading')} />}>
+                <p role="alert">{t('accounts.cover_failed')}</p>
+                {/* A reload starts on the picker again: nothing unlocked rides along. */}
+                <button class="primary" type="button" ref={(el) => queueMicrotask(() => el.focus())} onClick={() => location.reload()}>
+                    {t('common.try_again')}
+                </button>
+            </Show>
+        </div>
+    )
+}
 
 /** The pages the chats gate leaves alone: signing in, and the gate's own two. */
 const GATE_FREE = ['/signin', '/setup/chats', '/added-chats']
@@ -164,6 +192,8 @@ function Shell(props: ParentProps) {
         })
         onCleanup(off)
     })
+    // The picker's code, the first time it is wanted (at launch, from the menu, or locking again).
+    createEffect(() => picker() && loadProfiles())
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 
@@ -205,9 +235,9 @@ function Shell(props: ParentProps) {
                 </Show>
             </Show>
             <Show when={picker()}>
-                <Suspense>
-                    <Profiles />
-                </Suspense>
+                <Show when={ProfilesView()} fallback={<LockCover />}>
+                    {(View) => <Dynamic component={View()} />}
+                </Show>
             </Show>
             <Toaster />
             <CardMenu />
