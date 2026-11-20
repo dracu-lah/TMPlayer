@@ -171,6 +171,7 @@ export function Library() {
                 <ToggleRow
                     id="trailers_in_app"
                     icon={ClapperboardIcon}
+                    service="youtube"
                     title={t('metadata.trailers_in_app')}
                     subtitle={t('metadata.trailers_in_app_detail')}
                     on={settings().trailersInApp}

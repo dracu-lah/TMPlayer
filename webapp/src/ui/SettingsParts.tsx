@@ -4,6 +4,8 @@ import { t } from '../i18n'
 import { rowDomId } from '../screens/SettingsFind'
 import { Icon, type IconData } from './Icon'
 import { TmdbMark } from './TmdbMark'
+import { BADGE_SIZE, ServiceBadge, ServiceBadgeRow } from './ServiceBadge'
+import type { ServiceId } from './services'
 
 // The parts Settings is built from: its rows, the switch, the choices and the TV's panels.
 // `row` is a row's id in ui/settingsMap, which the search over Settings jumps to (rowDomId).
@@ -13,11 +15,13 @@ export function Chevron() {
     return <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
 }
 
-export function RowBody(props: { icon: IconData; title: string; subtitle?: string; note?: string }) {
+export function RowBody(props: { icon: IconData; service?: ServiceId; title: string; subtitle?: string; note?: string }) {
     return (
         <>
             <span class="set-icon">
-                <Icon icon={props.icon} size={22} />
+                <Show when={props.service} fallback={<Icon icon={props.icon} size={22} />}>
+                    <ServiceBadge service={props.service!} size={BADGE_SIZE.row} />
+                </Show>
             </span>
             <span class="set-text">
                 <span class="set-title">{props.title}</span>
@@ -64,10 +68,10 @@ export function LinkRow(props: { row?: string; href: string; icon: IconData; tit
 }
 
 /** An on or off row: the title, what it does, and the app's switch at the end. */
-export function ToggleRow(props: { id?: string; icon: IconData; title: string; subtitle: string; on: boolean; onChange: (on: boolean) => void }) {
+export function ToggleRow(props: { id?: string; icon: IconData; service?: ServiceId; title: string; subtitle: string; on: boolean; onChange: (on: boolean) => void }) {
     return (
         <button type="button" role="switch" class="set-row" id={props.id && rowDomId(props.id)} aria-checked={props.on} onClick={() => props.onChange(!props.on)}>
-            <RowBody icon={props.icon} title={props.title} subtitle={props.subtitle} />
+            <RowBody icon={props.icon} service={props.service} title={props.title} subtitle={props.subtitle} />
             <span class="switch" aria-hidden="true" />
         </button>
     )
@@ -131,6 +135,7 @@ export function TvSwitch(props: { id: string; row: string; title: string; on: bo
 export function TmdbCredit() {
     return (
         <>
+            <ServiceBadgeRow services={['tmdb', 'tvmaze', 'anilist']} />
             <a class="tmdb-credit" href="https://www.themoviedb.org/" target="_blank" rel="noopener" aria-label="TMDB">
                 <TmdbMark height={14} />
             </a>

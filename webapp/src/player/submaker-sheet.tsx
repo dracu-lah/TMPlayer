@@ -9,6 +9,7 @@ import { Add01Icon, AiMagicIcon, Cancel01Icon, Refresh01Icon } from '@hugeicons/
 import { Icon } from '../ui/Icon'
 import { language as shownLanguage, t } from '../i18n'
 import { Choice, Picker } from './sheets'
+import { ServiceBadge } from '../ui/ServiceBadge'
 import { fetchList, fetchSubtitle, fetchTextWith, hasConsent, listUrl, type Entry, type Kind } from './submaker'
 import type { JobView, Jobs } from './submaker-job'
 import type { Why } from './submaker'
@@ -128,6 +129,7 @@ export function SubmakerSheet(props: {
 
     return (
         <Picker title={t('submaker.title')} note={phase() === 'results' ? line() || undefined : undefined} phone={props.phone} panel={props.panel} anchor={props.anchor} root={props.root} onClose={props.onClose} onBack={props.onBack}>
+            <ServiceBadge service="submaker" size={24} name />
             <Show when={phase() === 'searching'}>
                 <p class="pc-menu-note pc-submaker-line" role="status">{t('submaker.searching')}</p>
             </Show>

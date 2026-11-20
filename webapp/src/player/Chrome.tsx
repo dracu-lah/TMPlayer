@@ -2400,10 +2400,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         </Show>
                         <Choice icon={Add01Icon} text={t('player.load_subtitle_file')} phone={phone()} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <Show when={msoneOn()}>
-                            <Choice icon={TranslateIcon} text={t('msone.search')} detail={t('msone.search_detail')} phone={phone()} onClick={() => setSheet('msone')} />
+                            <Choice icon={TranslateIcon} service="msone" text={t('msone.search')} detail={t('msone.search_detail')} phone={phone()} onClick={() => setSheet('msone')} />
                         </Show>
                         <Show when={submakerSet()}>
-                            <Choice icon={TranslateIcon} text={t('submaker.search')} detail={t('submaker.search_detail')} phone={phone()} onClick={() => setSheet('submaker')} />
+                            <Choice icon={TranslateIcon} service="submaker" text={t('submaker.search')} detail={t('submaker.search_detail')} phone={phone()} onClick={() => setSheet('submaker')} />
                         </Show>
                     </Picker>
                 </Match>
