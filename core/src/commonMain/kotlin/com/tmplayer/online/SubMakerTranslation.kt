@@ -40,7 +40,10 @@ sealed interface TranslationState {
  * [stableMs], or the total reaches [capMs], or the last cue reaches the end of the video.
  *
  * Time here is the time spent polling in the foreground: nothing is asked, and no time counts,
- * while [foreground] is false. A 429 waits out the wait it asked for (doubling, up to a minute).
+ * while [foreground] is false. A 429 waits out the wait it asked for (doubling, up to a minute);
+ * those waits count neither as "not grown" nor toward the cap (they have their own, [maxBusyMs]),
+ * and a job that ended because of them, or at the cap, is shown but never handed over as final:
+ * only the video's end or [stableMs] of calm polling without growth is the end of a translation.
  */
 class SubMakerTranslator(
     private val api: SubMakerApi,
@@ -48,6 +51,7 @@ class SubMakerTranslator(
     private val pollMs: Long = POLL_MS,
     private val stableMs: Long = STABLE_MS,
     private val capMs: Long = CAP_MS,
+    private val maxBusyMs: Long = MAX_BUSY_MS,
 ) {
     /**
      * Runs until finished, failed or cancelled. [onState] is told each step, [onTrack] each time the
@@ -67,12 +71,14 @@ class SubMakerTranslator(
         var best: String? = null
         var bad = 0
         var throttles = 0
+        var busyTotal = 0L
         onState(TranslationState.Waiting)
 
-        fun finish() {
+        /** [final] only when it reached the end or stopped growing; at the cap the text is partial. */
+        fun finish(final: Boolean) {
             val text = best
             if (text != null && lines > 0) {
-                onTrack(text, lines, true)
+                onTrack(text, lines, final)
                 onState(TranslationState.Done(lines))
             } else {
                 onState(TranslationState.Failed(SubtitleNotice.SubMakerEmpty, 0))
@@ -83,12 +89,15 @@ class SubMakerTranslator(
             // Nothing is asked in the background, and the time it takes does not count.
             if (!foreground.value) foreground.first { it }
             var wait = pollMs
+            var busy = false
             when (val answer = api.fetch(url, SubtitleText.MAX_BYTES)) {
                 is SubMakerApi.Answer.Failed -> when (val failure = answer.failure) {
                     is SubMakerApi.Failure.Busy -> {
                         throttles++
                         wait = maxOf(failure.retryAfterMs, pollMs shl minOf(throttles, 3)).coerceAtMost(MAX_BACKOFF_MS)
-                        stalled += wait
+                        // A rest the addon asked for is not a sign that the translation stopped growing.
+                        busy = true
+                        busyTotal += wait
                     }
                     SubMakerApi.Failure.Rejected -> return onState(TranslationState.Failed(SubtitleNotice.SubMakerRejected, lines))
                     SubMakerApi.Failure.Offline, SubMakerApi.Failure.Unreadable -> {
@@ -116,7 +125,7 @@ class SubMakerTranslator(
                             onState(TranslationState.Translating(lines))
                             val reachedEnd = endMs != null && endMs > MIN_END_MS &&
                                 SubMakerApi.lastCueEndMs(text) >= endMs - END_SLACK_MS
-                            if (reachedEnd) return finish()
+                            if (reachedEnd) return finish(true)
                             onTrack(text, lines, false)
                         } else {
                             stalled += wait
@@ -124,8 +133,17 @@ class SubMakerTranslator(
                     }
                 }
             }
-            if (lines > 0 && stalled >= stableMs) return finish()
-            if (elapsed + wait >= capMs) return finish()
+            if (busy) {
+                if (busyTotal >= maxBusyMs) {
+                    // Too long asked to wait: what came is shown (partial, never final) and it says so.
+                    best?.let { text -> if (lines > 0) onTrack(text, lines, false) }
+                    return onState(TranslationState.Failed(SubtitleNotice.SubMakerBusy, lines))
+                }
+                sleep(wait)
+                continue
+            }
+            if (lines > 0 && stalled >= stableMs) return finish(true)
+            if (elapsed + wait >= capMs) return finish(false)
             sleep(wait)
             elapsed += wait
         }
@@ -136,6 +154,9 @@ class SubMakerTranslator(
         const val STABLE_MS = 3 * 60_000L
         const val CAP_MS = 6 * 60_000L
         const val MAX_BACKOFF_MS = 60_000L
+
+        /** The most time one job spends waiting out 429 answers before it stops with what it has. */
+        const val MAX_BUSY_MS = 10 * 60_000L
         private const val MAX_BAD = 3
 
         /** A video shorter than this is not judged finished by its last cue. */
@@ -190,23 +211,35 @@ class SubMakerJobs(
         if (running[key]?.isActive == true) return false
         set(key, TranslationState.Waiting)
         var lastApplied = 0L
+        // The newest text a throttled update left unapplied: laid when the job ends without a final one.
+        var held: String? = null
         running[key] = scope.launch {
             try {
                 translator.run(
                     url = url,
                     endMs = endMs,
                     foreground = foreground,
-                    onState = { set(key, it) },
+                    onState = { next ->
+                        val rest = held
+                        if (!next.active && rest != null) {
+                            held = null
+                            write(rest, false)?.let { onTrack(it, false) }
+                        }
+                        set(key, next)
+                    },
                     onTrack = { srt, _, final ->
                         val t = now()
                         if (final || lastApplied == 0L || t - lastApplied >= applyEveryMs) {
                             val file = write(srt, final)
+                            held = null
                             if (file != null) {
                                 lastApplied = t
                                 onTrack(file, final)
                             } else if (final) {
                                 set(key, TranslationState.Failed(SubtitleNotice.Unreadable, SubMakerApi.cueCount(srt)))
                             }
+                        } else {
+                            held = srt
                         }
                     },
                 )

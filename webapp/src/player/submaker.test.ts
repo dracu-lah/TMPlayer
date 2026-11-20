@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 import {
-    clearJobs, cueCount, fetchList, fetchSubtitle, fetchTextWith, giveConsent, hasConsent, idFor, isPlaceholder, jobFor, lastCueEndMs, listUrl, normalizeBase, parseList, startJob, translate,
+    clearJobs, cueCount, FETCH_TIMEOUT_MS, fetchList, fetchSubtitle, fetchTextWith, giveConsent, hasConsent, idFor, isPlaceholder, jobFor, lastCueEndMs, listUrl, normalizeBase, parseList, startJob, translate,
     MAX_BODY, MAX_ENTRIES, type Answer, type FetchText, type Outcome, type TranslateOptions, type Update,
 } from './submaker.ts'
 
@@ -11,6 +11,7 @@ import {
 
 const SECRET = 'tok3nSECRETvalue9f8e7d6c'
 const BASE = `https://addon.example/${SECRET}`
+const BASE_HOST = 'https://addon.example/tok'
 
 const stamp = (ms: number) => {
     const h = Math.floor(ms / 3_600_000)
@@ -140,7 +141,7 @@ test('parseList reads files and Make entries and leaves the toolbox out', () => 
             { id: 'translate_fra', lang: 'fra', url: 'https://addon.example/f/translate/2' },
             { id: 's2', lang: 'mal' , url: 'https://addon.example/f/2.srt' },
         ],
-    })
+    }, BASE_HOST)
     assert.deepEqual(
         list.map((e) => [e.id, e.make]),
         [['s1', undefined], ['translate_mal', 'Malayalam'], ['x', 'Brazilian Portuguese'], ['translate_fra', 'fra'], ['s2', undefined]],
@@ -151,7 +152,7 @@ test('parseList reads files and Make entries and leaves the toolbox out', () => 
 })
 
 test('parseList survives garbage, wrong types and a flood', () => {
-    for (const bad of [null, undefined, 5, 'x', [], {}, { subtitles: 'x' }, { subtitles: {} }, { subtitles: [null, 1, 'a', [], {}] }]) assert.deepEqual(parseList(bad), [])
+    for (const bad of [null, undefined, 5, 'x', [], {}, { subtitles: 'x' }, { subtitles: {} }, { subtitles: [null, 1, 'a', [], {}] }]) assert.deepEqual(parseList(bad, BASE_HOST), [])
     const mixed = parseList({
         subtitles: [
             { id: 5, lang: 'eng', url: 'https://addon.example/a' },
@@ -165,13 +166,85 @@ test('parseList survives garbage, wrong types and a flood', () => {
             { id: 'a', lang: 'eng', label: { x: 1 }, url: 'https://addon.example/a' },
             { id: 'loop', lang: 'eng', url: 'http://127.0.0.1:7000/a.srt' },
         ],
-    })
-    assert.deepEqual(mixed.map((e) => e.id), ['a', 'loop'])
+    }, BASE_HOST)
+    assert.deepEqual(mixed.map((e) => e.id), ['a'])
     assert.equal(mixed[0].label, 'eng')
+    // A loopback address is fine for a loopback install, and for no other base.
+    const loop = { subtitles: [{ id: 'loop', lang: 'eng', url: 'http://127.0.0.1:7000/a.srt' }] }
+    assert.deepEqual(parseList(loop, 'http://127.0.0.1:7000/tok').map((e) => e.id), ['loop'])
     const many = { subtitles: Array.from({ length: 50_000 }, (_, i) => ({ id: `s${i}`, lang: 'eng', url: `https://addon.example/${i}` })) }
-    assert.equal(parseList(many).length, MAX_ENTRIES)
+    assert.equal(parseList(many, BASE_HOST).length, MAX_ENTRIES)
     const junk = { subtitles: Array.from({ length: 50_000 }, () => null) }
-    assert.deepEqual(parseList(junk), [])
+    assert.deepEqual(parseList(junk, BASE_HOST), [])
+})
+
+test('parseList drops an entry on another host than the base, and everything without a usable base', () => {
+    const json = {
+        subtitles: [
+            { id: 'a', lang: 'eng', url: 'https://addon.example/x/a.srt' },
+            { id: 'b', lang: 'eng', url: 'https://evil.example/x/b.srt' },
+            { id: 'c', lang: 'eng', url: 'https://ADDON.example/x/c.srt' },
+            { id: 'd', lang: 'eng', url: 'https://addon.example.evil.example/d.srt' },
+            { id: 'e', lang: 'eng', url: 'https://user:pw@addon.example/e.srt' },
+            { id: 'f', lang: 'Make French', url: 'https://cdn.example/translate/f' },
+        ],
+    }
+    assert.deepEqual(parseList(json, BASE).map((e) => e.id), ['a', 'c'])
+    assert.deepEqual(parseList(json, 'not a base'), [])
+    assert.deepEqual(parseList(json, ''), [])
+})
+
+test('fetchTextWith ends a stuck request after its timeout, and a caller abort still ends it at once', async () => {
+    const stuck = ((_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))))) as unknown as typeof fetch
+    const started = Date.now()
+    await assert.rejects(fetchTextWith(stuck, 30)('https://addon.example/x', new AbortController().signal))
+    assert.ok(Date.now() - started < 2000)
+    const ctl = new AbortController()
+    const pending = fetchTextWith(stuck, 60_000)('https://addon.example/x', ctl.signal)
+    ctl.abort()
+    await assert.rejects(pending)
+    assert.equal(FETCH_TIMEOUT_MS, 20_000)
+})
+
+test('fetchTextWith works where AbortSignal.any is missing (a timer of its own)', async () => {
+    const real = (AbortSignal as { any?: unknown }).any
+    ;(AbortSignal as { any?: unknown }).any = undefined
+    try {
+        const stuck = ((_url: string, init: RequestInit) =>
+            new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))))) as unknown as typeof fetch
+        await assert.rejects(fetchTextWith(stuck, 30)('https://addon.example/x', new AbortController().signal))
+        const fine = (async () => new Response('hi', { status: 200 })) as unknown as typeof fetch
+        assert.deepEqual(await fetchTextWith(fine, 30)('https://addon.example/x', new AbortController().signal), { status: 200, text: 'hi', retryAfter: null })
+    } finally {
+        ;(AbortSignal as { any?: unknown }).any = real
+    }
+})
+
+test('429 answers are no stall: three minutes of them do not make the job final', async () => {
+    const w = world()
+    const busy: Answer = { status: 429, text: null, retryAfter: '60' }
+    const out = await run(w, [ok(srt(20)), busy, busy, busy, ok(srt(20))])
+    assert.equal(out.state, 'done')
+    // 1 growth, 3 waits, then 18 calm polls without growth: 22 calls, and one final update at the end.
+    assert.equal(w.calls, 22)
+    assert.deepEqual(w.updates.map((u) => u.final), [false, true])
+})
+
+test('an addon that stays busy ends the job partial, shown and not final', async () => {
+    const w = world()
+    const busy: Answer = { status: 429, text: null, retryAfter: '60' }
+    const out = await run(w, [ok(srt(20)), busy])
+    assert.equal(out.state, 'failed')
+    assert.equal(out.state === 'failed' && out.why, 'offline')
+    assert.ok(w.updates.every((u) => !u.final))
+    assert.equal(w.updates.at(-1)!.lines, 20)
+    assert.equal(w.calls, 1 + 10)
+    // No cues at all and always busy: a failure with nothing shown.
+    const w2 = world()
+    const none = await run(w2, [busy])
+    assert.equal(none.state, 'failed')
+    assert.equal(w2.updates.length, 0)
 })
 
 // ---- reading SubRip ------------------------------------------------------------------------------
@@ -236,7 +309,8 @@ test('the cap ends a translation that keeps growing, with what it has', async ()
     const w = world()
     const out = await run(w, [(n) => ok(srt(n * 5 + 5))], { capMs: 60_000 })
     assert.equal(out.state, 'done')
-    assert.ok(w.updates.at(-1)!.final)
+    // At the cap the text is shown but is not the final one: only the end or a calm stretch is.
+    assert.ok(!w.updates.at(-1)!.final)
     assert.ok(w.calls <= 8)
 })
 
@@ -415,7 +489,7 @@ test('fetchList and fetchSubtitle turn every bad answer into a reason, not an ex
         if (a instanceof Error) throw a
         return a
     }
-    const good = await fetchList('u', list(ok(JSON.stringify({ subtitles: [{ id: 'a', lang: 'eng', url: 'https://addon.example/a' }] }))), ctl.signal)
+    const good = await fetchList(`${BASE_HOST}/subtitles/movie/tt1234567.json`, list(ok(JSON.stringify({ subtitles: [{ id: 'a', lang: 'eng', url: 'https://addon.example/a' }] }))), ctl.signal)
     assert.equal(good.ok && good.entries.length, 1)
     for (const bad of [ok('not json'), ok(null), ok('{"subtitles":5}'), { status: 404, text: null }, { status: 503, text: null }, new Error('x')]) {
         const r = await fetchList('u', list(bad), ctl.signal)

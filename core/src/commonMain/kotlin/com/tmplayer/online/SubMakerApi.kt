@@ -50,11 +50,17 @@ object SubMakerUrl {
     /** The manifest address of [base], for the check made when the viewer saves it. */
     fun manifest(base: String): String = "$base/manifest.json"
 
-    /** Whether [url], found in an addon's answer, may be fetched: https, or http where [base] itself is loopback http. */
+    /**
+     * Whether [url], found in an addon's answer, may be fetched: only from the same host as [base]
+     * (an answer cannot send the viewer's device to another server), https, or http where [base]
+     * itself is loopback http.
+     */
     fun fetchable(url: String, base: String): Boolean {
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
         val host = uri.host?.takeIf { it.isNotBlank() } ?: return false
         if (uri.rawUserInfo != null) return false
+        val baseHost = runCatching { URI(base).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: return false
+        if (!host.trim('[', ']').equals(baseHost.trim('[', ']'), ignoreCase = true)) return false
         return when (uri.scheme?.lowercase(Locale.ROOT)) {
             "https" -> true
             "http" -> isLoopback(host) && base.startsWith("http://")
@@ -73,23 +79,43 @@ object SubMakerSecret {
     @Volatile
     private var known: List<String> = emptyList()
 
-    /** Remembers [base] (and the token in its path) as secret, or forgets them when it is blank. */
+    /**
+     * Remembers [base], the token in its path, each path segment, and the percent-encoded and
+     * decoded forms of those as secret (the same forms as `hideAddon` in the web's logs.ts), or
+     * forgets them all when it is blank.
+     */
     fun register(base: String) {
-        known = if (base.isBlank()) {
-            emptyList()
-        } else {
-            val token = base.substringAfter("://").substringAfter('/', "").trim('/')
-            listOfNotNull(base, token.takeIf { it.length >= MIN_TOKEN })
-                .sortedByDescending { it.length }
+        if (base.isBlank()) {
+            known = emptyList()
+            return
         }
+        val found = LinkedHashSet<String>()
+        found += base
+        val path = base.substringAfter("://").substringAfter('/', "").trim('/')
+        if (path.length >= MIN_TOKEN) found += path
+        for (segment in path.split('/')) {
+            if (segment.length < MIN_SEGMENT) continue
+            found += segment
+            decoded(segment)?.let { found += it }
+        }
+        for (form in found.toList()) encoded(form)?.let { found += it }
+        known = found.filter { it == base || it.length >= MIN_SEGMENT }.sortedByDescending { it.length }.take(MAX_KNOWN)
     }
 
+    private fun decoded(text: String): String? =
+        runCatching { java.net.URLDecoder.decode(text.replace("+", "%2B"), "UTF-8") }.getOrNull()?.takeIf { it != text }
+
+    private fun encoded(text: String): String? =
+        runCatching { java.net.URLEncoder.encode(text, "UTF-8").replace("+", "%20") }.getOrNull()?.takeIf { it != text }
+
     private const val MIN_TOKEN = 8
+    private const val MIN_SEGMENT = 6
+    private const val MAX_KNOWN = 24
     private const val MARK = "[addon]"
 
     /** Any address; kept linear: a candidate is cut at whitespace and quotes, then judged by its words. */
     private val ADDRESS = Regex("""(?:stremio|https?)://[^\s"'<>]+""", RegexOption.IGNORE_CASE)
-    private val ADDON_PATHS = listOf("/manifest.json", "/subtitles/", "/translate", "/sub-toolbox", "/configure")
+    private val ADDON_PATHS = Regex("/(?:manifest\\.json|subtitles?/|translate|sub-toolbox|configure)", RegexOption.IGNORE_CASE)
 
     fun scrub(text: String): String {
         var out = text
@@ -97,7 +123,7 @@ object SubMakerSecret {
         if (!out.contains("://")) return out
         return ADDRESS.replace(out) { match ->
             val value = match.value
-            if (value.startsWith("stremio://", ignoreCase = true) || ADDON_PATHS.any { value.contains(it, ignoreCase = true) }) MARK else value
+            if (value.startsWith("stremio://", ignoreCase = true) || ADDON_PATHS.containsMatchIn(value)) MARK else value
         }
     }
 }

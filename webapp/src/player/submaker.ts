@@ -99,9 +99,20 @@ export interface Entry {
 /** Every language name a translation may be asked for is a short plain word or two. */
 const MAKE = /^make\s+(.{1,60})$/i
 
-/** The entries of an answer, the unusable ones left out. Never throws; at most 300; the toolbox page is not a subtitle. */
-export function parseList(json: unknown): Entry[] {
+/**
+ * The entries of an answer, the unusable ones left out. Never throws; at most 300; the toolbox page is not a subtitle.
+ * An entry's address is fetched only from the host of [base] (the viewer's own install): an answer cannot
+ * send the page to another server, so a foreign host drops the entry. No usable [base] drops them all.
+ */
+export function parseList(json: unknown, base: string): Entry[] {
     if (!isRecord(json) || !Array.isArray(json.subtitles)) return []
+    let host: string
+    try {
+        host = new URL(base).hostname.toLowerCase()
+    } catch {
+        return []
+    }
+    if (!host) return []
     const out: Entry[] = []
     const list = json.subtitles
     for (let i = 0; i < list.length && i < MAX_SCAN && out.length < MAX_ENTRIES; i++) {
@@ -114,7 +125,7 @@ export function parseList(json: unknown): Entry[] {
         let url: string
         try {
             const u = new URL(address)
-            if (!allowed(u)) continue
+            if (!allowed(u) || u.username || u.password || u.hostname.toLowerCase() !== host) continue
             url = u.href
         } catch {
             continue
@@ -241,16 +252,50 @@ async function readBody(res: Response): Promise<string | null> {
     return new TextDecoder().decode(all)
 }
 
-/** The page's fetch as a FetchText: no cookies, no referrer (the address is a secret), no cache. */
-export function fetchTextWith(fetcher: typeof fetch = (...a) => fetch(...a)): FetchText {
+/** One request, answer and body, takes no longer than this: a stuck connection is an error, not a hang. */
+export const FETCH_TIMEOUT_MS = 20_000
+
+/**
+ * [signal] together with a timeout: `AbortSignal.any` and `AbortSignal.timeout` where the browser has them,
+ * else a timer of our own. `done()` clears the timer and the listener when the request is over.
+ */
+function withTimeout(signal: AbortSignal, ms: number): { signal: AbortSignal; done: () => void } {
+    const any = (AbortSignal as { any?: (signals: AbortSignal[]) => AbortSignal }).any
+    const timeout = (AbortSignal as { timeout?: (ms: number) => AbortSignal }).timeout
+    if (typeof any === 'function' && typeof timeout === 'function') {
+        try {
+            return { signal: any.call(AbortSignal, [signal, timeout.call(AbortSignal, ms)]), done: () => {} }
+        } catch {}
+    }
+    const ctl = new AbortController()
+    const stop = () => ctl.abort()
+    if (signal.aborted) ctl.abort()
+    signal.addEventListener('abort', stop)
+    const timer = setTimeout(stop, ms)
+    return {
+        signal: ctl.signal,
+        done: () => {
+            clearTimeout(timer)
+            signal.removeEventListener('abort', stop)
+        },
+    }
+}
+
+/** The page's fetch as a FetchText: no cookies, no referrer (the address is a secret), no cache, [FETCH_TIMEOUT_MS] at most. */
+export function fetchTextWith(fetcher: typeof fetch = (...a) => fetch(...a), timeoutMs: number = FETCH_TIMEOUT_MS): FetchText {
     return async (url, signal) => {
-        const res = await fetcher(url, { signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' })
-        const retryAfter = res.headers.get('Retry-After')
-        if (!res.ok) {
-            res.body?.cancel().catch(() => {})
-            return { status: res.status, text: null, retryAfter }
+        const guard = withTimeout(signal, timeoutMs)
+        try {
+            const res = await fetcher(url, { signal: guard.signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' })
+            const retryAfter = res.headers.get('Retry-After')
+            if (!res.ok) {
+                res.body?.cancel().catch(() => {})
+                return { status: res.status, text: null, retryAfter }
+            }
+            return { status: res.status, text: await readBody(res), retryAfter }
+        } finally {
+            guard.done()
         }
-        return { status: res.status, text: await readBody(res), retryAfter }
     }
 }
 
@@ -263,7 +308,7 @@ export async function fetchList(url: string, fetchText: FetchText, signal: Abort
         if (signal.aborted) return { ok: false, why: 'aborted' }
         if (a.status < 200 || a.status >= 300) return { ok: false, why: a.status >= 500 || a.status === 429 ? 'offline' : 'unreadable' }
         if (typeof a.text !== 'string') return { ok: false, why: 'unreadable' }
-        const entries = parseList(JSON.parse(a.text))
+        const entries = parseList(JSON.parse(a.text), url)
         return { ok: true, entries }
     } catch {
         return { ok: false, why: signal.aborted ? 'aborted' : 'unreadable' }
@@ -330,6 +375,8 @@ export interface Job {
 /** Failures in a row that end a job: a flaky answer or two does not. */
 const TOLERATED = 2
 const MAX_BACKOFF_MS = 60_000
+/** The most foreground time one job spends waiting out 429 answers. */
+const MAX_BUSY_MS = 10 * 60_000
 
 /** Retry-After in seconds (a number or an HTTP date), as milliseconds; null when absent or not one. */
 function retryAfterMs(header: string | null | undefined, now: number): number | null {
@@ -354,6 +401,9 @@ export function translate(o: TranslateOptions): Job {
 
     const run = async (): Promise<Outcome> => {
         let fg = 0
+        // Foreground time spent waiting out 429 answers: it counts toward neither "not grown" nor the cap.
+        let busyFg = 0
+        let busyNow = false
         let grewAt = 0
         let last = o.now()
         let wasFg = o.foreground()
@@ -365,14 +415,22 @@ export function translate(o: TranslateOptions): Job {
             // Time counts only when the tab was visible at both ends of it.
             const t = o.now()
             const isFg = o.foreground()
-            if (wasFg && isFg) fg += Math.max(0, t - last)
+            if (wasFg && isFg) {
+                const spent = Math.max(0, t - last)
+                fg += spent
+                if (busyNow) busyFg += spent
+            }
+            busyNow = false
             last = t
             wasFg = isFg
             if (!isFg) {
                 await o.sleep(pollMs, ctl.signal).catch(() => {})
                 continue
             }
-            if (fg >= capMs) return best > 0 && bestText !== null ? finish() : failed('empty')
+            // A job held up by 429s for this long stops with what it has (shown, not final).
+            if (busyFg >= MAX_BUSY_MS) return best > 0 && bestText !== null ? partial('offline') : failed('offline')
+            // The cap is calm time: the waits the addon asked for are not counted. At the cap the text is partial.
+            if (fg - busyFg >= capMs) return best > 0 && bestText !== null ? finish(false) : failed('empty')
 
             let wait = pollMs
             try {
@@ -382,6 +440,7 @@ export function translate(o: TranslateOptions): Job {
                     const asked = retryAfterMs(a.retryAfter, o.now())
                     backoff = asked !== null ? Math.min(asked, MAX_BACKOFF_MS) : Math.min(backoff ? backoff * 2 : pollMs, MAX_BACKOFF_MS)
                     wait = Math.max(backoff, 1000)
+                    busyNow = true
                 } else if (!a || typeof a.status !== 'number' || a.status < 200 || a.status >= 300) {
                     // A refusal that will not change (404, 401, 403...) ends it; a server error may pass.
                     if (a && typeof a.status === 'number' && a.status >= 400 && a.status < 500) return failed('refused')
@@ -400,12 +459,12 @@ export function translate(o: TranslateOptions): Job {
                         if (!isPlaceholder(a.text) && n > best) {
                             best = n
                             bestText = a.text
-                            grewAt = fg
+                            grewAt = fg - busyFg
                             o.onUpdate({ lines: n, srt: a.text, final: false })
                         }
                         if (best > 0 && bestText !== null) {
-                            if (o.sourceEndMs !== undefined && lastCueEndMs(bestText) >= o.sourceEndMs) return finish()
-                            if (fg - grewAt >= stableMs) return finish()
+                            if (o.sourceEndMs !== undefined && lastCueEndMs(bestText) >= o.sourceEndMs) return finish(true)
+                            if (fg - busyFg - grewAt >= stableMs) return finish(true)
                         }
                     }
                 }
@@ -417,10 +476,17 @@ export function translate(o: TranslateOptions): Job {
         }
     }
 
-    const finish = (): Outcome => {
+    /** [final] only at the video's end or after the calm stretch; at the cap what is shown is partial. */
+    const finish = (final: boolean): Outcome => {
         const srt = bestText ?? ''
-        o.onUpdate({ lines: best, srt, final: true })
+        o.onUpdate({ lines: best, srt, final })
         return { state: 'done', lines: best, srt }
+    }
+
+    /** Stopped by the addon's waits: what came is shown (not final) and the line says why. */
+    const partial = (why: Why): Outcome => {
+        o.onUpdate({ lines: best, srt: bestText ?? '', final: false })
+        return { state: 'failed', why, lines: best, srt: bestText }
     }
 
     // Started on the next tick, so a cancel made right away asks nobody.

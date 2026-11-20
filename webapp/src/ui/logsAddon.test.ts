@@ -82,3 +82,25 @@ test('ordinary lines are left as they were', () => {
     assert.equal(scrubLine('[player] slow start after 1200 ms'), '[player] slow start after 1200 ms')
     assert.equal(scrubLine('Translating, 40 lines so far'), 'Translating, 40 lines so far')
 })
+
+test('the singular /subtitle/ and the toolbox path are addon addresses too', () => {
+    for (const line of [
+        'fetch https://host.example/abc/subtitle/movie/tt1234567.json failed',
+        'GET /subtitle/series/tt1234567:1:2.json',
+        'page https://host.example/abc/sub-toolbox/xyz',
+    ]) {
+        const out = scrubLine(line)
+        assert.match(out, /\[addon\]/u, line)
+        assert.ok(!/subtitle\/|sub-toolbox|host\.example/iu.test(out), `${line} -> ${out}`)
+    }
+})
+
+test('the address is taken out before a long line is cut, so a secret across the cut does not survive half', () => {
+    hideAddon(BASE)
+    // The base sits across the 2000 character cut: cut first, only its head would be left in the line.
+    const line = `${'x '.repeat(985)}${BASE} tail`
+    assert.ok(line.indexOf(TOKEN) < 2000 && line.indexOf(TOKEN) + TOKEN.length > 2000)
+    const out = scrubLine(line)
+    assert.ok(!out.includes(TOKEN.slice(0, 8)), out)
+    assert.ok(!out.includes('addon.example'), out)
+})

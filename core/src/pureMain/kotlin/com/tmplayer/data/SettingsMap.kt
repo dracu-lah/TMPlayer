@@ -195,6 +195,7 @@ object SettingsMap {
         row("find_subtitles", sub, "online.suggest_toggle", PT, onOff("online.suggest"), SettingsNeed.OnlineSubtitles)
         row("machine_subtitles", sub, "online.machine_toggle", PTD, onOff("online.machine"), SettingsNeed.OnlineSubtitles)
         row("subdl_key", sub, "online.subdl", PTD, need = SettingsNeed.OnlineSubtitles)
+        row("submaker_base", sub, "submaker.settings_title", PTD, need = SettingsNeed.OnlineSubtitles, details = listOf("submaker.settings_message"))
         row("msone", sub, "msone.title", PTD, need = SettingsNeed.State)
         row("online_cache", sub, "online.clear_cache", PTD, need = SettingsNeed.OnlineSubtitles)
 
@@ -248,6 +249,7 @@ object SettingsMap {
         row("crash_reports", lock, "settings.crash_reports", PTD, onOff("settings.crash_reports"), SettingsNeed.CrashReports)
         row("devices", lock, "settings.devices", PTD, listOf("settings.devices_detail"))
         row("resume_sync", lock, "syncplace.switch", PTD, onOff("syncplace.switch"))
+        row("sync_place", lock, "syncchannel.row_title", PTD, listOf("syncchannel.row_detail"))
         row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
         val h = SettingsGroup.Library

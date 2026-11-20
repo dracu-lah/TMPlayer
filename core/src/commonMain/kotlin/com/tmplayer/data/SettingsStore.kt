@@ -1103,6 +1103,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
                 it.remove(RESUME_SYNC_ACCOUNT)
                 it.remove(RESUME_SYNC_STATUS)
                 it.remove(KEEP_PLACE_WROTE_AT)
+                it.remove(SYNC_CHANNEL_BLOCK)
+                it.remove(SYNC_FILE_CHAT)
+                it.remove(SYNC_SENT_CHAT)
             }
         }
     }

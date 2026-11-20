@@ -17,8 +17,12 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.tmplayer.data.ChatSubtitleLoad
 import com.tmplayer.data.ChatSubtitleLoaded
 import com.tmplayer.i18n.L
+import com.tmplayer.online.SubtitleSwap
 import com.tmplayer.online.SubtitleText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -60,6 +64,12 @@ class SubtitleFiles(
 
     /** Told of each file put over the video (loaded from the phone or fetched online), for its handover to another player. */
     var onAttached: ((File) -> Unit)? = null
+
+    /** True while the viewer drags the scrub bar or swipes to scrub: a growing subtitle's swap waits ([SubtitleSwap]). */
+    var isScrubbing: () -> Boolean = { false }
+
+    private var lastSwapAt = 0L
+    private var swapWaiting: Job? = null
 
     /** The id of the file just loaded, until its track shows up and is selected. */
     private var pending: Pair<String, String>? = null
@@ -144,6 +154,42 @@ class SubtitleFiles(
             .build()
         if (onCastFile?.invoke(file, mime, label) == true) return
         pending = id to label
+        // The swap rebuilds the item, which rebuffers a streamed video: it waits for a quiet moment
+        // (not buffering, not scrubbing, or paused), and is made at most once a minute. A newer file
+        // that arrives meanwhile is already in [loaded], so the one swap carries the latest.
+        if (swapWaiting?.isActive == true) return
+        if (quietNow()) {
+            swapIn()
+        } else {
+            swapWaiting = activity.lifecycleScope.launch {
+                while (isActive) {
+                    delay(SubtitleSwap.RECHECK_MS)
+                    if (player() == null) return@launch
+                    if (quietNow()) {
+                        swapIn()
+                        return@launch
+                    }
+                }
+            }
+        }
+    }
+
+    /** Whether the player may be rebuilt now, by [SubtitleSwap]. */
+    private fun quietNow(): Boolean {
+        val exo = player() ?: return false
+        return SubtitleSwap.swapNow(
+            nowMs = android.os.SystemClock.elapsedRealtime(),
+            lastSwapMs = lastSwapAt,
+            buffering = exo.playbackState == Player.STATE_BUFFERING,
+            scrubbing = isScrubbing(),
+            paused = !exo.playWhenReady && exo.playbackState == Player.STATE_READY,
+        )
+    }
+
+    private fun swapIn() {
+        val exo = player() ?: return
+        val video = exo.currentMediaItem?.localConfiguration?.uri ?: return
+        lastSwapAt = android.os.SystemClock.elapsedRealtime()
         exo.setMediaItem(item(video), exo.currentPosition)
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
     }

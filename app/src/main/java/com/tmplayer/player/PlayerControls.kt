@@ -280,6 +280,9 @@ class PlayerControls(
     /** True while a finger or the D-pad is on the bar; the clock leaves the bar alone then. */
     private var scrubbing = false
 
+    /** The viewer is dragging the scrub bar now. */
+    val isScrubbing: Boolean get() = scrubbing
+
     private val hide = Runnable { hideAnimated() }
 
     private val tick = object : Runnable {
