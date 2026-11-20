@@ -632,7 +632,8 @@ class ChatListViewModel(
         val store = settings ?: return
         // On the background scope rather than this one: it outlives the screen on purpose, since
         // the whole value of the write is to the launch after this one.
-        Background.scope.launch { runCatching { store.saveChatSnapshot(chats) } }
+        // As the profile whose chats these are (HX88): a snapshot never lands in the next profile.
+        Background.scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { runCatching { store.saveChatSnapshot(chats) } }
     }
 
     fun load() {

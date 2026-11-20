@@ -209,7 +209,8 @@ private fun addedLine(s: Messages, record: WatchLaterRecord, list: String, resul
 
 /** Runs a list write off the screen's scope (a menu closes as it is picked) and says how it went. */
 internal fun listWrite(say: (String) -> Unit, s: Messages, write: suspend () -> String) {
-    Background.scope.launch {
+    // As the profile open when it was asked (HX88): dropped, never written into the next one.
+    Background.scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) {
         val line = try {
             write()
         } catch (e: CancellationException) {

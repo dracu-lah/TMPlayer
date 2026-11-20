@@ -67,9 +67,10 @@ interface ProfilePlatform {
 
     /**
      * Saves the player's place and stops it, and pauses the open profile's downloads, while its
-     * stores are still the open ones. [com.tmplayer.data.BeforeSwitch.runAll] plus the platform's own.
+     * stores are still the open ones. [com.tmplayer.data.BeforeSwitch.runAll] plus the platform's
+     * own, all together under one deadline; [onWaiting] hears what is still being waited for.
      */
-    suspend fun beforeSwitch()
+    suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit = {})
 
     /**
      * The platform's sign out of [profile], run by [AccountSwitcher.signOutProfile] with it open:
@@ -165,6 +166,32 @@ class ProfileFlow(
 
     private var running: Job? = null
     private var listening = false
+
+    /** The switch is waiting for work of the open profile to stop: Cancel stays on it. */
+    var waitCancellable: Boolean by mutableStateOf(false)
+        private set
+
+    /** Cancel while a switch waits ([waitCancellable]): nothing is switched, the open profile stays. */
+    fun cancelWaiting() {
+        if (!waitCancellable) return
+        running?.cancel()
+    }
+
+    /** The open profile's work stops first, the line saying what it waits for, with a Cancel. */
+    private suspend fun stopFirst() {
+        val line = status
+        waitCancellable = true
+        try {
+            platform.beforeSwitch { what -> status = if (what.isEmpty()) line else L.profilesWaiting(what = what.joinToString(", ")) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "stopping before a switch failed", e)
+        } finally {
+            waitCancellable = false
+            status = line
+        }
+    }
 
     /** The app lock as last read; meaningful once [appLockKnown]. */
     var appLockSettings: AppLockSettings? by mutableStateOf(null)
@@ -490,7 +517,7 @@ class ProfileFlow(
         focusOn = id
         work(L.profilesSwitching(name = name)) {
             val left = switcher.profiles.value.active
-            runCatching { platform.beforeSwitch() }.onFailure { Logger.w(TAG, "stopping before a switch failed", it) }
+            stopFirst()
             // Whatever opens next is locked until its own PIN is given (also heard from the switch itself).
             ProfileUnlock.lock()
             when (val result = switcher.switchTo(id, signInAgain)) {
@@ -513,7 +540,7 @@ class ProfileFlow(
     private fun addNow() {
         stage = Stage.Picker
         work(L.profilesSwitching(name = L.profilesAdd)) {
-            runCatching { platform.beforeSwitch() }.onFailure { Logger.w(TAG, "stopping before an add failed", it) }
+            stopFirst()
             ProfileUnlock.lock()
             when (val result = switcher.add()) {
                 is AddResult.Added -> enter()
@@ -539,7 +566,7 @@ class ProfileFlow(
         stage = Stage.Picker
         work(L.profilesSwitching(name = name)) {
             // Always: the open profile's own long jobs stop and are waited for before its data goes.
-            runCatching { platform.beforeSwitch() }
+            stopFirst()
             ProfileUnlock.lock()
             when (val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }) {
                 is SignOutResult.SignedOut -> {
@@ -578,7 +605,7 @@ class ProfileFlow(
         val name = nameOf(id)
         work(L.profilesSwitching(name = name)) {
             // Settings' sign out too: the profile's long jobs stop and are waited for first.
-            runCatching { platform.beforeSwitch() }
+            stopFirst()
             ProfileUnlock.lock()
             val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             if (result is SignOutResult.SignedOut) {
@@ -632,7 +659,7 @@ class ProfileFlow(
 
     private fun removeAllNow(deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         work(L.profilesRemoveAll) {
-            runCatching { platform.beforeSwitch() }
+            stopFirst()
             ProfileUnlock.lock()
             val result = switcher.removeAll { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             when {
@@ -798,6 +825,7 @@ fun ProfileFlowScreen(flow: ProfileFlow, list: AccountList, signInStep: Boolean)
             onOpen = flow::open,
             onAdd = flow::add,
             onOptions = flow::options,
+            onCancelStatus = if (flow.waitCancellable) flow::cancelWaiting else null,
             status = flow.status,
             focusOn = flow.focusOn,
             focusAsk = flow.focusAsk,
@@ -848,7 +876,8 @@ fun ProfileFlowScreen(flow: ProfileFlow, list: AccountList, signInStep: Boolean)
             val name = flow.nameOf(stage.id)
             ProfilePanel(
                 title = if (stage.playing) L.profilesSwitchPlayTitle(name = name) else L.profilesSwitchDownloadsTitle(name = name),
-                body = L.profilesSwitchPlayBody,
+                // The place is only spoken of when a video plays: downloads alone just pause.
+                body = if (stage.playing) L.profilesSwitchPlayBody else L.profilesSwitchDownloadsBody,
                 actions = listOf(
                     PanelAction(L.profilesSwitch, flow::confirmSwitch, primary = true),
                     PanelAction(L.commonCancel, { flow.back(stage.id) }),

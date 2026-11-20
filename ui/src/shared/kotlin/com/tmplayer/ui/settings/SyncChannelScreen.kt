@@ -158,7 +158,7 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
         onCreate = {
             asking = false
             work {
-                val session = Td.awaitConnectedSessionOrNull()
+                val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
                 val myId = Td.myId()
                 if (session == null || myId == 0L) {
                     error = s.settingsResumeSyncOffline
@@ -174,7 +174,7 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
                 note = null
                 Background.scope.launch {
                     try {
-                        val session = Td.awaitConnectedSessionOrNull()
+                        val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
                         if (session == null) error = s.settingsResumeSyncOffline else options = SyncDestinations.candidates(session.client)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
@@ -188,7 +188,7 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
         },
         onPick = { option ->
             work {
-                val session = Td.awaitConnectedSessionOrNull()
+                val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
                 val myId = Td.myId()
                 if (session == null || myId == 0L) {
                     error = s.settingsResumeSyncOffline

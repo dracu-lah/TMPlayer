@@ -117,6 +117,8 @@ fun WhoIsWatching(
     modifier: Modifier = Modifier,
     /** A line under the row while a switch runs ("Opening Asha", or the slow close's line), or null. */
     status: String? = null,
+    /** While the switch waits for the open profile's work to stop: Cancel stays on that profile. */
+    onCancelStatus: (() -> Unit)? = null,
     /** The tile to give the focus to, asked again each time [focusAsk] changes. */
     focusOn: String? = null,
     focusAsk: Int = 0,
@@ -227,6 +229,9 @@ fun WhoIsWatching(
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 8.dp).widthIn(max = 520.dp),
                         )
+                        if (onCancelStatus != null) {
+                            ProfileButton(label = s.commonCancel, onClick = onCancelStatus, modifier = Modifier.padding(top = 12.dp))
+                        }
                     }
                 }
             }
