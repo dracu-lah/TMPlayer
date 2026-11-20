@@ -239,8 +239,8 @@ Two choke points, one rule each:
   ones neutral or real, the profile's results taken down). Each post says its kind: `Ongoing`,
   `Result` or `Device` (the device's, never changed). Each is tagged with the profile it was
   posted for: a switch takes down every profile notification of the profile left, a sign out
-  all of its own, and a cold start with the open profile hidden takes down what an earlier
-  process left. The neutral copy keeps the tap, auto cancel and the swipe's delete intent.
+  all of its own, and a cold start with the open profile hidden takes down the profile notifications an
+  earlier process left (each carries `ProfileNotifications.PROFILE_EXTRA`; the device's stay). The neutral copy keeps the tap, auto cancel and the swipe's delete intent.
 - `ProfileNotificationsPolicyTest` scans every source set under app/src but the tests (main,
   cast, nocast, vlc, novlc, dev, debug, preview, promo, fdroid) for posts, media sessions and
   their metadata, cast items, widgets and shortcuts; each hit routes through the wrapper or
@@ -257,7 +257,8 @@ Two choke points, one rule each:
 | New video, episode and piece alerts | not even checked while hidden (`BackgroundChecks`, checked again before each post); posted as `Result` |
 | Playback stopped notice (`PlaybackService`) | `Result` |
 | Cast to a TV (`DlnaCastService`, both builds): notification and media session | `Ongoing`, and `ProfileMedia`: the app's name only while hidden |
-| Google Cast (regular build, app/src/cast `CastBuild`): the framework's own notification, lock screen and Bluetooth controls, and the TV's screen | with a PIN profile open the item is loaded with the app's name only (`OutsideWrites.castTitles`), from the load on: the framework cannot change a loaded item's titles, so a PIN profile's casts stay neutral even while unlocked; other profiles' casts name the video |
+| Google Cast (regular build, app/src/cast `CastBuild`): the framework's own notification, lock screen and Bluetooth controls, and the TV's screen | with a PIN profile open the item is loaded with the app's name only (`OutsideWrites.castTitles`), from the load on: the framework cannot change a loaded item's titles, so a PIN profile's casts stay neutral even while unlocked (accepted, 2026-11-20; the profile's options say so: "a cast started from it shows only TMPlayer's name"); other profiles' casts name the video |
+| Long jobs of a profile (Save to folder, moving downloads, an external player's stream, a cast to a TV, transfers, downloads) | each takes its owner (`Accounts.stamp`) when it starts and posts for it; a post whose owner is no longer the open profile is dropped (a foreground one goes up neutral); the first switch, sign out or remove stops the job and takes its foreground notification down (`ProfileJobs.stopOnSwitch`) |
 | The dev build's name dump (app/src/dev `NameDumpService`) | a fixed title, nothing of a profile |
 | External player stream (`ExternalStreams`) | `Ongoing` |
 | Updates, update installed, low storage, the sponsor card | `Device`: unchanged, nothing of a profile in them |
