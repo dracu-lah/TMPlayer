@@ -115,10 +115,45 @@ class ProfileNotificationsTest {
     fun `a cold start with the profile hidden takes down the profile's notifications left, the device's stay`() {
         val left = real("Left by the last process").apply { extras.putString(ProfileNotifications.PROFILE_EXTRA, "pa") }
         manager.notify(90, left)
-        manager.notify(91, real("An update is ready"))
+        val update = real("An update is ready").apply { extras.putBoolean(ProfileNotifications.DEVICE_EXTRA, true) }
+        manager.notify(91, update)
+        // Posted by a version before the markers: taken for a profile's.
+        manager.notify(92, real("Unmarked, from an older version"))
+        // On a device channel without the marker: the device's.
+        manager.createNotificationChannel(android.app.NotificationChannel(AppNotices.CHANNEL_UPDATES, "u", NotificationManager.IMPORTANCE_LOW))
+        manager.notify(
+            93,
+            notificationBuilder(context, AppNotices.CHANNEL_UPDATES, NotificationManager.IMPORTANCE_LOW)
+                .setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("Updated").build(),
+        )
         ProfileNotifications.clearLeftBehind(context)
-        assertNull(shadowOf(manager).getNotification(90))
-        assertEquals("An update is ready", shadowOf(manager).getNotification(91).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+        val shade = shadowOf(manager)
+        assertNull(shade.getNotification(90))
+        assertNull("unmarked is a profile's unless on a device channel", shade.getNotification(92))
+        assertEquals("An update is ready", shade.getNotification(91).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+        assertEquals("Updated", shade.getNotification(93).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+    }
+
+    @Test
+    fun `the first run after the upgrade clears the shade once`() {
+        context.getSharedPreferences("profile_notifications", Context.MODE_PRIVATE).edit().clear().commit()
+        manager.notify(97, real("From the version before"))
+        ProfileNotifications.clearOnceAfterUpgrade(context)
+        assertNull(shadowOf(manager).getNotification(97))
+        manager.notify(98, real("Posted after"))
+        ProfileNotifications.clearOnceAfterUpgrade(context)
+        assertEquals("Posted after", shadowOf(manager).getNotification(98).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+    }
+
+    @Test
+    fun `a flip never brings back the real titles of a job whose owner is no longer open`() {
+        val stale = AccountStamp(Long.MAX_VALUE, "ppin01")
+        ProfileNotifications.trackForTest(context, 99, real("Saving: a private title"), ProfileNotifications.Kind.Ongoing, stale)
+        ProfileNotifications.republish(context, hidden = false)
+        assertEquals(ProfileNotifications.appName(context), shadowOf(manager).getNotification(99).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+        ProfileNotifications.trackForTest(context, 100, real("Saved: a private title"), ProfileNotifications.Kind.Result, stale)
+        ProfileNotifications.republish(context, hidden = false)
+        assertNull(shadowOf(manager).getNotification(100))
     }
 
     @Test
