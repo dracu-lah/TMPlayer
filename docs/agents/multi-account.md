@@ -217,9 +217,13 @@ write. `TdSessionPolicyTest` lists every other wait and why it is safe (a read f
 screen, or the player, which closes before a switch).
 
 App-wide collectors over a profile's flows (audited, HX88): a switch must never read as a
-change of that profile's data. "Remove after watching" (`RemoveAfterWatching`, both apps) takes a
-new starting point whenever the open profile changes, deleting nothing, and deletes only as the
-profile whose marks they are, stopping if it is no longer open. The others only mirror the open
+change of that profile's data. "Remove after watching" (`RemoveAfterWatching`, both apps) is
+driven by marks as they are made (`WatchedMarks`, raised only by `WatchedStore.markWatched` and
+`markAllWatched`, for the profile the mark was written for), never by comparing two watched
+lists: a switch, a sign out, the app starting, a restore from a backup and a sync import delete
+nothing. A sync import marking videos watched on another device does not delete their downloads
+here (the conservative answer, user to confirm): only the viewer finishing or marking a video on
+this device does, and only while that profile is open. The others only mirror the open
 profile's state and act on no difference: the kids lock and the chats added (`ChatGate.follow`,
 `AddedChats.follow`), the viewer's corrections (`VideoCorrections.follow`), the widget's tile, the
 TV's channels (cleared on every switch), the notifications (taken down on every switch), and gone
