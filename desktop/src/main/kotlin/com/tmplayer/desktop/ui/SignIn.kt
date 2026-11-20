@@ -25,7 +25,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -574,27 +573,17 @@ private fun PasswordPane(state: AuthState.Password) {
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
     var forgot by remember { mutableStateOf(false) }
-    var confirming by remember { mutableStateOf(false) }
     val request = rememberRequest()
     val asking = rememberRequest()
     val focus = remember { FocusRequester() }
     LaunchedEffect(forgot) { if (!forgot) runCatching { focus.requestFocus() } }
 
     if (forgot) {
-        // No password and no recovery email: what is left, and the account reset behind a
-        // second, plainly worded confirmation.
-        Heading(s.loginNoRecoveryTitle, if (confirming) s.loginResetAccountSure else s.loginNoRecoveryBody)
-        asking.error?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) }
-        Button(onClick = { if (confirming) confirming = false else forgot = false }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (confirming) s.commonCancel else s.loginBackToPassword)
-        }
-        OutlinedButton(
-            onClick = { if (confirming) scope.send(asking) { Td.resetAccount() } else confirming = true },
-            enabled = !asking.busy,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (confirming) s.loginResetAccountConfirm else s.loginResetAccount)
+        // No password and no recovery email: TMPlayer never resets an account, so this points
+        // to Telegram's own app and help page.
+        Heading(s.loginNoRecoveryTitle, s.loginNoRecoveryHelp)
+        Button(onClick = { forgot = false }, modifier = Modifier.fillMaxWidth()) {
+            Text(s.loginBackToPassword)
         }
         return
     }

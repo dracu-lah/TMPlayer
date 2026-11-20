@@ -104,9 +104,7 @@ class SignInStepsTest {
     }
 
     @Test
-    fun `an account reset waiting period is read out of Telegram's error`() {
-        assertEquals(604_800, SignInWaits.resetWaitSeconds("2FA_CONFIRM_WAIT_604800"))
-        assertNull(SignInWaits.resetWaitSeconds("PASSWORD_HASH_INVALID"))
+    fun `the seconds until a moment never go below zero`() {
         assertEquals(30, SignInWaits.secondsUntil(1_000_030, 1_000_000_000L))
         assertEquals(0, SignInWaits.secondsUntil(10, 1_000_000_000L))
     }

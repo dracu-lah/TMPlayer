@@ -1040,8 +1040,7 @@ private fun Step(number: Int, text: String) {
 /**
  * Two-step verification: the password with show and hide, the account's own hint, and "Forgot
  * password?". With a recovery email that mails a code ([PasswordRecoveryPane]); without one it
- * says what is left, which is changing the password from a device still signed in, or Telegram's
- * account reset, offered only behind a second, plainly worded confirmation.
+ * points to Telegram's own app and help page: TMPlayer never resets an account.
  */
 @Composable
 private fun PasswordPane(
@@ -1054,21 +1053,14 @@ private fun PasswordPane(
     val s = LocalStrings.current
     var password by remember { mutableStateOf("") }
     var shown by rememberSaveable { mutableStateOf(false) }
-    // The "no recovery email" step, and within it the confirmation of the reset.
+    // The "no recovery email" step.
     var forgot by rememberSaveable { mutableStateOf(false) }
-    var confirming by rememberSaveable { mutableStateOf(false) }
     val submission = rememberSubmission(state, error)
     val asking = rememberSubmission(state, error)
 
     if (forgot) {
-        BackHandler { if (confirming) confirming = false else forgot = false }
-        NoRecoveryPane(
-            confirming = confirming,
-            error = error,
-            busy = asking.busy,
-            onReset = { if (confirming) asking.start { onRun { Td.resetAccount() } } else confirming = true },
-            onBack = { if (confirming) confirming = false else forgot = false },
-        )
+        BackHandler { forgot = false }
+        NoRecoveryPane(error = error, onBack = { forgot = false })
         return
     }
 
@@ -1117,13 +1109,10 @@ private fun PasswordPane(
     )
 }
 
-/** No password and no recovery email: what is left, and the account reset behind a confirmation. */
+/** No password and no recovery email: Telegram's own app and help page are the way back in. */
 @Composable
 private fun NoRecoveryPane(
-    confirming: Boolean,
     error: String?,
-    busy: Boolean,
-    onReset: () -> Unit,
     onBack: () -> Unit,
 ) {
     val s = LocalStrings.current
@@ -1132,25 +1121,13 @@ private fun NoRecoveryPane(
     Pane {
         PaneHeader(onBack = onBack)
         Text(s.loginNoRecoveryTitle, style = MaterialTheme.typography.headlineLarge)
-        Text(if (confirming) s.loginResetAccountSure else s.loginNoRecoveryBody, style = MaterialTheme.typography.bodyLarge)
+        Text(s.loginNoRecoveryHelp, style = MaterialTheme.typography.bodyLarge)
         if (error != null) PaneError(error)
-        val buttons: @Composable () -> Unit = {
-            // Back first and in focus on a remote: a reset is never one stray press away.
-            TmButton(onClick = onBack, modifier = (if (touch) Modifier.paneAction() else Modifier).focusRequester(back)) {
-                Text(if (confirming) s.commonCancel else s.loginBackToPassword)
-            }
-            TmSecondaryButton(
-                onClick = onReset,
-                loading = busy,
-                busyLabel = s.loginResetAccount,
-                modifier = if (touch) Modifier.paneAction() else Modifier,
-            ) {
-                Text(if (confirming) s.loginResetAccountConfirm else s.loginResetAccount, color = Tone.danger)
-            }
+        TmButton(onClick = onBack, modifier = (if (touch) Modifier.paneAction() else Modifier).focusRequester(back)) {
+            Text(s.loginBackToPassword)
         }
-        if (touch) buttons() else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { buttons() }
     }
-    LaunchedEffect(confirming) { if (!touch) runCatching { back.requestFocus() } }
+    LaunchedEffect(Unit) { if (!touch) runCatching { back.requestFocus() } }
 }
 
 /**

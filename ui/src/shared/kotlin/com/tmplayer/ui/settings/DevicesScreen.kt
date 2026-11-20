@@ -152,7 +152,7 @@ fun DevicesScreen(onClose: () -> Unit, modifier: Modifier = Modifier, preview: L
                     if (asking == ALL) {
                         Confirm(
                             title = s.sessionsEndAllTitle,
-                            body = s.sessionsEndAllConfirm,
+                            body = if (others.isEmpty()) s.sessionsEndAllConfirm else s.sessionsEndAllConfirmDevices(AccountSessions.devicesLine(others, s)),
                             action = if (busy) s.sessionsEnding else s.sessionsEndAll,
                             onYes = { end(ALL, "") },
                             onNo = { asking = null },

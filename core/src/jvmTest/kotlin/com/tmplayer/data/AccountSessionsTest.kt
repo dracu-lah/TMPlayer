@@ -68,6 +68,34 @@ class AccountSessionsTest {
         assertEquals("Unknown device", AccountSessions.title(session(3, false, 1, model = "").copy(platform = ""), s))
     }
 
+    private fun tdlib(id: Long, current: Boolean) = Session(
+        id, current, false, false, false, false, SessionDeviceTypeAndroid(), 1, "TMPlayer", "1.27.0", false,
+        "Pixel 8", "Android", "15", 100, 200, "203.0.113.5", "Berlin, Germany",
+    )
+
+    @Test
+    fun `ending this device's own session is refused, any other is allowed`() {
+        val list = arrayOf(tdlib(1, current = true), tdlib(2, current = false), tdlib(3, current = false))
+        assertTrue(AccountSessions.endsThisDevice(list, 1))
+        assertFalse(AccountSessions.endsThisDevice(list, 2))
+        assertFalse(AccountSessions.endsThisDevice(list, 3))
+        // A session that is no longer listed is not this device's.
+        assertFalse(AccountSessions.endsThisDevice(list, 99))
+        assertFalse(AccountSessions.endsThisDevice(emptyArray(), 1))
+    }
+
+    @Test
+    fun `the end all question names the devices, the first few and how many more`() {
+        Translator.use(Languages.ENGLISH)
+        val s = L.messages
+        val three = listOf(session(1, false, 1, "Pixel 8"), session(2, false, 1, "Desktop"), session(3, false, 1, "iPad"))
+        assertEquals("Pixel 8, Desktop, iPad", AccountSessions.devicesLine(three, s))
+        val five = three + listOf(session(4, false, 1, "Firefox"), session(5, false, 1, "Chrome"))
+        assertEquals("Pixel 8, Desktop, iPad, and 2 more", AccountSessions.devicesLine(five, s))
+        assertEquals("", AccountSessions.devicesLine(emptyList(), s))
+        assertTrue(s.sessionsEndAllConfirmDevices("Pixel 8").startsWith("Sign TMPlayer out on Pixel 8?"))
+    }
+
     @Test
     fun `the speed note holds a while after telegram says so, never for premium`() {
         assertTrue(SpeedLimit.limited(premium = false, limitedAtMs = 1_000, nowMs = 2_000))
