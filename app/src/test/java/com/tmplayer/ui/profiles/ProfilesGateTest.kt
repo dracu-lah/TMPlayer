@@ -467,6 +467,39 @@ class ProfilesGateTest {
         assertEquals(k.ids[0], k.book.list.value.activeId)
     }
 
+    @Test
+    fun `a Settings sign out that throws part way tells Settings and resumes what its wait paused`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.host.failEndSession = true
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        var told: com.tmplayer.data.SignOutResult? = null
+        flow.signOutOpen(deleteDownloads = false) { told = it }
+        rule.waitUntil(15_000) { told != null }
+        assertEquals(com.tmplayer.data.SignOutResult.Unknown, told)
+        rule.waitUntil(5_000) { k.platform.resumed == 1 }
+    }
+
+    @Test
+    fun `a Cancel's resume ends before a quick retry's wait begins`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.platform.hold = kotlinx.coroutines.CompletableDeferred()
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitUntil(5_000) { flow.waitCancellable }
+        flow.cancelWaiting()
+        // The retry as soon as the picker takes presses again.
+        k.platform.hold = null
+        rule.waitUntil(5_000) { flow.status == null }
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitUntil(15_000) { k.platform.order.count { it == "wait" } == 2 }
+        val order = k.platform.order.toList()
+        assertEquals("the retry waits for the resume: $order", listOf("wait", "resume", "wait"), order.take(3))
+    }
+
     private companion object {
         const val HOME = "The shell of the open profile"
     }

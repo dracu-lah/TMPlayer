@@ -180,18 +180,19 @@ class ProfileFlow(
     /** Cancel while a switch waits ([waitCancellable]): nothing is switched, the open profile stays. */
     fun cancelWaiting() {
         // Exactly one wins: a Cancel that comes after the wait is over does nothing, so the switch
-        // never goes ahead with the downloads it paused running again.
+        // never goes ahead with the downloads it paused running again. The resume runs in the
+        // cancelled work itself ([stopFirst]), so a retry waits for it.
         if (!wait.cancel()) return
         running?.cancel()
-        // The profile stays: what was paused for the switch goes on again.
-        scope.launch { runCatching { platform.switchCancelled() } }
     }
 
     private val wait = com.tmplayer.data.SwitchWait()
 
     /** A switch or sign out that did not happen: what its wait paused goes on again. */
-    private fun resumePaused() {
-        scope.launch { runCatching { platform.switchCancelled() } }
+    private suspend fun resumePaused() {
+        // Inside the work, waited for: the next work (a retry) starts only after it, so its wait
+        // never records a set that this resume then takes away.
+        withContext(NonCancellable) { runCatching { platform.switchCancelled() } }
     }
 
     /** The open profile's work stops first, the line saying what it waits for, with a Cancel. */
@@ -202,6 +203,8 @@ class ProfileFlow(
         try {
             platform.beforeSwitch { what -> status = if (what.isEmpty()) line else L.profilesWaiting(what = what.joinToString(", ")) }
         } catch (e: CancellationException) {
+            // The viewer's Cancel: the profile stays, what the wait paused goes on again.
+            if (!wait.waiting) resumePaused()
             throw e
         } catch (e: Exception) {
             Logger.w(TAG, "stopping before a switch failed", e)
@@ -210,7 +213,10 @@ class ProfileFlow(
             status = line
         }
         // A Cancel that won: the switch does not go on, even if it was not cancelled in time to stop the wait.
-        if (!wait.commit()) throw CancellationException("the viewer cancelled the switch")
+        if (!wait.commit()) {
+            resumePaused()
+            throw CancellationException("the viewer cancelled the switch")
+        }
     }
 
     /** The app lock as last read; meaningful once [appLockKnown]. */
@@ -505,7 +511,7 @@ class ProfileFlow(
     }
 
     /** One switch at a time from here too; the switcher itself keeps only the newest asked. */
-    private fun work(line: String, block: suspend () -> Unit) {
+    private fun work(line: String, onFailed: (() -> Unit)? = null, block: suspend () -> Unit) {
         val before = running
         running = scope.launch {
             before?.join()
@@ -524,6 +530,9 @@ class ProfileFlow(
             } catch (e: Exception) {
                 Logger.w(TAG, "a profile switch failed", e)
                 notice = Notice(L.profilesSwitchFailed(name = ""), "")
+                // Nothing happened as asked: the open profile's paused work goes on again.
+                resumePaused()
+                onFailed?.invoke()
             } finally {
                 withContext(NonCancellable) { watch.cancelAndJoin() }
                 status = null
@@ -637,7 +646,7 @@ class ProfileFlow(
 
     private fun confirmSignOutWith(id: String, deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         val name = nameOf(id)
-        work(L.profilesSwitching(name = name)) {
+        work(L.profilesSwitching(name = name), onFailed = { done(SignOutResult.Unknown) }) {
             try {
                 // Settings' sign out too: the profile's long jobs stop and are waited for first.
                 stopFirst()
@@ -699,7 +708,7 @@ class ProfileFlow(
     }
 
     private fun removeAllNow(deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
-        work(L.profilesRemoveAll) {
+        work(L.profilesRemoveAll, onFailed = { done(SignOutResult.Unknown) }) {
             stopFirst()
             ProfileUnlock.lock()
             val result = switcher.removeAll { profile, last -> platform.wipe(profile, last, deleteDownloads) }

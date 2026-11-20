@@ -56,7 +56,11 @@ internal class KitHost : ClientHost {
 
     override suspend fun awaitOpen() = Unit
 
+    /** Set: logging out throws, as a TDLib failing part way would. */
+    @Volatile var failEndSession = false
+
     override suspend fun endSession(timeoutMs: Long): Boolean {
+        if (failEndSession) throw IllegalStateException("TDLib could not log out")
         generation++
         return true
     }
@@ -80,7 +84,11 @@ internal class KitPlatform : ProfilePlatform {
     /** Set: the work before a switch does not stop until it completes (a sync that is slow to stop). */
     @Volatile var hold: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
+    /** What happened, in order: "wait" for each wait before a switch, "resume" for each resume. */
+    val order = java.util.Collections.synchronizedList(mutableListOf<String>())
+
     override suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit) {
+        order += "wait"
         hold?.let { waiting ->
             onWaiting(listOf("a sync"))
             waiting.await()
@@ -92,6 +100,9 @@ internal class KitPlatform : ProfilePlatform {
     @Volatile var resumed = 0
 
     override suspend fun switchCancelled() {
+        // Slow on purpose: a retry that did not wait for it would start its wait first.
+        kotlinx.coroutines.delay(200)
+        order += "resume"
         resumed++
     }
 

@@ -185,7 +185,8 @@ class ProfilePickerTvTest {
         press(rule.onNodeWithText(L.commonOk), Key.DirectionDown)
         rule.onNodeWithText(L.commonOk).assertIsFocused()
         press(rule.onNodeWithText(L.commonOk), Key.DirectionCenter)
-        rule.waitForIdle()
+        // Once the row takes presses again (what the failed Add paused is resumed first).
+        rule.waitUntil(5_000) { runCatching { tile("Asha").assertIsFocused() }.isSuccess }
         tile("Asha").assertIsFocused()
     }
 

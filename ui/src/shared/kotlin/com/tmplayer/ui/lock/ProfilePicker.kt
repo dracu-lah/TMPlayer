@@ -137,8 +137,10 @@ fun WhoIsWatching(
 
     // A remote needs something under it from the first frame: the first tile, or the one a closed
     // dialog came from. A touch screen draws no ring, so nothing is focused there.
-    LaunchedEffect(focusOn, focusAsk, model.tiles.size) {
+    // Again once the row takes presses (busy over): a tile cannot hold focus while it is disabled.
+    LaunchedEffect(focusOn, focusAsk, model.tiles.size, busy) {
         if (!tv && focusOn == null) return@LaunchedEffect
+        if (busy) return@LaunchedEffect
         withFrameNanos { }
         val target = focusOn?.takeIf { id -> model.tiles.any { it.id == id } } ?: model.tiles.firstOrNull()?.id
         runCatching { if (target != null) requester(target).requestFocus() else addFocus.requestFocus() }
