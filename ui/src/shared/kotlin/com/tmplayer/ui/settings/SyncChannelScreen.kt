@@ -120,7 +120,9 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
         busy = true
         note = null
         error = null
-        Background.scope.launch {
+        // As the profile open when it was pressed (HX88): its settings writes are that profile's,
+        // and dropped once another is open, never written into the next one.
+        Background.scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) {
             try {
                 block()
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -172,7 +174,7 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
                 loading = true
                 error = null
                 note = null
-                Background.scope.launch {
+                Background.scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) {
                     try {
                         val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
                         if (session == null) error = s.settingsResumeSyncOffline else options = SyncDestinations.candidates(session.client)

@@ -189,6 +189,23 @@ class ProfilePickerTvTest {
         tile("Asha").assertIsFocused()
     }
 
+    @Test
+    fun `while a switch waits the remote is on Cancel, and OK on it stays on the open profile`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.platform.hold = kotlinx.coroutines.CompletableDeferred()
+        show(k.flow())
+        press(tile("Asha"), Key.DirectionRight)
+        press(tile("Ben"), Key.DirectionCenter)
+        rule.waitUntil(15_000) { runCatching { rule.onNodeWithText(L.commonCancel).assertIsFocused() }.isSuccess }
+        press(rule.onNodeWithText(L.commonCancel), Key.DirectionCenter)
+        rule.waitUntil(5_000) { runCatching { rule.onNodeWithText(L.commonCancel).assertDoesNotExist() }.isSuccess }
+        k.platform.hold?.complete(Unit)
+        Thread.sleep(300)
+        rule.waitForIdle()
+        assertEquals("nothing was switched", k.ids[0], k.book.list.value.activeId)
+        assertEquals("what the switch paused goes on again", 1, k.platform.resumed)
+    }
+
     private companion object {
         const val HOME = "The shell of the open profile"
     }

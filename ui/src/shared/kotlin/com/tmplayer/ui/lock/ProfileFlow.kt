@@ -73,6 +73,12 @@ interface ProfilePlatform {
     suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit = {})
 
     /**
+     * The viewer cancelled a switch while it waited ([ProfileFlow.cancelWaiting]): the profile
+     * stays, so what [beforeSwitch] paused goes on again (the downloads it paused).
+     */
+    suspend fun switchCancelled() = Unit
+
+    /**
      * The platform's sign out of [profile], run by [AccountSwitcher.signOutProfile] with it open:
      * its stores ([com.tmplayer.data.SettingsStore.clearAccountData], or `clearEverything` when
      * [last]), the watched and bookmark stores, the downloads when [deleteDownloads].
@@ -175,6 +181,8 @@ class ProfileFlow(
     fun cancelWaiting() {
         if (!waitCancellable) return
         running?.cancel()
+        // The profile stays: what was paused for the switch goes on again.
+        scope.launch { runCatching { platform.switchCancelled() } }
     }
 
     /** The open profile's work stops first, the line saying what it waits for, with a Cancel. */

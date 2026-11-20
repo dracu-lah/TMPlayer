@@ -230,7 +230,13 @@ fun WhoIsWatching(
                             modifier = Modifier.padding(top = 8.dp).widthIn(max = 520.dp),
                         )
                         if (onCancelStatus != null) {
-                            ProfileButton(label = s.commonCancel, onClick = onCancelStatus, modifier = Modifier.padding(top = 12.dp))
+                            // The remote is put on it: the tiles wait, Cancel is the one thing to press.
+                            val cancelFocus = remember { FocusRequester() }
+                            LaunchedEffect(Unit) {
+                                withFrameNanos { }
+                                if (tv) runCatching { cancelFocus.requestFocus() }
+                            }
+                            ProfileButton(label = s.commonCancel, onClick = onCancelStatus, modifier = Modifier.padding(top = 12.dp).focusRequester(cancelFocus))
                         }
                     }
                 }

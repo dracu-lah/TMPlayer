@@ -84,6 +84,12 @@ internal class KitPlatform : ProfilePlatform {
         playing = false
         downloading = false
     }
+    @Volatile var resumed = 0
+
+    override suspend fun switchCancelled() {
+        resumed++
+    }
+
     override suspend fun wipe(profile: Profile, last: Boolean, deleteDownloads: Boolean) {
         wiped += profile.id
     }
