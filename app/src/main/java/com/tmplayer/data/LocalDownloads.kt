@@ -137,6 +137,9 @@ object LocalDownloads {
         return withContext(Dispatchers.IO) {
             val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
                 .getOrDefault(record.fileId)
+            // After the lookup, which suspends (HX88): never another profile's file of that id. A
+            // job of a profile no longer open stops here with its record kept.
+            if (runCatching { OwnedSessions.ensure() }.isFailure) return@withContext false
             runCatching { Td.deleteFile(fileId) }
             if (runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L) > 0) return@withContext false
             runCatching { settings.forgetDownload(record.chatId, record.messageId) }.isSuccess
