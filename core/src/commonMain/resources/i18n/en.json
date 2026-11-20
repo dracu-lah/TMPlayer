@@ -1911,7 +1911,7 @@
     "add_these": "{count, plural, one {Add this chat} other {Add these # chats}}",
     "added_count": "{count, plural, one {# chat added} other {# chats added}}",
     "all_chats": "chats",
-    "all_chats_detail": "Every chat counts: archived, muted, bots and people too, and any chat you join later. Your ticks are kept for when you turn this off.",
+    "all_chats_detail": "Every chat counts, archived and muted ones too. Your ticks are kept.",
     "all_chats_on": "All chats is on",
     "all_chats_switch": "All chats",
     "band_gone": "No longer available",
