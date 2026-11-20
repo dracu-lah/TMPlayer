@@ -225,18 +225,36 @@ counted when read, before any timer ran. Outside the app, `hidden()` and `hidden
 profile is hidden whenever it is locked AND whenever no window of the app is on screen, from the
 moment it leaves (a frozen or killed process leaves nothing behind); it shows again once the app
 is open and the profile unlocked. `onBackground` also schedules the `lock()` itself, so listeners
-hear it while the app is away. Every writer goes through `OutsideWrites.mayWriteNow(stamp)`:
-nothing is written while hidden or for a profile no longer open; removing always may.
+hear it while the app is away.
+
+Two choke points, one rule each:
+
+- The launcher (Play next, TV channels) writes through `OutsideWrites.mayWriteNow(stamp)`, asked
+  under the publisher's lock: nothing while hidden or for a profile no longer open; removing
+  always may.
+- Every notification and the cast's framework media session go through `ProfileNotifications`
+  (`post`, `foreground`, `cancel`) and `ProfileMedia.setMetadata`, which read `hiddenNow()`: while
+  hidden the shade gets a neutral notification (the app's name, the same channel, icon and tap,
+  nothing of the profile); on every flip of `hidden()` what is still up is posted again (ongoing
+  ones neutral or real, the profile's results taken down). Each post says its kind: `Ongoing`,
+  `Result` or `Device` (the device's, never changed). `ProfileNotificationsPolicyTest` fails on a
+  direct post anywhere else.
 
 | Surface | Rule |
 | --- | --- |
 | Continue watching widget (phone) | the Locked tile while hidden (`ContinueWidget.lockedBy(lock, profileLocked)`), worked out again on every switch |
-| TV home channels (Android TV) | `TvChannelsPublisher.publish` refuses under its lock while hidden or for a stale stamp; cleared by `OutsideSurfaces` whenever `hidden()` is true (its first value included) and on every switch; Home's last plan is forgotten when hidden, so it is written in full again |
+| TV home channels (Android TV) | `TvChannelsPublisher.publish` refuses under its lock while hidden or for a stale stamp; cleared by `OutsideSurfaces` whenever `hidden()` is true (its first value included) and on every switch; Home forgets its last plan when hidden, so it is written in full again |
 | TV Play next row | `WatchNextPublisher.apply` refuses each upsert while hidden or for a stale stamp (the player passes the stamp it opened under); cleared with the channels |
-| New video, episode and piece alerts | none posted while hidden, checked again right before each post, nor for a sleeping profile |
-| Download notifications | the app's name instead of the title while hidden; no result notification while hidden; a switch stops the downloads |
-| Player media session and controls | the app's name only while hidden (as with the app lock asking on open); the player closes on start when `lockedNow()` and before a switch |
+| Download progress and summary | `ProfileNotifications`, `Ongoing`: neutral while hidden, every row drawn again on a flip |
+| Download results, transfer results (`AndroidTransferNotifier`), Save to folder's result | `Result`: neutral while hidden, taken down when the profile hides |
+| Save to folder (`FolderExport`), moving downloads (`DownloadRelocationService`), transfer progress | `Ongoing` |
+| New video, episode and piece alerts | not even checked while hidden (`BackgroundChecks`, checked again before each post); posted as `Result` |
+| Playback stopped notice (`PlaybackService`) | `Result` |
+| Cast to a TV (`DlnaCastService`): notification and media session | `Ongoing`, and `ProfileMedia`: the app's name only while hidden |
+| External player stream (`ExternalStreams`) | `Ongoing` |
+| Updates, update installed, low storage, the sponsor card | `Device`: unchanged, nothing of a profile in them |
+| Player media session and controls (Media3, `PlayerActivity`) | its own private metadata (the app's name) while hidden or while the app lock asks on open; the player closes on start when `lockedNow()` and before a switch |
 | Recents thumbnail | while the open profile has a PIN: Android 13 and later `setRecentsScreenshotEnabled(false)`; below 13 `FLAG_SECURE`, which also blocks screenshots, screen recording and some casting of that window (MainActivity and PlayerActivity); off when the open profile has no PIN |
-| Trailers, offline downloads, "Wrong title?" | drawn inside `ProfilesGate`, keyed on the open profile: a switch or a lock closes them |
-| Toasts (`TopMessageHost`) | outside the gate: a short message may still name a video for a few seconds (open) |
+| Trailers, offline downloads | drawn inside `ProfilesGate`, keyed on the open profile: a switch or a lock closes them |
+| "Wrong title?" and the toasts (`TopMessageHost`) | where they always were, over everything, but only while the open profile's shell shows (`profileShellShown`); "Wrong title?" keyed on the open profile |
 | Share targets, shortcuts | none exist today |
