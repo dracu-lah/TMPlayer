@@ -28,6 +28,8 @@ import com.google.android.gms.cast.framework.SessionProvider
 import com.google.android.gms.cast.framework.media.CastMediaOptions
 import com.google.android.gms.cast.framework.media.NotificationOptions
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -90,6 +92,14 @@ private class GoogleCastSupport(private val context: Context) : CastSupport {
         .onFailure { Log.w(TAG, "No Cast framework here (no Google Play services?)", it) }
         .getOrNull()
     private val router: MediaRouter? = castContext?.let { runCatching { MediaRouter.getInstance(context) }.getOrNull() }
+
+    init {
+        // A switch, sign out or remove ends a cast (HX88): the video on the TV is the last
+        // profile's. On the main thread, as the Cast framework wants.
+        com.tmplayer.platform.Background.scope.launch {
+            com.tmplayer.data.Accounts.activeFolder.drop(1).collect { main.post { runCatching { endSession() } } }
+        }
+    }
     private val selector = MediaRouteSelector.Builder()
         .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
         .build()

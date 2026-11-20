@@ -92,6 +92,21 @@ object FolderExport {
     private val running = AtomicBoolean(false)
     @Volatile private var run: Run? = null
 
+    /** Completed when the run in hand has ended, for a switch to wait on (HX88). */
+    @Volatile private var ended: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    /** The profile of the copy in hand, or null when none runs. */
+    fun ownerNow(): AccountStamp? = run?.owner
+
+    /**
+     * Before a switch (HX88): the copy stops at its next buffer, its part copy removed, and the
+     * switch waits for it, so nothing of it (a removal, a record) runs once the next profile is open.
+     */
+    private val stopBeforeSwitch: suspend () -> Unit = ProfileJobs.beforeSwitch(
+        cancel = { if (running.get()) cancel.set(true) },
+        join = { ended?.await() },
+    )
+
     private class Run(
         val tree: Uri?,
         val items: List<Item>,
@@ -101,6 +116,8 @@ object FolderExport {
         val remove: Boolean,
         /** Started from a video's page, which shows no dialogs: its end is a toast and a notification. */
         val detached: Boolean,
+        /** The profile the copy was started under (HX88): every write and removal is that profile's. */
+        val owner: AccountStamp = Accounts.stamp,
     ) {
         val keys: Set<String> = items.mapTo(HashSet()) { it.source.key }
     }
@@ -230,6 +247,8 @@ object FolderExport {
         val plan = offer.plan
         val next = Run(offer.tree, items, plan.forbidden, plan.unfinished, plan.items.size - items.size, remove, detached)
         run = next
+        ended = kotlinx.coroutines.CompletableDeferred()
+        BeforeSwitch.add(stopBeforeSwitch)
         _state.value = State(
             progress = FolderCopy.Progress(0, items.size, items.firstOrNull()?.source?.title.orEmpty(), 0f, 0, items.sumOf { it.sizeBytes }),
             gallery = offer.gallery,
@@ -269,6 +288,16 @@ object FolderExport {
             running.set(false)
             return FolderCopy.Outcome(folder = "", copied = 0)
         }
+        // As the owner's work (HX88): a store write after a switch is dropped, never the next profile's.
+        return try {
+            withContext(AccountOwner(next.owner)) { runAs(context, next, onProgress) }
+        } finally {
+            BeforeSwitch.remove(stopBeforeSwitch)
+            ended?.complete(Unit)
+        }
+    }
+
+    private suspend fun runAs(context: Context, next: Run, onProgress: (FolderCopy.Progress) -> Unit): FolderCopy.Outcome {
         val resolver = context.contentResolver
         val gallery = next.tree == null
         var outcome = try {
@@ -279,7 +308,8 @@ object FolderExport {
                     stop = FolderCopy.Stop.FolderLost, notReached = next.items.size,
                 )
             } else {
-                FolderCopyIo.copyAll(folder, next.items.map { it.source }, next.forbidden, next.unfinished, { cancel.get() }) {
+                // Stops too the moment another profile is open, between two files at the latest.
+                FolderCopyIo.copyAll(folder, next.items.map { it.source }, next.forbidden, next.unfinished, { cancel.get() || !ProfileJobs.mayWrite(next.owner) }) {
                     _state.value = State(progress = it, gallery = gallery, keys = next.keys)
                     onProgress(it)
                 }
@@ -292,7 +322,8 @@ object FolderExport {
             )
         }
         if (next.leftOut > 0) outcome = outcome.copy(notReached = outcome.notReached + next.leftOut)
-        if (next.remove) outcome = removeSaved(context, outcome, next.items.associate { it.source.key to it.record })
+        // Only while the owner is open: TDLib's file ids and the records are that profile's alone.
+        if (next.remove && ProfileJobs.mayWrite(next.owner)) outcome = removeSaved(context, outcome, next.items.associate { it.source.key to it.record }, next.owner)
         next.tree?.let { tree -> runCatching { resolver.releasePersistableUriPermission(tree, GRANT) } }
         run = null
         // A video's page shows no result dialog: the end is a toast here and a notification from
@@ -316,12 +347,17 @@ object FolderExport {
      * file, then the record), so Downloads, the badges and the space figures agree. Where it was
      * watched up to stays in Continue watching, which plays it from the chat from then on.
      */
-    private suspend fun removeSaved(context: Context, outcome: FolderCopy.Outcome, records: Map<String, ResumeRecord>): FolderCopy.Outcome {
+    private suspend fun removeSaved(context: Context, outcome: FolderCopy.Outcome, records: Map<String, ResumeRecord>, owner: AccountStamp): FolderCopy.Outcome {
         val settings = SettingsStore(context)
         var removed = 0
         var kept = 0
         for (key in outcome.verifiedKeys) {
             val record = records[key] ?: continue
+            // Checked before each file's TDLib call: another profile's file with the same id is never touched.
+            if (!ProfileJobs.mayWrite(owner)) {
+                kept++
+                continue
+            }
             val gone = runCatching {
                 if (record.localPath != null) {
                     LocalDownloads.delete(settings, record)
@@ -532,9 +568,9 @@ class FolderExportService : Service() {
         }
         AndroidTransferNotifier.ensureChannel(this)
         if (!started) {
-            owner = com.tmplayer.data.Accounts.stamp
+            owner = FolderExport.ownerNow() ?: com.tmplayer.data.Accounts.stamp
             // A switch stops the copy: it is that profile's, and its titles must not follow.
-            com.tmplayer.data.ProfileJobs.stopOnSwitch(scope) {
+            com.tmplayer.data.ProfileJobs.stopOnSwitch(scope, owner) {
                 FolderExport.cancel()
                 runCatching { stopForegroundRemoving() }
                 stopSelf()

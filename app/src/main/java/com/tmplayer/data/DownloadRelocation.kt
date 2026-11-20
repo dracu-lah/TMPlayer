@@ -194,7 +194,10 @@ object DownloadRelocation {
     ): Boolean {
         if (activeJob != null) return false
         val app = context.applicationContext
-        val job = scope.launch {
+        // The profile whose downloads move (HX88): every record written is its own, and a switch
+        // stops the move between two files and waits for it ([BeforeSwitch]).
+        val owner = Accounts.stamp
+        val job = scope.launch(AccountOwner(owner)) {
             lock.withLock {
                 val outcome = try {
                     run(app, settings, destination, label)
@@ -204,7 +207,10 @@ object DownloadRelocation {
                 withContext(Dispatchers.Main) { onOutcome(outcome) }
             }
         }
+        val hook = ProfileJobs.beforeSwitch(cancel = { job.cancel() }, join = { job.join() })
+        BeforeSwitch.add(hook)
         job.invokeOnCompletion { cause ->
+            BeforeSwitch.remove(hook)
             activeJob = null
             if (cause is CancellationException) Handler(Looper.getMainLooper()).post(onCancelled)
         }
@@ -347,14 +353,19 @@ object DownloadRelocation {
         if (files.isNotEmpty()) _moving.value = Moving(0, total)
         try {
             var done = 0L
+            val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
             for ((record, src) in files) {
+                // Another profile open (a switch the hook could not wait out): stop, the rest stays where it is.
+                if (!ProfileJobs.mayWrite(owner)) break
                 val before = done
                 val size = (src.length() ?: 0L).coerceAtLeast(0)
                 try {
                     val newPath = transfer(context, src, destination, to) { landed, _ ->
                         _moving.value = Moving(before + landed, total)
                     }
-                    settings.setDownloadPath(record.chatId, record.messageId, newPath)
+                    // The file is whole at its new place and the original gone: its record follows
+                    // at once, never cut off by a cancel in between (a switch waits for this).
+                    withContext(NonCancellable) { settings.setDownloadPath(record.chatId, record.messageId, newPath) }
                     movedCount++
                 } catch (e: Exception) {
                     // A cancel is not a failure: it stops the move here, between files.

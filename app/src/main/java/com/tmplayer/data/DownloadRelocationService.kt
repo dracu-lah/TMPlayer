@@ -36,7 +36,7 @@ class DownloadRelocationService : Service() {
 
     init {
         // A switch stops the move with its own Cancel: the files are that profile's.
-        com.tmplayer.data.ProfileJobs.stopOnSwitch(scope) {
+        com.tmplayer.data.ProfileJobs.stopOnSwitch(scope, owner) {
             DownloadRelocation.cancel()
             runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
             stopSelf()

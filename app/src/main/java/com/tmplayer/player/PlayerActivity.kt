@@ -4919,6 +4919,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 .setDescription("")
                 // The app's own icon, so Media3 never fills the artwork from the file's own cover.
                 .setArtworkUri(android.net.Uri.parse("android.resource://$packageName/${applicationInfo.icon}"))
+                // And the bytes, which Media3 reads first: never the file's own embedded cover.
+                .apply { neutralArtwork()?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
                 .build()
         }
         val here = currentItem()
@@ -10709,6 +10711,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (!isFinishing) finish()
         }
     }
+
+    /** The app's icon as PNG bytes, made once, for the private media metadata (HX88). */
+    private val neutralIcon: ByteArray? by lazy {
+        runCatching {
+            val drawable = packageManager.getApplicationIcon(applicationInfo)
+            val size = 192
+            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        }.getOrNull()
+    }
+
+    private fun neutralArtwork(): ByteArray? = neutralIcon
 
     /** Writes the place; returns the write, for a caller that must wait for it ([saveBeforeInstall]). */
     private fun saveResumePosition(leaving: Boolean = false): Job? {

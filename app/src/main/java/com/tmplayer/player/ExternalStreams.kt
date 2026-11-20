@@ -134,7 +134,7 @@ class ExternalStreamService : Service() {
     private val switches = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     init {
-        com.tmplayer.data.ProfileJobs.stopOnSwitch(switches) {
+        com.tmplayer.data.ProfileJobs.stopOnSwitch(switches, owner) {
             ExternalStreams.close(this)
             stopSelf()
         }
@@ -198,6 +198,7 @@ class ExternalStreamService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(check)
+        switches.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         stopForegroundRemoving()
         super.onDestroy()
     }

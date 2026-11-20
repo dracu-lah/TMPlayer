@@ -58,7 +58,7 @@ class DlnaCastService : Service() {
     private val owner = com.tmplayer.data.Accounts.stamp
 
     init {
-        com.tmplayer.data.ProfileJobs.stopOnSwitch(scope) {
+        com.tmplayer.data.ProfileJobs.stopOnSwitch(scope, owner) {
             Cast.existing()?.endSession()
             stopSelf()
         }
