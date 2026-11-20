@@ -80,6 +80,8 @@ object ProfileNotifications {
         if (kind != Kind.Device) {
             posted[id] = Posted(notification, kind, owner)
             notification.extras.putString(PROFILE_EXTRA, owner.folder.orEmpty())
+        } else {
+            notification.extras.putBoolean(DEVICE_EXTRA, true)
         }
         runCatching { manager(app).notify(id, shown(app, notification, kind)) }
             .onFailure { Logger.w(TAG, "a notification was not posted", it) }
@@ -93,8 +95,11 @@ object ProfileNotifications {
     fun foreground(service: Service, id: Int, notification: Notification, kind: Kind, type: Int, owner: AccountStamp = Accounts.stamp) {
         val stale = !mayPost(kind, owner)
         if (kind != Kind.Device) {
-            posted[id] = Posted(notification, kind, owner)
             notification.extras.putString(PROFILE_EXTRA, owner.folder.orEmpty())
+            // A stale one is kept as its neutral copy only: no flip can ever post its real titles.
+            posted[id] = Posted(if (stale) neutral(service, notification) else notification, kind, owner)
+        } else {
+            notification.extras.putBoolean(DEVICE_EXTRA, true)
         }
         val shown = if (stale) neutral(service, notification) else shown(service, notification, kind)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) service.startForeground(id, shown, type) else service.startForeground(id, shown)
@@ -130,6 +135,33 @@ object ProfileNotifications {
         return builder.build()
     }
 
+    /** The device's channels: updates, low storage, the sponsor card. Nothing of a profile is ever in them. */
+    internal val DEVICE_CHANNELS = setOf(AppNotices.CHANNEL_UPDATES, AppNotices.CHANNEL_LOW_STORAGE, BackgroundChecks.CHANNEL_NEWS)
+
+    internal const val DEVICE_EXTRA = "com.tmplayer.device"
+
+    /** Whether [notification] is one of the device's: marked so, or on a device channel. */
+    internal fun isDevice(notification: Notification): Boolean {
+        if (notification.extras?.getBoolean(DEVICE_EXTRA, false) == true) return true
+        val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) notification.channelId else null
+        return channel != null && channel in DEVICE_CHANNELS
+    }
+
+    /**
+     * Once, on the first run of the version with profiles (HX88): what older versions posted
+     * carries no marker, so all of it comes down, whatever the profile.
+     */
+    internal fun clearOnceAfterUpgrade(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(CLEARED_KEY, 0) >= CLEARED_VERSION) return
+        runCatching { manager(context).cancelAll() }
+        prefs.edit().putInt(CLEARED_KEY, CLEARED_VERSION).apply()
+    }
+
+    private const val PREFS = "profile_notifications"
+    private const val CLEARED_KEY = "cleared_version"
+    private const val CLEARED_VERSION = 1
+
     /**
      * Posts again what is still up whenever the open profile hides or shows, the first value too;
      * takes down every profile notification of the profile left on a switch; and at a cold start
@@ -138,6 +170,7 @@ object ProfileNotifications {
      */
     fun follow(context: Context, scope: CoroutineScope) {
         val app = context.applicationContext
+        clearOnceAfterUpgrade(app)
         if (ProfileUnlock.hiddenNow()) clearLeftBehind(app)
         scope.launch { ProfileUnlock.hidden().collect { hidden -> republish(app, hidden) } }
         scope.launch { Accounts.activeFolder.drop(1).collect { folder -> leftProfile(app, folder.orEmpty()) } }
@@ -160,11 +193,12 @@ object ProfileNotifications {
      * so every profile notification (each carries [PROFILE_EXTRA]) comes down; the device's stay.
      */
     internal fun clearLeftBehind(context: Context) {
-        // Only the profile's (they carry PROFILE_EXTRA): an update or low storage notice stays.
+        // Everything but the device's: marked as such, or on a device channel (a notice posted
+        // before the markers existed). An unmarked one is taken for a profile's.
         runCatching {
             val manager = manager(context)
             for (each in manager.activeNotifications) {
-                if (each.notification.extras.containsKey(PROFILE_EXTRA)) manager.cancel(each.tag, each.id)
+                if (!isDevice(each.notification)) manager.cancel(each.tag, each.id)
             }
         }
     }
@@ -178,6 +212,12 @@ object ProfileNotifications {
                 continue
             }
             runCatching {
+                // A job's notification whose owner is no longer open: neutral if it must stay up
+                // (a foreground service), never real again.
+                if (!mayPost(entry.kind, entry.owner)) {
+                    if (entry.kind == Kind.Ongoing) manager.notify(id, neutral(context, entry.real)) else cancel(context, id)
+                    return@runCatching
+                }
                 when (onFlip(hidden, entry.kind)) {
                     null -> cancel(context, id)
                     Choice.Real -> manager.notify(id, entry.real)
@@ -195,6 +235,12 @@ object ProfileNotifications {
 
     /** For tests. */
     internal fun forgetAll() = posted.clear()
+
+    /** For tests: [notification] up as [id], kept for [owner] as a post would keep it. */
+    internal fun trackForTest(context: Context, id: Int, notification: Notification, kind: Kind, owner: AccountStamp) {
+        posted[id] = Posted(notification, kind, owner)
+        manager(context.applicationContext).notify(id, notification)
+    }
 
     private const val TAG = "ProfileNotifications"
 }
