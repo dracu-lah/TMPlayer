@@ -9,6 +9,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.CodeDelivery
@@ -129,6 +131,18 @@ class RajuSignInPhoneTest {
         has("Your Telegram password")
         has("Forgot password?")
         thumbs()
+    }
+
+    @Test
+    fun `no recovery email, Forgot password points to Telegram's own app and offers no account reset`() {
+        pane(AuthState.Password(hint = "", recoveryEmail = null))
+        rule.onNodeWithText("Forgot password?").performClick()
+        rule.waitForIdle()
+        has("Forgot your password?")
+        has("TMPlayer cannot reset the password", substring = true)
+        has("telegram.org/faq", substring = true)
+        assertEquals(0, RajuPass.count(rule, "Reset", substring = true))
+        assertEquals(0, RajuPass.count(rule, "Delete everything", substring = true))
     }
 
     @Test

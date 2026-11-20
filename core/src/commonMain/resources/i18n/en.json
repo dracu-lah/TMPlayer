@@ -1437,6 +1437,7 @@
     "invalid_country_code": "Invalid country code",
     "legal": "Terms and privacy",
     "no_recovery_body": "This account has no recovery email. Without the password, the only way in is to reset the account, which deletes all its chats and messages for good. If Telegram is still signed in on another device, change the password there instead: Settings, then Privacy and Security, then Two-Step Verification.",
+    "no_recovery_help": "This account has no recovery email, so TMPlayer cannot reset the password. In the Telegram app on a device that is still signed in, open Settings, then Privacy and Security, then Two-Step Verification, and change it there. More help: telegram.org/faq.",
     "no_recovery_title": "Forgot your password?",
     "password": "Password",
     "password_blurb": "Your Telegram account has a password. Enter it to finish signing in.",

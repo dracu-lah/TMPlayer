@@ -1007,26 +1007,6 @@ object Td {
     }
 
     /**
-     * The last way in for somebody with neither the password nor a recovery email: Telegram's own
-     * account reset, which deletes the account's messages and chats. Only ever called after the
-     * screen has said exactly that and the viewer has confirmed it. A recently used account is
-     * reset only after a waiting period; Telegram then refuses with `2FA_CONFIRM_WAIT_<seconds>`,
-     * which comes back here as the sentence saying how long.
-     */
-    suspend fun resetAccount(): String? {
-        val td = current ?: return L.errorsNotConnected
-        if (_auth.value !is AuthState.Password) return null
-        val result = withTimeoutOrNull(SUBMIT_TIMEOUT_MS) { td.deleteAccount("Forgot password", "") }
-            ?: return L.errorsNoAnswer
-        return when (result) {
-            is TdlResult.Success -> null
-            is TdlResult.Failure -> SignInWaits.resetWaitSeconds(result.message)
-                ?.let { L.loginResetAccountWait(Failures.waitPhrase(it)) }
-                ?: Failures.humanise(result.message)
-        }
-    }
-
-    /**
      * Asks Telegram to reset the login email of an account it signs in by email
      * ([EmailReset.Available]). TDLib answers with a new email code state that carries the wait.
      */

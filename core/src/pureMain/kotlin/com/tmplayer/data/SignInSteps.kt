@@ -90,16 +90,7 @@ object QrClock {
 /** The waits Telegram puts on sign in steps, read out of its errors. */
 object SignInWaits {
 
-    /**
-     * `2FA_CONFIRM_WAIT_604800`: an account reset that Telegram will carry out only after this
-     * many seconds, because the account was in use recently. Null for any other error.
-     */
-    fun resetWaitSeconds(raw: String?): Int? =
-        raw?.let { CONFIRM_WAIT.find(it)?.groupValues?.get(1)?.toIntOrNull() }
-
     /** Seconds left until a moment given as unix seconds, never below zero. */
     fun secondsUntil(unixSeconds: Int, nowMs: Long): Int =
         (unixSeconds - nowMs / 1000).coerceAtLeast(0).toInt()
-
-    private val CONFIRM_WAIT = Regex("""2FA_CONFIRM_WAIT_(\d+)""")
 }
