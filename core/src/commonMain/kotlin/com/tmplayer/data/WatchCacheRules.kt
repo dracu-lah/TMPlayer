@@ -373,6 +373,8 @@ class WatchCacheRules(
         // Only for the profile the work is for, while it is open and no switch is under way.
         if (!mayAct(ownerNow())) return 0L
         val held = bytesOf(fileId)
+        // Again after the read, which suspends: the live client may be the next profile's by now.
+        if (!mayAct(ownerNow())) return 0L
         runCatching { td.deleteFile(fileId) }
         if (bytesOf(fileId) > 0) return 0L
         runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }

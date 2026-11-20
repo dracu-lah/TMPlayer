@@ -163,4 +163,25 @@ class WatchCacheProfilesTest {
             Accounts.resetForTest()
         }
     }
+
+    @Test
+    fun `a switch between the size read and the delete stops the delete`() = runBlocking {
+        val deleted = mutableListOf<Int>()
+        var acting = true
+        val td = object : TdFiles {
+            override suspend fun currentFileId(chatId: Long, messageId: Long, storedFileId: Int) = storedFileId
+            override suspend fun deleteFile(fileId: Int) { deleted += fileId }
+            override suspend fun localDownloadedBytes(fileId: Int): Long {
+                // The read suspends, and the switch lands then.
+                acting = false
+                return 64L
+            }
+            override suspend fun localPathAnyway(fileId: Int): String? = null
+        }
+        val claims = WatchCacheRules(settings, filesRoot = { rootA }, td = td, busy = { emptySet() }, mayAct = { acting })
+        claims.claim(clip(1), "Chat")
+        acting = true
+        claims.claim(clip(2), "Chat")
+        assertTrue("no delete on the live client once the profile changed: $deleted", deleted.isEmpty())
+    }
 }
