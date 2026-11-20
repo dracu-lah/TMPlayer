@@ -167,6 +167,14 @@ object OutsideWrites {
      */
     fun secureWindow(openHasPin: Boolean): Boolean = openHasPin
 
+    /**
+     * What a cast names (Google Cast's own notification, lock screen controls and Bluetooth, and
+     * the TV's screen): with a PIN profile open, the app's name only, from the load on, since the
+     * framework cannot change a loaded item's titles while it plays. Real titles otherwise.
+     */
+    fun castTitles(title: String, subtitle: String, openHasPin: Boolean, appName: String): Pair<String, String> =
+        if (openHasPin) appName to "" else title to subtitle
+
     /** Whether the open profile has a PIN, as it changes. */
     fun openHasPin(): Flow<Boolean> {
         val book = Accounts.book ?: return flowOf(false)

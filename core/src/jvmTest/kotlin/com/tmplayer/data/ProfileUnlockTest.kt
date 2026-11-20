@@ -145,6 +145,12 @@ class ProfileUnlockTest {
     }
 
     @Test
+    fun `a PIN profile's cast names only the app, another profile's the video`() {
+        assertEquals("TMPlayer" to "", OutsideWrites.castTitles("A private title", "Episode 4", openHasPin = true, appName = "TMPlayer"))
+        assertEquals("A private title" to "Episode 4", OutsideWrites.castTitles("A private title", "Episode 4", openHasPin = false, appName = "TMPlayer"))
+    }
+
+    @Test
     fun `a profile with no PIN is never hidden`() {
         val own = AccountBook(AccountStore(File(Files.createTempDirectory("unlock3").toFile(), Accounts.FILE_NAME)))
         Accounts.resetForTest(own)
