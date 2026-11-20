@@ -406,7 +406,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) }).also { files ->
         // A file of the viewer's own, or one from the chat, replaces any online pick remembered for this video (HX25).
         files.onViewerChose = { OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(currentItem())) }
+        // A growing translation is swapped in only when no scrub is under way (the swap rebuffers the video).
+        files.isScrubbing = { controls?.isScrubbing == true || gestureScrubbing }
     }
+
+    /** A swipe scrub is under way (set by the gestures); see [SubtitleFiles.isScrubbing]. */
+    @Volatile
+    private var gestureScrubbing = false
     private val chatSubtitleLoader = ChatSubtitleLoader(subtitleFiles)
 
     /** The viewer's Downmix to stereo answer, or null for the device default. See [AudioDownmix.wanted]. */
@@ -3181,8 +3187,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 onSkip = ::skipBy,
                 onSeekStep = { zone, total, x, y -> feedback?.seekStep(zone, total, x, y) },
                 onLevel = { left, fraction, brightness -> feedback?.level(left, fraction, brightness) },
-                onScrub = { delta, target, length, rate -> feedback?.scrub(delta, target, length, rate) },
-                onScrubEnd = { feedback?.scrubEnded() },
+                onScrub = { delta, target, length, rate -> gestureScrubbing = true; feedback?.scrub(delta, target, length, rate) },
+                onScrubEnd = { gestureScrubbing = false; feedback?.scrubEnded() },
                 onPinch = ::pinchScale,
                 zoomAllowed = ::zoomAllowed,
                 zoomed = { zoom.zoomed },
