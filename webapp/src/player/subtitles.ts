@@ -7,6 +7,18 @@ import { parse as parseAss } from 'ass-compiler'
 
 /** What the file chooser offers, as ExternalSubtitle.EXTENSIONS. */
 export const SUBTITLE_EXTENSIONS = ['srt', 'ass', 'ssa', 'vtt', 'sub']
+/**
+ * The subtitle file in what was dropped on the player, the first by extension, or null. Case does
+ * not matter, a folder or a video among the files is ignored, and a drop with no subtitle does nothing.
+ */
+export function subtitleFromDrop(files: ArrayLike<File> | null | undefined): File | null {
+    for (const file of Array.from(files ?? [])) {
+        const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
+        if (file.name.includes('.') && SUBTITLE_EXTENSIONS.includes(ext)) return file
+    }
+    return null
+}
+
 /** A feature's subtitles are tens of kilobytes; anything far larger is not a subtitle file. */
 const MAX_BYTES = 4 * 1024 * 1024
 /** Frames a second for a MicroDVD file that does not say, the film rate. */
@@ -14,8 +26,10 @@ const DEFAULT_FPS = 23.976
 const LANGUAGE_TAG = /^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,4})?$/
 
 export class SubtitleError extends Error {
-    constructor(readonly why: 'too-big' | 'unreadable' | 'vobsub' | 'empty') {
+    readonly why: 'too-big' | 'unreadable' | 'vobsub' | 'empty'
+    constructor(why: 'too-big' | 'unreadable' | 'vobsub' | 'empty') {
         super(why)
+        this.why = why
     }
 }
 

@@ -18,7 +18,7 @@ import { readChapters, type Chapter } from './chapters'
 import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
 import { readLook } from './keep'
 import { loadThumb } from '../screens/thumbs'
-import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
+import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError, subtitleFromDrop } from './subtitles'
 import { choseOther, warmRestore } from './subpick-use'
 import { api, clearFlood, floodLeft, link } from '../tg/rpc'
 import { online } from '../net'
@@ -940,7 +940,22 @@ export function Player(props: {
 
     return (
         <video-player class="player-root">
-            <media-container ref={container} class="player" classList={{ blocked: blocked() }} attr:data-variant={variant()} tabIndex={-1}>
+            <media-container
+                ref={container}
+                class="player"
+                classList={{ blocked: blocked() }}
+                attr:data-variant={variant()}
+                tabIndex={-1}
+                onDragOver={(e) => {
+                    // Only a drop that carries files is ours; the drop below takes a subtitle among them.
+                    if (e.dataTransfer?.types.includes('Files')) e.preventDefault()
+                }}
+                onDrop={(e) => {
+                    e.preventDefault()
+                    const dropped = subtitleFromDrop(e.dataTransfer?.files)
+                    if (dropped) loadSubtitle(dropped)
+                }}
+            >
                 <video
                     ref={video}
                     playsinline
