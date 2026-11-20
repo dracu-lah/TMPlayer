@@ -189,6 +189,11 @@ class ProfileFlow(
 
     private val wait = com.tmplayer.data.SwitchWait()
 
+    /** A switch or sign out that did not happen: what its wait paused goes on again. */
+    private fun resumePaused() {
+        scope.launch { runCatching { platform.switchCancelled() } }
+    }
+
     /** The open profile's work stops first, the line saying what it waits for, with a Cancel. */
     private suspend fun stopFirst() {
         val line = status
@@ -588,8 +593,11 @@ class ProfileFlow(
                     platform.say(if (result.partialWipe) L.profilesWipePartial else L.profilesSignedOut(name = name))
                     afterSignOut(result)
                 }
-                SignOutResult.Failed -> notice = Notice(L.profilesSignOut, L.profilesSignOutFailed(name = name))
-                else -> notice = Notice(L.profilesSignOut, L.profilesSignOutFailed(name = name))
+                else -> {
+                    notice = Notice(L.profilesSignOut, L.profilesSignOutFailed(name = name))
+                    // Nothing was signed out: what the wait paused goes on again.
+                    resumePaused()
+                }
             }
         }
     }
@@ -634,6 +642,7 @@ class ProfileFlow(
                 afterSignOut(result)
             } else {
                 notice = Notice(L.profilesSignOut, L.profilesSignOutFailed(name = name))
+                resumePaused()
             }
             done(result)
         }
@@ -685,7 +694,10 @@ class ProfileFlow(
             val result = switcher.removeAll { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             when {
                 result is SignOutResult.SignedOut && result.partialWipe -> platform.say(L.profilesWipePartial)
-                result !is SignOutResult.SignedOut -> notice = Notice(L.profilesRemoveAll, L.profilesSignOutFailed(name = ""))
+                result !is SignOutResult.SignedOut -> {
+                    notice = Notice(L.profilesRemoveAll, L.profilesSignOutFailed(name = ""))
+                    resumePaused()
+                }
             }
             if (result is SignOutResult.SignedOut) enter()
             done(result)

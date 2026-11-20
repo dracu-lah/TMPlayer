@@ -13,16 +13,37 @@ internal object PausedForSwitch {
 
     private fun key(folder: String?) = "paused_" + (folder ?: "")
 
-    fun record(context: Context, folder: String?, ids: List<Int>) {
+    /** One paused download: its file id and the video it is, so a new database's id is never taken for it. */
+    data class Paused(val fileId: Int, val chatId: Long, val messageId: Long)
+
+    fun record(context: Context, folder: String?, paused: List<Paused>) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (ids.isEmpty()) prefs.edit().remove(key(folder)).apply() else prefs.edit().putString(key(folder), ids.joinToString(",")).apply()
+        if (paused.isEmpty()) {
+            prefs.edit().remove(key(folder)).apply()
+        } else {
+            prefs.edit().putString(key(folder), paused.joinToString(";") { "${it.fileId},${it.chatId},${it.messageId}" }).apply()
+        }
     }
 
-    /** The ids paused for [folder]'s switch, taken: asked again, there are none. */
-    fun take(context: Context, folder: String?): List<Int> {
+    /** What was paused for [folder]'s switch, taken: asked again, there is nothing. */
+    fun take(context: Context, folder: String?): List<Paused> {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val ids = prefs.getString(key(folder), null)?.split(',')?.mapNotNull { it.trim().toIntOrNull() }.orEmpty()
+        val paused = prefs.getString(key(folder), null)?.split(';')?.mapNotNull { entry ->
+            val parts = entry.split(',')
+            val id = parts.getOrNull(0)?.trim()?.toIntOrNull() ?: return@mapNotNull null
+            val chat = parts.getOrNull(1)?.trim()?.toLongOrNull() ?: return@mapNotNull null
+            val message = parts.getOrNull(2)?.trim()?.toLongOrNull() ?: return@mapNotNull null
+            Paused(id, chat, message)
+        }.orEmpty()
         prefs.edit().remove(key(folder)).apply()
-        return ids
+        return paused
     }
+
+    /**
+     * The ids of [paused] that are still the same video in [rows] (file id to chat and message):
+     * a row of another video under the same id (a new TDLib database after a sign out and a sign
+     * in) is never resumed.
+     */
+    fun stillTheSame(paused: List<Paused>, rows: Map<Int, Pair<Long, Long>>): List<Int> =
+        paused.filter { rows[it.fileId] == (it.chatId to it.messageId) }.map { it.fileId }
 }
