@@ -208,7 +208,7 @@ object DownloadRelocation {
             }
         }
         val hook = ProfileJobs.beforeSwitch(cancel = { job.cancel() }, join = { job.join() })
-        BeforeSwitch.add(hook)
+        BeforeSwitch.add(hook) { com.tmplayer.i18n.L.profilesWaitingMoving }
         job.invokeOnCompletion { cause ->
             BeforeSwitch.remove(hook)
             activeJob = null

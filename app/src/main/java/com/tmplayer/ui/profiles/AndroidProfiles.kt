@@ -56,10 +56,11 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
      * this profile's downloads pause, their queue written while its stores are still the open
      * ones. The service is told on the main thread and given a moment to stop what moves.
      */
-    override suspend fun beforeSwitch() {
-        BeforeSwitch.runAll()
-        if (!downloading()) return
-        withContext(Dispatchers.Main) { runCatching { OfflineDownloads.pauseAll(app) } }
+    override suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit) {
+        // The downloads pause alongside the other work, under the same deadline.
+        if (downloading()) withContext(Dispatchers.Main) { runCatching { OfflineDownloads.pauseAll(app) } }
+        val pausing = downloading()
+        BeforeSwitch.runAll(onWaiting = { what -> onWaiting(if (pausing && downloading()) what + com.tmplayer.i18n.L.profilesWaitingDownloads else what) })
         withTimeoutOrNull(PAUSE_WAIT_MS) {
             while (downloading()) delay(50)
         }

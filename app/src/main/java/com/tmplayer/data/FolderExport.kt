@@ -248,7 +248,7 @@ object FolderExport {
         val next = Run(offer.tree, items, plan.forbidden, plan.unfinished, plan.items.size - items.size, remove, detached)
         run = next
         ended = kotlinx.coroutines.CompletableDeferred()
-        BeforeSwitch.add(stopBeforeSwitch)
+        BeforeSwitch.add(stopBeforeSwitch) { com.tmplayer.i18n.L.profilesWaitingExport }
         _state.value = State(
             progress = FolderCopy.Progress(0, items.size, items.firstOrNull()?.source?.title.orEmpty(), 0f, 0, items.sumOf { it.sizeBytes }),
             gallery = offer.gallery,

@@ -194,7 +194,8 @@ class BackgroundChecks : JobService() {
             // is posted once another profile is open: a sleeping profile is never checked.
             val stamp = Accounts.stamp
             withContext(AccountOwner(stamp)) {
-                val session = withTimeoutOrNull(CONNECT_WAIT_MS) { Td.awaitConnectedSession() } ?: return@withContext
+                // The open profile's own client only (HX88), never the next one's.
+                val session = Td.sessionFor(stamp, CONNECT_WAIT_MS) ?: return@withContext
                 if (!stamp.isCurrent) return@withContext
                 // A profile behind its PIN (HX88) gets no alert at all: a notification would show
                 // its chats' titles and counts on the lock screen and in the shade.

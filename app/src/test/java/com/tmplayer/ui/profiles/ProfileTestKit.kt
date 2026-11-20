@@ -72,7 +72,14 @@ internal class KitPlatform : ProfilePlatform {
 
     override fun playing() = playing
     override fun downloading() = downloading
-    override suspend fun beforeSwitch() {
+    /** Set: the work before a switch does not stop until it completes (a sync that is slow to stop). */
+    @Volatile var hold: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    override suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit) {
+        hold?.let { waiting ->
+            onWaiting(listOf("a sync"))
+            waiting.await()
+        }
         stopped++
         playing = false
         downloading = false

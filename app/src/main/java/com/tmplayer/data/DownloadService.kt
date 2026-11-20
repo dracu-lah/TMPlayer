@@ -634,7 +634,8 @@ class DownloadService : Service() {
         // TDLib that never gets a socket would leave the viewer looking at a video that claims to
         // be downloading, sat at zero bytes, with no error and nothing to press. Giving up says so
         // instead, and Try again is one press away.
-        val session = Td.awaitConnectedSessionOrNull(CONNECT_WAIT_MS)
+        // The client of the profile the download was queued under (HX88), never the next one's.
+        val session = Td.sessionFor(kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp, CONNECT_WAIT_MS)
         if (session == null) {
             withContext(NonCancellable) {
                 Log.w(TAG, "No connection to Telegram for ${request.title}")

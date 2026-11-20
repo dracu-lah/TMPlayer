@@ -380,6 +380,37 @@ class ProfilesGateTest {
         assertEquals(0, done)
     }
 
+    @Test
+    fun `a switch waiting for work to stop says what it waits for, and Cancel stays on the open profile`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.platform.hold = kotlinx.coroutines.CompletableDeferred()
+        show(k.flow())
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        waitFor(L.profilesWaiting(what = "a sync"))
+        rule.onNodeWithText(L.commonCancel).performClick()
+        rule.waitUntil(5_000) { runCatching { rule.onNodeWithText(L.profilesWaiting(what = "a sync")).assertDoesNotExist() }.isSuccess }
+        k.platform.hold?.complete(Unit)
+        Thread.sleep(300)
+        rule.waitForIdle()
+        assertEquals("nothing was switched", k.ids[0], k.book.list.value.activeId)
+    }
+
+    @Test
+    fun `with only downloads moving the question speaks of the downloads, not a video's place`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        k.platform.downloading = true
+        flow.ask()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesSwitchDownloadsBody).assertExists()
+        rule.onNodeWithText(L.profilesSwitchPlayBody).assertDoesNotExist()
+    }
+
     private companion object {
         const val HOME = "The shell of the open profile"
     }
