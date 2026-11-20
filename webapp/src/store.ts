@@ -6,7 +6,7 @@ import { createSignal } from 'solid-js'
 import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
 import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
-import { cleanHome } from './ui/homeSettings'
+import { cleanHomeChats, cleanResume, cleanSettings, parseJournal, parseLast, readAddedMode, type HomeChatRow, type Note } from './ui/stored'
 import { decodePick, encodePick, type Pick } from './pick'
 import { admit, cleanTitle } from './rename'
 import * as Lists from './ui/lists'
@@ -100,12 +100,11 @@ const stored = <T>(op: (db: UseStore) => Promise<T>): Promise<T> => replayed.the
 // loses it. So each write is also noted at once in localStorage (which is synchronous), struck off
 // when IndexedDB has it, and anything still noted at the next start is written first.
 const JOURNAL = 'tmplayer-pending'
-type Note = { v: unknown } | { d: 1 }
 const seqs = new Map<string, number>()
 let seq = 0
 function noted(change: (notes: Record<string, Note>) => void) {
     try {
-        const notes: Record<string, Note> = JSON.parse(localStorage.getItem(JOURNAL) || '{}')
+        const notes = parseJournal(localStorage.getItem(JOURNAL))
         change(notes)
         if (Object.keys(notes).length) localStorage.setItem(JOURNAL, JSON.stringify(notes))
         else localStorage.removeItem(JOURNAL)
@@ -125,7 +124,7 @@ function note(key: string, n: Note) {
 const replayed: Promise<void> = (async () => {
     let left: Record<string, Note> = {}
     try {
-        left = JSON.parse(localStorage.getItem(JOURNAL) || '{}')
+        left = parseJournal(localStorage.getItem(JOURNAL))
     } catch {}
     const keys = Object.keys(left)
     if (!keys.length || !db) return
@@ -280,7 +279,7 @@ function applyTheme(theme: Theme) {
 
 export async function loadSettings() {
     const [saved, stars, later, added, mode, chatRows] = await Promise.all([
-        read<Partial<Settings>>('settings'),
+        read<unknown>('settings'),
         starred(),
         laterList(),
         addedChats(),
@@ -288,13 +287,12 @@ export async function loadSettings() {
         read<unknown>(HOME_CHATS),
     ])
     setHomeChatRows(cleanHomeChats(chatRows))
-    // Keys of settings since removed (`rows`, the As rows layout) are dropped, so the next write leaves them behind.
-    const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
+    // Keys of settings since removed (`rows`, the As rows layout) and values that do not hold up are dropped (ui/stored.ts): the defaults stand, and the next write leaves them behind.
+    const known = cleanSettings(saved)
     if (known.sizeMin === OLD_DEFAULT_MIN) delete known.sizeMin
-    if (typeof known.trailersInApp !== 'boolean') delete known.trailersInApp
-    setSettings({ ...DEFAULTS, ...cleanHome(known) })
+    setSettings({ ...DEFAULTS, ...known })
     setAddedIdsSignal(new Set(added.map((a) => a.chatId)))
-    setAddedModeSignal(readMode(mode))
+    setAddedModeSignal(readAddedMode(mode))
     setStarredIds(new Set(stars))
     setLaterIds(new Set(later.map(laterId)))
     await loadLists()
@@ -316,7 +314,7 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
 const id = (chatId: number, messageId: number) => `${chatId}:${messageId}`
 
 export function getResume(chatId: number, messageId: number): Promise<Resume | undefined> {
-    return read<Resume>(`resume:${id(chatId, messageId)}`)
+    return read<unknown>(`resume:${id(chatId, messageId)}`).then((r) => cleanResume(r) ?? undefined)
 }
 
 /** The position, or, near the end, the video as watched and its position dropped. */
@@ -348,9 +346,9 @@ function keepLast(last: Last) {
 function foldLast() {
     let last: Last | null = null
     try {
-        last = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null') as Last | null
+        last = parseLast(localStorage.getItem(LAST_KEY))
     } catch {}
-    if (!last?.key) return
+    if (!last) return
     if (last.resume) write(`resume:${last.key}`, last.resume)
     else if (last.watched) {
         remove(`resume:${last.key}`)
@@ -365,7 +363,7 @@ export function dropResume(chatId: number, messageId: number) {
 
 /** Videos left part way, the latest first: the Continue row. */
 export async function resumes(): Promise<Resume[]> {
-    return (await all<Resume>('resume:')).sort((a, b) => b.time - a.time)
+    return (await all<unknown>('resume:')).flatMap((r) => cleanResume(r) ?? []).sort((a, b) => b.time - a.time)
 }
 
 /** Video ids ("chatId:messageId") finished, for the Unwatched order and a show's next episode. */
@@ -491,8 +489,8 @@ export async function removeFromHistory(ids: string[]): Promise<{ snapshot: Hist
     for (const [k] of [...snapshot.resumes, ...snapshot.watched]) remove(k)
     // The last position kept for a closing page would bring one of them back at the next start.
     try {
-        const last = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null') as Last | null
-        if (last?.key && wanted.has(last.key)) localStorage.removeItem(LAST_KEY)
+        const last = parseLast(localStorage.getItem(LAST_KEY))
+        if (last && wanted.has(last.key)) localStorage.removeItem(LAST_KEY)
     } catch {}
     setWatchedTick(watchedTick() + 1)
     return { snapshot, count: hit.size }
@@ -613,23 +611,11 @@ export function setStarred(chatId: number, on: boolean) {
     setStarredIds(next)
 }
 
-/** A starred chat's row on Home, as last drawn: Settings names it in the order list without asking Telegram. */
-export interface HomeChatRow {
-    chatId: number
-    title: string
-}
+export type { HomeChatRow }
 
 const HOME_CHATS = 'home-chats'
 const [homeChatRows, setHomeChatRows] = createSignal<readonly HomeChatRow[]>([])
 export { homeChatRows }
-
-/** Checked, as everything read back is: a stored list that does not hold up is no list. */
-function cleanHomeChats(raw: unknown): HomeChatRow[] {
-    if (!Array.isArray(raw)) return []
-    return raw
-        .slice(0, 5000)
-        .flatMap((r): HomeChatRow[] => (r && typeof r.chatId === 'number' && Number.isFinite(r.chatId) && typeof r.title === 'string' ? [{ chatId: r.chatId, title: r.title.slice(0, 200) }] : []))
-}
 
 /** Home's chat rows as just drawn, kept for Settings > Home's order list. */
 export function rememberHomeChats(rows: readonly HomeChatRow[]) {
@@ -734,11 +720,6 @@ function setAddedMode(mode: AddedMode) {
 /** The added chats with their names, newest first, for the picker and the list of gone chats. */
 export async function addedChats(): Promise<AddedChat[]> {
     return (await all<AddedChat>('added:')).sort((a, b) => a.time - b.time)
-}
-
-/** Anything but the two known words, and nothing stored, reads as never asked. */
-function readMode(raw: unknown): AddedMode {
-    return raw === 'all' || raw === 'picked' ? raw : 'unanswered'
 }
 
 // "Choose the right poster": the TMDB title picked for a video, one stored line per video as the
@@ -1108,7 +1089,7 @@ export function syncDropResume(chatId: number, messageId: number) {
 export async function syncPutWatched(chatId: number, messageId: number, time: number) {
     const key = id(chatId, messageId)
     write(`watched:${key}`, time)
-    const place = await read<Resume>(`resume:${key}`)
+    const place = cleanResume(await read<unknown>(`resume:${key}`))
     if (place && place.time <= time) remove(`resume:${key}`, true)
     setWatchedTick(watchedTick() + 1)
 }
