@@ -281,7 +281,8 @@ class DesktopDownloadRunner(
                     OfflineDownloads.forget(id)
                     return@synchronized null
                 }
-                val job = scope.launch { fetch(request) }
+                // As the work of the profile it was asked under (HX88): its writes never land in another.
+                val job = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { fetch(request) }
                 running[id] = job
                 job.invokeOnCompletion {
                     synchronized(lock) { running.remove(id) }
@@ -437,7 +438,7 @@ class DesktopDownloadRunner(
     private fun startMove(request: DownloadRequest) {
         synchronized(lock) {
             if (moves.containsKey(request.fileId)) return
-            val job = scope.launch { finished(request) }
+            val job = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { finished(request) }
             moves[request.fileId] = job
             job.invokeOnCompletion { synchronized(lock) { if (moves[request.fileId] === job) moves.remove(request.fileId) } }
         }

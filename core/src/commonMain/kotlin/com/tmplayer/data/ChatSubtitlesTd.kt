@@ -104,7 +104,9 @@ class ChatSubtitleFinder(
     ): ChatSubtitleFound {
         if (chatId == 0L || messageId == 0L) return ChatSubtitleFound.None
         if (!KidsLock.allows(kids(), chatId)) return ChatSubtitleFound.Blocked
-        val key = "$chatId:$messageId"
+        // Under the profile open when it was asked (HX88): an answer that lands after a switch is
+        // kept under the old profile's turn, which nobody asks again.
+        val key = "${Accounts.stamp.generation}|$chatId:$messageId"
         return lock.withLock {
             kept[key]?.takeIf { now() - it.first < TTL_MS }?.let { return@withLock it.second }
             val answer = try {
@@ -126,7 +128,7 @@ class ChatSubtitleFinder(
 
     /** Forgets what was found for a video, for a Try again. */
     suspend fun forget(chatId: Long, messageId: Long) {
-        lock.withLock { kept.remove("$chatId:$messageId") }
+        lock.withLock { kept.remove("${Accounts.stamp.generation}|$chatId:$messageId") }
     }
 
     private suspend fun search(chatId: Long, messageId: Long, fileName: String, caption: String, preferred: List<String>): ChatSubtitleFound {

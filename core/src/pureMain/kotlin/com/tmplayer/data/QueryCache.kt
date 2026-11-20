@@ -90,7 +90,15 @@ class QueryCache(
     /** An answer as [peek] hands it out. */
     data class Cached<T>(val data: T, val updatedAt: Long, val stale: Boolean)
 
-    private val table = MutableStateFlow<Map<QueryKey, Entry>>(emptyMap())
+    /**
+     * The answers and the epoch they belong to. [clear] starts a new epoch, and an answer asked for
+     * in an older one is never kept ([putIf]): a request still on its way when the account changed
+     * (a sign out, another profile opened, HX88) lands nowhere. A class compared by identity, so a
+     * compare and set never mistakes a new empty table for an old one.
+     */
+    private class Table(val epoch: Long, val map: Map<QueryKey, Entry>)
+
+    private val table = MutableStateFlow(Table(0L, emptyMap()))
     private val running = MutableStateFlow<Map<QueryKey, Deferred<Any?>>>(emptyMap())
     private val prefetching = Semaphore(prefetchLimit)
 
@@ -100,10 +108,10 @@ class QueryCache(
     val changes: SharedFlow<QueryKey> = _changes.asSharedFlow()
 
     /** How many answers are kept, for tests and the logs. */
-    val size: Int get() = table.value.size
+    val size: Int get() = table.value.map.size
 
     /** Every key kept, most recently used last. */
-    fun keys(): List<QueryKey> = table.value.entries.sortedBy { it.value.usedAt }.map { it.key }
+    fun keys(): List<QueryKey> = table.value.map.entries.sortedBy { it.value.usedAt }.map { it.key }
 
     /**
      * The answer kept for [key], or null; stale once older than [staleTimeMs] or invalidated.
@@ -111,18 +119,18 @@ class QueryCache(
      */
     @Suppress("UNCHECKED_CAST")
     fun <T> peek(key: QueryKey, staleTimeMs: Long = 0): Cached<T>? {
-        val entry = table.value[key] ?: return null
+        val entry = table.value.map[key] ?: return null
         val now = clock()
         edit { map -> map[key]?.let { map + (key to Entry(it.data, it.updatedAt, it.invalidated, now)) } ?: map }
         return Cached(entry.data as T, entry.updatedAt, entry.invalidated || now - entry.updatedAt >= staleTimeMs)
     }
 
     /** What is kept for [key], with its times, without counting a use; null when nothing is. */
-    fun entry(key: QueryKey): Entry? = table.value[key]
+    fun entry(key: QueryKey): Entry? = table.value.map[key]
 
     /** The data kept for [key] without counting a use, or null. */
     @Suppress("UNCHECKED_CAST")
-    fun <T> data(key: QueryKey): T? = table.value[key]?.data as T?
+    fun <T> data(key: QueryKey): T? = table.value.map[key]?.data as T?
 
     /** Keeps [data] as the answer for [key], fresh as of [at]. */
     fun <T> put(key: QueryKey, data: T, at: Long = clock()) {
@@ -191,9 +199,32 @@ class QueryCache(
         return dropped
     }
 
-    /** Forgets everything: for sign out, when every answer is the last account's. */
+    /** Forgets everything and starts a new [epoch]: for sign out or a switch, when every answer is the last account's. */
     fun clear() {
-        table.value = emptyMap()
+        while (true) {
+            val before = table.value
+            if (table.compareAndSet(before, Table(before.epoch + 1, emptyMap()))) break
+        }
+        running.value = emptyMap()
+    }
+
+    /** Which [clear] the cache is on: taken before asking for something, handed to [putIf] with the answer. */
+    fun epoch(): Long = table.value.epoch
+
+    /** [put], unless the cache was cleared since [epoch]. Returns whether it was kept. */
+    fun <T> putIf(epoch: Long, key: QueryKey, data: T, at: Long = clock()): Boolean {
+        val now = clock()
+        var kept = false
+        while (true) {
+            val before = table.value
+            if (before.epoch != epoch) break
+            if (table.compareAndSet(before, Table(before.epoch, trim(before.map + (key to Entry(data, at, false, now)), now)))) {
+                kept = true
+                break
+            }
+        }
+        if (kept) _changes.tryEmit(key)
+        return kept
     }
 
     /**
@@ -212,10 +243,11 @@ class QueryCache(
             if (running.compareAndSet(now, now + (key to started))) break
         }
         // The failure goes to the callers through [started], never up the cache's scope.
+        val asked = epoch()
         val request = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 val answer = fetcher()
-                put(key, answer)
+                putIf(asked, key, answer)
                 started.complete(answer)
             } catch (e: Throwable) {
                 started.completeExceptionally(e)
@@ -237,7 +269,7 @@ class QueryCache(
      * the stale while revalidate half of [peek]. Returns the job, or null when nothing was needed.
      */
     fun <T> revalidate(key: QueryKey, staleTimeMs: Long, fetcher: suspend () -> T): Job? {
-        val entry = table.value[key]
+        val entry = table.value.map[key]
         if (entry != null && !entry.invalidated && clock() - entry.updatedAt < staleTimeMs) return null
         if (isFetching(key)) return null
         return scope.launch { runCatching { fetch(key, fetcher) } }
@@ -249,7 +281,7 @@ class QueryCache(
      * are already running or the key is being asked anyway.
      */
     fun <T> prefetch(key: QueryKey, staleTimeMs: Long, fetcher: suspend () -> T): Boolean {
-        val entry = table.value[key]
+        val entry = table.value.map[key]
         if (entry != null && !entry.invalidated && clock() - entry.updatedAt < staleTimeMs) return false
         if (isFetching(key)) return false
         if (!prefetching.tryAcquire()) return false
@@ -268,8 +300,8 @@ class QueryCache(
     private inline fun edit(change: (Map<QueryKey, Entry>) -> Map<QueryKey, Entry>) {
         while (true) {
             val before = table.value
-            val after = change(before)
-            if (after === before || table.compareAndSet(before, after)) return
+            val after = change(before.map)
+            if (after === before.map || table.compareAndSet(before, Table(before.epoch, after))) return
         }
     }
 
@@ -365,6 +397,8 @@ data class SavedGrid(val chatId: Long, val topicId: Int, val grid: ChatGrid, val
  */
 interface GridStore {
     fun load(): List<SavedGrid>
-    fun save(grids: List<SavedGrid>)
+
+    /** Writes [grids], gathered for the profile of [stamp] (HX88): dropped when it is no longer open. */
+    fun save(grids: List<SavedGrid>, stamp: AccountStamp)
     fun clear()
 }

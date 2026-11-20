@@ -305,14 +305,33 @@ object Td {
      */
     @Volatile
     private var currentPaths: Paths? = null
+
+    /**
+     * The platform's own folders, as [start] or [restart] had them. [currentPaths] is the open
+     * profile's view of them ([AccountDirs.pathsFor], HX88), which is these same folders for the
+     * profile adopted in place.
+     */
+    @Volatile
+    private var basePaths: Paths? = null
+
+    /**
+     * The other profiles' TDLib caches, measured at the last switch: what the open profile's cache
+     * must leave room for, since every profile shares one budget ([cacheCeilingBytes]).
+     */
+    @Volatile
+    var sleepingCacheBytes: Long = 0L
+        internal set
     private lateinit var device: DeviceInfo
     private lateinit var credentials: Credentials
 
     /** The API id this app signs in with, or 0 before [start]: how TMPlayer's own sessions are told apart. */
     val apiId: Int get() = if (::credentials.isInitialized) credentials.apiId else 0
 
-    /** The directories the running client was given, or null before [start]. */
+    /** The directories the running client was given (the open profile's), or null before [start]. */
     val paths: Paths? get() = currentPaths
+
+    /** The platform's own folders, which every profile's are found beside, or null before [start]. */
+    val platformPaths: Paths? get() = basePaths
 
     /**
      * Starts the client once per process; later calls are ignored. Each app supplies where TDLib
@@ -323,8 +342,13 @@ object Td {
             if (currentPaths != null) return
             this.device = device
             this.credentials = credentials
-            this.currentPaths = paths
+            this.basePaths = paths
+            this.currentPaths = AccountDirs.pathsFor(paths, Accounts.active)
         }
+        // Folders of profiles removed or half made before the last stop: never the open one's.
+        Accounts.book?.let { book -> scope.launch { book.sweep(paths) } }
+        // Who each profile signed in as, for the picker and the same account refused twice.
+        AccountSwitcher.current()?.attach(scope)
         scope.launch { keepClientRunning() }
         scope.launch {
             // Held up on Telegram (ConnectAdvice.waiting), counted afresh by a retry but not by a
@@ -417,7 +441,8 @@ object Td {
      */
     suspend fun restart(newPaths: Paths, timeoutMs: Long = RESTART_TIMEOUT_MS) {
         check(currentPaths != null) { "Td.start has not been called" }
-        currentPaths = newPaths
+        basePaths = newPaths
+        currentPaths = AccountDirs.pathsFor(newPaths, Accounts.active)
         val before = _session.value?.generation
         val signal = closedSignal
         val td = current
@@ -434,11 +459,64 @@ object Td {
         }
     }
 
+    /** The live client's generation, or null between two clients. For [AccountSwitcher]'s host. */
+    internal val sessionGeneration: Long? get() = _session.value?.generation
+
+    /** How many clients have been made so far: the next one's generation is one more. */
+    internal val generationsMade: Long get() = generation.get()
+
+    /** The live client, or null between two. */
+    internal val sessions: StateFlow<TdSession?> get() = _session
+
+    /** Waits for a client of a generation other than [before]. */
+    internal suspend fun awaitSessionAfter(before: Long?) {
+        _session.first { it != null && it.generation != before }
+    }
+
+    /**
+     * Points the next client at [paths] and closes the live one (HX88's switch). Unlike
+     * [restart] it never gives up on a client that is slow to close: the client loop opens the
+     * next one only once the old one has said Closed, so two clients never hold one folder and a
+     * weak TV never has two live. A client that could not start at all is tried again over [paths].
+     *
+     * [onClosed] runs once the old client has let go and before the next one exists: the moment
+     * the stores may become the next profile's, with nothing of the old one still running.
+     */
+    internal suspend fun reopenFor(paths: Paths, onClosed: () -> Unit) {
+        if (currentPaths == null) return
+        val td = synchronized(nextClientLock) {
+            currentPaths = paths
+            beforeNextClient = onClosed
+            current
+        }
+        _sessionEnded.value = false
+        logOutAsked = false
+        databaseAtStart = null
+        methodAfterRestart = SignInMethod.Undecided
+        clientRetry?.let {
+            it.complete(Unit)
+            return
+        }
+        if (td != null) gate.withLock { perform(td, AuthReducer.close()) }
+    }
+
+    private val nextClientLock = Any()
+
+    /** What [reopenFor] asked to run between the old client's close and the next client. */
+    private var beforeNextClient: (() -> Unit)? = null
+
     private suspend fun clientLoop() = coroutineScope {
         while (isActive) {
             val closed = CompletableDeferred<Unit>()
-            val td = TdlClient.create()
-            current = td
+            // Run with the client made, under one lock, so a switch asked for meanwhile is either
+            // run here, before the next client exists, or finds this client to close.
+            val td = synchronized(nextClientLock) {
+                beforeNextClient?.let { hook ->
+                    beforeNextClient = null
+                    runCatching(hook).onFailure { e -> Logger.w(TAG, "switching the stores to the next profile failed", e) }
+                }
+                TdlClient.create().also { current = it }
+            }
             retiring = null
             _session.value = TdSession(td, generation.incrementAndGet())
             lastHandled = null
@@ -1736,10 +1814,13 @@ object Td {
 
     /**
      * What TMPlayer is allowed to keep on disk before the oldest of it starts going, measured
-     * against the disk it is actually installed on. See [CacheShelf.ceiling].
+     * against the disk it is actually installed on. See [CacheShelf.ceiling]. Every profile shares
+     * it: the open one gets what the sleeping ones' caches leave ([AccountRules.sharedCeiling]).
      */
-    fun cacheCeilingBytes(): Long = currentPaths?.let { CacheShelf.ceiling(it.disk().totalBytes) }
-        ?: CacheShelf.MAX_CEILING_BYTES
+    fun cacheCeilingBytes(): Long = AccountRules.sharedCeiling(
+        currentPaths?.let { CacheShelf.ceiling(it.disk().totalBytes) } ?: CacheShelf.MAX_CEILING_BYTES,
+        sleepingCacheBytes,
+    )
 
     /** A month. Anything untouched for longer is not a cache, it is a leak. */
     private const val CACHE_TTL_SECONDS = 30 * 24 * 60 * 60

@@ -28,7 +28,7 @@ class ChatGridDiskTest {
                 scrollIndex = 12,
                 scrollOffset = 40,
             )
-            disk.save(listOf(SavedGrid(9, 3, grid, 1234)))
+            disk.save(listOf(SavedGrid(9, 3, grid, 1234)), Accounts.stamp)
             val back = ChatGridDisk(dir.resolve("chat-grids.json")).load().single()
             assertEquals(9L, back.chatId)
             assertEquals(3, back.topicId)

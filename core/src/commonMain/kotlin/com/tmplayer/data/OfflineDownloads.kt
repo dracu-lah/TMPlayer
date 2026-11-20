@@ -24,6 +24,13 @@ import kotlinx.coroutines.flow.update
  */
 object OfflineDownloads {
 
+    init {
+        // Another profile opened (HX88): file ids are its own database's, so the last one's rows
+        // mean nothing there. Its downloads were paused before the switch; the next profile's
+        // queue comes back through [restore].
+        Accounts.onSwitch { _active.value = emptyMap() }
+    }
+
     /** Where a video has got to, which is the only thing a row needs to know to draw itself. */
     enum class Stage {
         /** Waiting for the one ahead of it to finish. */

@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import okio.Path.Companion.toPath
 import java.io.File
 
@@ -450,6 +451,15 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         .distinctUntilChanged()
         .flowOn(Dispatchers.Default)
 
+    /**
+     * [block] as the work of [owner]'s profile (HX88): its writes are dropped by the store once
+     * another profile is open ([AccountScopedDataStore]). A player or a download passes the stamp it
+     * was made under, so a save that starts after a switch never lands in the next profile.
+     */
+    private suspend fun owned(owner: AccountStamp?, block: suspend () -> Unit) {
+        if (owner == null) block() else withContext(AccountOwner(owner)) { block() }
+    }
+
     // ---- added chats ------------------------------------------------------------------------
 
     /** The chats the viewer added, with the mode beside them. See [AddedChats]. */
@@ -631,6 +641,28 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             if (keepDownloads) {
                 for ((key, value) in kept) prefs[key] = value
                 migrated?.let { prefs[DOWNLOADS_MIGRATED] = it }
+            }
+        }
+    }
+
+    /**
+     * Signing out of one profile while others stay on the device (HX88): only the account's keys
+     * go ([AccountKeys]), so the theme, the player, the app lock and the kids lock switch stay as
+     * every profile has them. With [keepDownloads] the records of downloads in the Downloads
+     * folder stay, as [clearEverything] keeps them. [clearEverything] is still the sign out of the
+     * last profile.
+     */
+    suspend fun clearAccountData(keepDownloads: Boolean = false) {
+        prefs.edit { prefs ->
+            for ((key, value) in prefs.asMap().entries.toList()) {
+                val name = key.name
+                if (!AccountKeys.isAccount(name)) continue
+                if (keepDownloads) {
+                    if (name == DOWNLOADS_MIGRATED.name) continue
+                    val ids = name.removePrefixOrNull("dl_")
+                    if (ids != null && decodeDownload(prefs, ids, value as? String)?.localPath != null) continue
+                }
+                prefs.remove(key)
             }
         }
     }
@@ -3263,7 +3295,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * many bytes are actually on disk rather than trusting a number the crash may have caught mid
      * write.
      */
-    suspend fun saveDownloadQueue(requests: List<DownloadRequest>) {
+    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null) = owned(owner) {
         prefs.edit { prefs ->
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
@@ -3283,7 +3315,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * disk are the viewer's, and a download whose record fell off the end would become a file
      * nothing can name, play or delete.
      */
-    suspend fun noteDownload(item: MediaItem, chatTitle: String, localPath: String? = null) {
+    suspend fun noteDownload(item: MediaItem, chatTitle: String, localPath: String? = null, owner: AccountStamp? = null) = owned(owner) {
         prefs.edit { prefs ->
             prefs[downloadKey(item.chatId, item.messageId)] = ResumeRecord.encode(
                 fileId = item.fileId,
@@ -3308,7 +3340,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         positionMs: Long,
         durationMs: Long = 0L,
         description: String? = null,
-    ) {
+        owner: AccountStamp? = null,
+    ) = owned(owner) {
         prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
             // Watch time for the support ladder, read off the same heartbeat.
@@ -3483,7 +3516,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * leave another's older place to resume from. [item] names the video when this copy has no
      * place of its own to read it from (Start over on a copy never played).
      */
-    suspend fun clearResumePosition(chatId: Long, messageId: Long, item: MediaItem? = null) {
+    suspend fun clearResumePosition(chatId: Long, messageId: Long, item: MediaItem? = null, owner: AccountStamp? = null) = owned(owner) {
         prefs.edit {
             val played = item ?: recordOf(it, chatId, messageId, null)?.toMediaItem()
             it.remove(resumeKey(chatId, messageId))
@@ -3565,8 +3598,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         /** Whether the Tips card may show on Home: the tour was never taken or turned down. */
         fun tipsDue(state: TourState): Boolean = state == TourState.Never
 
-        /** Opens the store at [file]. Call once per process and share the result. */
-        fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)
+        /**
+         * Opens the store at [file]. Call once per process and share the result. The account's
+         * keys are the open profile's ([AccountScopedDataStore], HX88).
+         */
+        fun openDataStore(file: File): DataStore<Preferences> = AccountScopedDataStore.opened(openSafeDataStore(file))
 
         /** Whether launch should skip the chat list, given what is remembered and the setting. */
         fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =

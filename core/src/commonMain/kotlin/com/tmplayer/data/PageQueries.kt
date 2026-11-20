@@ -67,17 +67,32 @@ object PageQueries {
 
     init {
         followUpdates()
+        // Another profile opened (HX88): its chats are not these, and its own listings are read in.
+        // The cache is cleared before its stamp moves: a save that read the old epoch is either
+        // refused by the epoch or by the old stamp, never written as the new profile's.
+        Accounts.onSwitch {
+            cache.clear()
+            cacheStamp = Accounts.stamp
+            topics.value = emptyMap()
+            Background.scope.launch { runCatching { preload() } }
+        }
     }
+
+    /** The profile whose listings the cache holds. */
+    @Volatile
+    private var cacheStamp: AccountStamp = Accounts.stamp
 
     /** Reads the listings kept on the disk into the cache. Blocks on the disk: off the main thread. */
     fun preload() {
+        // A switch while the file is read: what it held is the last profile's, and is not kept.
+        val epoch = cache.epoch()
         val saved = runCatching { store?.load() }.getOrNull().orEmpty()
         // Signed out meanwhile: they are nobody's now.
         val auth = Td.auth.value
         if (auth != AuthState.Ready && auth != AuthState.Connecting && auth !is AuthState.Failed) return
         saved.forEach { kept ->
             val key = QueryKey.ChatMedia(kept.chatId, kept.topicId)
-            if (cache.data<ChatGrid>(key) == null) cache.put(key, kept.grid, at = kept.savedAt)
+            if (cache.data<ChatGrid>(key) == null) cache.putIf(epoch, key, kept.grid, at = kept.savedAt)
         }
     }
 
@@ -163,6 +178,8 @@ object PageQueries {
 
     private suspend fun saveGrids() {
         val disk = store ?: return
+        val owner = cacheStamp
+        val epoch = cache.epoch()
         val grids = cache.keys().asReversed()
             .filterIsInstance<QueryKey.ChatMedia>()
             .filter { it.query.isEmpty() }
@@ -174,7 +191,9 @@ object PageQueries {
                 SavedGrid(key.chatId, key.topicId, trimmed, entry.updatedAt)
             }
         if (Td.auth.value !is AuthState.Ready && Td.auth.value !is AuthState.Connecting) return
-        withContext(Dispatchers.IO) { runCatching { disk.save(grids) } }
+        // Cleared while gathering: what was gathered may be either profile's, and none is written.
+        if (cache.epoch() != epoch) return
+        withContext(Dispatchers.IO) { runCatching { disk.save(grids, owner) } }
     }
 
     /**

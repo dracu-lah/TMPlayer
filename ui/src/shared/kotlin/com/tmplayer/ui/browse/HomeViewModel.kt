@@ -479,6 +479,8 @@ class HomeViewModel(
      * The cache is written back a moment after the rows settle ([persist]).
      */
     private fun restore() {
+        // The profile this Home is built for (HX88): rows gathered after a switch are not written as its.
+        val owner = com.tmplayer.data.Accounts.stamp
         val snapshot = HomeCache.load()
         if (snapshot != null && !snapshot.isEmpty) {
             _loaded.value = snapshot.loaded
@@ -499,7 +501,7 @@ class HomeViewModel(
         }
         viewModelScope.launch {
             combine(_loaded, _recent, _partial, _art, _own) { loaded, recent, partial, art, own ->
-                HomeCache.Snapshot(loaded, recent, partial, art, System.currentTimeMillis(), own)
+                HomeCache.Snapshot(loaded, recent, partial, art, System.currentTimeMillis(), own, stamp = owner)
             }.collectLatest { snapshot ->
                 // Settled, not mid-refresh: a row at a time arriving should not write ten times.
                 kotlinx.coroutines.delay(if (com.tmplayer.ui.theme.Motion.television) PERSIST_AFTER_TV_MS else PERSIST_AFTER_MS)

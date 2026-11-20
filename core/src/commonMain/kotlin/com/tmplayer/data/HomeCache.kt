@@ -27,9 +27,25 @@ import java.util.Base64
  */
 object HomeCache {
 
-    /** Where it lives; null (a test, a build that never set it) keeps nothing. Set once at start. */
+    /**
+     * Where it lives; null (a test, a build that never set it) keeps nothing. Set once at start.
+     * Each profile keeps its own copy beside it ([Accounts.scopedFile], HX88).
+     */
     @Volatile
     var file: File? = null
+
+    init {
+        // A removed profile's copy goes with its folders (HX88): "" is the adopted profile's own name.
+        Accounts.onPurge { folder ->
+            val base = file ?: return@onPurge
+            val doomed = Accounts.scopedFile(base, folder.ifEmpty { null })
+            synchronized(this) {
+                runCatching { doomed.delete() }
+                runCatching { File(doomed.path + ".tmp").delete() }
+                if (readFor?.folder == folder.ifEmpty { null }) readFor = null
+            }
+        }
+    }
 
     /** What Home had, ready to draw. */
     data class Snapshot(
@@ -44,6 +60,11 @@ object HomeCache {
          * (HX8): an account with thousands of chats waited for its whole list first.
          */
         val chats: List<ChatSummary> = emptyList(),
+        /**
+         * The profile whose Home this is (HX88): the one open when the rows were gathered, which
+         * the caller passes in. A snapshot of a profile no longer open is never written or kept.
+         */
+        val stamp: AccountStamp = Accounts.stamp,
     ) {
         val isEmpty: Boolean get() = loaded.isEmpty() && recent == null && art.isEmpty()
     }
@@ -51,19 +72,24 @@ object HomeCache {
     @Volatile
     private var memory: Snapshot? = null
 
+    /** The profile [memory] was read or written for; null before the first read. */
     @Volatile
-    private var read = false
+    private var readFor: AccountStamp? = null
 
     /**
-     * The last snapshot, read off the disk the first time and from memory after. Cheap to call
-     * from the main thread once [preload] has run; otherwise the first call reads the file.
+     * The last snapshot of the open profile, read off the disk the first time and from memory
+     * after. Cheap to call from the main thread once [preload] has run; otherwise the first call
+     * (and the first after a switch) reads the file.
      */
     fun load(): Snapshot? {
-        if (read) return memory
+        if (readFor == Accounts.stamp) return memory
         synchronized(this) {
-            if (read) return memory
-            memory = runCatching { file?.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull()
-            read = true
+            val stamp = Accounts.stamp
+            if (readFor == stamp) return memory
+            memory = runCatching {
+                file?.let { Accounts.scopedFile(it, stamp) }?.takeIf { it.isFile }?.readText()?.let(::decode)?.copy(stamp = stamp)
+            }.getOrNull()
+            readFor = stamp
             return memory
         }
     }
@@ -73,18 +99,24 @@ object HomeCache {
         load()
     }
 
-    /** Writes [snapshot] over the last one. Skipped when nothing changed. */
+    /**
+     * Writes [snapshot] over the last one of its own profile. Skipped when nothing changed, and
+     * dropped when its profile is no longer the open one: checked under the lock the write holds,
+     * and the file is the snapshot's profile's, never the one open at the moment of writing.
+     */
     fun save(snapshot: Snapshot) {
-        val target = file ?: return
+        val base = file ?: return
         val before = memory
-        if (before != null && before.loaded == snapshot.loaded && before.recent == snapshot.recent &&
+        if (before != null && before.stamp == snapshot.stamp && before.loaded == snapshot.loaded && before.recent == snapshot.recent &&
             before.partial == snapshot.partial && before.art == snapshot.art && before.chats == snapshot.chats
         ) {
             return
         }
         synchronized(this) {
+            if (!snapshot.stamp.isCurrent) return
             memory = snapshot
-            read = true
+            readFor = snapshot.stamp
+            val target = Accounts.scopedFile(base, snapshot.stamp)
             runCatching {
                 target.parentFile?.mkdirs()
                 val temp = File(target.parentFile, target.name + ".tmp")
@@ -97,12 +129,13 @@ object HomeCache {
         }
     }
 
-    /** Forgets it, on the disk and in memory: for sign out. */
+    /** Forgets the open profile's, on the disk and in memory: for sign out. */
     fun clear() {
         synchronized(this) {
+            val stamp = Accounts.stamp
             memory = null
-            read = true
-            runCatching { file?.delete() }
+            readFor = stamp
+            runCatching { file?.let { Accounts.scopedFile(it, stamp) }?.delete() }
         }
     }
 

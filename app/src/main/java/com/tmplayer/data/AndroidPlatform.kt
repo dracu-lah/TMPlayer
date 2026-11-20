@@ -78,8 +78,17 @@ fun buildCredentials(): Credentials = Credentials(
     apiHash = BuildConfig.TG_API_HASH,
 )
 
+/**
+ * The profile list (HX88), `filesDir/accounts/accounts.json`, opened before the first store or
+ * TDLib reads anything. Safe to call from every entry point; only the first call reads the disk.
+ */
+fun openAccounts(context: Context) = com.tmplayer.data.Accounts.open(File(context.applicationContext.filesDir, "accounts"))
+
 /** [Td.start] with everything Android supplies. Safe to call from every entry point. */
-fun Td.start(context: Context) = start(AndroidPaths(context), androidDeviceInfo(), buildCredentials())
+fun Td.start(context: Context) {
+    openAccounts(context)
+    start(AndroidPaths(context), androidDeviceInfo(), buildCredentials())
+}
 
 /**
  * The one DataStore for the process, at the path the `preferencesDataStore("tmplayer")` delegate
@@ -100,6 +109,7 @@ private object SettingsFile {
      */
     fun get(context: Context): DataStore<Preferences> {
         val file = File(context.applicationContext.filesDir, "datastore/${SettingsStore.FILE_NAME}")
+        openAccounts(context)
         store?.takeIf { openedAt == file }?.let { return it }
         return synchronized(this) {
             store?.takeIf { openedAt == file } ?: SettingsStore.openDataStore(file).also {
@@ -122,6 +132,7 @@ private object WatchedFile {
     private var store: DataStore<Preferences>? = null
 
     fun get(context: Context): DataStore<Preferences> = store ?: synchronized(this) {
+        openAccounts(context)
         store ?: WatchedStore.openDataStore(
             File(context.applicationContext.filesDir, "datastore/${WatchedStore.FILE_NAME}"),
         ).also { store = it }
@@ -143,6 +154,7 @@ private object BookmarkFile {
     private var store: DataStore<Preferences>? = null
 
     fun get(context: Context): DataStore<Preferences> = store ?: synchronized(this) {
+        openAccounts(context)
         store ?: BookmarkStore.openDataStore(
             File(context.applicationContext.filesDir, "datastore/${BookmarkStore.FILE_NAME}"),
         ).also { store = it }

@@ -59,12 +59,20 @@ object ChatVideoCount {
     /** How long an answer is kept. Long enough for a session with the picker, short enough to be fresh. */
     const val TTL_MS = 10 * 60 * 1000L
 
-    private val cache = ConcurrentHashMap<Long, Pair<Long, ChatCount>>()
+    /** When each count was taken and for which profile's turn ([Accounts.stamp], HX88). */
+    private class Kept(val at: Long, val count: ChatCount, val generation: Long)
+
+    private val cache = ConcurrentHashMap<Long, Kept>()
+
+    init {
+        // Another profile opened: its chats are not these.
+        Accounts.onSwitch { forget() }
+    }
     private val gate = Semaphore(AT_ONCE)
 
     /** The count for [chatId] if it is already known and still fresh, without asking Telegram. */
     fun cached(chatId: Long, now: Long): ChatCount? =
-        cache[chatId]?.takeIf { now - it.first < TTL_MS }?.second
+        cache[chatId]?.takeIf { now - it.at < TTL_MS && it.generation == Accounts.stamp.generation }?.count
 
     /** Forgets every count. Sign out, and a test between its cases. */
     fun forget() = cache.clear()
@@ -73,7 +81,7 @@ object ChatVideoCount {
     fun forgetExpired(now: Long = nowMs()) {
         // Not removeIf: that is the JVM's, and this file is compiled for iOS too.
         for ((chatId, entry) in cache.entries.toList()) {
-            if (now - entry.first >= TTL_MS) cache.remove(chatId, entry)
+            if (now - entry.at >= TTL_MS) cache.remove(chatId, entry)
         }
     }
 
@@ -84,8 +92,10 @@ object ChatVideoCount {
      */
     suspend fun of(calls: ChatCountCalls, chatId: Long, now: () -> Long = { nowMs() }): ChatCount {
         cached(chatId, now())?.let { return it }
+        val asked = Accounts.stamp.generation
         val (answer, whole) = gate.withPermit { ask(calls, chatId) }
-        if (answer is ChatCount.Known && whole) cache[chatId] = Pair(now(), answer)
+        // Kept under the turn it was asked in: one that lands after a switch is never handed out.
+        if (answer is ChatCount.Known && whole) cache[chatId] = Kept(now(), answer, asked)
         return answer
     }
 

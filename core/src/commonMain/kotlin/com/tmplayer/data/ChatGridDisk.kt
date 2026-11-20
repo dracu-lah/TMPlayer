@@ -10,21 +10,44 @@ import java.io.File
  *
  * Kept in [HomeCache]'s spelling: one JSON file written whole through a temporary file, the videos
  * as Telegram gave them (before the size limits), TDLib's file ids as they are. Forgotten on sign
- * out ([clear]). The JVM only: the browser keeps its listings in memory.
+ * out ([clear]). The JVM only: the browser keeps its listings in memory. Each profile keeps its own
+ * copy beside [base] ([Accounts.scopedFile], HX88).
  */
-class ChatGridDisk(private val file: File) : GridStore {
+class ChatGridDisk(private val base: File) : GridStore {
 
-    /** What was last written, so a save of the same listings is skipped. */
+    /** What was last written and where, so a save of the same listings is skipped. */
     @Volatile
-    private var written: String? = null
+    private var written: Pair<File, String>? = null
+
+    /** The open profile's file. */
+    private val file: File get() = Accounts.scopedFile(base)
+
+    init {
+        // A removed profile's listings go with its folders (HX88): "" is the adopted profile's own file.
+        Accounts.onPurge { folder ->
+            val doomed = Accounts.scopedFile(base, folder.ifEmpty { null })
+            synchronized(this) {
+                runCatching { doomed.delete() }
+                runCatching { File(doomed.path + ".tmp").delete() }
+                if (written?.first == doomed) written = null
+            }
+        }
+    }
 
     override fun load(): List<SavedGrid> =
         runCatching { file.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull().orEmpty()
 
-    override fun save(grids: List<SavedGrid>) {
+    /**
+     * Writes [grids] to the file of [stamp]'s profile, the one they were gathered for. Dropped when
+     * that profile is no longer open: checked under the lock the write holds, so a switch between
+     * gathering and writing never puts one profile's listings in another's file.
+     */
+    override fun save(grids: List<SavedGrid>, stamp: AccountStamp) {
         val text = encode(grids)
-        if (text == written) return
+        val file = Accounts.scopedFile(base, stamp)
+        if (written == (file to text)) return
         synchronized(this) {
+            if (!stamp.isCurrent) return
             runCatching {
                 file.parentFile?.mkdirs()
                 val temp = File(file.parentFile, file.name + ".tmp")
@@ -33,7 +56,7 @@ class ChatGridDisk(private val file: File) : GridStore {
                     file.delete()
                     temp.renameTo(file)
                 }
-                written = text
+                written = file to text
             }
         }
     }
