@@ -43,8 +43,12 @@ import com.tmplayer.platform.Logger
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.background
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -83,6 +87,13 @@ interface ProfilePlatform {
      * it asks when the app opens. Null emits for a platform without one.
      */
     val appLock: Flow<AppLockSettings?> get() = flowOf(null)
+
+    /**
+     * The app lock as it is now, read at once when the flow is made; null when it could not be
+     * read yet (everything then asks the app lock's PIN until [appLock] says, fail closed). A
+     * platform without an app lock answers [AppLockSettings] with nothing set.
+     */
+    fun appLockNow(): AppLockSettings? = AppLockSettings()
 
     /** The app lock's PIN, for that check; null when there is none to ask. */
     fun appLockChecker(): PinChecker? = null
@@ -155,9 +166,30 @@ class ProfileFlow(
     private var running: Job? = null
     private var listening = false
 
+    /** The app lock as last read; meaningful once [appLockKnown]. */
+    var appLockSettings: AppLockSettings? by mutableStateOf(null)
+        private set
+
+    /** Whether the app lock was read at all: until it is, everything it guards asks (fail closed). */
+    var appLockKnown: Boolean by mutableStateOf(false)
+        private set
+
     init {
         // Heard from the start, with or without a screen: switches and the app lock lock it.
         ProfileUnlock.install()
+        // The app lock from the store, now and as it changes, on the app's scope: no screen sets it.
+        runCatching { platform.appLockNow() }.getOrNull()?.let {
+            appLockSettings = it
+            appLockKnown = true
+        }
+        scope.launch {
+            runCatching {
+                platform.appLock.collect {
+                    appLockSettings = it ?: AppLockSettings()
+                    appLockKnown = true
+                }
+            }.onFailure { if (it is CancellationException) throw it else Logger.w(TAG, "the app lock could not be read", it) }
+        }
     }
 
     /** The profile whose PIN was just given at the picker, until its switch has opened it. */
@@ -174,11 +206,8 @@ class ProfileFlow(
     /** Manage profiles is on: a press on a tile opens its options. */
     var manage: Boolean by mutableStateOf(false)
 
-    /** The app lock has a PIN: the picker's sign out, remove and add ask it first. */
-    var appLockPin: Boolean by mutableStateOf(false)
-
-    /** The platform's app lock settings, for the gate. */
-    val appLock: Flow<AppLockSettings?> get() = platform.appLock
+    /** The app lock has a PIN, or was not read yet: the picker's sign out, remove and add ask it first. */
+    val appLockPin: Boolean get() = !appLockKnown || appLockSettings?.pinSet == true
 
     fun appLockChecker(): PinChecker? = platform.appLockChecker()
 
@@ -239,6 +268,8 @@ class ProfileFlow(
 
     fun dismissNotice() {
         notice = null
+        // The remote goes back to the tile it came from, never into the void the panel left.
+        focusAsk++
     }
 
     /** Back to the row, the focus on [id]'s tile. */
@@ -433,11 +464,10 @@ class ProfileFlow(
             before?.join()
             status = line
             val watch = scope.launch {
+                // Only the slow close's line: the line itself was set above, and a late Idle
+                // must never put it back after the work ended (it left the row disabled).
                 switcher.state.collect { state ->
-                    status = when (state) {
-                        is SwitchState.ClosingSlowly -> L.profilesClosingSlowly
-                        else -> line
-                    }
+                    if (state is SwitchState.ClosingSlowly) status = L.profilesClosingSlowly
                 }
             }
             try {
@@ -448,7 +478,7 @@ class ProfileFlow(
                 Logger.w(TAG, "a profile switch failed", e)
                 notice = Notice(L.profilesSwitchFailed(name = ""), "")
             } finally {
-                watch.cancel()
+                withContext(NonCancellable) { watch.cancelAndJoin() }
                 status = null
             }
         }
@@ -635,6 +665,8 @@ class ProfileFlow(
     }
 
     private fun removeNow(id: String) {
+        // As every change of the list does ([ProfileUnlock]): the open profile asks its PIN again.
+        ProfileUnlock.lock()
         launch {
             when (switcher.remove(id)) {
                 RemoveResult.Removed -> back()
@@ -669,20 +701,21 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
     }
     LaunchedEffect(flow) { flow.listen() }
     val list by flow.switcher.profiles.collectAsState()
-    val appLock by flow.appLock.collectAsState(null)
     val appUnlocked by AppLockSession.unlocked.collectAsState()
-    // Read here only to draw: the locking itself happens in ProfileUnlock, with no screen needed.
+    // Read here only to draw: the locking itself happens in ProfileUnlock, with no screen needed,
+    // and the app lock's state is the flow's, read from the store on the app's scope.
     val unlockedId by ProfileUnlock.unlockedId.collectAsState()
-    LaunchedEffect(appLock?.pinSet) { flow.appLockPin = appLock?.pinSet == true }
     val several = ProfilePicker.atLaunch(list)
     val show = several && (flow.asked || !flow.entered)
-    val lock = appLock
+    val lock = flow.appLockSettings
     Box(Modifier.fillMaxSize()) {
         when {
+            // The app lock not read yet: nothing of the picker until it is (fail closed).
+            show && !flow.appLockKnown -> Box(Modifier.fillMaxSize().background(Tone.background))
             // "Ask when the app opens": its PIN before the picker too, so the picker never shows
             // whose profiles these are, nor lets one be signed out, past the app's own lock.
             show && lock != null && lock.pinSet && lock.onOpen && !appUnlocked -> {
-                val checker = remember(flow) { flow.appLockChecker() }
+                val checker = remember(flow) { flow.appLockChecker() } ?: RefusingChecker
                 PinPad(
                     checker = checker,
                     purpose = PinPurpose.Check,
@@ -692,7 +725,9 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
                     brand = true,
                 )
             }
-            show -> ProfileFlowScreen(flow, list, signInStep)
+            // The picker, and with one profile too any panel a press asked for (Add account behind
+            // the app lock's PIN, or asked first while a video plays).
+            show || flow.stage != ProfileFlow.Stage.Picker -> ProfileFlowScreen(flow, list, signInStep)
             // The open profile's PIN, not given in this process: nothing of it shows until it is.
             // Back offers the other profiles when there are some; with one it leaves the app.
             ProfileUnlock.needsUnlock(list, unlockedId) -> key(list.activeId) {
@@ -724,7 +759,7 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
 }
 
 /** A checker that takes no PIN: where one is required and none is there, nothing gets through. */
-private object RefusingChecker : PinChecker {
+internal object RefusingChecker : PinChecker {
     override suspend fun waitUntil(): Long = 0L
     override suspend fun check(pin: String): com.tmplayer.data.PinCheck = com.tmplayer.data.PinCheck.Wrong(com.tmplayer.data.PinAttempts())
     override fun freeLeft(attempts: com.tmplayer.data.PinAttempts): Int = 0

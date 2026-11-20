@@ -216,7 +216,8 @@ fun PinPad(
                 scope.launch {
                     // The hash is deliberately slow; off the thread drawing the keys.
                     val verdict = withContext(Dispatchers.Default) {
-                        runCatching { checker?.check(pin) ?: PinCheck.NoPin }.getOrElse { PinCheck.Wrong(PinAttempts()) }
+                        // No checker where a PIN is asked: refused (fail closed), never let through.
+                        runCatching { (checker ?: RefusingChecker).check(pin) }.getOrElse { PinCheck.Wrong(PinAttempts()) }
                     }
                     busy = false
                     entered = ""
