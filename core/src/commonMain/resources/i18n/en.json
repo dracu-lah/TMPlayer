@@ -3600,7 +3600,7 @@
     "searching": "Asking your SubMaker…",
     "settings_checking": "Checking your SubMaker…",
     "settings_invalid": "That isn't an install address. Paste the link that ends in manifest.json",
-    "settings_message": "Paste the install address of your own SubMaker (it ends in manifest.json). It holds your private token, so it stays on this device and is never shown or logged. When you search, the video's IMDb id goes to that address.",
+    "settings_message": "Paste the install address of your own SubMaker (it ends in manifest.json). It holds your private token, so it stays on this device and is never shown or logged. When you search, the video's IMDb id goes to that address. To remove it, empty the field and confirm.",
     "settings_none": "Optional. The install address of your own SubMaker, for ready subtitles and AI translations",
     "settings_ok": "Your SubMaker answered",
     "settings_remove": "Remove",
