@@ -78,7 +78,7 @@ test('a held chord acts once: the repeats are spent without a second page change
     g.document = { querySelector: () => null, activeElement: null }
     const gone: string[] = []
     let path = '/chats'
-    const off = installShellKeys({ enabled: () => true, path: () => path, go: (p) => gone.push(`go ${(path = p)}`), back: () => gone.push(`back ${(path = '/chats')}`), searchLabel: () => 'Search', mac: false })
+    const off = installShellKeys({ enabled: () => true, path: () => path, go: (p) => gone.push(`go ${(path = p)}`), back: () => gone.push(`back ${(path = '/chats')}`), searchLabel: () => 'Search', mac: false, listen: (fn) => (listeners.push(fn as (e: unknown) => void), () => {}) })
     const fire = (repeat: boolean) => {
         let prevented = false
         listeners[0]({ ...press('k', { ctrlKey: true, code: 'KeyK' }), repeat, defaultPrevented: false, target: { tagName: 'BODY' }, preventDefault: () => (prevented = true) })

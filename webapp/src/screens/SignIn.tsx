@@ -1,8 +1,11 @@
+import { onGlobal } from '../ui/globalInput'
 import { batch, createMemo, createSignal, lazy, Match, onCleanup, onMount, Show, Suspense, Switch } from 'solid-js'
 import { renderSVG } from 'uqr'
 import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { sessionEnded, signedIn } from '../session'
+import { many, openPicker } from '../accounts'
+import { addingHere, cancelAdding } from '../accountFlows'
 import { form } from '../form'
 import { clock, t } from '../i18n'
 import { failure } from '../errors'
@@ -358,8 +361,7 @@ export function SignIn() {
         padDigit(e.key)
         e.preventDefault()
     }
-    onMount(() => tv && window.addEventListener('keydown', remoteDigit))
-    onCleanup(() => window.removeEventListener('keydown', remoteDigit))
+    onMount(() => tv && onCleanup(onGlobal(window, 'keydown', remoteDigit)))
 
     const resend = async () => {
         const s = step()
@@ -579,6 +581,11 @@ export function SignIn() {
                     )}
                 </Match>
             </Switch>
+
+            {/* Profiles (HX88): the sign in of an account being added goes back; another profile is a choice away. */}
+            <Show when={addingHere()} fallback={<Show when={many()}><button class="link alt" type="button" onClick={openPicker}>{t('accounts.switch')}</button></Show>}>
+                <button class="link alt" type="button" onClick={() => void cancelAdding()}>{t('accounts.add_cancel')}</button>
+            </Show>
 
             <SignInFooter />
 

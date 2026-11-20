@@ -3,6 +3,7 @@
 // (the viewer's own lists and Settings). A pointer gets a short name under each icon; a phone held
 // sideways, where height is short, gets the compact bar of round icon buttons (CSS). One highlight
 // slides to the chosen place.
+import { onGlobal } from './globalInput'
 import { createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { A, useLocation, useNavigate } from '@solidjs/router'
 import { Clock01Icon, Download04Icon, History, Home03Icon, Message01Icon, Search01Icon, Settings01Icon, StarIcon } from '@hugeicons/core-free-icons'
@@ -57,8 +58,7 @@ export function Nav() {
             navigate('/settings')
         }
     }
-    onMount(() => document.addEventListener('keydown', onKey))
-    onCleanup(() => document.removeEventListener('keydown', onKey))
+    onMount(() => onCleanup(onGlobal(document, 'keydown', onKey)))
     return (
         <nav class="nav" aria-label="TMPlayer">
             <div class="nav-cells" style={{ '--i': Math.max(0, chosen()) }}>
@@ -152,11 +152,10 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
     onMount(() => {
         measure()
         addEventListener('resize', measure)
-        document.addEventListener('pointerdown', outside, true)
+        onCleanup(onGlobal(document, 'pointerdown', outside, true))
         card.querySelector<HTMLElement>('.you-row')?.focus({ preventScroll: true })
     })
     onCleanup(() => removeEventListener('resize', measure))
-    onCleanup(() => document.removeEventListener('pointerdown', outside, true))
     const command = isMac() ? '⌘' : 'Ctrl+'
     return (
         <div ref={card} class="you-menu" role="menu" aria-label={t('nav.you')} style={place()} onKeyDown={onKey}>

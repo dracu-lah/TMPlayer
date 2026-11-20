@@ -233,6 +233,10 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
   background: var(--menu); color: var(--fg); border: 1px solid var(--line); border-radius: 999px;
 }
 /* Another tab holds the session: covers the page, which stops. */
+/* The picker's stand-in while its code loads, or when it cannot (HX88): opaque, nothing of the profile under it. */
+.lock-cover { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; align-content: center; gap: 16px; padding: 16px; background: var(--bg); color: var(--fg); text-align: center; }
+dialog.lock-cover { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; }
+dialog.lock-cover::backdrop { background: var(--bg); }
 .other-tab {
   position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; align-content: center; gap: 16px;
   padding: 16px max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left));

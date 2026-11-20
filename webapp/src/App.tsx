@@ -1,8 +1,13 @@
-import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type ParentProps } from 'solid-js'
+import { onGlobal } from './ui/globalInput'
+import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type Component, type ParentProps } from 'solid-js'
+import { Dynamic } from 'solid-js/web'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online, unreachable, watchReach } from './net'
 import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
+import { closeTopLayer, locked, picker, shieldPage } from './accounts'
+import { holdClose, openModal } from './ui/confirmCore'
+import { afterSessionRead, attachSignedIn, cleanStaleProfiles, sessionUnreadable, showCarriedNotice } from './accountFlows'
 import { loadSubmaker } from './submakerBase'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
 import { openSync, stopSync } from './sync'
@@ -52,6 +57,42 @@ const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSe
 const loadTv = () => import('./tv')
 const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
 const TvBar = lazy(() => loadTv().then((m) => ({ default: m.TvBar })))
+// "Who's watching?" (HX88): only fetched where a browser has profiles to choose from. Until it is in
+// (or when it cannot come, offline) an opaque cover stands in its place, so a locked profile's
+// screens never show under it.
+const [ProfilesView, setProfilesView] = createSignal<Component | null>(null)
+const [profilesFailed, setProfilesFailed] = createSignal(false)
+let profilesAsked = false
+function loadProfiles() {
+    if (profilesAsked) return
+    profilesAsked = true
+    import('./ui/Profiles').then(
+        (m) => setProfilesView(() => m.Profiles),
+        () => setProfilesFailed(true),
+    )
+}
+
+/** What covers the page while the picker loads, or when it could not: nothing of the profile, and Try again. */
+function LockCover() {
+    // A modal dialog in the top layer too, closed by nothing: the picker takes its place, or a reload.
+    const open = (d: HTMLDialogElement) =>
+        queueMicrotask(() => {
+            closeTopLayer(d)
+            holdClose(d, () => true)
+            openModal(d)
+        })
+    return (
+        <dialog class="lock-cover" ref={open} aria-label={t('accounts.cover_loading')} onCancel={(e) => e.preventDefault()}>
+            <Show when={profilesFailed()} fallback={<div class="loader" role="progressbar" aria-label={t('accounts.cover_loading')} />}>
+                <p role="alert">{t('accounts.cover_failed')}</p>
+                {/* A reload starts on the picker again: nothing unlocked rides along. */}
+                <button class="primary" type="button" ref={(el) => queueMicrotask(() => el.focus())} onClick={() => location.reload()}>
+                    {t('common.try_again')}
+                </button>
+            </Show>
+        </dialog>
+    )
+}
 
 /** The pages the chats gate leaves alone: signing in, and the gate's own two. */
 const GATE_FREE = ['/signin', '/setup/chats', '/added-chats']
@@ -75,12 +116,28 @@ function Shell(props: ParentProps) {
     watchReach(() => !!me() && sessionHere() === 'here')
 
     onMount(async () => {
+        // A line a reload carried over (a profile signed out, the same account twice), and profiles a closed tab left half added.
+        showCarriedNotice()
+        void cleanStaleProfiles()
         try {
+            // At launch with profiles to choose from, the session is read once one is chosen (rpc.openSession).
             const [user] = await Promise.all([api.me(), loadSettings(), loadSubmaker()])
+            const next = await afterSessionRead(user)
+            if (next === 'leaving') return
+            if (next === 'signedOut') return void setMe(null)
             setMe(user)
             // The saved session is used at once; Telegram's answer follows, and says when it was ended elsewhere.
-            if (user) api.whoami().then((u) => void (u ? setMe(u) : sessionEndedElsewhere()), () => {})
+            if (user)
+                api.whoami().then(
+                    async (u) => {
+                        if (!u) return sessionEndedElsewhere()
+                        if (await attachSignedIn(u)) setMe(u)
+                    },
+                    () => {},
+                )
         } catch (e) {
+            // With other profiles, this one needs attention and the picker opens over the error.
+            sessionUnreadable()
             setError(errorText(e))
         }
     })
@@ -141,8 +198,17 @@ function Shell(props: ParentProps) {
             go: (path) => navigate(path),
             back: () => back(navigate),
             searchLabel: () => t('browse.search_chat'),
+            listen: (onKey) => onGlobal(window, 'keydown', onKey),
         })
         onCleanup(off)
+    })
+    // The picker's code, the first time it is wanted (at launch, from the menu, or locking again).
+    createEffect(() => picker() && loadProfiles())
+    // Locked (HX88): the rest of the page is inert and hidden, and the player closes, so its streams,
+    // decoders and sound go (accounts.ts stopped its media and kept its place first).
+    createEffect(() => shieldPage(locked()))
+    createEffect(() => {
+        if (locked() && location.pathname.startsWith('/watch/')) navigate('/', { replace: true })
     })
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
@@ -158,7 +224,7 @@ function Shell(props: ParentProps) {
                 </Match>
                 <Match when={me() === null && location.pathname === '/signin'}>{props.children}</Match>
                 <Match when={signedIn()}>
-                    <main class="page" classList={{ playing: playing(), bleed: detail() }}>
+                    <main class="page" classList={{ playing: playing(), bleed: detail() }} inert={picker() ? true : undefined}>
                         <ErrorBoundary
                             fallback={(e, reset) => (
                                 <div class="boot">
@@ -182,6 +248,11 @@ function Shell(props: ParentProps) {
                 {/* Reload cannot fetch a new version offline: the notice waits for the connection. */}
                 <Show when={!online()} fallback={<Show when={unreachable()} fallback={<UpdateNotice />}><ReachBanner /></Show>}>
                     <p class="offline-line" role="status">{t('web.offline')}</p>
+                </Show>
+            </Show>
+            <Show when={picker()}>
+                <Show when={ProfilesView()} fallback={<LockCover />}>
+                    {(View) => <Dynamic component={View()} />}
                 </Show>
             </Show>
             <Toaster />

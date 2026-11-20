@@ -9,6 +9,7 @@
 // that open from their buttons) and `tv` (the Android TV player: no top bar, the title over the
 // bar, one play disc, a row of round buttons with More at its end, the time as a button, every
 // control reached with the remote's arrows and OK, see `tvKey`).
+import { onGlobal } from '../ui/globalInput'
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
 import {
     Add01Icon,
@@ -686,14 +687,13 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const start = (level: number) => {
             void applyBoost(v, level).then((ok) => {
                 if (ok || retry) return
+                const offs: (() => void)[] = []
                 retry = () => {
-                    document.removeEventListener('pointerdown', retry!, true)
-                    document.removeEventListener('keydown', retry!, true)
+                    offs.forEach((off) => off())
                     retry = null
                     if (boost() === level) start(level)
                 }
-                document.addEventListener('pointerdown', retry, true)
-                document.addEventListener('keydown', retry, true)
+                offs.push(onGlobal(document, 'pointerdown', retry, true), onGlobal(document, 'keydown', retry, true))
             })
         }
         startBoost = start
@@ -1549,8 +1549,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         setSheet(null)
         queueMicrotask(() => focusIt(opener?.isConnected ? opener : c.root))
     }
-    onMount(() => document.addEventListener('keydown', onKey))
-    onCleanup(() => document.removeEventListener('keydown', onKey))
+    // Not while the profile is locked: no key of the page may play, skip or open the locked video.
+    onMount(() => onCleanup(onGlobal(document, 'keydown', onKey)))
 
     // ---- the picture: taps, clicks and the phone's gestures ---------------------------------
     const [hold, setHold] = createSignal(false)

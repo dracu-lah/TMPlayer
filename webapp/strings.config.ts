@@ -3,6 +3,8 @@
 // fetches the whole catalog for the rules. A bare name takes a whole section, `section.key` one
 // string of a large one; env.d.ts types the result from this list.
 export const PAGE_STRINGS = [
+    // Profiles (HX88): the picker, its PIN and its options, Add account and Remove all accounts.
+    'accounts',
     'auth',
     'common',
     'errors',

@@ -13,6 +13,7 @@ import { findTopics, keepWhole, keptTopics, telegramTopics, topicWords } from '.
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
 import { deleteEverything, deleteMessages, readFiles, writeFile, type FoundFile } from './syncfile'
 import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
+import { storageOfWorker } from '../ui/accountBook'
 import type { ChatInfo, ChatItem, ChatPage, ChatSubtitle, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, RecentPage, QrEvent, RpcError, SentCode, SponsoredReport, Tile, TopicsFound, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
@@ -23,7 +24,8 @@ const base = new BaseTelegramClient({
     apiId: __TG_API_ID__,
     apiHash: __TG_API_HASH__,
     crypto: cryptoProvider(),
-    storage: testMode ? 'tmplayer-test' : 'tmplayer',
+    // The profile's own session (HX88), from the name the page gave this worker: the adopted profile's is `tmplayer` as always.
+    storage: storageOfWorker(self.name, testMode),
     testMode,
     initConnectionOptions: {
         deviceModel: 'TMPlayer Web',
@@ -50,6 +52,8 @@ base.onConnectionState.add((link) => postMessage({ link }))
 const LOG_OUT_WAIT_MS = 5_000
 /** A 1 MiB read that has not answered by now is asked again (see chunk): slower than 35 KB/s plays nothing anyway. */
 const CHUNK_TIMEOUT_MS = 30_000
+/** A profile's picture is kept in the page's storage: a small one only. */
+const PHOTO_MAX = 60_000
 
 // The app's rules start loading beside the connection, so the first list does not wait for them.
 const rulesStarted = performance.now()
@@ -178,6 +182,17 @@ export const api = {
     },
 
     /** The signed in user as Telegram has it now; a 401 (ended on another device) signs the page out. */
+    /**
+     * The signed in account's small Telegram photo, for its profile's round picture on the picker
+     * (HX88); null when it has none, or one too big to keep beside the profile.
+     */
+    async myPhoto(_: Ctx): Promise<ArrayBuffer | null> {
+        const small = (await tg.getMe()).photo?.small
+        if (!small) return null
+        const bytes = await tg.downloadAsBuffer(small)
+        return bytes.byteLength > 0 && bytes.byteLength <= PHOTO_MAX ? own(bytes) : null
+    },
+
     async whoami(_: Ctx): Promise<Me | null> {
         try {
             return me(await tg.getMe())

@@ -8,6 +8,7 @@
 import { createRoot, createSignal } from 'solid-js'
 import { api, errorText } from '../tg/rpc'
 import { me } from '../session'
+import { names, writesOpen } from '../accounts'
 import { language, t } from '../i18n'
 import { REMOVAL_DAYS } from './format'
 import { freshState, parseState, runSync, type Deps, type Outcome, type State } from './run'
@@ -86,7 +87,8 @@ export async function loadSync(): Promise<void> {
  * file a tab last used are read from there before each run, and a change in another tab arrives as
  * a `storage` event, so a tab that was open when the switch was turned off does not sync on.
  */
-const SHARED_KEY = 'tmplayer-sync-state'
+// Per profile (HX88): the adopted profile's keeps its name.
+const SHARED_KEY = names.syncShared
 function readShared(): State | null {
     try {
         return parseState(JSON.parse(localStorage.getItem(SHARED_KEY) ?? 'null'))
@@ -96,6 +98,8 @@ function readShared(): State | null {
 }
 
 async function patch(p: Partial<State>) {
+    // A run that ends after the page began leaving its profile (HX88) writes nothing of it.
+    if (!writesOpen()) return
     const next = { ...(readShared() ?? state()), ...p }
     setState(next)
     kvWrite(STATE_KEY, next)

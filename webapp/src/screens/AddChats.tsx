@@ -9,6 +9,7 @@
 // (nothing ticked for them), made from the head of the list counted first (core's ChatSuggestions).
 // The counts have a budget (ui/pickCount.ts): the head, then the rows the viewer stays on, then more
 // only when they ask for it, and none once Telegram refuses.
+import { onGlobal } from '../ui/globalInput'
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js'
 import { useBeforeLeave, useNavigate, useSearchParams } from '@solidjs/router'
 import { Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
@@ -356,8 +357,7 @@ export function AddChats() {
             e.preventDefault()
             selectAllNow()
         }
-        addEventListener('keydown', keys)
-        onCleanup(() => removeEventListener('keydown', keys))
+        onCleanup(onGlobal(window, 'keydown', keys))
     })
 
     const footer = () => {

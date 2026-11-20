@@ -1,5 +1,6 @@
 // The viewer's own lists behind the "You" menu: Favourites (the starred chats) and History, with
 // the app's tabs (Recent, Continue, Watch later, Watched), each day under its own heading.
+import { onGlobal } from '../ui/globalInput'
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useNavigate, useParams } from '@solidjs/router'
 import { CheckmarkCircle02Icon, Clock01Icon, History, LeftToRightListBulletIcon, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
@@ -206,8 +207,7 @@ export function HistoryPage() {
                 remove()
             } else if (e.key === 'Escape') leave()
         }
-        addEventListener('keydown', keys)
-        onCleanup(() => removeEventListener('keydown', keys))
+        onCleanup(onGlobal(window, 'keydown', keys))
     })
     return (
         <>
