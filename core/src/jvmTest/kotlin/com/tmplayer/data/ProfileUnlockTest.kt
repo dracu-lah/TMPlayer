@@ -82,10 +82,15 @@ class ProfileUnlockTest {
     fun `still away past the grace, the profile counts as locked before any timer or return`() {
         val own = lockedBookUnlocked()
         ProfileUnlock.onBackground(now = 1_000L, lockAfterMs = 600_000L)
-        assertFalse("30 s away is still within the grace", ProfileUnlock.hiddenNow(now = 31_000L))
-        assertTrue("61 s away is locked when read", ProfileUnlock.hiddenNow(now = 62_000L))
+        assertFalse("30 s away is still within the grace inside the app", ProfileUnlock.lockedNow(now = 31_000L))
+        assertTrue("but outside the app a PIN profile is hidden the moment it leaves the screen", ProfileUnlock.hiddenNow(now = 31_000L))
+        assertTrue("61 s away is locked when read", ProfileUnlock.lockedNow(now = 62_000L))
         assertFalse(ProfileUnlock.isUnlocked(own.list.value.activeId, now = 62_000L))
-        assertTrue("a clock that went backwards counts as long", ProfileUnlock.hiddenNow(now = 10L))
+        assertTrue("a clock that went backwards counts as long", ProfileUnlock.lockedNow(now = 10L))
+        // Back on screen within the grace: unlocked inside, shown outside again.
+        ProfileUnlock.onForeground(now = 31_000L)
+        assertFalse(ProfileUnlock.lockedNow(now = 31_000L))
+        assertFalse(ProfileUnlock.hiddenNow(now = 31_000L))
     }
 
     @Test

@@ -74,6 +74,9 @@ object ProfileUnlock {
      */
     fun onBackground(now: Long = PinClock.now(), lockAfterMs: Long = GRACE_MS + 1) {
         leftAt = now
+        // Outside the app a PIN profile's content goes at once ([hidden]): a process frozen or
+        // killed in the background never runs the timer below, and its cards must not stay.
+        away.value = true
         timer?.cancel()
         timer = Background.scope.launch {
             delay(lockAfterMs)
@@ -85,10 +88,14 @@ object ProfileUnlock {
     fun onForeground(now: Long = PinClock.now()) {
         timer?.cancel()
         timer = null
-        val away = awayTooLong(now)
+        val tooLong = awayTooLong(now)
         leftAt = -1L
-        if (away) lock()
+        away.value = false
+        if (tooLong) lock()
     }
+
+    /** Whether no window of the app is on screen now. */
+    private val away = MutableStateFlow(false)
 
     /** Away longer than [GRACE_MS], or a clock behind the stamp (a reboot): the absence was long. */
     private fun awayTooLong(now: Long): Boolean {
@@ -103,18 +110,31 @@ object ProfileUnlock {
     }
 
     /**
-     * Whether the open profile's content must stay off every surface outside the app now: also
-     * while the app is still away past [GRACE_MS], before any timer has run.
+     * Inside the app: the open profile asks its PIN before anything of it is drawn, counting an
+     * absence past [GRACE_MS] there and then, before any timer has run (a player resumed late).
      */
-    fun hiddenNow(now: Long = PinClock.now()): Boolean {
+    fun lockedNow(now: Long = PinClock.now()): Boolean {
         val list = Accounts.book?.list?.value ?: return false
         return needsUnlock(list, if (awayTooLong(now)) null else open.value)
     }
 
-    /** [hiddenNow] as it changes: the widget, the TV's rows and the notifications follow it. */
+    /**
+     * Outside the app (the widget, the TV's rows, notifications): a PIN profile's content shows
+     * only while its PIN was given and the app is on screen; the moment the app leaves the screen
+     * it goes, and comes back once the app is open and the profile unlocked again.
+     */
+    fun hiddenNow(now: Long = PinClock.now()): Boolean {
+        val list = Accounts.book?.list?.value ?: return false
+        if (list.active?.pin == null) return false
+        return away.value || lockedNow(now)
+    }
+
+    /** [hiddenNow] as it changes, from its first value. */
     fun hidden(): Flow<Boolean> {
         val book = Accounts.book ?: return flowOf(false)
-        return combine(book.list, open) { list, id -> needsUnlock(list, if (awayTooLong(PinClock.now())) null else id) }.distinctUntilChanged()
+        return combine(book.list, open, away) { list, id, gone ->
+            list.active?.pin != null && (gone || needsUnlock(list, if (awayTooLong(PinClock.now())) null else id))
+        }.distinctUntilChanged()
     }
 
     /** For tests: nothing unlocked, nobody away. */
@@ -122,5 +142,6 @@ object ProfileUnlock {
         timer?.cancel()
         open.value = null
         leftAt = -1L
+        away.value = false
     }
 }
