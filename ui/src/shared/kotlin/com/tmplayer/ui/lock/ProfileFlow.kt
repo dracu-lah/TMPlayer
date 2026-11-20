@@ -538,7 +538,8 @@ class ProfileFlow(
         val name = nameOf(id)
         stage = Stage.Picker
         work(L.profilesSwitching(name = name)) {
-            if (switcher.profiles.value.activeId != id) runCatching { platform.beforeSwitch() }
+            // Always: the open profile's own long jobs stop and are waited for before its data goes.
+            runCatching { platform.beforeSwitch() }
             ProfileUnlock.lock()
             when (val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }) {
                 is SignOutResult.SignedOut -> {
@@ -576,6 +577,8 @@ class ProfileFlow(
     private fun confirmSignOutWith(id: String, deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         val name = nameOf(id)
         work(L.profilesSwitching(name = name)) {
+            // Settings' sign out too: the profile's long jobs stop and are waited for first.
+            runCatching { platform.beforeSwitch() }
             ProfileUnlock.lock()
             val result = switcher.signOutProfile(id) { profile, last -> platform.wipe(profile, last, deleteDownloads) }
             if (result is SignOutResult.SignedOut) {
