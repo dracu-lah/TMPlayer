@@ -1,5 +1,9 @@
 package com.tmplayer.data
 
+import com.tmplayer.platform.Background
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,19 +62,38 @@ object ProfileUnlock {
         lockListeners += block
     }
 
-    fun isUnlocked(id: String): Boolean = open.value == id
+    fun isUnlocked(id: String, now: Long = PinClock.now()): Boolean = open.value == id && !awayTooLong(now)
 
-    /** The app's last window left the screen (not a rotation). */
-    fun onBackground(now: Long = PinClock.now()) {
+    @Volatile
+    private var timer: Job? = null
+
+    /**
+     * The app's last window left the screen (not a rotation). The lock itself comes [lockAfterMs]
+     * later, so the widget and the launcher hear it while the app is still away; and whoever reads
+     * the unlock before then ([hiddenNow], [isUnlocked]) counts the absence there and then.
+     */
+    fun onBackground(now: Long = PinClock.now(), lockAfterMs: Long = GRACE_MS + 1) {
         leftAt = now
+        timer?.cancel()
+        timer = Background.scope.launch {
+            delay(lockAfterMs)
+            if (leftAt >= 0) lock()
+        }
     }
 
     /** A window of the app is back: after more than [GRACE_MS] away the open profile locks. */
     fun onForeground(now: Long = PinClock.now()) {
-        val left = leftAt
+        timer?.cancel()
+        timer = null
+        val away = awayTooLong(now)
         leftAt = -1L
-        // A clock behind the stamp started again (a reboot): the absence was long.
-        if (left >= 0 && (now < left || now - left > GRACE_MS)) lock()
+        if (away) lock()
+    }
+
+    /** Away longer than [GRACE_MS], or a clock behind the stamp (a reboot): the absence was long. */
+    private fun awayTooLong(now: Long): Boolean {
+        val left = leftAt
+        return left >= 0 && (now < left || now - left > GRACE_MS)
     }
 
     /** The open profile of [list] has a PIN that was not given in this process. */
@@ -79,17 +102,24 @@ object ProfileUnlock {
         return active.pin != null && active.id != unlocked
     }
 
-    /** Whether the open profile's content must stay off every surface outside the app now. */
-    fun hiddenNow(): Boolean = Accounts.book?.list?.value?.let { needsUnlock(it) } ?: false
+    /**
+     * Whether the open profile's content must stay off every surface outside the app now: also
+     * while the app is still away past [GRACE_MS], before any timer has run.
+     */
+    fun hiddenNow(now: Long = PinClock.now()): Boolean {
+        val list = Accounts.book?.list?.value ?: return false
+        return needsUnlock(list, if (awayTooLong(now)) null else open.value)
+    }
 
     /** [hiddenNow] as it changes: the widget, the TV's rows and the notifications follow it. */
     fun hidden(): Flow<Boolean> {
         val book = Accounts.book ?: return flowOf(false)
-        return combine(book.list, open) { list, id -> needsUnlock(list, id) }.distinctUntilChanged()
+        return combine(book.list, open) { list, id -> needsUnlock(list, if (awayTooLong(PinClock.now())) null else id) }.distinctUntilChanged()
     }
 
     /** For tests: nothing unlocked, nobody away. */
     internal fun resetForTest() {
+        timer?.cancel()
         open.value = null
         leftAt = -1L
     }

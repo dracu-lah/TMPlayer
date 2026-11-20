@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -66,6 +67,52 @@ class ProfileUnlockTest {
         other.update { it.copy(profiles = it.profiles + Profile("pb", "pb"), activeId = "pb") }
         Accounts.resetForTest(other)
         assertNull(ProfileUnlock.unlockedId.value)
+    }
+
+    /** A book whose open profile has a PIN, unlocked, as Accounts' own. */
+    private fun lockedBookUnlocked(): AccountBook {
+        val own = AccountBook(AccountStore(File(Files.createTempDirectory("away").toFile(), Accounts.FILE_NAME)))
+        Accounts.resetForTest(own)
+        own.update { it.replace(ProfilePin.set(it.active!!, "1234")!!) }
+        ProfileUnlock.unlock(own.list.value.activeId)
+        return own
+    }
+
+    @Test
+    fun `still away past the grace, the profile counts as locked before any timer or return`() {
+        val own = lockedBookUnlocked()
+        ProfileUnlock.onBackground(now = 1_000L, lockAfterMs = 600_000L)
+        assertFalse("30 s away is still within the grace", ProfileUnlock.hiddenNow(now = 31_000L))
+        assertTrue("61 s away is locked when read", ProfileUnlock.hiddenNow(now = 62_000L))
+        assertFalse(ProfileUnlock.isUnlocked(own.list.value.activeId, now = 62_000L))
+        assertTrue("a clock that went backwards counts as long", ProfileUnlock.hiddenNow(now = 10L))
+    }
+
+    @Test
+    fun `the delayed lock fires the listeners while the app is still away`() {
+        lockedBookUnlocked()
+        val fired = java.util.concurrent.CountDownLatch(1)
+        ProfileUnlock.onLock { fired.countDown() }
+        ProfileUnlock.onBackground(lockAfterMs = 50L)
+        assertTrue("the lock came on its own", fired.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertNull(ProfileUnlock.unlockedId.value)
+    }
+
+    @Test
+    fun `coming back in time cancels the delayed lock`() {
+        val own = lockedBookUnlocked()
+        ProfileUnlock.onBackground(lockAfterMs = 200L)
+        ProfileUnlock.onForeground()
+        Thread.sleep(400L)
+        assertTrue(ProfileUnlock.isUnlocked(own.list.value.activeId))
+    }
+
+    @Test
+    fun `a cold start with a locked profile is hidden from the first value`() = kotlinx.coroutines.runBlocking {
+        val own = AccountBook(AccountStore(File(Files.createTempDirectory("cold").toFile(), Accounts.FILE_NAME)))
+        own.update { it.replace(ProfilePin.set(it.active!!, "1234")!!) }
+        Accounts.resetForTest(own)
+        assertTrue(ProfileUnlock.hidden().first())
     }
 
     @Test
