@@ -37,6 +37,10 @@ class ProfileNotificationsPolicyTest {
         Regex("""\.setCastMediaOptions\("""),
         Regex("""\bRemoteViews\("""),
         Regex("""setDynamicShortcuts|ShortcutManager|ShortcutInfo"""),
+        // The launcher: the TV's Play next row and channels, and the home screen widget.
+        Regex("""contentResolver\.(insert|update|delete|bulkInsert)\("""),
+        Regex("""requestChannelBrowsable"""),
+        Regex("""\b(updateAppWidget|partiallyUpdateAppWidget)\("""),
     )
 
     /** A notification's own words: fine in a file that posts through the wrapper, else marked. */
@@ -47,11 +51,17 @@ class ProfileNotificationsPolicyTest {
 
     private fun appSrc(): File = listOf(File("src"), File("app/src")).first { File(it, "main").isDirectory }
 
-    /** Every source set but the tests: main, cast, nocast, vlc, novlc, dev, debug, preview, promo, fdroid. */
-    private fun sourceRoots(): List<File> =
-        appSrc().listFiles().orEmpty()
+    /**
+     * Every source set but the tests (main, cast, nocast, vlc, novlc, dev, debug, preview, promo
+     * and its shared folder, fdroid), and :ui's synthetic account, which :app's debug build uses.
+     */
+    private fun sourceRoots(): List<File> {
+        val app = appSrc().listFiles().orEmpty()
             .filter { it.isDirectory && !it.name.startsWith("test") && !it.name.startsWith("androidTest") }
-            .flatMap { set -> listOf(File(set, "java"), File(set, "kotlin")).filter { it.isDirectory } }
+            .flatMap { set -> listOf(File(set, "java"), File(set, "kotlin"), File(set, "shared")).filter { it.isDirectory } }
+        val ui = listOf(File(appSrc().absoluteFile.parentFile.parentFile, "ui/src/synthetic/kotlin")).filter { it.isDirectory }
+        return app + ui
+    }
 
     private fun marked(lines: List<String>, index: Int): Boolean =
         (maxOf(0, index - 2)..index).any { lines[it].contains("profile-notifications:") }
@@ -89,6 +99,8 @@ class ProfileNotificationsPolicyTest {
         val sets = sourceRoots().map { it.parentFile.name }.toSet()
         assertTrue("main is scanned", "main" in sets)
         assertTrue("the regular build's Google Cast is scanned", "cast" in sets)
+        assertTrue("the promo build's shared folder is scanned", sourceRoots().any { it.name == "shared" && it.parentFile.name == "promo" })
+        assertTrue(":ui's synthetic account is scanned", sourceRoots().any { it.path.endsWith("synthetic/kotlin") })
         assertTrue(File(appSrc(), "main/java/$wrapper").isFile)
     }
 

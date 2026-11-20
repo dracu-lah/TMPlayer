@@ -112,9 +112,33 @@ class ProfileNotificationsTest {
     }
 
     @Test
-    fun `a cold start with the profile hidden takes down what an earlier process left`() {
-        manager.notify(90, real("Left by the last process"))
+    fun `a cold start with the profile hidden takes down the profile's notifications left, the device's stay`() {
+        val left = real("Left by the last process").apply { extras.putString(ProfileNotifications.PROFILE_EXTRA, "pa") }
+        manager.notify(90, left)
+        manager.notify(91, real("An update is ready"))
         ProfileNotifications.clearLeftBehind(context)
         assertNull(shadowOf(manager).getNotification(90))
+        assertEquals("An update is ready", shadowOf(manager).getNotification(91).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+    }
+
+    @Test
+    fun `a job started under a PIN profile posts nothing of it once another profile is open`() {
+        val started = AccountStamp(1L, "ppin01")
+        val now = AccountStamp(2L, null)
+        assertFalse(ProfileNotifications.mayPost(ProfileNotifications.Kind.Ongoing, owner = started, current = now))
+        assertFalse(ProfileNotifications.mayPost(ProfileNotifications.Kind.Result, owner = started, current = now))
+        assertTrue("the device's notices are no profile's", ProfileNotifications.mayPost(ProfileNotifications.Kind.Device, owner = started, current = now))
+        assertTrue(ProfileNotifications.mayPost(ProfileNotifications.Kind.Ongoing, owner = now, current = now))
+        // Posted for an owner that is not the open profile's turn: nothing reaches the shade.
+        ProfileNotifications.post(context, 95, real("Saving: a private title"), ProfileNotifications.Kind.Ongoing, owner = AccountStamp(Long.MAX_VALUE, "ppin01"))
+        assertNull(shadowOf(manager).getNotification(95))
+    }
+
+    @Test
+    fun `a profile's posted notification carries its profile, its neutral copy too`() {
+        ProfileNotifications.post(context, 96, real("A private video title"), ProfileNotifications.Kind.Ongoing)
+        val posted = shadowOf(manager).getNotification(96)
+        assertTrue(posted.extras.containsKey(ProfileNotifications.PROFILE_EXTRA))
+        assertTrue(ProfileNotifications.neutral(context, posted).extras.containsKey(ProfileNotifications.PROFILE_EXTRA))
     }
 }
