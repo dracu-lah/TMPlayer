@@ -259,6 +259,8 @@ fun PlayerScreen(
     /** "Not enough space": close the player for Downloads with Free up space up. Null hides it. */
     onFreeUpSpace: (() -> Unit)? = null,
 ) {
+    // The profile this player was opened for (HX88): its resume saves are never another profile's.
+    val accountOwner = androidx.compose.runtime.remember { com.tmplayer.data.Accounts.stamp }
     val s = LocalStrings.current
     // One search for the Cast button per player session (FQ8), not one per reveal of the controls.
     val castPresence = rememberCastBarPresence()
@@ -913,8 +915,8 @@ fun PlayerScreen(
         )
         playerScope.launch {
             runCatching {
-                if (forget) settings.clearResumePosition(it.chatId, it.messageId, it)
-                else settings.saveResumePosition(it.chatId, it.messageId, position, duration, description)
+                if (forget) settings.clearResumePosition(it.chatId, it.messageId, it, owner = accountOwner)
+                else settings.saveResumePosition(it.chatId, it.messageId, position, duration, description, owner = accountOwner)
             }
             // Out to the other devices once the saves stop (a pause, the player closed): the
             // push waits for them to settle, so the heartbeat never edits the message (ResumeSync).

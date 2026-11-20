@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import okio.Path.Companion.toPath
 import java.io.File
 
@@ -449,6 +450,15 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         .map(transform)
         .distinctUntilChanged()
         .flowOn(Dispatchers.Default)
+
+    /**
+     * [block] as the work of [owner]'s profile (HX88): its writes are dropped by the store once
+     * another profile is open ([AccountScopedDataStore]). A player or a download passes the stamp it
+     * was made under, so a save that starts after a switch never lands in the next profile.
+     */
+    private suspend fun owned(owner: AccountStamp?, block: suspend () -> Unit) {
+        if (owner == null) block() else withContext(AccountOwner(owner)) { block() }
+    }
 
     // ---- added chats ------------------------------------------------------------------------
 
@@ -3285,7 +3295,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * many bytes are actually on disk rather than trusting a number the crash may have caught mid
      * write.
      */
-    suspend fun saveDownloadQueue(requests: List<DownloadRequest>) {
+    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null) = owned(owner) {
         prefs.edit { prefs ->
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
@@ -3305,7 +3315,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * disk are the viewer's, and a download whose record fell off the end would become a file
      * nothing can name, play or delete.
      */
-    suspend fun noteDownload(item: MediaItem, chatTitle: String, localPath: String? = null) {
+    suspend fun noteDownload(item: MediaItem, chatTitle: String, localPath: String? = null, owner: AccountStamp? = null) = owned(owner) {
         prefs.edit { prefs ->
             prefs[downloadKey(item.chatId, item.messageId)] = ResumeRecord.encode(
                 fileId = item.fileId,
@@ -3330,7 +3340,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         positionMs: Long,
         durationMs: Long = 0L,
         description: String? = null,
-    ) {
+        owner: AccountStamp? = null,
+    ) = owned(owner) {
         prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
             // Watch time for the support ladder, read off the same heartbeat.
@@ -3505,7 +3516,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * leave another's older place to resume from. [item] names the video when this copy has no
      * place of its own to read it from (Start over on a copy never played).
      */
-    suspend fun clearResumePosition(chatId: Long, messageId: Long, item: MediaItem? = null) {
+    suspend fun clearResumePosition(chatId: Long, messageId: Long, item: MediaItem? = null, owner: AccountStamp? = null) = owned(owner) {
         prefs.edit {
             val played = item ?: recordOf(it, chatId, messageId, null)?.toMediaItem()
             it.remove(resumeKey(chatId, messageId))

@@ -173,6 +173,9 @@ import java.io.File
 @UnstableApi
 class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
+    /** The profile this player was opened for (HX88): its resume saves are never another profile's. */
+    private val accountOwner = com.tmplayer.data.Accounts.stamp
+
     override var player: ExoPlayer? = null
         private set
 
@@ -10705,8 +10708,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val forget = watched || markedWatchedHere
         val write = App.backgroundScope.launch {
             runCatching {
-                if (forget) store.clearResumePosition(chat, message, here)
-                else store.saveResumePosition(chat, message, position, duration, description)
+                if (forget) store.clearResumePosition(chat, message, here, owner = accountOwner)
+                else store.saveResumePosition(chat, message, position, duration, description, owner = accountOwner)
             }
         }
         if (leaving) publishWatchNext(if (markedWatchedHere && duration > 0) duration else position, duration)

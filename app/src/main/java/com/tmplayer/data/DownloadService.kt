@@ -494,7 +494,8 @@ class DownloadService : Service() {
                     stale = id
                     return@synchronized null
                 }
-                val job = scope.launch { fetch(request) }
+                // As the work of the profile it was asked under (HX88): its writes never land in another.
+                val job = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { fetch(request) }
                 running[id] = job
                 // Registered before the job can finish, so a fetch that fails immediately still
                 // finds its own entry to clear and still pumps whatever is behind it.
@@ -720,7 +721,7 @@ class DownloadService : Service() {
         OfflineDownloads.moving(id, heldByPlayer = true)
         synchronized(lock) {
             if (heldMoves.containsKey(id)) return
-            heldMoves[id] = scope.launch {
+            heldMoves[id] = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) {
                 try {
                     // Cancellable while it only waits: Pause and Cancel reach it here.
                     while (WatchCache.isPlaying(id)) delay(DownloadFinisher.POLL_MS)
