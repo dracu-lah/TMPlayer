@@ -21,8 +21,9 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary
  * ([com.tmplayer.data.RemedyMemory.learned]) and the next video of it starts in PCM at once, while a
  * refused PCM output (nothing FFmpeg could change) teaches nothing.
  *
- * A2 (passthrough off with the device's decoder) is not built: Media3 1.11 reads the output's
- * capabilities through its AudioOutputProvider, and PCM from FFmpeg already avoids passthrough.
+ * A2 is passthrough off ([PcmOnlyOutputProvider]): the output takes PCM only, so the device's own
+ * decoder (or FFmpeg's) decodes the track. It is the next step where FFmpeg has no decoder for the
+ * format, and what Settings' Audio passthrough turned off asks for on every video.
  */
 @UnstableApi
 object AudioPolicy {

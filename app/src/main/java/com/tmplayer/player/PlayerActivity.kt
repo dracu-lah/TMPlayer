@@ -848,6 +848,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Settings, Playback, Advanced, Tunneled playback; read as the video opens. */
     private var tunneledMode = com.tmplayer.player.TunneledMode.Auto
 
+    /**
+     * Settings, Playback, Advanced, Audio passthrough (on by default); read as the video opens, so
+     * a change applies from the next video. Off builds the player's sound output PCM only (A2).
+     */
+    private var audioPassthrough = true
+
     /** Whether the player in hand was built with tunneling on, so an error under it can retry without. */
     private var tunnelingActive = false
 
@@ -2486,6 +2492,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val silenceRead = async { runCatching { settings.skipSilenceNow() }.getOrDefault(false) }
             val decoderRead = async { runCatching { settings.videoDecoderNow() }.getOrDefault(com.tmplayer.data.VideoDecoder.Automatic) }
             val tunnelRead = async { runCatching { settings.tunneledModeNow() }.getOrDefault(com.tmplayer.player.TunneledMode.Auto) }
+            val passthroughRead = async { runCatching { settings.audioPassthroughNow() }.getOrDefault(true) }
             val statsRead = async { runCatching { settings.playbackStatsNow() }.getOrDefault(false) }
             val styleRead = async { runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()) }
             // Only a video from a message has somewhere to keep an offset; a file opened from
@@ -2586,6 +2593,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             skipSilence = silenceRead.await()
             videoDecoder = decoderRead.await()
             tunneledMode = tunnelRead.await()
+            audioPassthrough = passthroughRead.await()
             statsOn = statsRead.await()
             subtitleStyle = styleRead.await()
             applySubtitleStyle()
@@ -4310,7 +4318,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         .build()
 
     /** The path the next player is built on ([DecoderPolicy]): the remedy ladder's, else the known device list's. */
-    private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild()
+    private fun decoderPolicyForBuild(): DecoderPolicy = remedies.policyForBuild().allowingPassthrough(audioPassthrough)
 
     /** The policy the player now playing was built on, for the stutter report's "why this decoder". */
     private var builtPolicy: DecoderPolicy? = null
@@ -4455,7 +4463,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(processors)
-                    .setAudioOutputProvider(output)
+                    // Passthrough off (A2, or Settings): the output takes PCM only.
+                    .setAudioOutputProvider(PcmOnlyOutputProvider.of(output, policy.passthroughOff))
                     .build()
             }
 
@@ -9779,6 +9788,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun facts(excluded: Set<String>) = RemedyFacts.ladder(
             player, watchDecoder, excluded, decoderPicked = videoDecoder != com.tmplayer.data.VideoDecoder.Automatic,
             tunneling = tunnelingActive, tunnelingPicked = tunneledMode != com.tmplayer.player.TunneledMode.Auto,
+            passthrough = builtPolicy?.passthroughOff == false,
         )
         override fun classKey() = RemedyFacts.classKey(player, mediaMime.ifBlank { mediaFileName })
         override fun failedRenderer(error: PlaybackException) = RemedyFacts.failedRenderer(player, error)

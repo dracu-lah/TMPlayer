@@ -318,6 +318,8 @@ private val ENGINE_HISTORY = stringPreferencesKey("engine_history")
 private val REMEDY_MEMORY = stringPreferencesKey("remedy_memory")
 private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
+// Dolby and DTS to the television or receiver as they are (A2); off decodes them to plain sound here.
+private val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
 private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
 
 // Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [RepeatVideo].
@@ -2158,6 +2160,19 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setTunneledMode(mode: com.tmplayer.player.TunneledMode) {
         prefs.edit { it[TUNNELED_PLAYBACK] = mode.key }
+    }
+
+    /**
+     * Audio passthrough (on by default, which is how every build before it played): a Dolby or DTS
+     * track goes to the television or receiver as it is where the output says it takes it. Off
+     * keeps every track plain PCM, decoded here. The player reads it as a video opens.
+     */
+    val audioPassthrough: Flow<Boolean> = read { it[AUDIO_PASSTHROUGH] ?: true }
+
+    suspend fun audioPassthroughNow(): Boolean = prefs.data.first()[AUDIO_PASSTHROUGH] ?: true
+
+    suspend fun setAudioPassthrough(value: Boolean) {
+        prefs.edit { it[AUDIO_PASSTHROUGH] = value }
     }
 
     /** The playback stats overlay (off). Stored now; the overlay itself comes later. */

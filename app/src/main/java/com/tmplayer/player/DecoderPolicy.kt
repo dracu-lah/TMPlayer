@@ -19,6 +19,9 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
  * - [softwareVideo] puts the app's FFmpeg video decoder ahead of the device's (R2), the same order
  *   "Prefer software video" builds; [softwareAudio] does the same for the sound (A1, [AudioPolicy]).
  * - [tunnelingOff] keeps tunneled playback off whatever Auto would pick (R1b).
+ * - [passthroughOff] keeps every sound track plain PCM (A2, [PcmOnlyOutputProvider]): a Dolby or
+ *   DTS bitstream the output says it takes is decoded here instead, by the device's decoder or
+ *   FFmpeg's. The ladder's hop sets it, and so does Settings' Audio passthrough turned off.
  *
  * Decoder fallback stays on in every policy: Media3 then tries the next decoder when one fails to
  * start, which is the first rung of all and costs nothing.
@@ -30,8 +33,15 @@ data class DecoderPolicy(
     val softwareVideo: Boolean = false,
     val softwareAudio: Boolean = false,
     val tunnelingOff: Boolean = false,
+    val passthroughOff: Boolean = false,
 ) {
     enum class Async { Default, On, Off }
+
+    /**
+     * This policy under Settings' Audio passthrough: [allowed] (on, the default) leaves it as it
+     * is, off keeps the sound PCM whatever the ladder's path says. A path that turned it off stays off.
+     */
+    fun allowingPassthrough(allowed: Boolean): DecoderPolicy = if (allowed || passthroughOff) this else copy(passthroughOff = true)
 
     /** The codec list Media3 asks: [base] as it is, or without [excluded] for the picture. */
     fun selector(base: MediaCodecSelector = MediaCodecSelector.DEFAULT): MediaCodecSelector =
@@ -63,6 +73,7 @@ data class DecoderPolicy(
         append(", picture ").append(if (softwareVideo) "software first" else "device first")
         append(", sound ").append(if (softwareAudio) "software first" else "device first")
         if (tunnelingOff) append(", tunneling off")
+        if (passthroughOff) append(", passthrough off")
         if (excluded.isNotEmpty()) append(", left out ").append(excluded.sorted().joinToString(","))
     }
 
@@ -76,6 +87,8 @@ data class DecoderPolicy(
         append("+snd_").append(if (softwareAudio) "sw" else "hw")
         append("+tun_").append(if (tunnelingOff) "off" else "auto")
         append("+out_").append(excluded.size.coerceAtMost(9))
+        // Only when off, so every report written before A2 keeps its class.
+        if (passthroughOff) append("+pt_off")
     }
 
     companion object {
@@ -98,6 +111,7 @@ data class DecoderPolicy(
                 softwareVideo = path.software,
                 softwareAudio = path.audioSoftware,
                 tunnelingOff = path.tunnelingOff,
+                passthroughOff = path.passthroughOff,
             )
         }
     }

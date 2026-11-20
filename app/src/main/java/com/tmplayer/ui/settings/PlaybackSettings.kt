@@ -120,6 +120,21 @@ internal fun LazyListScope.playerRows(
                 },
             )
         }
+        // Audio passthrough (A2): on, Dolby and DTS go out as they are where the output takes
+        // them; off, they are decoded here. A phone's speaker and the desktop's mpv only ever get
+        // PCM, so the row is the television's. Read as a video opens: the next video follows it.
+        item {
+            val s = LocalStrings.current
+            val scope = rememberCoroutineScope()
+            val on by settings.audioPassthrough.collectAsStateWithLifecycle(initialValue = true)
+            ToggleRow(
+                title = s.settingsAudioPassthrough,
+                subtitle = if (on) s.settingsAudioPassthroughOn else s.settingsAudioPassthroughOff,
+                icon = TmIcons.Audio,
+                checked = on,
+                onToggle = { scope.launch { settings.setAudioPassthrough(!on) } },
+            )
+        }
     }
     // Stored now; the overlay itself comes in a later version, which the row says.
     item {

@@ -319,6 +319,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         if (evidence == RemedyEvidence.AudioFailed) {
             // An output that refused plain PCM is not helped by FFmpeg's PCM.
             facts = facts.copy(audioSoftwareTakes = AudioPolicy.softwareHelps(error, facts.audioSoftwareTakes))
+            // Passthrough off (A2) helps only where the output refused a bitstream; a refused PCM output stays refused.
+            facts = facts.copy(passthrough = facts.passthrough && AudioPolicy.bitstream(AudioPolicy.refusedFormat(error)))
             // The output refused the bitstream: the next video of this class starts its sound in PCM (RL8).
             if (AudioPolicy.teachesSoftware(error, facts.audioSoftwareTakes)) {
                 memory = memory.learned(k, Remedy.AudioSoftware, host.today())

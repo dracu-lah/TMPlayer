@@ -70,6 +70,7 @@ class RemedyRunnerTest {
         var otherDecoder = true
         var softwareTakes = true
         var audioSoftwareTakes = true
+        var passthrough = true
         var autoSwitch = true
         var engineInput: EngineInput? = null
         var engine = EngineDecision(PlayerEngine.ExoPlayer, EngineReason.Default)
@@ -118,6 +119,7 @@ class RemedyRunnerTest {
             otherDecoder = otherDecoder,
             softwareTakes = softwareTakes,
             audioSoftwareTakes = audioSoftwareTakes,
+            passthrough = passthrough,
             autoSwitch = autoSwitch,
         )
 
@@ -464,6 +466,38 @@ class RemedyRunnerTest {
         assertTrue("FFmpeg's PCM would be refused the same", player.reopened.none { it.softwareAudio })
         val learned = player.saved?.records?.values?.singleOrNull()
         assertTrue(learned == null || Remedy.AudioSoftware !in learned.working)
+    }
+
+    @Test
+    fun aRefusedBitstreamFfmpegCannotTakeTurnsPassthroughOff() {
+        open()
+        player.audioSoftwareTakes = false
+        // A2: the output refused the Dolby bitstream and FFmpeg has no decoder for it, so the
+        // output is built PCM only and the device's own decoder takes the track.
+        assertTrue(runner.onPlayerError(refusedOutput(EAC3)))
+        val hop = player.reopened.single()
+        assertTrue(hop.passthroughOff)
+        assertFalse(hop.softwareAudio)
+        assertFalse(hop.softwareVideo)
+        assertTrue(hop.shortClass().endsWith("+pt_off"))
+        assertEquals(listOf(com.tmplayer.i18n.L.playerRemedySoundAnotherWay), player.said)
+    }
+
+    @Test
+    fun passthroughOffIsNoStepForARefusedPcmOutput() {
+        open()
+        player.audioSoftwareTakes = false
+        runner.onPlayerError(refusedOutput(PCM))
+        assertTrue("PCM was refused: turning passthrough off changes nothing", player.reopened.none { it.passthroughOff })
+    }
+
+    @Test
+    fun passthroughOffIsNoStepWhenThePlayerIsPcmOnlyAlready() {
+        open()
+        player.audioSoftwareTakes = false
+        player.passthrough = false
+        runner.onPlayerError(refusedOutput(EAC3))
+        assertTrue("built PCM only already (Settings off)", player.reopened.none { it.passthroughOff })
     }
 
     private object DefaultRenderersFactoryModes {
