@@ -93,7 +93,7 @@ const defs: MapRow[] = [
     { id: 'whats_new', page: 'about', core: true, title: 'settings.whats_new' },
     { id: 'changelog', page: 'about', core: true, title: 'settings.changelog', details: ['settings.changelog_detail'] },
     { id: 'report_problem', page: 'about', core: true, title: 'settings.report_problem' },
-    { id: 'request_feature', page: 'about', core: false, title: 'web.request_feature', details: ['web.request_feature_detail'] },
+    { id: 'request_feature', page: 'about', core: true, title: 'web.request_feature', details: ['web.request_feature_detail'] },
     { id: 'notices', page: 'about', core: false, title: 'about.notices_title', details: ['about.notices_detail'] },
     { id: 'legal', page: 'about', core: false, title: 'login.legal' },
     { id: 'chip_in', page: 'about', core: false, title: 'support.buy_coffee', details: ['support.pay_upi'] },

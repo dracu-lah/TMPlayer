@@ -293,7 +293,9 @@ object SettingsMap {
         row("tour", ab, "settings.tour", PTD, listOf("settings.tour_body"))
         row("whats_new", ab, "settings.whats_new", PTD)
         row("changelog", ab, "settings.changelog", PTD, listOf("settings.changelog_detail"))
-        row("report_problem", ab, "settings.report_problem", PTD, listOf("settings.report_problem_detail"))
+        row("report_problem", ab, "settings.report_problem", PTD, listOf("settings.report_problem_detail", "settings.report_problem_detail_inbox"))
+        // HX64: an idea, written in the app with the build's inbox, else on GitHub's feature request page.
+        row("request_feature", ab, "settings.request_feature", PTD, listOf("settings.request_feature_detail"))
         row("save_logs", ab, "logs.save", PTD, listOf("logs.save_detail"))
         row("detailed_logs", ab, "logs.detailed", PT, onOff("logs.detailed"))
         row("playback_test", ab, "playbacktest.title", PT, listOf("playbacktest.detail"))
