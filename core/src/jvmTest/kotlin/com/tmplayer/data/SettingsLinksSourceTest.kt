@@ -43,12 +43,19 @@ class SettingsLinksSourceTest {
 
     @Test
     fun `the web app's links land on a page and an anchor it has`() {
-        val settings = File(root, "webapp/src/screens/Settings.tsx").readText()
-        val pages = Regex("""\{\s*id:\s*'([a-z]+)'""").findAll(settings).map { it.groupValues[1] }.toSet()
+        // The page is drawn by Settings.tsx and the files beside it in screens/settings (the page
+        // list and the rows' anchors); an old address (library) lands on the page that took its place.
+        val settings = (listOf(File(root, "webapp/src/screens/Settings.tsx")) +
+            File(root, "webapp/src/screens/settings").listFiles { f -> f.extension == "tsx" }.orEmpty().sortedBy { it.name })
+            .joinToString("\n") { it.readText() }
+        val map = File(root, "webapp/src/ui/settingsMap.ts").readText()
+        val oldPages = Regex("""OLD_PAGES[^=]*=\s*\{([^}]*)\}""").find(map)?.groupValues?.get(1).orEmpty()
+            .let { Regex("""([a-z]+)\s*:""").findAll(it).map { m -> m.groupValues[1] }.toSet() }
+        val pages = Regex("""\{\s*id:\s*'([a-z]+)'""").findAll(settings).map { it.groupValues[1] }.toSet() + oldPages
         assertTrue("the page list was read: $pages", "home" in pages && "library" in pages)
         val anchors = Regex("""id="([a-z-]+)"""").findAll(settings).map { it.groupValues[1] }.toSet()
         val links = sources("webapp/src", "ts", "tsx")
-            .filter { it.name != "Settings.tsx" && ".test." !in it.name }
+            .filter { it.name != "Settings.tsx" && it.parentFile.name != "settings" && ".test." !in it.name }
             .flatMap { Regex("""/settings/([a-z]+)(?:#([a-z-]+))?""").findAll(it.readText()).map { m -> it.name to m } }
             .toList()
         assertTrue("found the links in: $links", links.isNotEmpty())
