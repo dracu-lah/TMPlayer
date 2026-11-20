@@ -66,6 +66,8 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
     }
 
     override suspend fun wipe(profile: Profile, last: Boolean, deleteDownloads: Boolean) {
+        // Its results, alerts and Play actions leave the shade with it (HX88).
+        com.tmplayer.data.ProfileNotifications.clearProfile(app)
         forgetProfile(app, SettingsStore(app), WatchedStore(app), deleteDownloads, last)
     }
 

@@ -10,6 +10,7 @@ import android.media.session.MediaSession
 import android.os.Build
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -48,7 +49,8 @@ object ProfileNotifications {
         else -> choose(hidden, kind)
     }
 
-    private class Posted(val real: Notification, val kind: Kind)
+    /** What was posted, and for which profile ([Accounts.activeFolder] when posted, "" for the adopted one). */
+    private class Posted(val real: Notification, val kind: Kind, val folder: String = Accounts.active.folder.orEmpty())
 
     private val posted = ConcurrentHashMap<Int, Posted>()
 
@@ -88,13 +90,43 @@ object ProfileNotifications {
         builder.setVisibility(Notification.VISIBILITY_PRIVATE)
         real.contentIntent?.let(builder::setContentIntent)
         builder.setOngoing(real.flags and Notification.FLAG_ONGOING_EVENT != 0)
+        // Still dismissed on a tap, and still telling its owner when it is swiped away.
+        builder.setAutoCancel(real.flags and Notification.FLAG_AUTO_CANCEL != 0)
+        real.deleteIntent?.let(builder::setDeleteIntent)
         return builder.build()
     }
 
-    /** Posts again what is still up whenever the open profile hides or shows, the first value too. */
+    /**
+     * Posts again what is still up whenever the open profile hides or shows, the first value too;
+     * takes down every profile notification of the profile left on a switch; and at a cold start
+     * with the open profile hidden, takes down what an earlier process left in the shade, before
+     * anything of this one posts.
+     */
     fun follow(context: Context, scope: CoroutineScope) {
         val app = context.applicationContext
+        if (ProfileUnlock.hiddenNow()) clearLeftBehind(app)
         scope.launch { ProfileUnlock.hidden().collect { hidden -> republish(app, hidden) } }
+        scope.launch { Accounts.activeFolder.drop(1).collect { folder -> leftProfile(app, folder.orEmpty()) } }
+    }
+
+    /** A switch: every notification of another profile than [open] comes down (the device's stay). */
+    internal fun leftProfile(context: Context, open: String) {
+        for ((id, entry) in posted.entries.toList()) {
+            if (entry.kind != Kind.Device && entry.folder != open) cancel(context, id)
+        }
+    }
+
+    /** The open profile signs out (its wipe): all its notifications come down. */
+    fun clearProfile(context: Context) {
+        for ((id, entry) in posted.entries.toList()) if (entry.kind != Kind.Device) cancel(context, id)
+    }
+
+    /**
+     * A cold start with the open profile hidden: what an earlier process posted is unknown here,
+     * so all of it comes down (the device's notices are posted again by their own schedules).
+     */
+    internal fun clearLeftBehind(context: Context) {
+        runCatching { manager(context).cancelAll() }
     }
 
     internal fun republish(context: Context, hidden: Boolean) {
