@@ -65,6 +65,14 @@ class BackupCoverageTest {
         // device's bookkeeping: found again by its caption on a restored device.
         "resume_sync_message", "resume_sync_keys", "resume_sync_file", "resume_sync_favourites", "resume_sync_at",
         "resume_sync_account", "resume_sync_sent_at", "resume_sync_status",
+        // Where the sync file and the backups are kept (HX87): the private channel the viewer chose
+        // is a chat id of one account (and the backup is read out of it, so it cannot say where to
+        // look), its title and account, why it is not used right now (a refused post, a missing
+        // right), which chat the remembered file message and the last new file belong to, and where
+        // an older copy was left. All of it names chats and messages of this account on this device
+        // and is chosen again, or found again by its caption, on a restored one.
+        "sync_channel", "sync_channel_title", "sync_channel_account", "sync_channel_block",
+        "sync_file_chat", "sync_sent_chat", "sync_old_copy",
         // Which kinds of picture this device kept up with in software, and whose "may stutter"
         // question was turned off (HX2): about this device's CPU and decoders, not another's.
         "decode_memory", "heavy_ask_skip",
