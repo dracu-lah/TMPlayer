@@ -59,7 +59,7 @@ export class User {
  * in as account N.
  */
 let storageName = 'tmplayer'
-type FakeSession = { id: number } | { out: true }
+type FakeSession = { id: number } | { out: true } | { corrupt: true }
 function sessionDb(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         const open = indexedDB.open(storageName, 1)
@@ -83,6 +83,8 @@ async function sessionOp(write?: FakeSession): Promise<FakeSession | null> {
 }
 async function signedInAs(): Promise<number | null> {
     const s = await sessionOp().catch(() => null)
+    // A session a test broke on purpose: reading it fails, as a corrupt mtcute store does.
+    if (s && 'corrupt' in s) throw new Error('the stored session cannot be read')
     if (s && 'out' in s) return null
     if (s) return s.id
     return storageName === 'tmplayer' && !flags.has('signedout') ? 1 : null

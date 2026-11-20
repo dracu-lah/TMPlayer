@@ -36,11 +36,14 @@ const storedKeys = (page: Page) =>
             }),
     )
 
-/** Two profiles already on this browser: the adopted one (account 1) and `abc123` (account 2), each with its chats answered. */
-async function twoProfiles(page: Page, extra: { layout?: string; attention?: boolean; pins?: { main?: Pin; abc123?: Pin } } = {}) {
+/**
+ * Two profiles already on this browser: the adopted one (account 1) and `abc123` (account 2), each with
+ * its chats answered. `attention`: abc123 has no session; `corrupt`: its session cannot be read.
+ */
+async function twoProfiles(page: Page, extra: { layout?: string; attention?: boolean; corrupt?: boolean; active?: string; pins?: { main?: Pin; abc123?: Pin } } = {}) {
     await page.goto('/__e2e/sizes')
     await page.evaluate(
-        ({ book, layout, attention }) =>
+        ({ book, layout, attention, corrupt }) =>
             new Promise<void>((resolve) => {
                 localStorage.setItem('tmplayer-accounts', JSON.stringify(book))
                 if (layout) localStorage.setItem('tmplayer-layout', layout)
@@ -59,7 +62,7 @@ async function twoProfiles(page: Page, extra: { layout?: string; attention?: boo
                         tg.onupgradeneeded = () => tg.result.createObjectStore('fake')
                         tg.onsuccess = () => {
                             const t2 = tg.result.transaction('fake', 'readwrite')
-                            t2.objectStore('fake').put({ id: 2 }, 'self')
+                            t2.objectStore('fake').put(corrupt ? { corrupt: true } : { id: 2 }, 'self')
                             t2.oncomplete = () => (tg.result.close(), resolve())
                         }
                     }
@@ -70,12 +73,13 @@ async function twoProfiles(page: Page, extra: { layout?: string; attention?: boo
                 v: 1,
                 profiles: [
                     { id: 'main', name: 'Dana Test', userId: 1, state: 'ok', pin: extra.pins?.main ?? null, fails: 0, lockedUntil: 0, added: 1 },
-                    { id: 'abc123', name: 'Robin Test', userId: 2, state: 'ok', pin: extra.pins?.abc123 ?? null, fails: 0, lockedUntil: 0, added: 2 },
+                    { id: 'abc123', name: 'Robin Test', userId: 2, state: extra.corrupt ? 'attention' : 'ok', pin: extra.pins?.abc123 ?? null, fails: 0, lockedUntil: 0, added: 2 },
                 ],
-                active: 'main',
+                active: extra.active ?? 'main',
             },
             layout: extra.layout,
             attention: extra.attention,
+            corrupt: extra.corrupt,
         },
     )
 }
@@ -85,7 +89,10 @@ const tile = (page: Page, name: RegExp) => picker(page).getByRole('button', { na
 
 /** Settings' list, where the account and its profile menu are. */
 async function openSettings(page: Page) {
-    await page.goto('/settings')
+    // Inside the app, as its own links go: a new page load would ask a PIN profile's PIN again
+    // (an unlock is taken over only by a reload of the tab or a page the tab started itself).
+    if ((await page.locator('main.page').count()) > 0) await page.evaluate(() => (history.pushState(null, '', '/settings'), dispatchEvent(new PopStateEvent('popstate'))))
+    else await page.goto('/settings')
     await expect(page.locator('.set-account, .settings .panel').first()).toBeVisible()
 }
 
@@ -463,7 +470,9 @@ async function danaUnlocked(page: Page) {
     await twoProfiles(page, { pins: { main: dana } })
     await page.evaluate(() => {
         sessionStorage.setItem('tmplayer-tab-profile', 'main')
-        sessionStorage.setItem('tmplayer-tab-unlocked', JSON.stringify({ id: 'main', at: Date.now() }))
+        // As this tab's own page leaves it when it starts the next one on Dana: the unlock and its handoff.
+        sessionStorage.setItem('tmplayer-tab-unlocked', JSON.stringify({ id: 'main', at: Date.now(), token: 'e2etoken0001' }))
+        sessionStorage.setItem('tmplayer-unlock-handoff', 'e2etoken0001')
     })
 }
 
@@ -560,4 +569,105 @@ test('locking again with the picker unable to load covers everything, with Try a
     await reloads(page, () => cover.getByRole('button', { name: 'Try again' }).click())
     await expect(picker(page)).toBeVisible()
     await expect(page.locator('main.page')).toHaveCount(0)
+})
+
+// ---- Third review ----
+
+/** What the screen shows in its middle: inside the picker (or its cover), or the profile's page. */
+const topAtMiddle = (page: Page) =>
+    page.evaluate(() => {
+        const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2)
+        return el?.closest('dialog.profiles, dialog.lock-cover') ? 'picker' : el?.closest('dialog') ? 'other dialog' : 'page'
+    })
+
+test('locking again closes a question that was open, and the picker is on top of everything', async ({ page }) => {
+    await danaUnlocked(page)
+    await page.clock.install()
+    await page.goto('/settings')
+    await page.getByRole('button', { name: 'Sign out of Telegram' }).click()
+    await expect(page.getByRole('dialog', { name: 'Sign out of Dana Test?' })).toBeVisible()
+    await showTab(page, 'hidden')
+    await page.clock.fastForward(61_000)
+    await showTab(page, 'visible')
+    await expect(picker(page)).toBeVisible()
+    // Only the picker is open, in the top layer, and it is what shows.
+    expect(await page.evaluate(() => [...document.querySelectorAll('dialog[open]')].map((d) => d.className))).toEqual(['profiles'])
+    expect(await page.locator('dialog.profiles').evaluate((d) => d.matches(':modal'))).toBe(true)
+    expect(await topAtMiddle(page)).toBe('picker')
+    // Escape does not close it while locked.
+    await page.keyboard.press('Escape')
+    await expect(picker(page)).toBeVisible()
+})
+
+test('on the picker at launch, a profile whose session cannot be read is removed here, and said so', async ({ page }) => {
+    await twoProfiles(page, { corrupt: true, active: 'abc123' })
+    await page.goto('/')
+    await expect(tile(page, /^Robin Test, Needs attention/)).toBeVisible()
+    await tile(page, /^Robin Test/).click()
+    await page.getByRole('dialog', { name: 'Robin Test' }).getByRole('button', { name: 'Remove from this browser' }).click()
+    await reloads(page, () => page.getByRole('dialog', { name: 'Remove Robin Test?' }).getByRole('button', { name: 'Remove', exact: true }).click())
+    await expect(page.getByText('Profile removed')).toBeVisible({ timeout: 15_000 })
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main'])
+    expect((await storedKeys(page)).filter((k) => k.startsWith('@'))).toEqual([])
+    expect(await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name).includes('tmplayer-abc123'))).toBe(false)
+})
+
+test('on the picker at launch, Sign in again on an unreadable session opens its sign in, its lists kept', async ({ page }) => {
+    await twoProfiles(page, { corrupt: true, active: 'abc123' })
+    await page.goto('/')
+    await tile(page, /^Robin Test/).click()
+    await page.getByRole('dialog', { name: 'Robin Test' }).getByRole('button', { name: 'Sign in again' }).click()
+    await expect(page).toHaveURL(/\/signin/, { timeout: 15_000 })
+    await expect(picker(page)).toHaveCount(0)
+    expect(await storedKeys(page)).toContain('@abc123:addedMode')
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main', 'abc123'])
+})
+
+test('a copy of the tab (its sessionStorage in a new tab) does not open the PIN profile', async ({ page, browser }) => {
+    await danaUnlocked(page)
+    await page.goto('/')
+    await expect(page.locator('main.page')).toBeVisible()
+    // Duplicate tab: the original stays open, the copy carries its sessionStorage and the shared localStorage.
+    const stored = await page.evaluate(() => ({ session: { ...sessionStorage }, local: { ...localStorage } }))
+    const copy = await page.context().newPage()
+    await copy.goto('/__e2e/sizes')
+    await copy.evaluate(({ session }) => Object.entries(session).forEach(([k, v]) => sessionStorage.setItem(k, v)), stored)
+    await copy.goto('/')
+    await expect(picker(copy)).toBeVisible()
+    await expect(copy.locator('main.page')).toHaveCount(0)
+    await tile(copy, /^Dana Test/).click()
+    await expect(copy.locator('dialog.pin-dialog')).toBeVisible()
+    await copy.close()
+    // A new browser context restored from the same storage (a session restored after a crash): the same.
+    const restored = await browser.newContext()
+    const again = await restored.newPage()
+    await again.goto('/__e2e/sizes')
+    await again.evaluate(({ session, local }) => {
+        Object.entries(local).forEach(([k, v]) => localStorage.setItem(k, v))
+        Object.entries(session).forEach(([k, v]) => sessionStorage.setItem(k, v))
+    }, stored)
+    await again.reload()
+    await again.goto('/')
+    await expect(picker(again)).toBeVisible()
+    await restored.close()
+    // The original is still open and unlocked.
+    await expect(page.locator('main.page')).toBeVisible()
+    await expect(picker(page)).toHaveCount(0)
+})
+
+test('Remove all refuses, before wiping anything, while a profile is open in another tab', async ({ page, context }) => {
+    await twoProfiles(page)
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('main.page')).toBeVisible()
+    const other = await context.newPage()
+    await other.goto('/')
+    await reloads(other, () => tile(other, /^Robin Test/).click())
+    await expect(other.locator('main.page')).toBeVisible()
+    await openSettings(page)
+    await page.getByRole('button', { name: 'Remove all accounts' }).click()
+    await expect(page.getByText('A profile is open in another tab. Close it there first: nothing was removed')).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'Remove all accounts?' })).toHaveCount(0)
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main', 'abc123'])
+    await other.close()
 })
