@@ -162,6 +162,7 @@ private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
                     if (link.url == About.PRIVACY) s.settingsPrivacyComputer else link.detail,
                     iconFor(link, group),
                     end = RowEnd.External,
+                    service = link.service,
                 ) { OpenExternal.browse(link.url) }
             }
         }

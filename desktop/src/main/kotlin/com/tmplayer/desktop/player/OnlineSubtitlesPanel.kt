@@ -116,6 +116,14 @@ internal fun BoxScope.OnlineSubtitlesPanel(
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Whose list this is: the service's logo, drawn only, so the title beside it is read once.
+                com.tmplayer.ui.components.ServiceBadge(
+                    if (msone) com.tmplayer.ui.components.Service.MSone
+                    else if (submaker) com.tmplayer.ui.components.Service.SubMaker
+                    else com.tmplayer.ui.components.Service.OpenSubtitles,
+                    modifier = Modifier.padding(end = 10.dp),
+                    size = com.tmplayer.ui.components.ServiceBadgeSize.Line,
+                )
                 Text(if (msone) s.msoneTitle else if (submaker) s.submakerTitle else s.onlineResultsTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 OverlayButton(TmIcons.Close, s.commonClose, onClose, size = 32)
             }

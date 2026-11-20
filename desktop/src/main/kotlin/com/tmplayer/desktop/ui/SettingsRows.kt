@@ -164,6 +164,8 @@ internal fun Setting(
     iconTint: Color = Tone.accent,
     onClick: (() -> Unit)? = null,
     toggled: Boolean? = null,
+    /** The service the row is about: its badge takes the icon chip's place (HX93). */
+    service: com.tmplayer.ui.components.Service? = null,
     selected: Boolean = false,
     control: @Composable () -> Unit,
 ) {
@@ -197,7 +199,7 @@ internal fun Setting(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
-                SettingIconChip(icon, tint = iconTint)
+                SettingIconChip(icon, tint = iconTint, service = service)
                 Spacer(Modifier.width(16.dp))
             }
             WordsAndControl(
@@ -295,6 +297,7 @@ internal fun Action(
     value: String? = null,
     end: RowEnd = RowEnd.Chevron,
     enabled: Boolean = true,
+    service: com.tmplayer.ui.components.Service? = null,
     onClick: () -> Unit,
 ) {
     Setting(
@@ -304,6 +307,7 @@ internal fun Action(
         modifier = modifier,
         icon = icon,
         iconTint = iconTint,
+        service = service,
         onClick = if (enabled) onClick else null,
     ) { RowTail(value, end) }
 }
@@ -332,9 +336,10 @@ internal fun Toggle(
     checked: Boolean,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    service: com.tmplayer.ui.components.Service? = null,
     onChange: (Boolean) -> Unit,
 ) {
-    Setting(title, detail, modifier = modifier, icon = icon, onClick = { onChange(!checked) }, toggled = checked) {
+    Setting(title, detail, modifier = modifier, icon = icon, service = service, onClick = { onChange(!checked) }, toggled = checked) {
         Switch(checked = checked, onCheckedChange = null)
     }
 }
