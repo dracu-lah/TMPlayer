@@ -352,6 +352,8 @@ class ProfilesGateTest {
         flow.add()
         rule.waitForIdle()
         rule.onNodeWithText(L.profilesSwitchPlayTitle(name = L.profilesAdd)).assertExists()
+        // The shell stays composed under the panel, so Cancel lands back where it came from.
+        rule.onNodeWithText(HOME).assertExists()
         rule.onNodeWithText(L.commonCancel).performClick()
         rule.waitForIdle()
         rule.onNodeWithText(HOME).assertExists()
