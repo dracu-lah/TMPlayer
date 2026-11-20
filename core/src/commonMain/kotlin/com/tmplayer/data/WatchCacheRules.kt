@@ -121,7 +121,7 @@ class WatchCacheRules(
      * Telegram's limit ([SplitPieces]), each with the id it plays as. Every piece is recorded, and
      * under either rule all of them are kept together, as the one video the cache now holds.
      */
-    suspend fun claimAll(pieces: List<Pair<MediaItem, Int>>, chatTitle: String) = claiming.withLock {
+    suspend fun claimAll(pieces: List<Pair<MediaItem, Int>>, chatTitle: String) = owned { claiming.withLock {
         if (pieces.isEmpty()) return@withLock
         val ids = pieces.mapTo(HashSet()) { it.second }
         inFlight += ids
@@ -139,7 +139,17 @@ class WatchCacheRules(
         } finally {
             inFlight -= ids
         }
-    }
+    } }
+
+    /**
+     * As the profile open when the work started (HX88): every delete after checks it is still
+     * that profile's turn ([deleteAndForget]), the claim path's too.
+     */
+    private suspend fun <T> owned(block: suspend () -> T): T =
+        if (kotlinx.coroutines.currentCoroutineContext()[AccountOwner] != null) block() else withContext(AccountOwner(stamp())) { block() }
+
+    /** The profile of the work under way: its [AccountOwner], or the one open now. */
+    private suspend fun ownerNow(): AccountStamp = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: stamp()
 
     /**
      * Deletes every cached video except [keepFileId], and forgets the records once they are gone.
@@ -150,7 +160,9 @@ class WatchCacheRules(
     suspend fun evictAllBut(keepFileId: Int) = evictAllBut(setOf(keepFileId))
 
     /** [evictAllBut] keeping every one of [keepFileIds]: the pieces of one video cut into several. */
-    suspend fun evictAllBut(keepFileIds: Set<Int>) {
+    suspend fun evictAllBut(keepFileIds: Set<Int>): Unit = owned { evictAllButOwned(keepFileIds) }
+
+    private suspend fun evictAllButOwned(keepFileIds: Set<Int>) {
         val cached = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
         if (cached.isEmpty()) return
         val busyNow = busy()
@@ -182,7 +194,9 @@ class WatchCacheRules(
         evictOverCap(capBytes, listOfNotNull(keepFileId).toSet())
 
     /** [evictOverCap] sparing every one of [keepFileIds]. */
-    suspend fun evictOverCap(capBytes: Long, keepFileIds: Set<Int>): Long {
+    suspend fun evictOverCap(capBytes: Long, keepFileIds: Set<Int>): Long = owned { evictOverCapOwned(capBytes, keepFileIds) }
+
+    private suspend fun evictOverCapOwned(capBytes: Long, keepFileIds: Set<Int>): Long {
         val cached = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
         if (cached.isEmpty()) return 0L
         val spared = (busy() + playing() + inFlight.toSet() + keptFileIds() + keepFileIds).toMutableSet()
@@ -230,10 +244,17 @@ class WatchCacheRules(
      * @param knownPaths the local paths of everything the app can name, asked of TDLib by the
      *   caller: only it knows which records are worth resolving.
      */
-    fun strays(knownPaths: Set<String>): List<Stray> = straysIn(filesRoot(), knownPaths)
+    fun strays(knownPaths: Set<String>, owner: AccountStamp = stamp()): List<Stray> =
+        straysIn(rootFor?.invoke(owner) ?: filesRoot(), knownPaths)
 
     /** Removes one stray from the disk. TDLib refetches it if the video is ever played again. */
-    fun forget(stray: Stray): Boolean = runCatching { File(stray.path).delete() }.getOrDefault(false)
+    fun forget(stray: Stray, owner: AccountStamp = stamp()): Boolean {
+        // Only while the profile whose folder it is in is open and no switch is under way (HX88).
+        if (!mayAct(owner)) return false
+        val folder = (rootFor?.invoke(owner) ?: filesRoot()).absoluteFile
+        if (!File(stray.path).absoluteFile.startsWith(folder)) return false
+        return runCatching { File(stray.path).delete() }.getOrDefault(false)
+    }
 
     /**
      * Takes the videos nothing owns, without being asked, and under [CacheRule.UnderCap] brings the
@@ -284,7 +305,7 @@ class WatchCacheRules(
         for (stray in straysIn(folder, (accounted + open).toSet())) {
             if (!mayAct(owner)) break
             if (stray.modifiedAt > settled) continue
-            if (forget(stray)) freed += stray.bytes
+            if (forget(stray, owner)) freed += stray.bytes
         }
         freed
     }
@@ -349,6 +370,8 @@ class WatchCacheRules(
 
     /** Deletes, then forgets the record only if the bytes really went. Returns the bytes freed. */
     private suspend fun deleteAndForget(record: ResumeRecord, fileId: Int): Long {
+        // Only for the profile the work is for, while it is open and no switch is under way.
+        if (!mayAct(ownerNow())) return 0L
         val held = bytesOf(fileId)
         runCatching { td.deleteFile(fileId) }
         if (bytesOf(fileId) > 0) return 0L

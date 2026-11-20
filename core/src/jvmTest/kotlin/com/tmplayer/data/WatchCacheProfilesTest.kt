@@ -110,4 +110,57 @@ class WatchCacheProfilesTest {
         assertTrue(ofA2.exists())
         assertTrue(ofB.exists())
     }
+
+    private fun clip(id: Int) = MediaItem(
+        chatId = 7, messageId = id.toLong(), fileId = id, title = "Clip $id", sizeBytes = 64, durationSec = 60,
+        mimeType = "video/mp4", thumbnailFileId = 0, miniThumbnail = null, date = 0,
+    )
+
+    @Test
+    fun `a claim made for a profile no longer open deletes nothing`() = runBlocking {
+        val deleted = mutableListOf<Int>()
+        val td = object : TdFiles {
+            override suspend fun currentFileId(chatId: Long, messageId: Long, storedFileId: Int) = storedFileId
+            override suspend fun deleteFile(fileId: Int) { deleted += fileId }
+            override suspend fun localDownloadedBytes(fileId: Int) = if (fileId in deleted) 0L else 64L
+            override suspend fun localPathAnyway(fileId: Int): String? = null
+        }
+        var acting = true
+        // The real stamp: the store drops writes of any other owner, as in the app.
+        val claims = WatchCacheRules(settings, filesRoot = { rootA }, td = td, busy = { emptySet() }, mayAct = { acting })
+        claims.claim(clip(1), "Chat")
+        // The next video's claim lands after the profile changed (from the app's scope).
+        acting = false
+        claims.claim(clip(2), "Chat")
+        assertTrue("nothing of the last profile deleted: $deleted", deleted.isEmpty())
+        acting = true
+        claims.claim(clip(3), "Chat")
+        assertTrue("its own claim still makes room: ${settings.cachedVideosNow().map { it.fileId }}", deleted.isNotEmpty())
+    }
+
+    @Test
+    fun `a stray outside the profile's own folder is never removed`() {
+        val ofB = stray(rootB, "b.mkv")
+        val rules = WatchCacheRules(settings, filesRoot = { rootA }, busy = { emptySet() }, stamp = { a }, rootFor = { rootA }, mayAct = { true })
+        assertTrue(!rules.forget(WatchCacheRules.Stray(ofB.absolutePath, ofB.length(), ofB.lastModified()), a))
+        assertTrue(ofB.exists())
+    }
+
+    @Test
+    fun `wired without seams, a sweep during a switch under way deletes nothing`() = runBlocking {
+        val ofA = stray(rootA, "a.mkv")
+        val book = AccountBook(AccountStore(File(Files.createTempDirectory("switching").toFile(), Accounts.FILE_NAME)))
+        Accounts.resetForTest(book)
+        try {
+            book.update { it.copy(switchingTo = it.activeId) }
+            // The real seams: the stamp is Accounts', and the switch is read from the book.
+            WatchCacheRules(settings, filesRoot = { rootA }, busy = { emptySet() }).sweep()
+            assertTrue("a switch under way: nothing walked or deleted", ofA.exists())
+            book.update { it.copy(switchingTo = null) }
+            WatchCacheRules(settings, filesRoot = { rootA }, busy = { emptySet() }).sweep()
+            assertFalse("once it is over the sweep runs as before", ofA.exists())
+        } finally {
+            Accounts.resetForTest()
+        }
+    }
 }
