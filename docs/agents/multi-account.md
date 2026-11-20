@@ -206,7 +206,8 @@ Phase B, per platform:
 6. A PIN profile's content never shows outside the app while it is hidden: every notification
    goes through `ProfileNotifications`, the launcher through `OutsideWrites`, both policed by tests.
 7. A sign out discards what belongs to the session it ends (paused downloads, results in the
-   shade); nothing of an old TDLib database is resumed on a new one.
+   shade); nothing of an old TDLib database is resumed on a new one: whatever keeps file ids for
+   later keeps the database marker with them and is dropped when it differs (`DatabaseMarker`).
 
 ## Phase B1: the shared screens and Android
 
@@ -270,9 +271,14 @@ File walkers, trimmers and cleaners (audited, HX88), each over the open profile'
 - The picture, TMDB and online subtitle caches: the device's, shared by every profile (one budget),
   nothing of an account in them; the TDLib cache budget is shared too (`Td.cacheCeilingBytes`).
 
-The downloads a switch paused are kept per profile on the device (`PausedForSwitch`): they go on
-again when that profile is open next, after a Cancel, a switch back, or a process that died while
-the switch waited.
+The downloads a switch paused are kept per profile on the device (`PausedForSwitch`, merged,
+never overwritten by a retry): they go on again when that profile is open next, after a Cancel,
+a switch, Add account, sign out or Remove all accounts that failed or did not happen, a switch
+back, or a process that died while the switch waited. A sign out and a session Telegram ended
+drop them. Every stored set and the stored download queue carry the TDLib database's marker
+(`DatabaseMarker`, a random id kept in the profile's database folder, made anew when the folder
+is wiped, renewed on a sign out and an ended session); one of another database is dropped, never
+resumed. A queue from before markers is taken as the current database's once and then marked.
 
 The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
 background scope as the profile open when they were asked (`AccountOwner`), so one that lands
