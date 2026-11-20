@@ -219,21 +219,24 @@ Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
 
 ### What shows a profile outside the app, and its lock rule
 
-Each reads `ProfileUnlock.hidden()` or `hiddenNow()`: true while the open profile has a PIN not
-given in this process.
+Two readings in `ProfileUnlock`. Inside the app, `lockedNow()`: the open profile has a PIN that
+was not given in this process, or the app was away more than 60 s (or the clock went backwards),
+counted when read, before any timer ran. Outside the app, `hidden()` and `hiddenNow()`: a PIN
+profile is hidden whenever it is locked AND whenever no window of the app is on screen, from the
+moment it leaves (a frozen or killed process leaves nothing behind); it shows again once the app
+is open and the profile unlocked. `onBackground` also schedules the `lock()` itself, so listeners
+hear it while the app is away. Every writer goes through `OutsideWrites.mayWriteNow(stamp)`:
+nothing is written while hidden or for a profile no longer open; removing always may.
 
 | Surface | Rule |
 | --- | --- |
-| Continue watching widget (phone) | the Locked tile (`ContinueWidget.lockedBy(lock, profileLocked)`) |
-| TV home channels (Android TV) | not published while hidden; cleared whenever `hidden()` is true, its first value included (a cold start with the profile locked), by `OutsideSurfaces` |
-| TV Play next row | cleared with the channels (`WatchNextPublisher.clearAll`) |
-| New video, episode and piece alerts | none posted for a hidden profile (the absence counted when read), nor for a sleeping one |
-
-The background lock is counted where it is read: `hiddenNow()`, `hidden()` and `isUnlocked()`
-treat more than 60 s away (or a clock that went backwards) as locked before any timer ran, and
-`onBackground` also schedules the `lock()` itself, so the listeners and the flows hear it while
-the app is still away.
-| Download notifications | titles of the open profile's own downloads; a switch stops them (open) |
-| Player media session and picture in picture | the player closes before a switch (open: a locked state while playing in the background is not checked) |
-| Recents screenshot | not covered: the app lock's own rule applies (open) |
+| Continue watching widget (phone) | the Locked tile while hidden (`ContinueWidget.lockedBy(lock, profileLocked)`), worked out again on every switch |
+| TV home channels (Android TV) | `TvChannelsPublisher.publish` refuses under its lock while hidden or for a stale stamp; cleared by `OutsideSurfaces` whenever `hidden()` is true (its first value included) and on every switch; Home's last plan is forgotten when hidden, so it is written in full again |
+| TV Play next row | `WatchNextPublisher.apply` refuses each upsert while hidden or for a stale stamp (the player passes the stamp it opened under); cleared with the channels |
+| New video, episode and piece alerts | none posted while hidden, checked again right before each post, nor for a sleeping profile |
+| Download notifications | the app's name instead of the title while hidden; no result notification while hidden; a switch stops the downloads |
+| Player media session and controls | the app's name only while hidden (as with the app lock asking on open); the player closes on start when `lockedNow()` and before a switch |
+| Recents thumbnail | while the open profile has a PIN: Android 13 and later `setRecentsScreenshotEnabled(false)`; below 13 `FLAG_SECURE`, which also blocks screenshots, screen recording and some casting of that window (MainActivity and PlayerActivity); off when the open profile has no PIN |
+| Trailers, offline downloads, "Wrong title?" | drawn inside `ProfilesGate`, keyed on the open profile: a switch or a lock closes them |
+| Toasts (`TopMessageHost`) | outside the gate: a short message may still name a video for a few seconds (open) |
 | Share targets, shortcuts | none exist today |
