@@ -1,0 +1,43 @@
+/* The service tile (ServiceBadge.tsx): a rounded square, decoration only. A logo sits on a white chip
+   that reads on both themes and on a TV; an initial wears the name's colour with white on it. */
+.svc-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    box-sizing: border-box;
+    overflow: hidden;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    user-select: none;
+    pointer-events: none;
+}
+.svc-tile.svc-logo {
+    background: #fff;
+    padding: 10%;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.svc-tile svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    /* A mark is never turned or mirrored, in a right to left language too. */
+    transform: none;
+}
+.svc-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+.svc-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.svc-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+}
