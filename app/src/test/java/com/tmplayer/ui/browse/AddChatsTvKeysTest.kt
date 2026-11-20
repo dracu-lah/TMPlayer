@@ -25,11 +25,13 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.ChatVideoCount
 import com.tmplayer.data.CountAnswer
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -51,6 +53,10 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [28], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
 class AddChatsTvKeysTest {
+
+    /** Without it a state write left on the looper at the end of one test silences Compose for the rest of the class (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {
