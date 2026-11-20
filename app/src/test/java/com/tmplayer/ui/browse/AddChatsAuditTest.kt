@@ -114,8 +114,11 @@ class AddChatsAuditTest {
         // What a viewer needs on the first screen: leaving, finding, choosing, finishing.
         val must = buildList<Pair<String, String>> {
             if (!tv) add("Back" to "Back")
-            add("Done" to "Save with no chats")
-            add("count" to "No chats chosen yet")
+            // Saved Messages is ticked for a fresh start (HX86), so Done is Done and one chat is chosen.
+            add("Done" to "Done")
+            add("count" to "1 chat chosen")
+            // The All chats switch is on the first screen of every form factor (HX86).
+            add("All chats switch" to "All chats")
             add("scope All" to "All")
             add("scope Channels" to "Channels")
             add("scope Archived" to "Archived")

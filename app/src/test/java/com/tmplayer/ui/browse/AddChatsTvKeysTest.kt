@@ -28,6 +28,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,8 +41,9 @@ import java.io.File
 
 /**
  * The three pane picker with a remote alone on a large account (HX76): 3,000 chats, the mandatory
- * choice as the setup step shows it. Every line of the focus map: start on Done when the
- * Recommended band ticked something (no longer: nothing is ticked for the viewer), else the first row; the rail, the list and the panel each
+ * choice as the setup step shows it. Every line of the focus map: start on Done over a choice
+ * already made, else on the first row (a fresh install has Saved Messages ticked, HX86), and on the
+ * All chats switch while it is on; the rail, the list and the panel each
  * answer Left, Right, Up, Down and Back; the chats with no videos fold into one row that opens in
  * place; a held Down speeds up; the search keyboard's Search lands on a row.
  */
@@ -56,10 +58,10 @@ class AddChatsTvKeysTest {
     }
 
     @Test
-    fun `the remote starts on the first row when the Recommended band is shown, nothing is ticked for the viewer`() {
+    fun `the remote starts on the first row when the Recommended band is shown, only Saved Messages is ticked for a fresh start`() {
         val model = AddChatsViewModel(counts = Counts, write = {})
         val activity = open(model, chats = CHATS)
-        assertTrue(model.state.value.ticked.isEmpty())
+        assertEquals("Saved Messages is the one tick of a fresh install (HX86)", setOf(100L), model.state.value.ticked)
         assertEquals(listOf("Saved Messages"), focusedTitle(activity))
         save("add-chats-tv-three-panes.png", draw(activity))
         model.stop()
@@ -115,9 +117,9 @@ class AddChatsTvKeysTest {
         save("add-chats-tv-row-focus-moved.png", draw(activity))
         val row = focusedTitle(activity)
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
-        assertEquals(listOf("Save with no chats"), focusedWords(activity))
+        assertEquals(listOf("Done"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
-        assertEquals("No Select all on TV: Down stays on Done", listOf("Save with no chats"), focusedWords(activity))
+        assertEquals("No Select all on TV: Down stays on Done", listOf("Done"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         assertEquals("Left goes back to the row it came from", row, focusedTitle(activity))
         model.stop()
@@ -146,16 +148,19 @@ class AddChatsTvKeysTest {
     /**
      * The setup's one question on a television (R3): the remote starts on the first chat, OK ticks
      * it, Right goes to Done, and Back climbs to the rail and then asks "Leave without choosing?".
-     * Nothing is ticked for the viewer and Done is off until a chat is.
+     * Saved Messages is ticked for a fresh start (HX86), so Done is on; OK on it unticks it, which
+     * turns Done off again until a chat is ticked.
      */
     @Test
     fun `the setup question on a television, first chat, OK ticks, Right goes to Done, Back asks`() {
         val model = AddChatsViewModel(counts = null, write = {})
         var left = 0
         val activity = open(model, chats = CHATS, onLeave = { left++ }, confirmLeave = true)
-        assertTrue("nothing is ticked for the viewer", model.state.value.ticked.isEmpty())
+        assertEquals("Saved Messages is ticked for a fresh start", setOf(100L), model.state.value.ticked)
         assertTrue("the question is the heading", nodes(activity).any { words(it).contains("Which chats have your videos?") })
         assertEquals("focus starts on the first chat", listOf("Saved Messages"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertTrue("OK unticks it", model.state.value.ticked.isEmpty())
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
         assertEquals("OK ticks the chat", 1, model.state.value.ticked.size)
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
@@ -222,7 +227,8 @@ class AddChatsTvKeysTest {
         idle()
         val place = focusedTitle(activity).single().removePrefix("Chat number ").toInt()
         val head = ChatPicking.headStart(CHATS).toSet()
-        assertTrue("the held Down went past the head start, to $place", 1_000L + place > head.max() + 40)
+        // The switch above the rows takes a row's height of the list, so a jump is a row shorter (HX86).
+        assertTrue("the held Down went past the head start, to $place", 1_000L + place > head.max() + 25)
         // Counted: the head start, and the rows on screen where the remote stopped. Not the
         // screenfuls in between, each a Telegram call whose answer rebuilt the list mid-jump.
         val passed = asked.filter { it !in head && it < 1_000L + place - 20 }
@@ -263,21 +269,23 @@ class AddChatsTvKeysTest {
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
         assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertEquals(model.state.value.recommended.toSet(), model.state.value.ticked)
+        assertEquals(model.state.value.recommended.toSet() + 100L, model.state.value.ticked)
         assertEquals("the remote stays on the button", listOf("Remove these 12 chats"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertTrue(model.state.value.ticked.isEmpty())
+        assertEquals("the band is out again, Saved Messages stays", setOf(100L), model.state.value.ticked)
         assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
         assertEquals("Down goes on to the band's first chat", listOf("Chat number 1"), focusedTitle(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_UP)
         assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
-        // Nothing ticked in the required choice: Done is off, so Right stays on the button.
+        // Saved Messages is ticked, so Done is on and Right goes to it.
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
-        assertEquals(listOf("Add these 12 chats"), focusedWords(activity))
+        assertEquals("Right goes to Done", listOf("Done"), focusedWords(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
-        assertEquals("Right goes to Done once something is ticked", listOf("Done"), focusedWords(activity))
+        assertEquals(listOf("Done"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         assertEquals("Left goes back to the last row the remote stood on", listOf("Chat number 1"), focusedTitle(activity))
         model.stop()
@@ -292,7 +300,7 @@ class AddChatsTvKeysTest {
         val activity = open(model, chats = CHATS, onLeave = { left++ }, confirmLeave = true)
         press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertEquals(12, model.state.value.ticked.size)
+        assertEquals(13, model.state.value.ticked.size)
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
         assertTrue("Back from the button goes to the rail: ${focusedWords(activity)}", focusedWords(activity).contains("All"))
@@ -305,7 +313,7 @@ class AddChatsTvKeysTest {
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
         assertTrue(nodes(activity).none { words(it).contains("Leave without choosing?") })
-        assertEquals(12, model.state.value.ticked.size)
+        assertEquals(13, model.state.value.ticked.size)
         // The remote went back to Done, so Back climbs to the rail first and the next one asks again.
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
@@ -325,8 +333,13 @@ class AddChatsTvKeysTest {
         var went = 0
         val activity = open(model, chats = CHATS.take(12), onContinue = { went++ })
         assertTrue("nothing to recommend", model.state.value.recommended.isEmpty())
-        assertTrue(nodes(activity).any { words(it).contains("Continue without choosing") })
+        // Saved Messages is ticked for a fresh start (HX86), so Done works and nothing is offered
+        // until the viewer unticks it: then the way out comes back.
+        assertTrue(nodes(activity).none { words(it).contains("Continue without choosing") })
         assertEquals(listOf("Saved Messages"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertTrue(model.state.value.ticked.isEmpty())
+        assertTrue(nodes(activity).any { words(it).contains("Continue without choosing") })
         // Done is off with nothing ticked, so Right lands on the way out instead of staying put.
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
         assertEquals(listOf("Continue without choosing"), focusedWords(activity))
@@ -393,7 +406,7 @@ class AddChatsTvKeysTest {
         press(activity, KeyEvent.KEYCODE_DPAD_UP)
         assertEquals(listOf("Add these 5 chats"), focusedWords(activity))
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertEquals(setOf(2_003L, 2_004L, 2_005L, 3_001L, 3_002L), model.state.value.ticked)
+        assertEquals(setOf(100L, 2_003L, 2_004L, 2_005L, 3_001L, 3_002L), model.state.value.ticked)
         assertEquals(listOf("Remove these 5 chats"), focusedWords(activity))
         // The button hands Back to the rail like a row does.
         activity.onBackPressedDispatcher.onBackPressed()
@@ -402,7 +415,7 @@ class AddChatsTvKeysTest {
         press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
         press(activity, KeyEvent.KEYCODE_DPAD_UP)
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertTrue("the second press takes them out again", model.state.value.ticked.isEmpty())
+        assertEquals("the second press takes them out again, Saved Messages stays", setOf(100L), model.state.value.ticked)
         model.stop()
     }
 
@@ -453,6 +466,64 @@ class AddChatsTvKeysTest {
         idle()
         // Loud 1 is in Films only: it is listed because the vanished folder is no filter any more.
         assertTrue(nodes(activity).any { words(it).contains("Loud 1") })
+        model.stop()
+    }
+
+    // ---- The All chats switch (HX86) ---------------------------------------------------------
+
+    /**
+     * The switch is the first stop above the rows: Up from the first row reaches it, OK flips it,
+     * and with it on the rows are disabled, so Down goes straight to Done.
+     */
+    @Test
+    fun `the All chats switch is above the rows, OK flips it, and with it on Down skips the disabled ticks to Done`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        val activity = open(model, chats = CHATS, required = false)
+        assertEquals(listOf("Saved Messages"), focusedTitle(activity))
+        press(activity, KeyEvent.KEYCODE_DPAD_UP)
+        assertTrue("Up from the first row reaches the switch: ${focusedWords(activity)}", focusedWords(activity).contains("All chats"))
+        assertFalse(model.state.value.allChats)
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertTrue("OK turns it on", model.state.value.allChats)
+        assertEquals("the ticks are kept", setOf(100L), model.state.value.ticked)
+        assertTrue("it says On for a screen reader", nodes(activity).any { node ->
+            node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "On"
+        })
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        assertFalse("OK turns it off again", model.state.value.allChats)
+        press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        assertEquals("Down skips the disabled ticks to Done", listOf("Done"), focusedWords(activity))
+        assertTrue("the foot says why", nodes(activity).any { words(it).contains("All chats is on") })
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        model.stop()
+    }
+
+    @Test
+    fun `an account opened with All chats on starts the remote on the switch, and Done works with nothing ticked`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        model.clear(setOf(100L))
+        model.setAllChats(true, CHATS, listComplete = true)
+        var went = 0
+        val activity = open(model, chats = CHATS, onContinue = { went++ })
+        assertTrue("the remote starts on the switch: ${focusedWords(activity)}", focusedWords(activity).contains("All chats"))
+        assertTrue(model.state.value.ticked.isEmpty())
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals("Right goes to Done, which is on in the required choice", listOf("Done"), focusedWords(activity))
+        assertTrue(nodes(activity).none { words(it).contains("Continue without choosing") })
+        model.stop()
+    }
+
+    @Test
+    fun `the folders in the rail and the Recommended band are greyed while All chats is on`() {
+        val model = AddChatsViewModel(counts = null, write = {})
+        model.setAllChats(true, FOLDERED, listComplete = true)
+        val activity = open(model, chats = FOLDERED, folders = FOLDERS, required = false)
+        press(activity, KeyEvent.KEYCODE_DPAD_DOWN)
+        press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
+        repeat(6) { press(activity, KeyEvent.KEYCODE_DPAD_DOWN) }
+        press(activity, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals("a folder is not chosen while every chat counts", null, model.state.value.folder)
         model.stop()
     }
 

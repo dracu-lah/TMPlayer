@@ -1,7 +1,7 @@
 // The Add chats picker's rules, the web twin of core's ChatPickingTest. `node --test src/ui/picking.test.ts`
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { adding, allTicked, changed, clearVisible, counted, FALLBACK, headStart, MAX_BAND, MIN_VIDEOS, needsConfirm, pickRows, recommend, refine, scanOrder, selectAll, visibleIds, type PickChat } from './picking.ts'
+import { adding, afterAllOff, allTicked, changed, clearVisible, counted, FALLBACK, freshTicks, headStart, MAX_BAND, MIN_VIDEOS, needsConfirm, pickRows, recommend, refine, scanOrder, selectAll, visibleIds, type PickChat } from './picking.ts'
 
 type Chat = PickChat & { title: string }
 const chat = (id: number, title: string, more: Partial<Chat> = {}): Chat => ({ id, title, kind: 'channel', self: false, ...more })
@@ -147,4 +147,24 @@ test('scanOrder reads channels before groups before people, recency inside each'
         { id: 5, kind: 'channel', self: false },
     ]
     assert.deepEqual(scanOrder(list).map((x) => x.id), [4, 3, 5, 2, 1])
+})
+
+// ---- All chats (HX86): the twin of core's ChatPickingTest ---------------------------------------
+
+test('a fresh start ticks Saved Messages alone, and nothing while the list has not brought it', () => {
+    assert.deepEqual([...freshTicks(all)], [1])
+    assert.deepEqual([...freshTicks(all.slice(1))], [])
+})
+
+test('switching all chats off brings the kept ticks back, minus a chat since left', () => {
+    assert.deepEqual([...afterAllOff(new Set([2, 3]), all, true)], [2, 3])
+    assert.deepEqual([...afterAllOff(new Set([2, 99]), all, true)], [2])
+    // A list still on its way never calls a chat gone.
+    assert.deepEqual([...afterAllOff(new Set([2, 99]), all, false)], [2, 99])
+})
+
+test('switching all chats off never leaves an empty set, it returns to Saved Messages', () => {
+    assert.deepEqual([...afterAllOff(new Set(), all, true)], [1])
+    assert.deepEqual([...afterAllOff(new Set([99]), all, true)], [1])
+    assert.deepEqual([...afterAllOff(new Set(), all.slice(1), true)], [])
 })

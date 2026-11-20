@@ -7,8 +7,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
@@ -73,6 +76,12 @@ class AddChatsRenderTest {
             }
         }
         waitForIdle()
+        // Saved Messages is ticked for a fresh start (HX86): Done works and nothing else is offered
+        // until the viewer unticks it.
+        onNode(hasText("Choose at least one chat")).assertDoesNotExist()
+        onNode(hasText("Continue without choosing") and hasClickAction()).assertDoesNotExist()
+        onNode(hasText("Saved Messages") and hasClickAction()).performClick()
+        waitForIdle()
         onNode(hasText("Choose at least one chat")).assertExists()
         onNode(hasText("Continue without choosing") and hasClickAction()).performClick()
         assertEquals(1, went)
@@ -104,7 +113,11 @@ class AddChatsRenderTest {
         waitForIdle()
         onNode(hasText("Which chats have your videos?")).assertExists()
         onNode(hasText("Back") and hasClickAction()).assertDoesNotExist()
-        // Nothing ticked: Done says what is missing and cannot be pressed.
+        // Saved Messages is ticked for a fresh start (HX86): Done works. Untick it and Done says what
+        // is missing and cannot be pressed.
+        onNode(hasText("Done") and hasClickAction()).assertExists()
+        onNode(hasText("Saved Messages") and hasClickAction()).performClick()
+        waitForIdle()
         onNode(hasText("Choose at least one chat")).assertExists()
         onNode(hasText("Choose at least one chat") and hasClickAction()).assertDoesNotExist()
         onNode(hasText("Done") and hasClickAction()).assertDoesNotExist()
@@ -151,7 +164,7 @@ class AddChatsRenderTest {
         onNode(hasText("Lantern Club") and hasClickAction()).assertDoesNotExist()
         onNode(hasText("Add these 3 chats") and hasClickAction()).performClick()
         waitForIdle()
-        assertEquals(setOf(201L, 203L, 204L), model.state.value.ticked)
+        assertEquals(setOf(200L, 201L, 203L, 204L), model.state.value.ticked)
         onNode(hasText("Family") and hasClickAction()).performClick()
         waitForIdle()
         // Mira is in both folders and ticked already: she is not asked twice, and Films' other chats stay.
@@ -159,7 +172,7 @@ class AddChatsRenderTest {
         onNode(hasText("All") and hasClickAction()).performClick()
         waitForIdle()
         assertEquals(null, model.state.value.folder)
-        assertEquals(setOf(201L, 203L, 204L), model.state.value.ticked)
+        assertEquals(setOf(200L, 201L, 203L, 204L), model.state.value.ticked)
         model.stop()
     }
 
@@ -179,10 +192,10 @@ class AddChatsRenderTest {
         onNode(hasText("Add these 81 chats") and hasClickAction()).performClick()
         waitForIdle()
         onNode(hasText("Select 81 chats?")).assertExists()
-        assertTrue("nothing ticked before the answer", model.state.value.ticked.isEmpty())
+        assertEquals("only Saved Messages is ticked before the answer", setOf(200L), model.state.value.ticked)
         onNode(hasText("Select") and hasClickAction()).performClick()
         waitForIdle()
-        assertEquals(81, model.state.value.ticked.size)
+        assertEquals(82, model.state.value.ticked.size)
         model.stop()
     }
 
@@ -358,6 +371,57 @@ class AddChatsRenderTest {
             204L -> chat.copy(folderIds = listOf(7, 8))
             else -> if (chat.id in 2_001L..2_080L) chat.copy(folderIds = listOf(8)) else chat
         }
+    }
+
+    /**
+     * The All chats switch on the desktop (HX86): a clickable row above the search that reads On or
+     * Off, the folder chips are greyed with the line "All chats is on" while it is on, a tick and
+     * Select all change nothing, Done works with nothing ticked, and off brings the ticks back.
+     */
+    @Test
+    fun `the All chats switch greys the folders and the ticks while on and gives them back off`() = runComposeUiTest {
+        val written = mutableListOf<com.tmplayer.data.AddedChoice>()
+        val model = AddChatsViewModel(write = {}, writeChoice = { written += it })
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1280.dp, 900.dp)) {
+                    AddChatsScreen(chats = withFolders(), listComplete = true, starred = emptySet(), model = model, onClose = {}, folders = FOLDERS)
+                }
+            }
+        }
+        waitForIdle()
+        val switch = androidx.compose.ui.test.SemanticsMatcher("the All chats switch") { node ->
+            node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text).orEmpty().any { it.text == "All chats" } &&
+                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) != null
+        }
+        onNode(switch).assertExists()
+        assertEquals("Off", onNode(switch).fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription))
+        onNode(hasText("Harbour Notes") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(setOf(200L, 201L), model.state.value.ticked)
+        onNode(switch).performClick()
+        waitForIdle()
+        assertEquals("On", onNode(switch).fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription))
+        // In the switch and in the foot: the line the greyed controls point at.
+        assertTrue(onAllNodes(hasText("All chats is on")).fetchSemanticsNodes().isNotEmpty())
+        // The folder chips take no press while it is on, and a tick or Select all changes nothing.
+        onNode(hasText("Films")).assertExists()
+        onNode(hasText("Films") and hasClickAction()).assertIsNotEnabled()
+        onNode(hasText("Mira") and hasClickAction()).assertDoesNotExist()
+        model.toggle(204L)
+        model.selectAll(setOf(205L, 206L))
+        assertEquals(setOf(200L, 201L), model.state.value.ticked)
+        onNode(switch).performClick()
+        waitForIdle()
+        assertEquals("the kept ticks are back", setOf(200L, 201L), model.state.value.ticked)
+        onNode(hasText("Films") and hasClickAction()).assertIsEnabled()
+        onNode(switch).performClick()
+        waitForIdle()
+        onNode(hasText("Done") and hasClickAction()).performClick()
+        waitUntil(timeoutMillis = 3_000) { written.isNotEmpty() }
+        assertEquals(com.tmplayer.data.AddedMode.All, written.single().mode)
+        assertEquals(listOf(200L, 201L), written.single().chats.map { it.id })
+        model.stop()
     }
 
     private companion object {

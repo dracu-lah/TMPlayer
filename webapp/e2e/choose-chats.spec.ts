@@ -98,3 +98,26 @@ test.describe('the picker by keyboard', () => {
         await expect(page.getByRole('checkbox')).toHaveCount(0)
     })
 })
+
+// The All chats switch (HX86): at the top above the search, off by default; on, every chat counts, the ticks and
+// Select all are disabled (and kept), the foot says so, and off brings the ticks back.
+test.describe('the All chats switch', () => {
+    test('is off at first, disables the ticks while on, and gives them back when off', async ({ page }) => {
+        await page.goto('/added-chats')
+        const clips = page.getByRole('checkbox', { name: 'Test Clips' })
+        await expect(clips).toBeVisible()
+        const all = page.getByRole('switch', { name: /All chats/ })
+        await expect(all).toHaveAttribute('aria-checked', 'false')
+        await clips.check()
+        const before = await page.locator('.select-count').innerText()
+        await all.click()
+        await expect(all).toHaveAttribute('aria-checked', 'true')
+        await expect(clips).toBeDisabled()
+        await expect(page.getByRole('button', { name: 'Select all' })).toBeDisabled()
+        await expect(page.locator('.select-count')).toHaveText('All chats is on')
+        await all.click()
+        await expect(clips).toBeEnabled()
+        await expect(clips).toBeChecked()
+        await expect(page.locator('.select-count')).toHaveText(before)
+    })
+})

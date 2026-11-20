@@ -290,4 +290,30 @@ class ChatPickingTest {
         assertEquals(rows.size, rows.map { it.id }.toSet().size)
         assertTrue(rows.all { it.band == ChatPicking.Band.Chats })
     }
+
+    // ---- All chats (HX86) -------------------------------------------------------------------
+
+    @Test
+    fun `a fresh start ticks Saved Messages alone, and nothing while the list has not brought it`() {
+        assertEquals(setOf(1L), ChatPicking.freshTicks(account))
+        assertEquals(emptySet<Long>(), ChatPicking.freshTicks(account.drop(1)))
+        assertEquals(1L, ChatPicking.savedId(account))
+    }
+
+    @Test
+    fun `switching all chats off brings the kept ticks back, minus a chat since left`() {
+        assertEquals(setOf(2L, 3L), ChatPicking.afterAllOff(setOf(2L, 3L), account, listComplete = true))
+        // 99 is not in the account any more: dropped quietly, once the list is whole.
+        assertEquals(setOf(2L), ChatPicking.afterAllOff(setOf(2L, 99L), account, listComplete = true))
+        // A list still on its way never calls a chat gone.
+        assertEquals(setOf(2L, 99L), ChatPicking.afterAllOff(setOf(2L, 99L), account, listComplete = false))
+    }
+
+    @Test
+    fun `switching all chats off never leaves an empty set, it returns to Saved Messages`() {
+        assertEquals(setOf(1L), ChatPicking.afterAllOff(emptySet(), account, listComplete = true))
+        assertEquals(setOf(1L), ChatPicking.afterAllOff(setOf(99L), account, listComplete = true))
+        // No Saved Messages in the list yet: empty, and the picker's Done stays off until it comes.
+        assertEquals(emptySet<Long>(), ChatPicking.afterAllOff(emptySet(), account.drop(1), listComplete = true))
+    }
 }
