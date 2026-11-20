@@ -346,7 +346,8 @@ object Td {
             this.currentPaths = AccountDirs.pathsFor(paths, Accounts.active)
         }
         // Folders of profiles removed or half made before the last stop: never the open one's.
-        Accounts.book?.let { book -> scope.launch { book.sweep(paths) } }
+        // Once the platform's stores and caches are registered, so their copies go too (LOW 1).
+        Accounts.book?.let { book -> scope.launch { Accounts.sweepOnceRegistered(book, paths) } }
         // Who each profile signed in as, for the picker and the same account refused twice.
         AccountSwitcher.current()?.attach(scope)
         scope.launch { keepClientRunning() }
@@ -483,22 +484,48 @@ object Td {
      * the stores may become the next profile's, with nothing of the old one still running.
      */
     internal suspend fun reopenFor(paths: Paths, onClosed: () -> Unit) {
-        if (currentPaths == null) return
+        val before = currentPaths ?: return
         val td = synchronized(nextClientLock) {
             currentPaths = paths
             beforeNextClient = onClosed
             current
         }
-        _sessionEnded.value = false
-        logOutAsked = false
-        databaseAtStart = null
-        methodAfterRestart = SignInMethod.Undecided
-        clientRetry?.let {
-            it.complete(Unit)
-            return
+        try {
+            _sessionEnded.value = false
+            logOutAsked = false
+            databaseAtStart = null
+            methodAfterRestart = SignInMethod.Undecided
+            clientRetry?.let {
+                it.complete(Unit)
+                return
+            }
+            val close = closeRequest()
+            if (td != null) gate.withLock { perform(td, close) }
+        } catch (e: Throwable) {
+            // The live client was never asked to close (HX88 review, LOW 4): the next client it
+            // makes one day, after a restart or a lost connection, must open the profile still
+            // open, and must not run the switch's hook, which would move the stores to the target.
+            undoReopen(before, onClosed)
+            throw e
         }
-        if (td != null) gate.withLock { perform(td, AuthReducer.close()) }
     }
+
+    /** What [reopenFor] sends to close the live client; a test makes it fail. */
+    @Volatile
+    internal var closeRequest: () -> AuthStep = { AuthReducer.close() }
+
+    /** Points the next client back at [before] and drops [hook], when the hook is still the one asked for. */
+    internal fun undoReopen(before: Paths, hook: () -> Unit) {
+        synchronized(nextClientLock) {
+            if (beforeNextClient === hook) {
+                beforeNextClient = null
+                currentPaths = before
+            }
+        }
+    }
+
+    /** For tests: the hook a switch left for the next client, or null. */
+    internal val pendingSwitchHook: (() -> Unit)? get() = synchronized(nextClientLock) { beforeNextClient }
 
     private val nextClientLock = Any()
 
