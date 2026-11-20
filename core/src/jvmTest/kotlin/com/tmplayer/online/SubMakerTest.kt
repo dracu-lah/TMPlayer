@@ -508,6 +508,117 @@ class SubMakerTest {
         assertTrue(slept.all { it == 10_000L })
     }
 
+    // ---- review fixes (HX91) ----------------------------------------------------------------
+
+    @Test
+    fun `an entry on another host than the viewer's own is dropped`() {
+        val text = """{"subtitles":[
+            {"id":"a","lang":"eng","url":"$base/sub/a.srt"},
+            {"id":"b","lang":"eng","url":"https://evil.example/sub/b.srt"},
+            {"id":"c","lang":"eng","url":"https://ADDON.test/x/c.srt"},
+            {"id":"d","lang":"eng","url":"https://addon.test.evil.example/d.srt"},
+            {"id":"e","lang":"eng","url":"https://user:pw@addon.test/e.srt"}]}"""
+        assertEquals(listOf("a", "c"), SubMakerApi.parseList(text, base)!!.map { it.id })
+        assertTrue(SubMakerUrl.fetchable("http://localhost:9/x", "http://localhost:9"))
+        assertFalse(SubMakerUrl.fetchable("http://127.0.0.1:9/x", "http://localhost:9"))
+        assertFalse(SubMakerUrl.fetchable("https://addon.test/x", "not a base"))
+    }
+
+    @Test
+    fun `the singular subtitle path and the other addon paths are taken out of any address`() {
+        val scrub = LogScrubber()
+        for (line in listOf(
+            "GET https://other.example/anytoken/subtitle/movie/tt1234567.json failed",
+            "GET https://other.example/anytoken/subtitles/movie/tt1234567.json failed",
+            "page https://other.example/anytoken/sub-toolbox/x",
+            "job https://other.example/anytoken/translate/mal",
+        )) {
+            assertTrue(scrub.scrub(line), scrub.scrub(line).contains("[addon]"))
+            assertFalse(CrashReportScrubber.redact(line), CrashReportScrubber.redact(line).contains("anytoken"))
+        }
+    }
+
+    @Test
+    fun `every form of the address is scrubbed from a log line and a crash report`() {
+        val odd = "https://addon.test/tokenSegmentAA/conf%20ig-Bbb9/t%C3%A9st-segment"
+        SubMakerSecret.register(odd)
+        val scrub = LogScrubber()
+        for (form in listOf(odd, "tokenSegmentAA", "conf%20ig-Bbb9", "conf ig-Bbb9", "t%C3%A9st-segment", "tést-segment", "tokenSegmentAA/conf%20ig-Bbb9")) {
+            val line = "something $form went wrong"
+            assertFalse("$form in a line", scrub.scrub(line).contains(form))
+            assertFalse("$form in a report", CrashReportScrubber.redact(line).contains(form))
+        }
+        SubMakerSecret.register("")
+        assertEquals("tokenSegmentAA stays", SubMakerSecret.scrub("tokenSegmentAA stays"))
+    }
+
+    private fun srtOf(cues: Int) = FakeAddon.srt(cues).toByteArray()
+
+    @Test
+    fun `429 answers never count as a stall and never make a final result`() = runBlocking {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val transport = HttpTransport {
+            when (calls.getAndIncrement()) {
+                0 -> HttpResponse(200, body = srtOf(20))
+                1, 2, 3 -> HttpResponse(429, mapOf("retry-after" to "60"))
+                else -> HttpResponse(200, body = srtOf(20))
+            }
+        }
+        val finals = mutableListOf<Boolean>()
+        val states = mutableListOf<TranslationState>()
+        translator({}, transport).run("https://a.test/translate/x", null, MutableStateFlow(true), { states += it }, { _, _, final -> finals += final })
+        // Three minutes of waiting out 429s did not end it: 18 calm polls without growth did.
+        assertEquals(22, calls.get())
+        assertEquals(listOf(false, true), finals)
+        assertEquals(TranslationState.Done(20), states.last())
+    }
+
+    @Test
+    fun `an addon that stays busy ends the job partial, never final`() = runBlocking {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val transport = HttpTransport {
+            if (calls.getAndIncrement() == 0) HttpResponse(200, body = srtOf(20)) else HttpResponse(429, mapOf("retry-after" to "60"))
+        }
+        val finals = mutableListOf<Boolean>()
+        val states = mutableListOf<TranslationState>()
+        translator({}, transport).run("https://a.test/translate/x", null, MutableStateFlow(true), { states += it }, { _, _, final -> finals += final })
+        assertTrue(finals.isNotEmpty() && finals.none { it })
+        assertEquals(TranslationState.Failed(SubtitleNotice.SubMakerBusy, 20), states.last())
+        assertEquals(1 + 10, calls.get())
+    }
+
+    @Test
+    fun `reaching the cap while still growing shows the text but is not final`() = runBlocking {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val transport = HttpTransport { HttpResponse(200, body = srtOf(calls.incrementAndGet() * 5)) }
+        val finals = mutableListOf<Boolean>()
+        val states = mutableListOf<TranslationState>()
+        SubMakerTranslator(SubMakerApi(transport, RateLimiter(0, { 0 }, {}), "t"), {}, capMs = 60_000L)
+            .run("https://a.test/translate/x", null, MutableStateFlow(true), { states += it }, { _, _, final -> finals += final })
+        assertTrue(finals.none { it })
+        assertTrue(states.last() is TranslationState.Done)
+    }
+
+    @Test
+    fun `a throttled partial result is still laid when the job ends, and never as the final file`() {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val transport = HttpTransport { HttpResponse(200, body = srtOf(calls.incrementAndGet() * 5)) }
+        val translator = SubMakerTranslator(SubMakerApi(transport, RateLimiter(0, { 0 }, {}), "t"), {}, capMs = 60_000L)
+        val jobs = SubMakerJobs(translator, CoroutineScope(Dispatchers.Default), now = { 1L }, applyEveryMs = Long.MAX_VALUE / 2)
+        val written = java.util.Collections.synchronizedList(mutableListOf<Pair<Int, Boolean>>())
+        jobs.start("v|x", "https://a.test/translate/x", null, write = { srt, final ->
+            written += SubMakerApi.cueCount(srt) to final
+            File.createTempFile("tm-part", ".srt", dir)
+        }, onTrack = { _, _ -> })
+        val until = System.nanoTime() + 15_000_000_000
+        while (jobs.stateOf("v|x")?.active != false && System.nanoTime() < until) Thread.sleep(2)
+        assertTrue(jobs.stateOf("v|x") is TranslationState.Done)
+        assertTrue(written.none { it.second })
+        // The first update was applied; the newest one waited and was laid at the end.
+        assertTrue("$written", written.size >= 2 && written.last().first > written.first().first)
+        jobs.cancelAll()
+    }
+
     @Test
     fun `a cancel while waiting ends the run with no more asking`() = runBlocking {
         val gate = CompletableDeferred<Unit>()

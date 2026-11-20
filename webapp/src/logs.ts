@@ -49,7 +49,7 @@ const QUERY = /\?[\w%.~-]*=[^\s"'<>]*/gu
 /** A stremio:// address: an addon's install link, whose path holds the viewer's secret. */
 const STREMIO = /stremio:\/\/[^\s"'<>]*/giu
 /** An addon's address (its list, a translation, its manifest), with the host and secret path before it when they are there. */
-const ADDON = /(?:https?:\/\/[^\s"'<>]*)?\/(?:subtitles|translate)\/[^\s"'<>]*|(?:https?:\/\/[^\s"'<>]*)?\/manifest\.json[^\s"'<>]*/giu
+const ADDON = /(?:https?:\/\/[^\s"'<>]*)?\/(?:subtitles?\/|translate|sub-toolbox)[^\s"'<>]*|(?:https?:\/\/[^\s"'<>]*)?\/manifest\.json[^\s"'<>]*/giu
 /** Any run this long of what tokens, keys and hashes are written in. */
 const TOKEN = /[A-Za-z0-9_-]{16,}/gu
 const DIGITS = /\d{6,}/gu
@@ -281,9 +281,11 @@ function takeOutAddon(line: string): string {
  */
 export function scrubLine(line: unknown, known: Known = NOBODY): string {
     let out = typeof line === 'string' ? line : String(line ?? '')
+    // The addon's address goes first, as core does: cut before it, a secret that straddles the cut
+    // would be left half in the line.
+    out = takeOutAddon(out)
     if (out.length > MAX_LINE) out = `${out.slice(0, MAX_LINE)} [cut]`
     out = out.replace(CONTROL, ' ')
-    out = takeOutAddon(out)
     out = takeOutNames(out, known)
     out = out.replace(URL_TAIL, '$1[query]').replace(QUERY, '?[query]')
     out = takeOutEmails(out)
