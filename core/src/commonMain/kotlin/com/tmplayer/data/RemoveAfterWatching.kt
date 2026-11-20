@@ -28,16 +28,25 @@ class RemoveAfterWatching(
     private val watched: Flow<Map<String, WatchedRecord>>,
     private val downloads: suspend () -> List<ResumeRecord>,
     private val busy: (ResumeRecord) -> Boolean = ::isFetching,
+    /** The open profile's turn (HX88): a change of it is never a change of what was watched. */
+    private val profile: () -> AccountStamp = { Accounts.stamp },
     private val delete: suspend (ResumeRecord) -> Boolean,
 ) {
 
     /** Watches until cancelled. */
     suspend fun run() {
         var seen: Set<String>? = null
+        var seenFor: AccountStamp? = null
         combine(enabled, watched) { on, marks -> on to marks.keys }.collect { (on, keys) ->
             val before = seen
-            if (before == null) {
+            // Another profile's list (HX88), or the last one's arriving after a switch: a new
+            // starting point, nothing deleted. What the next profile watched is not newly watched.
+            // The stamp moves before the stores' views do, so no list of the next profile is ever
+            // compared with the last one's.
+            val stamp = profile()
+            if (before == null || stamp != seenFor) {
                 seen = keys
+                seenFor = stamp
                 return@collect
             }
             val fresh = keys - before
@@ -45,9 +54,14 @@ class RemoveAfterWatching(
             var next = before.intersect(keys) + fresh
             if (on && fresh.isNotEmpty()) {
                 val retry = mutableSetOf<String>()
-                for (record in due(fresh, runCatching { downloads() }.getOrDefault(emptyList()))) {
-                    val gone = !busy(record) && runCatching { delete(record) }.getOrDefault(false)
-                    if (!gone) retry += record.key
+                // As the profile whose marks these are, and only while it is open: a switch part way
+                // stops the deletes, and the store writes of one under way are that profile's.
+                kotlinx.coroutines.withContext(AccountOwner(stamp)) {
+                    for (record in due(fresh, runCatching { downloads() }.getOrDefault(emptyList()))) {
+                        if (profile() != stamp) break
+                        val gone = !busy(record) && runCatching { delete(record) }.getOrDefault(false)
+                        if (!gone) retry += record.key
+                    }
                 }
                 next = next - retry
             }
