@@ -11,8 +11,8 @@ package com.tmplayer.data
 object ChatPicking {
 
     /**
-     * Which chats the list is narrowed to. Telegram's folders join this with HX29; until then a
-     * folder is reached on the Chats page as before.
+     * Which chats the list is narrowed to by kind. A Telegram folder is the other way to narrow it
+     * (HX29): [rows]' `folder`, one at a time with a scope, never both.
      */
     enum class Scope { All, Archived, Channels, Groups, People }
 
@@ -39,6 +39,26 @@ object ChatPicking {
         val starred: Boolean = false,
     )
 
+    /** Whether [chat] is in Telegram folder [folderId], as the folders were last read ([ChatSummary.folderIds]). */
+    fun inFolder(chat: ChatSummary, folderId: Int): Boolean = folderId in chat.folderIds
+
+    /**
+     * The folders the picker offers as filters (HX29): Telegram's own, in its order, without the
+     * ones that already are a scope (its suggested Channels, Groups and Private folders list what
+     * those scopes list). Folders sharing a title stay separate, told apart by id.
+     */
+    fun pickable(folders: List<ChatFolderSummary>): List<ChatFolderSummary> = folders
+        .distinctBy { it.id }
+        .filter { scopeOf(it) == null }
+
+    /** The scope a Telegram suggested folder (known by its icon, which only those carry) duplicates, or null. */
+    fun scopeOf(folder: ChatFolderSummary): Scope? = when (folder.icon) {
+        "Channels" -> Scope.Channels
+        "Groups" -> Scope.Groups
+        "Private" -> Scope.People
+        else -> null
+    }
+
     /** Whether [chat] belongs in [scope]. Saved Messages counts as a person, as it does elsewhere. */
     fun inScope(chat: ChatSummary, scope: Scope): Boolean = when (scope) {
         Scope.All -> true
@@ -58,6 +78,9 @@ object ChatPicking {
      * @param recommended [ChatSuggestions.recommend]'s answer, in its order.
      * @param alreadyAdded the chats added when the picker opened, fixed for the opening so a row
      *   never moves between bands as it is ticked or unticked.
+     * @param folder the Telegram folder the list is narrowed to, or null. It stands in place of a
+     *   scope: a folder lists what Telegram puts in it, archived chats among them, with no band of
+     *   their own (as under the Archived scope).
      * @param listComplete whether the chat list is whole. A chat still on its way is simply not
      *   here yet, and must not be called gone: HX32's partial load would otherwise mark half an
      *   account as left.
@@ -72,10 +95,11 @@ object ChatPicking {
         scope: Scope = Scope.All,
         listComplete: Boolean = false,
         alreadyAdded: Set<Long> = emptySet(),
+        folder: Int? = null,
     ): List<Row> {
         val searching = query.isNotBlank()
-        val whole = !searching && scope == Scope.All
-        val inScope = chats.filter { inScope(it, scope) }
+        val whole = !searching && scope == Scope.All && folder == null
+        val inScope = if (folder != null) chats.filter { inFolder(it, folder) } else chats.filter { inScope(it, scope) }
         // Ranked, not filtered, by the same rule as the Chats page: the accent nobody types and
         // the letter mistyped on a remote still find the chat.
         val matching = if (searching) Fuzzy.rank(inScope, query) { it.title } else inScope
@@ -103,7 +127,7 @@ object ChatPicking {
         // The archive has a band of its own under the rest, not a separate screen: a movie channel
         // archived to keep Telegram tidy is still a movie channel. Under the Archived scope the
         // chats above are already the archived ones, so nothing lands here twice.
-        for (chat in rest) if (chat.isArchived) add(chat, if (scope == Scope.Archived) Band.Chats else Band.Archived)
+        for (chat in rest) if (chat.isArchived) add(chat, if (scope == Scope.Archived || folder != null) Band.Chats else Band.Archived)
         if (whole && listComplete) {
             val names = addedNames.associate { it.id to it.title }
             for (id in added) {

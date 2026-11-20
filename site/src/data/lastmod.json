@@ -187,7 +187,7 @@
   },
   {
     "path": "/install/",
-    "lastmod": "2026-11-17",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -243,7 +243,7 @@
   },
   {
     "path": "/android/",
-    "lastmod": "2026-11-16",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -275,7 +275,7 @@
   },
   {
     "path": "/desktop/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -295,13 +295,13 @@
   },
   {
     "path": "/faq/",
-    "lastmod": "2026-11-17",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.7"
   },
   {
     "path": "/privacy/",
-    "lastmod": "2026-11-18",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.5"
   },
@@ -415,7 +415,7 @@
   },
   {
     "path": "/guides/telegram-videos-on-fire-tv/",
-    "lastmod": "2026-10-29",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.7"
   },
@@ -443,7 +443,7 @@
   },
   {
     "path": "/guides/external-player-for-telegram/",
-    "lastmod": "2026-10-20",
+    "lastmod": "2026-11-19",
     "changefreq": "monthly",
     "priority": "0.6",
     "images": [

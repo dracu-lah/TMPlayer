@@ -56,21 +56,23 @@ import kotlinx.coroutines.launch
 data class BrowseData(
     val chats: List<ChatSummary>,
     val account: Account? = null,
-    /** True while the folders' members are still being read: a folder page is not empty yet, only unknown. */
-    val foldersPending: Boolean = false,
-    /** The folders whose members could not be read (HX32): their pages say so, with Try again, never "nothing in this folder". */
-    val foldersFailed: Set<Int> = emptySet(),
-) {
+)
+
+/** Whether a folder's members are known: an empty folder may only say "nothing here" when [Loaded]. */
+enum class FolderRead { Loading, NotLoaded, Loaded }
+
+/**
+ * How reading the folders' members went (HX29): [pending] while they are on their way, [failed]
+ * the folders that could not be read (HX32), which are not empty folders.
+ */
+data class FolderStatus(val pending: Boolean = false, val failed: Set<Int> = emptySet()) {
     /** How reading [folderId]'s members went. */
-    fun folderRead(folderId: Int): FolderRead = when {
-        folderId in foldersFailed -> FolderRead.NotLoaded
-        foldersPending -> FolderRead.Loading
+    fun read(folderId: Int): FolderRead = when {
+        folderId in failed -> FolderRead.NotLoaded
+        pending -> FolderRead.Loading
         else -> FolderRead.Loaded
     }
 }
-
-/** Whether a folder's members are known: an empty folder page may only say "nothing here" when [Loaded]. */
-enum class FolderRead { Loading, NotLoaded, Loaded }
 
 /**
  * @param settings where the cold-start snapshot lives. Null in the contexts that have no
@@ -87,6 +89,16 @@ class ChatListViewModel(
 
     private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading(LOADING_CHATS))
     val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
+
+    // Above the init block, which paints the remembered list through publish() before the
+    // properties declared under it exist (the desktop's immediate main dispatcher crashed on that once).
+    private val _folderStatus = MutableStateFlow(FolderStatus())
+
+    /** When the folders' members are read (HX29); declared here for the same reason. */
+    private val folderReads = FolderReads()
+
+    /** How reading the folders' members is going, for the picker's folder filters (HX29). */
+    val folderStatus: StateFlow<FolderStatus> = _folderStatus.asStateFlow()
 
     /**
      * True once the store has said there is no list from an earlier launch, which makes this the
@@ -497,10 +509,33 @@ class ChatListViewModel(
     private var membership: com.tmplayer.data.FolderMembership? = null
     private var foldersJob: Job? = null
 
-    /** True when the folders could not be read at all (no connection, a failed read): their pages offer Try again. */
+    /** True when the folders could not be read at all (no connection, a failed read): the picker offers Try again. */
     private var foldersGaveUp = false
 
-    /** Reads the folders' members again, from a folder page's Try again (HX32). */
+    /**
+     * True once the picker has asked for the folders (HX29). Their members are read for the picker
+     * alone: on a database TDLib has not filled yet that asks Telegram for every chat of the
+     * account, so nothing reads them ahead of it, and a list read later keeps them current only
+     * once they have been asked for.
+     */
+    private fun folderIds(): List<Int> = Td.folders.value.map { it.id }
+
+    /**
+     * The picker is open: reads the folders' members unless they are already read, and again when
+     * a folder has appeared since (an unread folder is loading, never an empty one).
+     */
+    fun wantFolders() {
+        folderReads.want()
+        if (folderReads.readOnWant(folderIds())) retryFolders() else publish()
+    }
+
+    /** The picker left: loads stop reading the folders, and a read in flight is cancelled. */
+    fun unwantFolders() {
+        folderReads.unwant()
+        foldersJob?.cancel()
+    }
+
+    /** Reads the folders' members again, from the picker's Try again (HX32). */
     fun retryFolders() {
         if (foldersJob?.isActive == true) return
         foldersGaveUp = false
@@ -527,6 +562,7 @@ class ChatListViewModel(
     }
 
     private suspend fun readFolders(repository: ChatRepository, session: com.tmplayer.data.TdSession) {
+        val asked = folderIds()
         val found = try {
             repository.folderMembership()
         } catch (cancelled: CancellationException) {
@@ -543,10 +579,15 @@ class ChatListViewModel(
         }
         foldersGaveUp = false
         membership = found
-        val current = chats ?: return
-        val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
-        if (next != current) chats = next
+        folderReads.markRead(asked)
+        val current = chats
+        if (current != null) {
+            val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
+            if (next != current) chats = next
+        }
         publish()
+        // A folder appeared while this read ran: it is read too, as long as the picker is open.
+        if (folderReads.readOnWant(folderIds())) readFolders(repository, session)
     }
 
     /**
@@ -651,7 +692,7 @@ class ChatListViewModel(
                     failure = L.chatsSomeNotLoaded.takeIf { sync.partial },
                     partial = sync.partial,
                 )
-                if (session.isCurrent()) fillFolders(repository, session)
+                if (session.isCurrent() && folderReads.readAfterLoad(folderIds())) fillFolders(repository, session)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
@@ -681,6 +722,8 @@ class ChatListViewModel(
         foldersJob?.cancel()
         membership = null
         foldersGaveUp = false
+        folderReads.reset()
+        _folderStatus.value = FolderStatus()
         pendingNewChats.clear()
         account = null
         chats = null
@@ -721,14 +764,15 @@ class ChatListViewModel(
         val LOADING_CHATS: String get() = L.browseLoadingChats
     }
 
-    /** Whether the folders' members are still on their way: a folder's page may not call itself empty yet. */
-    private fun foldersPending(): Boolean = membership == null && !foldersGaveUp && Td.folders.value.isNotEmpty()
+    /** Whether the folders' members are still on their way: a folder may not call itself empty yet. */
+    private fun foldersPending(): Boolean = !foldersGaveUp && folderReads.unread(folderIds())
 
     /** The folders that could not be read: the failed ones of the last read, or all of them when it never happened. */
     private fun foldersFailed(): Set<Int> = membership?.failed
         ?: if (foldersGaveUp) Td.folders.value.mapTo(HashSet()) { it.id } else emptySet()
 
     private fun publish() {
+        _folderStatus.value = FolderStatus(foldersPending(), foldersFailed())
         val everything = chats ?: return
         // Kept whole, before the kids lock and the added chats, which are applied below on each
         // read. The picker reads this list, so it must stay whole: a chat
@@ -738,7 +782,7 @@ class ChatListViewModel(
         val allowed = ChatGate.browsing.value
         val loaded = KidsLock.chats(everything, allowed)
         _state.value = when {
-            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account, foldersPending(), foldersFailed()))
+            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account))
             // Nothing added yet (HX27), which is a choice to make rather than a fault: a first run
             // that skipped the picker, or every added chat since left. Asked before the kids lock,
             // since a locked app with nothing added should still say what to do about it.

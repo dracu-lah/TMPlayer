@@ -66,6 +66,7 @@ class AddChatsViewModel(
     data class State(
         val query: String = "",
         val scope: ChatPicking.Scope = ChatPicking.Scope.All,
+        val folder: Int? = null,
         val ticked: Set<Long> = emptySet(),
         val counted: Map<Long, ChatCount> = emptyMap(),
         val added: Set<Long> = emptySet(),
@@ -292,7 +293,17 @@ class AddChatsViewModel(
 
     fun scope(scope: ChatPicking.Scope) {
         settled = true
-        _state.update { it.copy(scope = scope) }
+        _state.update { it.copy(scope = scope, folder = null) }
+    }
+
+    /**
+     * Narrows the list to Telegram folder [id] (HX29), in place of a scope; null goes back to
+     * every chat. Kept for the opening only: nothing about it is stored, so a folder deleted
+     * since simply is not there next time.
+     */
+    fun folder(id: Int?) {
+        settled = true
+        _state.update { it.copy(folder = id, scope = ChatPicking.Scope.All) }
     }
 
     /** Whether the choice is being written or is written: the selection is then fixed, so what is saved is what the foot showed. */

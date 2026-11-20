@@ -141,7 +141,7 @@ export interface ChatsEvent {
 }
 
 /** Video sort orders, as the app's VideoSort names them. */
-export type Sort = 'Newest' | 'Oldest' | 'Name' | 'Year' | 'Size' | 'Longest' | 'Unwatched'
+export type Sort = 'Newest' | 'Oldest' | 'Name' | 'Year' | 'Size' | 'Longest' | 'LastPlayed' | 'Unwatched'
 
 /** How a chat's grid is asked for: the app's order, size limits and progress, and words to look for. */
 export interface ChatView {
@@ -153,10 +153,20 @@ export interface ChatView {
     started: string[]
     query: string
     /**
+     * The chat's Show filter and the line of its other filters (ui/videoFilter.ts), as the worker's
+     * rules read them. Absent or "All" and "": every video shows.
+     */
+    filter?: string
+    facets?: string
+    /** For the Last played order: the version of the times the worker holds (sent once with `setTouches`); absent or unknown, the order has no times. */
+    touches?: number
+    /**
      * After a video that is not an episode, the chat's own next one in this order (the app's
      * ChatOrder): the watch page's Next and autoplay follow the grid's sort. Off or absent: it stops.
      */
     chatOrder?: boolean
+    /** A forum chat held to one topic (the `?topic=` of a "Chat > Topic" row in Search): only its videos are listed, read through the topic itself. */
+    topic?: number
 }
 
 /**
@@ -172,6 +182,8 @@ export interface Tile {
     episodes: number
     /** Other copies of the same video, parts it was cut into, and raw pieces that play as one. */
     copies: number
+    /** How many versions the card says (VideoCopies.versionCount: the same file posted twice counts once); 1 for a show or a single file. */
+    versions: number
     parts: number
     pieces: number
     /** "Trailer", "Sample"... for an extra. */
@@ -186,6 +198,13 @@ export interface ChatPage {
     tiles: Tile[]
     /** Videos the size limits left out of `tiles`. */
     hiddenBySize: number
+    /** Cards before the chat's filters, of the videos loaded so far; `hiddenByFilter` of them are screened out. */
+    total: number
+    hiddenByFilter: number
+    /** Cards kept after the matches because nothing states their length or picture size. */
+    unknown: number
+    /** The audio languages the loaded names state, most common first (the Language chips). */
+    languages: string[]
     /** Videos loaded so far, before the limits. */
     loaded: number
     /** Every video in the chat is loaded. */
@@ -198,6 +217,34 @@ export interface ChatPage {
     /** Telegram's sponsored messages for a channel, placed among the cards every `sponsoredBetween` (0: one after them all). */
     sponsored: SponsoredItem[]
     sponsoredBetween: number
+    /** The topic the grid is held to (`ChatView.topic`) with its name, when it was found. */
+    topic?: { id: number; name: string }
+}
+
+/** A topic found by its name (U14), listed as "Chat > Topic"; a tap opens the chat on that topic. */
+export interface TopicHit {
+    chatId: number
+    chatTitle: string
+    topicId: number
+    /** The topic's name; empty for one with no title (the page says "Untitled topic"). */
+    name: string
+    pinned: boolean
+    closed: boolean
+    /** False when the topic holds no video or file: listed dimmed. */
+    hasVideos: boolean
+    score: number
+}
+
+/** The answer of a search by topic name, whole or so far. */
+export interface TopicsFound {
+    hits: TopicHit[]
+    /** Groups with topics asked, and how many of those Telegram refused. */
+    asked: number
+    refused: number
+    /** More groups could have topics than one search asks: the heading says so. */
+    partial: boolean
+    /** The search is still asking (an event before the last answer). */
+    searching: boolean
 }
 
 /** A sponsored message Telegram shows in a channel, as the apps' SponsoredItem. Never playable. */
@@ -400,10 +447,17 @@ export interface WatchInfo {
     chatTitle: string
     /** The chat restricts saving content. */
     protected: boolean
-    /** What the file is badged with ("1080p", "4K"), from its name and size; null when neither says. */
+    /** What the file is badged with ("1080p", "4K"), from its stated size else its name (QualityRead); null when neither says. */
     quality: string | null
-    /** Every copy of this video in the chat (this one among them, best first) when there is more than one file of it. */
+    /** The picture's height that badge reads (2160 for 4K), for the quality the viewer usually plays; null when nothing says. */
+    qualityHeight?: number | null
+    /**
+     * Every copy of this video in the chat when there is more than one file of it, this one among
+     * them, in the order the list shows them: recommended first (HX38). Its length is "N versions".
+     */
     copies: CopyRef[]
+    /** Every file of that group, the same file posted twice included (`copies` shows such a pair once): what a rename is written to. */
+    group: { chatId: number; messageId: number }[]
     /** The caption as an overview, its file facts and lines repeating the name taken off (MediaText.overviewOf); null when nothing is left. */
     overview: string | null
 }
@@ -417,4 +471,12 @@ export interface CopyRef {
     /** Seconds since 1970. */
     date: number
     chat: string
+    /** "Best for this device" (VideoCopies.bestForDevice), only where the copies differ in picture. */
+    best?: boolean
+    /** "May stutter on this computer" for a copy this browser cannot play natively; "Smooth" beside one that may. */
+    fit?: 'smooth' | 'stutter' | null
+    /** The viewer started this copy. */
+    started?: boolean
+    /** Its name says another picture than the size Telegram states (the size heads the row). */
+    mismatch?: boolean
 }

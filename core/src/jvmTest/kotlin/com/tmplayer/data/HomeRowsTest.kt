@@ -177,6 +177,37 @@ class HomeRowsTest {
     }
 
     @Test
+    fun `recent takes at most three from one chat while others have videos, newest first`() {
+        val flood = (1..12).map { video(1, date = 1000 + it) }
+        val other = (1..4).map { video(2, date = 100 + it) }
+        val rows = HomeRows.build(
+            continueWatching = emptyList(),
+            favourites = listOf(chat(1), chat(2)),
+            loaded = mapOf(1L to flood, 2L to other),
+            recent = flood + other,
+        )
+        val recent = rows.filterIsInstance<HomeRow.Recent>().single()
+        val items = recent.entries.filterIsInstance<ShelfEntry.File>().map { it.item }
+        assertEquals(HomeRows.LIMIT, items.size)
+        // Three each first, then topped up one more per chat: chat 2 is never crowded out.
+        assertEquals(4, items.count { it.chatId == 2L })
+        assertEquals(6, items.count { it.chatId == 1L })
+        assertEquals(items.sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }), items)
+            }
+
+    @Test
+    fun `recent is still full when one chat is all there is`() {
+        val flood = (1..12).map { video(1, date = 1000 + it) }
+        val rows = HomeRows.build(
+            continueWatching = emptyList(),
+            favourites = listOf(chat(1), chat(2)),
+            loaded = mapOf(1L to flood, 2L to emptyList()),
+            recent = flood,
+        )
+        assertEquals(HomeRows.LIMIT, rows.filterIsInstance<HomeRow.Recent>().single().entries.size)
+    }
+
+    @Test
     fun `recent needs two starred chats, as one already has its own row`() {
         val one = HomeRows.build(emptyList(), listOf(chat(1)), mapOf(1L to listOf(video(1))), recent = listOf(video(1)))
         assertEquals(listOf("chat-1"), one.map { it.key })

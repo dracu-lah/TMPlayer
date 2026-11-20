@@ -73,6 +73,11 @@ enum class PlayerMenuEntry {
     SaveToDownloads,
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
+    /**
+     * "Add to a list" (HX43), as in a video's hold menu: a page of the panel with every named list
+     * (ticked where the video is, a press toggles) and New list. Only for a video from a message.
+     */
+    AddToList,
     PictureInPicture,
     /**
      * The same video in the other engine (PR2), at the same place with the same tracks: ExoPlayer
@@ -157,6 +162,8 @@ enum class PhoneMenuEntry {
     LoadSubtitleFile,
     SaveToDownloads,
     MarkWatched,
+    /** "Add to a list" (HX43), as on the television: a page of the lists, ticked where the video is. */
+    AddToList,
     /** The moment marked as stuttering, with the last minute of the trace kept for Send logs (L3). */
     ReportStutter,
     /** "Picture looks wrong" (RL10): the mark, and another way to show the picture, once. */
@@ -204,6 +211,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.LoadSubtitleFile -> L.playerLoadSubtitleFile
     PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
     PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
+    PhoneMenuEntry.AddToList -> L.listsAddTo
     PhoneMenuEntry.AddBookmark -> L.playerAddBookmark
     PhoneMenuEntry.MarkIntro -> if (introMarking) L.playerMarkIntroEnd else L.playerMarkIntro
     PhoneMenuEntry.RemoveIntroMark -> L.playerMarkIntroRemove
@@ -260,6 +268,10 @@ object PlayerMenu {
      *
      * [rotatePicture] adds Rotate picture under the shapes (a picture, not a cast), and
      * [playerVolume] adds Player volume above Volume boost (the sound plays here, not on a cast).
+     *
+     * [addToList] is whether the video came from a message, which a named list points at (the
+     * same gate as [markWatched]); a list keeps a name, never a copy, so a chat that restricts
+     * saving may be in one too, as the card menu has it.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
@@ -279,6 +291,7 @@ object PlayerMenu {
         removeIntroMark: Boolean = false,
         rotatePicture: Boolean = false,
         playerVolume: Boolean = false,
+        addToList: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.LockScreen)
         add(PlayerMenuEntry.PlaybackDetails)
@@ -310,6 +323,7 @@ object PlayerMenu {
         if (removeIntroMark) add(PlayerMenuEntry.RemoveIntroMark)
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
+        if (addToList) add(PlayerMenuEntry.AddToList)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
@@ -334,7 +348,8 @@ object PlayerMenu {
      * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
      * shape while a pinch has the picture enlarged. [otherEngine] adds Try the other engine, as on
      * the television. [repeatVideo] adds Repeat this video under the A-B repeat (a video, not sound
-     * alone, which has its own repeat in the list). The lock stays first: the line people come here for.
+     * alone, which has its own repeat in the list). [addToList] offers "Add to a list" under Mark as
+     * watched (a video from a message; see [tvEntries]). The lock stays first: the line people come here for.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
@@ -356,6 +371,7 @@ object PlayerMenu {
         removeIntroMark: Boolean = false,
         rotatePicture: Boolean = false,
         playerVolume: Boolean = false,
+        addToList: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -392,6 +408,7 @@ object PlayerMenu {
         add(PhoneMenuEntry.LoadSubtitleFile)
         if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
         if (markWatched) add(PhoneMenuEntry.MarkWatched)
+        if (addToList) add(PhoneMenuEntry.AddToList)
         if (reportStutter) {
             add(PhoneMenuEntry.ReportStutter)
             add(PhoneMenuEntry.ReportWrongPicture)

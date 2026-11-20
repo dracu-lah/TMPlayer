@@ -138,6 +138,10 @@ internal fun HomePane(
     end: Dp,
     bottom: Dp,
     onRowShown: (HomeRow) -> Unit,
+    /** A row came on screen while scrolling: asked for after a short stay ([HomeViewModel.rowShown], HX54), so a flick past rows asks for none. */
+    onRowSeen: (HomeRow) -> Unit = onRowShown,
+    /** That row left the screen again: a fetch still queued for it is taken back ([HomeViewModel.rowGone]). */
+    onRowLeft: (HomeRow) -> Unit = {},
     onArtWanted: (ResumeRecord) -> Unit,
     onResume: (ResumeRecord) -> Unit,
     onPlay: (MediaItem, String) -> Unit,
@@ -645,7 +649,10 @@ internal fun HomePane(
                     val loaded = row.isLoaded
                     // Asked for whenever the row comes on screen: the model fetches it the first
                     // time, and again only when a refresh passed it by (HomeViewModel.request).
-                    LaunchedEffect(row.key) { onRowShown(row) }
+                    androidx.compose.runtime.DisposableEffect(row.key) {
+                        onRowSeen(row)
+                        onDispose { onRowLeft(row) }
+                    }
                     val isFirst = row === listed.first()
                     val title = homeRowTitle(row, s)
                     // Only a row that leaves something out offers the rest of it.
@@ -1257,7 +1264,7 @@ private fun telegramFacts(chat: String, item: MediaItem): String {
     return remember(chat, item, s) {
         listOfNotNull(
             chat.ifBlank { null },
-            item.qualityTags.firstOrNull(),
+            com.tmplayer.data.QualityRead.of(item),
             item.sizeBytes.takeIf { it > 0 }?.let { s.formatter.size(it) },
         ).joinToString("  ·  ")
     }

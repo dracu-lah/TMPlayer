@@ -1,6 +1,6 @@
-import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, FilterHorizontalIcon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, Cancel01Icon, ClapperboardIcon, Clock01Icon, Edit02Icon, FilterHorizontalIcon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
@@ -8,7 +8,10 @@ import { dropResume, getResume, laterIds, namedLists, progress as readProgress, 
 import { openListPicker } from './Lists'
 import { chatGone, forgetGone } from '../goneVideos'
 import { showChoices, type MarkChoice } from './showMarks'
-import { agrees, hasGaps, rows as guideRows, seasons as guideSeasons, type HeldSeason, type Row as GuideRow, type SeasonStop } from './seriesGuide'
+import { agrees, counted, hasGaps, numbering, rekey, rows as guideRows, seasons as guideSeasons, seasonsFor, type HeldSeason, type ProviderEpisode, type Row as GuideRow, type SeasonStop } from './seriesGuide'
+import { loadSeason } from './seasonFetch'
+import { placeholder } from '../animeGuide'
+import './series.css'
 import { scrollBehavior } from '../ui/motion'
 import { Icon, type IconData } from '../ui/Icon'
 import { arrowKeys } from '../ui/arrows'
@@ -18,6 +21,7 @@ import { TitleLogo } from '../ui/TitleLogo'
 import { openTrailer } from '../ui/TrailerSheet'
 import { inApp, isValidKey, watchUrl } from '../ui/trailer'
 import { openPosterPicker } from '../ui/PosterPicker'
+import { canReportTitle, openRename, reportTitle } from '../ui/renameTarget'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
@@ -25,6 +29,8 @@ import { answer, askOf, followAnimeGuide, loadBackdropLightFirst, loadExtras, lo
 import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
+import { chooseCopyOf, copiesTick, isApart, keepApart, renamedTitle } from '../copies'
+import './versions.css'
 import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
 
 const dot = '  ·  '
@@ -68,8 +74,9 @@ export function Detail() {
         started: seen()?.started ?? [],
         query: '',
     })
+    // Asked again when a file is kept apart or a copy chosen (HX38), once the worker has it.
     const [info] = createResource(
-        () => (seen.state === 'ready' ? { ...ids(), view: view() } : null),
+        () => (seen.state === 'ready' ? { ...ids(), view: view(), tick: copiesTick() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[detail]', e), null)),
     )
     const close = () => back(navigate)
@@ -146,6 +153,11 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         if (f?.source !== 'anilist' || f.kind !== 'show' || !f.id) return
         onCleanup(followAnimeGuide(f.id, setAnimeGuide))
     })
+    // The TMDB show the series page asks its episodes of: not AniList's (its guide is the anime one above), not a film.
+    const tmdbShow = () => {
+        const f = found()
+        return f?.match && f.kind === 'show' && f.source !== 'anilist' && f.id && /^\d{1,9}$/.test(f.id) ? f.id : null
+    }
     const episodeAt = () => {
         const m = props.info?.episode?.code ? /^S(\d+)E(\d+)/i.exec(props.info.episode.code) : null
         return m ? { season: Number(m[1]), episode: Number(m[2]) } : null
@@ -194,7 +206,10 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         if (kind() === undefined || kind() !== null || failed()) return null
         return askOf(item) ? 'nothing' : 'unread'
     }
-    const title = () => found()?.title || props.info?.title || item.title
+    // The viewer's own title (Rename) leads; TMDB's, then the name the worker reads, follow.
+    const title = () => renamedTitle(item) || found()?.title || props.info?.title || item.title
+    // Every copy of this video: a rename is written to all of them, so it holds whichever one a card shows.
+    const copyItems = () => props.info?.group.length ? props.info.group : (props.info?.copies.map((c) => c.item) ?? [])
     const ep = () => props.info?.episode ?? null
     const episodeName = () => extras()?.episode?.name || ep()?.name || ''
     const resolution = () => props.info?.quality ?? (props.info?.height ? `${props.info.height}p` : '')
@@ -312,8 +327,8 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         level={1}
                         class="detail-title"
                         name={title()}
-                        extras={extras()}
-                        pending={!!(settings().posters && askOf(item)) && (!props.infoSettled || meta.loading)}
+                        extras={renamedTitle(item) ? null : extras()}
+                        pending={!renamedTitle(item) && !!(settings().posters && askOf(item)) && (!props.infoSettled || meta.loading)}
                     />
                     <p class="detail-facts">
                         <For each={facts()}>
@@ -374,6 +389,11 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                         <Show when={settings().posters}>
                             <Round icon={Search01Icon} label={t('poster.round')} onClick={() => openPosterPicker(item, props.info?.seasons.flatMap((s) => s.episodes.map((e) => e.item)) ?? [])} />
                         </Show>
+                        {/* Rename: the title the viewer wants to see (the apps' Rename), kept for every copy and carried by the sync file. Wrong title? (WB28) shows only once its inbox is registered. */}
+                        <Round icon={Edit02Icon} label={t('grid.rename')} popup onClick={() => openRename(item, props.info?.title || item.title, copyItems())} />
+                        <Show when={canReportTitle()}>
+                            <Round icon={InformationCircleIcon} label={t('titles.menu')} popup onClick={() => reportTitle(item, props.info?.title || item.title, copyItems())} />
+                        </Show>
                         {/* A trailer plays in YouTube's own player in a sheet, which loads only after this press (ui/TrailerSheet.tsx); with Play trailers in TMPlayer off it is a link to YouTube in another tab. A key that is not a YouTube id is never offered. */}
                         <Show when={isValidKey(extras()?.trailer) ? extras()!.trailer! : undefined} keyed>
                             {(key) => (
@@ -403,6 +423,9 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <Show when={(props.info?.copies.length ?? 0) > 1}>
                     <Versions item={item} info={props.info!} />
                 </Show>
+                <Show when={props.info}>
+                    <CopyRepair item={item} grouped={(props.info?.copies.length ?? 0) > 1} />
+                </Show>
                 <Show when={props.info?.protected || !item.canBeSaved}>
                     <p class="notice muted small">{t('detail.protected')}</p>
                 </Show>
@@ -424,7 +447,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                 <div class="detail-side">{aboutSection()}</div>
                 </div>
                 <Show when={props.info?.seasons.length}>
-                    <Episodes info={props.info!} current={item} extras={extras()} />
+                    <Episodes info={props.info!} current={item} extras={extras()} tmdbId={tmdbShow()} />
                 </Show>
                 <Show when={!props.info?.seasons.length && props.info?.more.length}>
                     <More info={props.info!} />
@@ -460,30 +483,66 @@ function Round(props: { icon: IconData; label: string; on?: boolean; onClick?: (
     )
 }
 
+/** Rows of a long copies list shown at once; More shows the next as many. */
+const COPY_PAGE = 50
+
 /**
  * The copies of this video the chat holds (the apps' Versions): one quiet line naming the copy this
  * page is about ("1080p · H.264 · Blu-ray · 885 MB · from Film Club") with Change at its end, and
- * under it, once Change is pressed, every copy as a row of its own to choose from. Choosing one turns
- * the page to that copy, so Play and the facts speak of it.
+ * under it, once Change is pressed, every copy as a row of its own to choose from, recommended
+ * first with "Best for this device" (HX38: one this browser plays natively, a phone's 1080p before
+ * 4K), the count the card says. Choosing one remembers it for the video (its cards play it from
+ * then on) and turns the page to that copy, so Play and the facts speak of it; the remote and the
+ * keyboard land back on this line.
  */
 function Versions(props: { item: VideoItem; info: WatchInfo }) {
     const navigate = useNavigate()
+    const location = useLocation<{ video?: VideoItem; versions?: boolean }>()
     const [open, setOpen] = createSignal(false)
-    const here = () => props.info.copies.find((c) => c.item.messageId === props.item.messageId && c.item.chatId === props.item.chatId)
+    const [shown, setShown] = createSignal(COPY_PAGE)
+    let summaryButton: HTMLButtonElement | undefined
+    let list: HTMLUListElement | undefined
+    const isHere = (c: CopyRef) => c.item.messageId === props.item.messageId && c.item.chatId === props.item.chatId
+    const here = () => props.info.copies.find(isHere)
     const heading = (c: CopyRef) => (c.facts.length ? c.facts.join(dot) : size(c.item.size))
     const summary = () => {
         const c = here()
         return c ? [heading(c), c.facts.length ? size(c.item.size) : '', t('detail.copy_from', { chat: c.chat })].filter(Boolean).join(dot) : ''
     }
+    const device = () => (form() === 'tv' ? 'tv' : form() === 'phone' ? 'phone' : 'computer')
+    // CopyRef.date is in seconds.
+    const datesDiffer = () => new Set(props.info.copies.map((c) => Math.floor(c.date / 86_400))).size > 1
+    const detail = (c: CopyRef) =>
+        [
+            c.fit === 'stutter' ? t('detail.copy_may_stutter', { device: device() }) : c.fit === 'smooth' ? t('detail.copy_smooth', { device: device() }) : '',
+            c.facts.length ? size(c.item.size) : '',
+            shortLength(c.item.duration),
+            datesDiffer() ? t('detail.copy_posted', { date: new Date(c.item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) }) : '',
+            c.started ? t('detail.copy_started') : '',
+        ]
+            .filter(Boolean)
+            .join(dot)
     const pick = (c: CopyRef) => {
         setOpen(false)
-        if (c === here()) return
-        navigate(detailPath(c.item), { replace: true, state: { video: c.item } })
+        // Chosen even when it is the copy shown: the viewer pins it over the recommendation for its cards.
+        chooseCopyOf(c.item, props.info.copies.map((x) => x.item))
+        if (isHere(c)) return void summaryButton?.focus()
+        navigate(detailPath(c.item), { replace: true, state: { video: c.item, versions: true } })
     }
-    const datesDiffer = () => new Set(props.info.copies.map((c) => Math.floor(c.date / 86_400_000))).size > 1
+    const more = () => {
+        const from = shown()
+        setShown(from + COPY_PAGE)
+        // The first row the press brought in takes the focus, so the remote and the keys go on from there.
+        queueMicrotask(() => list?.querySelectorAll<HTMLElement>('[role=option]')[from]?.focus())
+    }
+    // Back from a choice (the page turned to the copy chosen): the focus is on this line again, not on Play.
+    onMount(() => {
+        if (!location.state?.versions) return
+        requestAnimationFrame(() => summaryButton?.focus())
+    })
     return (
         <section class="detail-versions" aria-label={t('detail.copies_title')}>
-            <button type="button" class="detail-copy-summary" aria-expanded={open()} onClick={() => setOpen(!open())}>
+            <button type="button" class="detail-copy-summary" ref={summaryButton} aria-expanded={open()} onClick={() => setOpen(!open())}>
                 <span class="detail-copy-text">
                     <span class="detail-copy-line">{summary()}</span>
                     <span class="muted small">{t('detail.versions', { count: props.info.copies.length })}</span>
@@ -491,19 +550,22 @@ function Versions(props: { item: VideoItem; info: WatchInfo }) {
                 <span class="detail-copy-change">{open() ? t('detail.copy_done') : t('detail.copy_change')}</span>
             </button>
             <Show when={open()}>
-                <ul class="detail-copy-list" role="listbox" aria-label={t('detail.copies_title')} onKeyDown={(e) => form() !== 'tv' && arrowKeys(e, e.currentTarget, '[role=option]', { vertical: true })}>
-                    <For each={props.info.copies}>
+                <ul class="detail-copy-list" ref={list} role="listbox" aria-label={t('detail.copies_title')} onKeyDown={(e) => form() !== 'tv' && arrowKeys(e, e.currentTarget, '[role=option]', { vertical: true })}>
+                    <For each={props.info.copies.slice(0, shown())}>
                         {(c) => (
                             <li role="presentation">
-                                <button type="button" role="option" class="detail-copy" aria-selected={c === here()} onClick={() => pick(c)}>
+                                <button type="button" role="option" class="detail-copy" aria-selected={isHere(c)} onClick={() => pick(c)}>
                                     <span class="detail-copy-text">
-                                        <span class="detail-copy-line">{heading(c)}</span>
-                                        <span class="muted small">
-                                            {[c.facts.length ? size(c.item.size) : '', shortLength(c.item.duration), datesDiffer() ? new Date(c.item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : ''].filter(Boolean).join(dot)}
+                                        <span class="detail-copy-line">
+                                            <span>{heading(c)}</span>
+                                            <Show when={c.best}>
+                                                <span class="detail-copy-best">{t('detail.copy_best')}</span>
+                                            </Show>
                                         </span>
+                                        <span class="muted small" classList={{ 'detail-copy-stutter': c.fit === 'stutter' }}>{detail(c)}</span>
                                         <span class="muted small detail-copy-file">{c.fileName}</span>
                                     </span>
-                                    <Show when={c === here()}>
+                                    <Show when={isHere(c)}>
                                         <Icon icon={Tick02Icon} size={22} />
                                     </Show>
                                 </button>
@@ -511,8 +573,52 @@ function Versions(props: { item: VideoItem; info: WatchInfo }) {
                         )}
                     </For>
                 </ul>
+                <Show when={props.info.copies.length > shown()}>
+                    <button type="button" class="link detail-copy-more" onClick={more}>
+                        {`${t('common.more')}${dot}${props.info.copies.length - shown()}`}
+                    </button>
+                </Show>
             </Show>
         </section>
+    )
+}
+
+/**
+ * "Not the same video" under the copies (the apps' repair, last on the page): this file stands
+ * apart from the copies it was grouped with, its own card and page from then on; on a file kept
+ * apart, "Group with its copies again". Nothing is lost either way, so it asks nothing; the focus
+ * stays on the line, which turns into the other once the page has read again.
+ */
+function CopyRepair(props: { item: VideoItem; grouped: boolean }) {
+    let wrap: HTMLDivElement | undefined
+    const apart = () => isApart(props.item)
+    const press = (on: boolean) => {
+        keepApart(props.item, on)
+        const refocus = (tries: number) => {
+            const next = wrap?.querySelector<HTMLButtonElement>('button')
+            if (next && next.dataset.on !== String(on)) return next.focus()
+            if (tries > 0) setTimeout(() => refocus(tries - 1), 100)
+        }
+        queueMicrotask(() => refocus(30))
+    }
+    return (
+        <div class="detail-copy-repair" ref={wrap}>
+            <Show when={apart()}>
+                <button type="button" class="detail-copy-repair-button" data-on="false" onClick={() => press(false)}>
+                    <Icon icon={Link04Icon} size={20} />
+                    <span>{t('grid.same_video_again')}</span>
+                </button>
+            </Show>
+            <Show when={!apart() && props.grouped}>
+                <button type="button" class="detail-copy-repair-button" data-on="true" onClick={() => press(true)}>
+                    <Icon icon={Unlink04Icon} size={20} />
+                    <span class="detail-copy-text">
+                        <span>{t('grid.not_same_video')}</span>
+                        <span class="muted small">{t('grid.not_same_video_detail')}</span>
+                    </span>
+                </button>
+            </Show>
+        </div>
     )
 }
 
@@ -578,7 +684,7 @@ function saveOnlyMine(on: boolean): void {
  * the whole show, and Mark episodes, whose card lists the season's and the show's lines with how
  * many episodes each changes, so picking one is the confirmation.
  */
-function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras | null }) {
+function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras | null; tmdbId: string | null }) {
     const progress = useProgress()
     const navigate = useNavigate()
     const seasonOf = () => props.info.seasons.find((s) => s.episodes.some((e) => e.item.messageId === props.current.messageId))?.number ?? props.info.seasons[0]?.number
@@ -590,8 +696,10 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     const heldSeasons = createMemo((): HeldSeason[] =>
         props.info.seasons.map((s) => ({ number: s.number, numbers: s.episodes.map((e) => numberOf(e.code)), covered: s.covered ?? [], packed: props.info.packs.some((p) => p.season === s.number) })),
     )
-    const listed = () => props.extras?.seasonList ?? []
-    const next = () => props.extras?.next ?? null
+    // The numbering the chat follows: TMDB's season split (S02E01) or TMDB's own (S01E26), as the apps decide it.
+    const numb = createMemo(() => numbering(heldSeasons(), props.extras))
+    const listed = () => numb().seasons
+    const next = () => numb().next
     const full = createMemo((): SeasonStop[] | null => {
         if (!listed().length && !next()) return null
         return agrees(heldSeasons(), listed()) ? guideSeasons(heldSeasons(), listed(), next(), today) : null
@@ -608,10 +716,33 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     // The whole-season files of the season shown, after its episodes (a pack of several seasons sits under its first).
     const packsHere = () => props.info.packs.filter((p) => p.season === shown())
     const packName = (p: { season: number; seasonEnd: number | null }) => (p.seasonEnd ? t('series.pack_span', { first: p.season, last: p.seasonEnd }) : t('series.pack_whole'))
+    // TMDB's episodes of the season shown, one by one (names, stills, days, lengths): the split's own season, or TMDB's, or
+    // for a chat counting straight through the TMDB seasons its numbers fall in, put under the chat's numbers. Never throws:
+    // no list (no key, offline, nothing known) leaves the page as the counts and the chat's names make it.
+    const [provided] = createResource(
+        // Only for a match the chat agrees with, or a season it counts straight through (S02E13 for TMDB's second season's first):
+        // a wrong match would name its files wrongly.
+        () => (props.tmdbId && shown() > 0 && (full() || counted(shown(), heldSeasons().find((h) => h.number === shown())?.numbers ?? [], listed())) ?`${props.tmdbId}|${shown()}|${numb().split ? (props.extras?.seasonGroup ?? '') : ''}|${listed().length}` : null),
+        async (key): Promise<ProviderEpisode[] | null> => {
+            try {
+                const [id, s, group] = key.split('|')
+                const n = Number(s)
+                const mine = untrack(heldSeasons).find((h) => h.number === n)?.numbers ?? []
+                const layout = untrack(listed)
+                const lists = new Map<number, ProviderEpisode[]>()
+                await Promise.all(seasonsFor(n, mine, layout).map(async (sn) => void lists.set(sn, (await loadSeason(id, sn, group || null)) ?? [])))
+                return rekey(n, mine, layout, lists)
+            } catch {
+                return null
+            }
+        },
+    )
+    const listedEpisodes = (): ProviderEpisode[] | null => (provided.state === 'ready' ? provided() ?? null : null)
+    const meta = createMemo(() => new Map((listedEpisodes() ?? []).map((e) => [e.number, e])))
     const lines = createMemo((): GuideRow[] => {
         const n = shown()
         if (!guide()) return (season()?.episodes ?? []).map((e) => ({ kind: 'have' as const, number: numberOf(e.code) }))
-        return guideRows(n, heldSeasons(), listed().find((s) => s.number === n), next(), today)
+        return guideRows(n, heldSeasons(), listed().find((s) => s.number === n), next(), today, listedEpisodes())
     })
     const [gap, setGap] = createSignal<{ number: number; state: 'missing' | 'upcoming'; airDate: string | null } | null>(null)
     let gapCard!: HTMLDialogElement
@@ -619,6 +750,7 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
     const find = (words: string) => navigate(`/search?q=${encodeURIComponent(words)}`)
     const day = (iso: string) => new Date(iso).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
     const seasonName = (n: number) => (n === 0 ? t('series.specials') : t('series.season', { number: n }))
+    const spokenUpcoming = (n: number, airDate: string | null) => t('series.gap_spoken_upcoming', { number: n, date: airDate ? day(airDate) : t('detail.upcoming') })
     const [seen] = createResource(watchedTick, async () => new Set((await watchedList()).map((w) => `${w.chatId}:${w.messageId}`)))
     const watchedSet = () => seen.latest ?? new Set<string>()
     const seasons = () => props.info.seasons.map((s) => ({ number: s.number, episodes: s.episodes.map((e) => e.item) }))
@@ -755,20 +887,29 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                             when={line.kind === 'have'}
                             fallback={
                                 <li>
-                                    <button
-                                        type="button"
-                                        class="episode gap"
-                                        onClick={() => {
-                                            if (line.kind !== 'gap') return
-                                            setGap({ number: line.number, state: line.state, airDate: line.airDate })
-                                            gapCard.showModal()
-                                        }}
+                                    <Show
+                                        when={line.kind === 'gap' && line.state === 'missing'}
+                                        fallback={
+                                            // Not aired yet: nothing to do with it, so no control and no focus; read as one line.
+                                            <div class="episode gap upcoming" role="group" aria-label={spokenUpcoming(line.number, line.kind === 'gap' ? line.airDate : null)}>
+                                                <GapBody number={line.number} season={shown()} state="upcoming" airDate={line.kind === 'gap' ? line.airDate : null} meta={meta().get(line.number)} day={day} />
+                                            </div>
+                                        }
                                     >
-                                        <span class="episode-code">{code(line.number)}</span>
-                                        <span class="episode-name">
-                                            {line.kind === 'gap' && line.state === 'upcoming' ? (line.airDate ? t('detail.airs_on', { date: day(line.airDate) }) : t('detail.upcoming')) : t('series.not_in_chats')}
-                                        </span>
-                                    </button>
+                                        {/* Missing: a dimmed row that wakes up on focus and keeps "Find in other chats" on a press. */}
+                                        <button
+                                            type="button"
+                                            class="episode gap"
+                                            aria-label={t('series.gap_spoken_missing', { number: line.number })}
+                                            onClick={() => {
+                                                if (line.kind !== 'gap') return
+                                                setGap({ number: line.number, state: line.state, airDate: line.airDate })
+                                                gapCard.showModal()
+                                            }}
+                                        >
+                                            <GapBody number={line.number} season={shown()} state="missing" airDate={line.kind === 'gap' ? line.airDate : null} meta={meta().get(line.number)} day={day} />
+                                        </button>
+                                    </Show>
                                 </li>
                             }
                         >
@@ -779,7 +920,10 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                                         <li>
                                             <A class="episode" classList={{ playing: here() }} href={watchPath(e.item)} state={{ video: e.item }} aria-current={here() ? 'true' : undefined}>
                                                 <span class="episode-code">{e.code}</span>
-                                                <span class="episode-name">{e.name ?? shortLength(e.item.duration)}</span>
+                                                <span class="episode-text">
+                                                    <span class="episode-name">{titled(meta().get(line.number), line.number) || (e.name ?? shortLength(e.item.duration))}</span>
+                                                    <Show when={heldFacts(e.item, meta().get(line.number), day)}>{(facts) => <span class="episode-facts">{facts()}</span>}</Show>
+                                                </span>
                                                 <Show when={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}>
                                                     <span class="episode-watched" role="img" aria-label={t('detail.watched_line')}>
                                                         <Icon icon={Tick02Icon} size={16} />
@@ -808,6 +952,73 @@ function Episodes(props: { info: WatchInfo; current: VideoItem; extras: Extras |
                 </For>
             </ol>
         </section>
+    )
+}
+
+/** TMDB's name for an episode, or '' where it has none or only numbers it ("Episode 32" is no name in season 2). */
+function titled(meta: ProviderEpisode | undefined, number: number): string {
+    return meta?.name && !placeholder(meta.name, number) ? meta.name : ''
+}
+
+/** What a held episode says under its name: TMDB's running time (else the file's), its day, the file's size last. */
+function heldFacts(item: VideoItem, meta: ProviderEpisode | undefined, day: (iso: string) => string): string {
+    if (!meta) return ''
+    return [meta.runtime ? shortLength(meta.runtime * 60) : shortLength(item.duration), meta.airDate ? day(meta.airDate) : '', size(item.size)].filter(Boolean).join(dot)
+}
+
+/** The picture of an episode the chat lacks: TMDB's still once the row is near the screen (a long season loads only what is seen), else its number. */
+function Still(props: { path: string | null; number: number }) {
+    const [src, setSrc] = createSignal<string | null>(null)
+    let box!: HTMLSpanElement
+    onMount(() => {
+        const path = props.path
+        if (!path) return
+        const load = () => void loadFile(path, 'w185').then(setSrc, () => {})
+        if (typeof IntersectionObserver === 'undefined') return load()
+        const seen = new IntersectionObserver((hits) => {
+            if (!hits.some((h) => h.isIntersecting)) return
+            seen.disconnect()
+            load()
+        }, { rootMargin: '300px' })
+        seen.observe(box)
+        onCleanup(() => seen.disconnect())
+    })
+    return (
+        <span class="episode-still" ref={box} aria-hidden="true">
+            <span class="episode-still-number">{props.number}</span>
+            <Show when={src()}>
+                <img src={src()!} alt="" decoding="async" />
+            </Show>
+        </span>
+    )
+}
+
+/**
+ * An episode TMDB lists and no chat holds, laid out as a held one and dimmed: its still (else its number), its code and a
+ * small tag saying why it does not play, its name, length and day, and a line or two of its words.
+ */
+function GapBody(props: { number: number; season: number; state: 'missing' | 'upcoming'; airDate: string | null; meta: ProviderEpisode | undefined; day: (iso: string) => string }) {
+    const name = () => titled(props.meta, props.number) || t('series.episode', { number: props.number })
+    const tag = () => (props.state === 'upcoming' ? (props.airDate ? t('detail.airs_on', { date: props.day(props.airDate) }) : t('detail.upcoming')) : t('series.gap_not_in_chat'))
+    // An upcoming one says its day in the tag already.
+    const facts = () => [props.meta?.runtime && props.meta.runtime <= 1440 ? shortLength(props.meta.runtime * 60) : '', props.state === 'missing' && props.airDate ? props.day(props.airDate) : ''].filter(Boolean).join(dot)
+    return (
+        <>
+            <Still path={props.meta?.still ?? null} number={props.number} />
+            <span class="episode-text">
+                <span class="gap-head">
+                    <span class="episode-code">{t('series.episode_short', { season: props.season, episode: props.number })}</span>
+                    <span class="gap-tag">{tag()}</span>
+                </span>
+                <span class="episode-name">{name()}</span>
+                <Show when={facts()}>
+                    <span class="episode-facts">{facts()}</span>
+                </Show>
+                <Show when={props.meta?.overview}>
+                    <span class="episode-overview">{props.meta!.overview}</span>
+                </Show>
+            </span>
+        </>
     )
 }
 

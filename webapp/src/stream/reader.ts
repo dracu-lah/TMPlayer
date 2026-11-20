@@ -50,6 +50,8 @@ export interface MediaFile {
     readonly loaded: number
     /** Whether a read someone waits on is still on its way. */
     readonly waiting: boolean
+    /** Bytes asked of Telegram that have not arrived yet: a read ends a whole chunk at a time, so the stall watch (player/openStall.ts) allows for them. */
+    readonly pending: number
     warmUp(): void
     /** Bytes [start, end) of the file. */
     read(start: number, end: number): Promise<Uint8Array>
@@ -263,6 +265,13 @@ export class TgFile implements MediaFile {
     get waiting(): boolean {
         for (const job of this.jobs.values()) if (job.urgent) return true
         return false
+    }
+
+    /** Bytes of the chunks asked of Telegram and not yet in. */
+    get pending(): number {
+        let n = 0
+        for (const job of this.jobs.values()) if (job.started) n += this.chunk
+        return n
     }
 
     get cachedBytes(): number {

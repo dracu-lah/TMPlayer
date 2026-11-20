@@ -77,9 +77,10 @@ test('the sort menu opens on its first line, walks on arrows and hands the keybo
     await trigger.focus()
     await page.keyboard.press('Enter')
     const items = page.getByRole('menuitemradio')
-    await expect(items.first()).toBeFocused()
+    // The first line is Play random (WB13), the orders follow it.
+    await expect(page.locator('[role^=menuitem]').first()).toBeFocused()
     await page.keyboard.press('ArrowDown')
-    await expect(items.nth(1)).toBeFocused()
+    await expect(items.first()).toBeFocused()
     await page.keyboard.press('End')
     await expect(page.locator('[role^=menuitem]').last()).toBeFocused()
     await page.keyboard.press('Escape')

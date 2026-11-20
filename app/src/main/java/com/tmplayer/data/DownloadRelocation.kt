@@ -114,10 +114,7 @@ object DownloadRelocation {
     private fun sizeText(bytes: Long): String = StorageRelocationPlan.size(bytes)
 
     /** Whether [e] is the file system saying the disk is full, in the words the JDK and Android use. */
-    internal fun isNoSpace(e: Throwable): Boolean {
-        val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
-        return text.contains("No space left", ignoreCase = true) || text.contains("ENOSPC") || text.contains("disk full", ignoreCase = true)
-    }
+    internal fun isNoSpace(e: Throwable): Boolean = StorageRelocationPlan.isNoSpace(e)
 
     /**
      * The label of the volume a move is waiting for, or null when none is pending or it is
@@ -313,7 +310,7 @@ object DownloadRelocation {
         }
         val into = dir ?: throw IOException("No folder to move into")
         return when (video) {
-            is LocalVideo.OnDisk -> DownloadFiles.moveIntoDownloads(video.file, into, video.file.name, onProgress).absolutePath
+            is LocalVideo.OnDisk -> DownloadFiles.moveIntoDownloads(video.file, into, video.file.name, onProgress = onProgress).absolutePath
             is LocalVideo.InTree -> {
                 val moved = DownloadTree.pull(video, into, video.name(), onProgress)
                 letGo(video)

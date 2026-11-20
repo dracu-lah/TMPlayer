@@ -99,13 +99,21 @@ const val BRAND_NAME = "TMPlayer"
 /**
  * How large a [BrandLockup] is drawn: the mark's side, the name's type to go with it, and the
  * room between them. [Small] for bars and corners, [Medium] for sign in, the lock and setup,
- * [Large] for About and the start-up loader.
+ * [Large] for About and the start-up loader, [Desktop] for the computer's Home corner.
  */
 class BrandSize(val mark: Dp, val name: TextUnit, val gap: Dp) {
     companion object {
         val Small = BrandSize(26.dp, 18.sp, 10.dp)
         val Medium = BrandSize(44.dp, 26.sp, 14.dp)
         val Large = BrandSize(64.dp, 36.sp, 18.dp)
+
+        /**
+         * The desktop's corner lockup over Home: a step above [Small] (which read smaller than the
+         * row headings on a computer screen, 2026-11-01) and well under the 40 dp, 28 sp it was
+         * drawn at, which was too big (HX60), most of all at 150% and 200% scale where a small
+         * window has few dp to give.
+         */
+        val Desktop = BrandSize(32.dp, 22.sp, 12.dp)
     }
 }
 

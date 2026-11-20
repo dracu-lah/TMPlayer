@@ -1,0 +1,16 @@
+/* The rename sheet (RenameSheet.tsx) on top of the page's .confirm look: a touch sized field and
+   buttons, "Use the file name" at the start so Save stays last under the thumb, wrapping on a narrow phone. */
+.rename-sheet { width: min(420px, calc(100vw - 32px)); }
+.rename-sheet form { display: flex; flex-direction: column; gap: 12px; }
+.rename-sheet p { margin: 0; }
+.rename-sheet .list-name { margin: 0; }
+.rename-sheet .list-name input { min-height: 44px; }
+.rename-count { text-align: end; font-variant-numeric: tabular-nums; }
+.rename-buttons { flex-wrap: wrap; }
+.rename-buttons button { min-height: 44px; padding-inline: 12px; }
+.rename-buttons .rename-reset { margin-inline-end: auto; text-align: start; }
+.rename-buttons button:disabled { opacity: .6; }
+@media (max-width: 359px) {
+  .rename-buttons { flex-direction: column-reverse; align-items: stretch; }
+  .rename-buttons .rename-reset { margin-inline-end: 0; }
+}

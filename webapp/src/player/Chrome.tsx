@@ -9,7 +9,7 @@
 // that open from their buttons) and `tv` (the Android TV player: no top bar, the title over the
 // bar, one play disc, a row of round buttons with More at its end, the time as a button, every
 // control reached with the remote's arrows and OK, see `tvKey`).
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
 import {
     Add01Icon,
     Bookmark02Icon,
@@ -45,10 +45,16 @@ import {
 } from '@hugeicons/core-free-icons'
 import './player.css'
 import './subfonts.css'
+import './rotate.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
-import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheets'
-import { nextShape, objectFit, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
+import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, variant, walk } from './sheets'
+import { nextShape, objectFit, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
+import { clampedTo, NONE as NO_ZOOM, panBy, percent, pinch as pinchZoom, settled, stepped, wheelSteps, zoomed, type Frame, type Zoom } from './zoom'
+import { actionFor, FRAME, playerHearsKeys } from './playerKeys'
+import { confirmOpen } from '../ui/Confirm'
+import { cueOverlay, type CueOverlay } from './cueoverlay'
+import './zoom.css'
 import { remoteKey } from '../tv/remote'
 import { frameAt, type Frames } from './storyboard'
 import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, PICTURES_SHOWN, type FrameGrabber } from './seekpreview'
@@ -56,14 +62,17 @@ import { coverBackground } from '../screens/cover'
 import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
-import { BookmarksSheet, delayText, ShortcutsSheet, SIZES, TimingSheet } from './extra-sheets'
-import { MsoneSheet, type MsoneTarget } from './msone-sheet'
+import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
+import { copyLink, linkOf, linkOffered } from '../ui/tgLinks'
+import { MsoneSheet, trackLabel as onlineLabel, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
+import * as subpick from './subpick-use'
 import { mergeSkips } from './skipOnline'
 import { answer, askOf, loadAnimeSkips } from '../screens/posters'
-import { settings } from '../store'
+import { openingSpeed, readBoost, rememberSpeed, settings, writeBoost } from '../store'
 import { msoneOn } from '../msoneFlag'
-import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
+import { AUTOPLAY_LIMIT, BOOSTS, fineRate, IDLE_LIMIT, nextTurn, noteInput, pressLoop, repeats, repeatState, SeekUndo, sidewaysTurn, pictureTransform, SLEEP_CHOICES, sleepState, speedScopes, TURNS, turnedPictureSize, turnFrame, watching, wrapLoop, type Loop } from './extras'
+import { applyBoost, boostIsIos, boostSupported, releaseBoost } from './boost'
 import {
     addBookmark, deleteBookmark, loadBookmarks, readAutoplay, readChatOrder, readKeepRepeat, renameBookmark, writeAutoplay, writeChatOrder, writeKeepRepeat, writeLook,
     type Bookmark, type SubtitleLook,
@@ -116,6 +125,10 @@ const PEEK_MS = 1200
 /** An iPhone or iPad: a page cannot set the volume there (the side buttons do), so the right side's drag does nothing. */
 const FIXED_VOLUME = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const UNLOCK_PILL_MS = 2500
+/** PlayerFeedback.ZOOM_MS: the zoom's figure stays this long after the fingers lift or a key zooms. */
+const ZOOM_MS = 1800
+/** Cmd is the command key on a Mac (and an iPad's keyboard, which says MacIntel), Ctrl elsewhere. */
+const MAC = /Mac/.test(navigator.platform)
 
 export type { Shape }
 const SHAPE_ICON: Partial<Record<Shape, IconData>> = { fit: FitToScreenIcon, crop: CropIcon, stretch: MaximizeScreenIcon }
@@ -158,6 +171,14 @@ export interface Ctl {
     qualityLabel: (height: number) => string
     readout: () => string
     details: () => string
+    /** Report stutter (WB18): null when this browser has no frame counters, so the line is not offered. */
+    stutter: () => { press: () => 'kept' | 'already' } | null
+    /** What the page's logs weigh, scrubbed, for the line under Copy details. */
+    logsSize: () => string
+    /** The scrubbed logs as text, for the selected copy a browser that refuses the clipboard gets. */
+    logsText: () => string
+    /** Copy details with the logs, written to the clipboard inside the press itself; false when the browser refused. */
+    copyLogs: () => Promise<boolean>
     loadSubtitleFile: () => void
     /** Lays a subtitle file over the video and shows it; throws when the file cannot be read. */
     addSubtitle: (file: File, as?: { label: string; language: string }) => Promise<void>
@@ -178,7 +199,13 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
+
+/** A file name the three systems all take: no path or reserved characters, not too long. */
+function shotName(title: string, at: number): string {
+    const name = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'TMPlayer'
+    return `${name} ${clock(at).replace(/:/g, '.')}.png`
+}
 
 export { variant }
 
@@ -255,6 +282,28 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // ---- showing and hiding ------------------------------------------------------------------
     const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
+    // Playback details (WB18): what Report stutter and Copy details just did, and what the logs weigh.
+    const [detailsNote, setDetailsNote] = createSignal('')
+    const [logsSize, setLogsSize] = createSignal<string | null>(null)
+    /** The text a browser that would not copy gets to select and copy itself. */
+    const [copyFallback, setCopyFallback] = createSignal<string | null>(null)
+    createEffect(() => {
+        if (sheet() !== 'details') return
+        setDetailsNote('')
+        setCopyFallback(null)
+        try {
+            setLogsSize(untrack(() => c.logsSize()))
+        } catch {
+            setLogsSize(null)
+        }
+        // The remote and the keyboard come into the sheet on its close button, so OK still closes it as before.
+        queueMicrotask(() => c.root.querySelector<HTMLElement>('.pc-details .pc-btn')?.focus({ preventScroll: true }))
+    })
+    const copyDetails = () =>
+        void c.copyLogs().then((ok) => {
+            setCopyFallback(ok ? null : c.logsText())
+            setDetailsNote(ok ? t('player.details_copied') : t('web.copy_failed'))
+        })
     // The subtitle files posted in this video's chat (EG-F48): looked for once, when the Subtitles
     // picker (or More options, which leads to it) first opens. One search, answered best first; the
     // entry shows only when there are some, and a failure just leaves it out.
@@ -268,6 +317,41 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const wanted = [navigator.language.slice(0, 2).toLowerCase(), 'en']
         call('chatSubtitles', [c.item.chatId, c.item.messageId, c.item.fileName || c.item.title, '', wanted]).then(setChatSubs, () => {})
     })
+    // Copy link at this time (the apps' CopyLinkAtTime): the link is asked as More options opens, so the tap that copies it has it.
+    // Not for a chat that restricts saving, nor a video played from pieces. `linkShown` is the link, when the browser refused the clipboard.
+    const askLink = (chatId: number, messageId: number) => call('messageLink', [chatId, messageId])
+    const [linkShown, setLinkShown] = createSignal('')
+    // Telegram says this video may not be passed on now (the chat became protected, or the message destroys itself): the entry goes.
+    const [linkBlocked, setLinkBlocked] = createSignal(false)
+    let linkAsked: string | null = null
+    createEffect(() => {
+        if (sheet() !== 'more' || !linkOffered(c.item)) return
+        const key = `${c.item.chatId}:${c.item.messageId}`
+        if (linkAsked !== key) {
+            linkAsked = key
+            setLinkBlocked(false)
+            void linkOf(c.item, askLink).then((a) => linkAsked === key && setLinkBlocked(!('link' in a) && a.none === 'protected'))
+        }
+    })
+    let linkBusy = false
+    const copyLinkAtTime = async () => {
+        if (linkBusy || !linkOffered(c.item)) return
+        linkBusy = true
+        const at = Math.floor(v.currentTime)
+        setSheet(null)
+        try {
+            const out = await copyLink(c.item, at, askLink)
+            if (out.done === 'shown') {
+                setLinkShown(out.link)
+                setSheet('link')
+            } else {
+                if (out.done === 'none' && out.why === 'protected') setLinkBlocked(true)
+                flash(out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links'))
+            }
+        } finally {
+            linkBusy = false
+        }
+    }
     /** The listed file read and laid over the video, or the sentence saying why not (a gone file leaves the list). */
     const pickChat = async (sub: ChatSubtitle) => {
         if (chatBusy()) return
@@ -278,6 +362,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             const own = episodeOf(c.item.fileName ?? '') ?? (info()?.episode ? episodeOf(info()!.episode!.code) : null)
             const file = await readChatSubtitle(sub, own)
             await c.addSubtitle(file, { label: sub.name.replace(/\.[^.]+$/, ''), language: sub.language ?? '' })
+            subpick.choseOther(c.item)
             setSheet(null)
         } catch (e) {
             if (e instanceof ChatSubtitleError) {
@@ -402,9 +487,33 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         noteSeek(from, to)
     }
     const seekBy = (s: number) => seekTo(v.currentTime + s)
+    // The speed a video opens at: the one kept for its show (known once the show is read), else for its chat.
+    let speedPicked = false
+    {
+        let last = ''
+        createEffect(() => {
+            const scopes = speedScopes(c.item.chatId, c.info()?.episode?.show ?? null)
+            const key = `${scopes.series}|${scopes.chat}`
+            if (key === last) return
+            last = key
+            let alive = true
+            onCleanup(() => (alive = false))
+            openingSpeed(scopes).then(
+                (r) => {
+                    if (!alive || speedPicked || Math.abs(v.playbackRate - r) < 0.001) return
+                    v.defaultPlaybackRate = r
+                    v.playbackRate = r
+                },
+                () => {},
+            )
+        })
+    }
     const setSpeed = (r: number) => {
         const next = Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, r)) * 100) / 100
         v.playbackRate = next
+        // Remembered for this show, or this chat (SpeedMemory); 1x forgets it, so the next one opens at 1x too.
+        speedPicked = true
+        rememberSpeed(speedScopes(c.item.chatId, c.info()?.episode?.show ?? null), next)
         flash(speedLabel(next))
     }
     const stepSpeed = (up: boolean) => {
@@ -416,9 +525,21 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         v.volume = Math.max(0, Math.min(1, x))
         v.muted = v.volume === 0
     }
+    // The online subtitle laid over this video (picked from MSone, or brought back by itself): the one track the
+    // remembered pick is about. Choosing it again ends an Off; Off is remembered; any other track ends the pick (HX25).
+    let onlineTrack: TextTrack | null = null
+    const layOnline = async (file: File, as: { label: string; language: string }) => {
+        const before = new Set(Array.from(v.textTracks))
+        await c.addSubtitle(file, as)
+        onlineTrack = Array.from(v.textTracks).find((tt) => !before.has(tt)) ?? null
+        readSubs()
+    }
     const pickSub = (track: TextTrack | null) => {
         for (const tt of subs()) tt.mode = tt === track ? 'showing' : 'disabled'
         readSubs()
+        if (!track) subpick.choseOff(c.item)
+        else if (track === onlineTrack) subpick.choseOnline(c.item)
+        else subpick.choseOther(c.item)
         flash(track ? t('player.subtitles_track', { track: subLabel(track, subs().indexOf(track)) }) : t('player.subtitles_off'))
     }
     const subLabel = (tt: TextTrack, i: number) => tt.label || (tt.language ? tt.language.toUpperCase() : t('player.track_number', { number: i + 1 }))
@@ -427,6 +548,31 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const at = list.indexOf(subOn())
         pickSub(list[(at + (back ? -1 : 1) + list.length) % list.length])
     }
+    // HX25, the start: the online subtitle picked for this video before comes back by itself (its own copy, the MSone
+    // cache's file, or one download when nothing forbids it), and so does Off. The lookup began when the player opened
+    // (Player's warmRestore), so the track is usually in before the first frame, and always before the viewer can enter
+    // the iPhone's own full screen. A subtitle the viewer chose meanwhile is never replaced; nothing here shows an error.
+    let leaving = false
+    onCleanup(() => (leaving = true))
+    onMount(() => {
+        void subpick.takeRestore(c.item).then(async ({ found, wanted }) => {
+            const showing = () => Array.from(v.textTracks).some((tt) => (tt.kind === 'subtitles' || tt.kind === 'captions') && tt.mode === 'showing')
+            // Whatever the viewer chose while this was looked for (Off, a track, a file, MSone's list) stands over it.
+            if (leaving || !wanted() || showing()) return
+            if (found.kind === 'ready') {
+                try {
+                    await layOnline(found.file, { label: onlineLabel(), language: 'ml' })
+                    if (!wanted()) return
+                    if (!found.fromDevice) subpick.keepRestored(c.item, found.hit, found.file)
+                    if (onlineTrack) flash(t('player.subtitles_track', { track: subLabel(onlineTrack, subs().indexOf(onlineTrack)) }))
+                } catch {
+                    // A copy that does not read is no pick: the viewer is simply asked again, no error card.
+                    subpick.choseOther(c.item)
+                }
+            }
+            // Off needs nothing laid: no subtitle shows by itself, and none is laid.
+        })
+    })
     const cycleAudio = (back = false) => {
         const list = c.audios()
         if (list.length < 2 || !c.canSwitchAudio()) return
@@ -450,11 +596,25 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             onCleanup(() => watch.disconnect())
         }
     }
+    // Rotate picture (PictureRotation): the picture turned a quarter at a time as it is drawn, the box resized so a
+    // sideways picture still fits the stage; for this video only (a new player starts upright).
+    const [turn, setTurn] = createSignal(0)
     createEffect(() => {
         const s = shape()
+        const deg = turn()
+        const sw = stage().width || v.parentElement?.clientWidth || 0
+        const sh = stage().height || v.parentElement?.clientHeight || 0
         v.style.objectFit = objectFit(s)
+        // The canvas engines' pictures follow this (movi.ts by custom properties, libavcanvas.ts by mirroring the style).
+        c.root.style.setProperty('--stage-w', `${sw}px`)
+        c.root.style.setProperty('--stage-h', `${sh}px`)
+        c.root.style.setProperty('--turn', `${deg}deg`)
+        if (deg) c.root.setAttribute('data-turn', String(deg))
+        else c.root.removeAttribute('data-turn')
         const ratio = shapeRatio(s)
-        const at = ratio === null ? null : ratioBox(stage().width || v.parentElement?.clientWidth || 0, stage().height || v.parentElement?.clientHeight || 0, ratio)
+        const frame = turnFrame(sw, sh, deg)
+        const inner = ratio === null ? null : ratioBox(frame.width, frame.height, ratio)
+        const at = inner ? { left: frame.left + inner.left, top: frame.top + inner.top, width: inner.width, height: inner.height } : sidewaysTurn(deg) && sw > 0 && sh > 0 ? frame : null
         if (!at) {
             for (const p of ['position', 'left', 'top', 'width', 'height'] as const) v.style.removeProperty(p)
             return
@@ -463,12 +623,259 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     })
     onCleanup(() => {
         for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit'] as const) v.style.removeProperty(p)
+        for (const p of ['--stage-w', '--stage-h', '--turn']) c.root.style.removeProperty(p)
+        c.root.removeAttribute('data-turn')
     })
+    const pickTurn = (deg: number) => {
+        // The turn changes the picture the zoom enlarges, as another shape does: the zoom starts again from 100 per cent.
+        resetZoom(true)
+        setTurn(deg)
+        zoomFrameKept = null
+        flash(deg ? t('player.rotate_picture_now', { degrees: deg }) : t('player.rotate_picture_off'))
+    }
+
+    // Volume boost (boost.ts): the sound above the file's own level, kept for every video until turned off. Not on an
+    // iPhone or iPad, where the page cannot carry it, so the entry is left out there.
+    const boostOk = boostSupported()
+    const boostIos = boostIsIos()
+    const [boost, setBoost] = createSignal(1)
+    let boostPicked = false
+    let startBoost: (level: number) => void = () => {}
+    {
+        // A level that could not start yet (no tap has allowed audio) starts on the next one.
+        let retry: (() => void) | null = null
+        const start = (level: number) => {
+            void applyBoost(v, level).then((ok) => {
+                if (ok || retry) return
+                retry = () => {
+                    document.removeEventListener('pointerdown', retry!, true)
+                    document.removeEventListener('keydown', retry!, true)
+                    retry = null
+                    if (boost() === level) start(level)
+                }
+                document.addEventListener('pointerdown', retry, true)
+                document.addEventListener('keydown', retry, true)
+            })
+        }
+        startBoost = start
+        if (boostOk)
+            void readBoost().then((level) => {
+                if (boostPicked || level <= 1) return
+                setBoost(level)
+                start(level)
+            })
+        // A new source or engine (a quality pick, the fallback chain) starts without the graph: say the level again.
+        listen('playing', () => boost() > 1 && !retry && start(boost()))
+        onCleanup(() => {
+            if (retry) (document.removeEventListener('pointerdown', retry, true), document.removeEventListener('keydown', retry, true))
+            releaseBoost(v)
+        })
+    }
+    const pickBoost = (level: number) => {
+        boostPicked = true
+        setBoost(level)
+        writeBoost(level)
+        startBoost(level)
+        flash(level > 1 ? t('player.volume_boost_now', { percent: Math.round(level * 100) }) : t('player.volume_boost_off'))
+    }
     const pickShape = (next: Shape) => {
+        // Another shape starts the zoom again from 100 per cent (PictureZoom: the shape sizes the picture
+        // it enlarges), quietly: the shape's own note says what happened.
+        resetZoom(true)
         setShape(next)
+        zoomFrameKept = null
         flash(t('player.picture_shape_now', { shape: shapeName(next) }))
     }
     const cycleShape = () => pickShape(nextShape(shape()))
+
+    // ---- free zoom (PZ1, PictureZoom): 100 to 400 per cent over the shape, around the fingers -----
+    // Drawn as a transform on the picture (the <video>, or the canvas an engine draws on in its
+    // place), centred on the stage as every shape's box is, so the zoom's pan is the transform's
+    // move. The subtitles stay outside it: the <video>'s own cue box would grow with the picture,
+    // so while zoomed it is hidden (zoom.css) and the cues are drawn in the layer over the picture
+    // the canvas engines already use. A new video is a new Chrome, so it starts at 100 per cent.
+    const [zoom, setZoom] = createSignal<Zoom>(NO_ZOOM)
+    const [zoomChip, setZoomChip] = createSignal(false)
+    let zoomChipTimer = 0
+    type WebkitShown = HTMLVideoElement & { webkitDisplayingFullscreen?: boolean }
+    /** Not on the TV (no fingers, no zoom keys), not while locked or a status sheet is up, not in the iPhone's own full screen. */
+    const zoomAllowed = () => !tv() && !locked() && !c.blocked() && !(v as WebkitShown).webkitDisplayingFullscreen
+    const engineCanvas = () => c.root.querySelector<HTMLCanvasElement>('canvas.sw-canvas, canvas.movi-canvas')
+    /**
+     * The stage and the picture's size in it, measured once and kept: a pinch's moves only write
+     * the transform, never read the layout back. Measured again after a resize, another shape,
+     * a new frame size or an engine's canvas coming or going.
+     */
+    let zoomFrameKept: Frame | null = null
+    const zoomFrame = (): Frame => {
+        if (zoomFrameKept) return zoomFrameKept
+        const w = c.root.clientWidth
+        const h = c.root.clientHeight
+        const cv = engineCanvas()
+        const pic = turnedPictureSize(w, h, v.videoWidth || cv?.width || w, v.videoHeight || cv?.height || h, shape(), turn())
+        const frame = { viewWidth: w, viewHeight: h, pictureWidth: pic?.width ?? w, pictureHeight: pic?.height ?? h }
+        // A stage not laid out yet is measured again next time.
+        if (w > 0 && h > 0) zoomFrameKept = frame
+        return frame
+    }
+    listen('resize', () => (zoomFrameKept = null))
+    const showZoomChip = (live: boolean) => {
+        clearTimeout(zoomChipTimer)
+        setZoomChip(true)
+        if (!live) zoomChipTimer = window.setTimeout(() => setZoomChip(false), ZOOM_MS)
+    }
+    /** Back to 100 per cent: with the figure saying so, or `quiet` (a new shape says it with its own note). */
+    function resetZoom(quiet = false) {
+        if (quiet) (clearTimeout(zoomChipTimer), setZoomChip(false))
+        if (!zoomed(zoom())) return
+        setZoom(NO_ZOOM)
+        if (!quiet) showZoomChip(false)
+    }
+    /** A key's or a wheel's steps, around a point of the stage (its centre for a key). */
+    const zoomBy = (steps: number, x = c.root.clientWidth / 2, y = c.root.clientHeight / 2) => {
+        if (!zoomAllowed() || !steps) return
+        setZoom((z) => stepped(z, steps, x, y, zoomFrame()))
+        showZoomChip(false)
+    }
+    /** The transform on every picture there is now: the <video>, and an engine's canvas, however late it came. */
+    // The turn (Rotate picture) and the zoom share the one transform, composed in extras.ts pictureTransform.
+    const applyZoom = (z: Zoom) => {
+        const tf = pictureTransform(untrack(turn), z)
+        for (const el of [v, engineCanvas()]) {
+            if (!el) continue
+            if (el.style.transform !== tf) el.style.transform = tf
+            el.style.transformOrigin = tf ? 'center center' : ''
+        }
+        c.root.classList.toggle('pc-zoomed', zoomed(z))
+    }
+    // The cues while zoomed: a layer of our own over the native picture, unless an engine draws its
+    // own (movi.ts, libavcanvas.ts), which wins whenever it comes, so the words are never drawn twice.
+    let zoomCues: CueOverlay | null = null
+    let zoomCuesEl: Element | null = null
+    const engineCues = () => Array.from(c.root.querySelectorAll('.movi-cues')).some((el) => el !== zoomCuesEl)
+    const placeCues = (z: Zoom) => {
+        // One layer for both: the zoomed picture and the turned one each take the element's own cue box with them.
+        const want = (zoomed(z) || untrack(turn) !== 0) && !engineCues()
+        if (want && !zoomCues) {
+            const before = new Set(c.root.querySelectorAll('.movi-cues'))
+            zoomCues = cueOverlay(v, () => v.currentTime)
+            zoomCuesEl = Array.from(c.root.querySelectorAll('.movi-cues')).find((el) => !before.has(el)) ?? null
+            zoomCues.draw()
+        } else if (!want && zoomCues) {
+            zoomCues.remove()
+            zoomCues = null
+            zoomCuesEl = null
+        }
+    }
+    createEffect(() => {
+        const z = zoom()
+        turn()
+        applyZoom(z)
+        placeCues(z)
+    })
+    // An engine's canvas or cue layer added (or taken away) after the zoom was set: the transform
+    // and the cues follow it, and the picture is measured again.
+    if (typeof MutationObserver !== 'undefined') {
+        const engines = new MutationObserver(() => {
+            zoomFrameKept = null
+            const z = untrack(zoom)
+            applyZoom(z)
+            placeCues(z)
+        })
+        engines.observe(c.root, { childList: true })
+        onCleanup(() => engines.disconnect())
+    }
+    // A resized stage (a turned phone, a window, full screen) keeps the scale and pulls the pan back inside.
+    createEffect(on(stage, () => ((zoomFrameKept = null), setZoom((z) => (zoomed(z) ? clampedTo(z, zoomFrame()) : z))), { defer: true }))
+    const redrawCues = () => zoomCues?.draw()
+    listen('timeupdate', redrawCues)
+    v.textTracks.addEventListener('change', redrawCues)
+    // The iPhone's own full screen is the system's player: the page's transform does not reach it.
+    const quietReset = () => resetZoom(true)
+    v.addEventListener('webkitbeginfullscreen', quietReset)
+    onCleanup(() => {
+        clearTimeout(zoomChipTimer)
+        zoomCues?.remove()
+        v.textTracks.removeEventListener('change', redrawCues)
+        v.removeEventListener('webkitbeginfullscreen', quietReset)
+        c.root.classList.remove('pc-zoomed')
+        for (const el of [v, engineCanvas()]) el?.style.removeProperty('transform')
+        v.style.removeProperty('transform-origin')
+    })
+    const zoomText = () => t('player.zoom_percent', { percent: `${percent(zoom())}%` })
+
+    // ---- screenshots (S with the subtitles, Shift+S without) -----------------------------------
+    // The frame shown, at the video's own size, as a PNG the browser saves. The canvas engines'
+    // picture is their canvas; a frame the page may not read (a WebGL canvas that kept no copy, a
+    // source the browser calls foreign) comes out empty or throws, and the note says it failed.
+    const screenshot = async (withSubtitles: boolean) => {
+        const cv = engineCanvas()
+        const onCanvas = !!cv && (v.classList.contains('movi-active') || v.classList.contains('sw-active'))
+        const w = onCanvas ? cv!.width : v.videoWidth
+        const h = onCanvas ? cv!.height : v.videoHeight
+        const at = v.currentTime
+        if (!(w > 0) || !(h > 0)) return flash(t('player.screenshot_failed'))
+        try {
+            const out = document.createElement('canvas')
+            out.width = w
+            out.height = h
+            const g = out.getContext('2d')
+            if (!g) throw new Error('no 2d')
+            g.drawImage(onCanvas ? cv! : v, 0, 0, w, h)
+            // A cleared WebGL buffer reads as see-through black; a real frame is opaque.
+            if (g.getImageData(w >> 1, h >> 1, 1, 1).data[3] === 0) throw new Error('empty frame')
+            // A turned picture is saved as it is shown (Rotate picture): the frame turned, the subtitles upright over it.
+            let shot = out
+            if (turn() !== 0) {
+                const side = sidewaysTurn(turn())
+                shot = document.createElement('canvas')
+                shot.width = side ? h : w
+                shot.height = side ? w : h
+                const r = shot.getContext('2d')
+                if (!r) throw new Error('no 2d')
+                r.translate(shot.width / 2, shot.height / 2)
+                r.rotate((turn() * Math.PI) / 180)
+                r.drawImage(out, -w / 2, -h / 2)
+            }
+            if (withSubtitles) drawCuesOn(shot.getContext('2d')!, shot.width, shot.height, at)
+            const blob = await new Promise<Blob | null>((done) => shot.toBlob(done, 'image/png'))
+            if (!blob) throw new Error('no image')
+            const file = shotName(info()?.title ?? c.item.title, at)
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = file
+            a.click()
+            window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+            flash(t('player.screenshot_saved', { file }))
+        } catch {
+            flash(t('player.screenshot_failed'))
+        }
+    }
+    /** The subtitles showing at `at`, drawn at the foot of the frame in the player's look (white, a dark edge). */
+    const drawCuesOn = (g: CanvasRenderingContext2D, w: number, h: number, at: number) => {
+        const track = subOn()
+        const lines = Array.from(track?.cues ?? [])
+            .filter((cue) => cue.startTime <= at && at < cue.endTime)
+            .flatMap((cue) => String((cue as VTTCue).text ?? '').replace(/<[^>]*>/g, '').split('\n'))
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(-4)
+        if (!lines.length) return
+        const size = Math.max(14, Math.round(h * 0.05))
+        g.font = `600 ${size}px system-ui, sans-serif`
+        g.textAlign = 'center'
+        g.textBaseline = 'bottom'
+        g.lineJoin = 'round'
+        g.lineWidth = Math.max(2, size / 8)
+        g.strokeStyle = 'rgba(0, 0, 0, .85)'
+        g.fillStyle = '#fff'
+        lines.forEach((line, i) => {
+            const y = h - Math.round(h * 0.06) - (lines.length - 1 - i) * size * 1.25
+            g.strokeText(line, w / 2, y, w * 0.9)
+            g.fillText(line, w / 2, y, w * 0.9)
+        })
+    }
 
 
     // ---- chapters (Chapters.kt) --------------------------------------------------------------
@@ -663,6 +1070,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         (!!document.pictureInPictureEnabled && !v.disablePictureInPicture && !!v.requestPictureInPicture) ||
         (typeof wv.webkitSetPresentationMode === 'function' && !!wv.webkitSupportsPresentationMode?.('picture-in-picture'))
     const togglePip = async () => {
+        // The small window shows the frame as it is, unturned: a turned picture goes back upright as it opens (the note says so).
+        if (turn() !== 0 && !document.pictureInPictureElement) pickTurn(0)
         try {
             if (document.pictureInPictureElement) await document.exitPictureInPicture()
             else if (document.pictureInPictureEnabled && v.requestPictureInPicture) await v.requestPictureInPicture()
@@ -723,11 +1132,6 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const on = !c.watched()
         c.markWatched(on)
         flash(on ? t('player.marked_watched') : t('player.marked_unwatched'))
-    }
-    const stepShape = (dir: 1 | -1) => {
-        const next = pinchShape(shape(), dir > 0)
-        if (next === shape()) return
-        pickShape(next)
     }
     const repeatText = () => (!loop() ? t('player.loop_set_start') : loop()!.end === null ? t('player.loop_set_end') : t('player.loop_clear'))
     const stepSize = (dir: -1 | 1) => {
@@ -942,8 +1346,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             return true
         }
         if (sheet()) {
-            if (key === 'back' || (sheet() === 'details' && key === 'ok')) setSheet(null)
+            // Playback details holds buttons now (Report stutter, Copy details): OK presses the one the remote is on, and closes the sheet from anywhere else.
+            const onDetailsButton = sheet() === 'details' && !!active?.closest('.pc-details-btn')
+            if (key === 'back' || (sheet() === 'details' && key === 'ok' && !onDetailsButton)) setSheet(null)
             else if (key === 'ok') return 'native'
+            else if (arrow && sheet() === 'details') walk(c.root.querySelector('.pc-details'), key, active)
             else if (arrow && ['episodes', 'timing', 'bookmarks', 'still', 'msone'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
             return true
         }
@@ -1007,9 +1414,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
 
     // ---- keys (PlayerKeys.actionFor, the parts a browser can do) --------------------------
     const onKey = (e: KeyboardEvent) => {
-        if (e.defaultPrevented) return
         const target = e.target as HTMLElement | null
-        if (target && (target.isContentEditable || (target instanceof HTMLInputElement && target.type !== 'range') || target instanceof HTMLTextAreaElement)) return
+        const typing = !!target && (target.isContentEditable || (target instanceof HTMLInputElement && target.type !== 'range') || target instanceof HTMLTextAreaElement)
+        // A confirm question (ui/Confirm.tsx) has every key, Escape first: the player behind it stays.
+        if (!playerHearsKeys({ handled: e.defaultPrevented, typing, confirm: confirmOpen() })) return
         if (tv()) {
             const handled = tvKey(e)
             if (handled) {
@@ -1033,68 +1441,74 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             return
         }
         const k = e.key
-        const shift = e.shiftKey
-        const command = e.ctrlKey || e.metaKey
-        const plain = !shift && !e.ctrlKey && !e.altKey && !e.metaKey
         // Not every target is an element: a key sent to the document itself has none.
         const onSlider = target instanceof Element && target.getAttribute('role') === 'slider'
         const onButton = target instanceof HTMLButtonElement || onSlider
+        // The seek bar's own arrows, and a focused button's Space and Enter, are theirs.
+        if ((k === 'ArrowLeft' || k === 'ArrowRight') && onSlider) return
+        if ((k === ' ' || k === 'Enter') && onButton && !e.altKey) return
+        const a = actionFor(
+            { key: k, code: e.code, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey },
+            { mac: MAC, chapters: chapters().length > 0, paused: v.paused, speedNormal: Math.abs(v.playbackRate - 1) <= 0.001, fullscreen: !!document.fullscreenElement, skipShown: !!skipNow() },
+        )
+        if (!a) return
         let done = true
-        if (k === 'ArrowLeft' || k === 'ArrowRight') {
-            if (onSlider) return
-            const sign = k === 'ArrowRight' ? 1 : -1
-            // The command key alone steps through chapters, where the file has them (else it is a minute).
-            if (command && !shift && !e.altKey && chapters().length) stepChapter(sign > 0)
-            else {
-                const s = (e.ctrlKey && e.altKey) ? 300 : shift || e.ctrlKey ? 60 : e.altKey ? 10 : 5
-                seekBy(sign * s)
-                flash(`${sign > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: s })}`, sign > 0 ? 'right' : 'left')
-            }
-        } else if (k === 'ArrowUp' || k === 'ArrowDown') {
-            setVol(v.volume + (k === 'ArrowUp' ? 0.05 : -0.05))
-            flash(`${Math.round(v.volume * 100)}%`)
-        } else if ((k === ' ' || k === 'Enter') && onButton) return
-        else if (command || e.altKey) return
-        else if ((k === ' ' || k === 'k' || k === 'K' || k === 'Enter') && plain) togglePlay()
-        else if (k === 'p' || k === 'P') shift ? go(c.info()?.previous ?? null) : togglePlay()
-        else if ((k === 'n' || k === 'N') && shift) go(c.info()?.next ?? null)
-        else if (k === 'PageDown') go(c.info()?.next ?? null)
-        else if (k === 'PageUp') go(c.info()?.previous ?? null)
-        else if ((k === 'r' || k === 'R') && !shift) pressRepeat()
-        else if ((k === 'b' || k === 'B') && !shift) bookmarkHere()
-        else if ((k === 'g' || k === 'G') && !shift) skipNow() ? skipIt() : (done = false)
-        else if (k === 'G' && shift) stepSize(1)
-        else if (k === 'F' && shift) stepSize(-1)
-        else if (k === 'z' || k === 'Z' || k === 'x' || k === 'X') nudgeDelay(k === 'z' ? -0.1 : 0.1)
-        else if (k === '?') setSheet('shortcuts')
-        else if (k === 'j' || k === 'J') seekBy(-10)
-        else if (k === 'l' || k === 'L') seekBy(10)
-        else if (k === 'm' || k === 'M') v.muted = !v.muted
-        else if ((k === 'f' || k === 'F') && !shift) toggleFullscreen()
-        else if (k === 'c' || k === 'C') cycleSub()
-        else if (k === 'v' || k === 'V') cycleSub(shift)
-        else if (k === 'a' || k === 'A') cycleAudio(shift)
-        else if ((k === 'w' || k === 'W') && !shift) cycleShape()
-        else if (k === ']' || k === '=' || k === '+' || k === '>') stepSpeed(true)
-        else if (k === '[' || k === '-' || k === '<') stepSpeed(false)
-        else if (k === ',' && v.paused) seekBy(-1 / 30)
-        else if (k === '.' && v.paused) seekBy(1 / 30)
-        else if (k === 'Home') seekTo(0)
-        else if (k === 'End') seekTo(duration())
-        else if (/^[0-9]$/.test(k) && !shift) seekTo((duration() * Number(k)) / 10)
-        else if (k === 'i' || k === 'I') setSheet('details')
-        else if (k === 'Backspace' && shift) takeBack()
-        else if (k === 'Backspace') {
-            if (Math.abs(v.playbackRate - 1) > 0.001) setSpeed(1)
-            else c.close()
-        } else if (k === 'Escape') {
-            if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-            else c.close()
-        } else done = false
+        let raise = true
+        switch (a.do) {
+            case 'togglePlay': togglePlay(); break
+            case 'seek':
+                seekBy(a.by)
+                flash(`${a.by > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: Math.abs(a.by) })}`, a.by > 0 ? 'right' : 'left')
+                break
+            case 'chapter': stepChapter(a.forward); break
+            case 'volume':
+                setVol(v.volume + a.by)
+                flash(`${Math.round(v.volume * 100)}%`)
+                raise = false
+                break
+            case 'mute': v.muted = !v.muted; raise = false; break
+            case 'episode': go((a.next ? c.info()?.next : c.info()?.previous) ?? null); break
+            case 'speed': stepSpeed(a.up); break
+            case 'speedReset': setSpeed(1); break
+            case 'frame': seekBy(a.forward ? FRAME : -FRAME); break
+            case 'subtitles': cycleSub(a.back); break
+            case 'subtitlesToggle': cycleSub(); break
+            case 'audio': cycleAudio(a.back); break
+            case 'subtitleDelay': nudgeDelay(a.by); break
+            case 'subtitleSize': stepSize(a.by); break
+            case 'fullscreen': void toggleFullscreen(); break
+            case 'exitFullscreen': document.exitFullscreen().catch(() => {}); break
+            case 'shape': cycleShape(); break
+            case 'rotate': pickTurn(nextTurn(turn())); break
+            case 'zoom': zoomBy(a.steps); raise = false; break
+            case 'zoomReset': resetZoom(); raise = false; break
+            case 'screenshot': void screenshot(a.subtitles); raise = false; break
+            case 'repeat': pressRepeat(); break
+            case 'bookmark': bookmarkHere(); break
+            case 'skip': skipIt(); break
+            case 'goToTime': askTime(); break
+            case 'undoSeek': takeBack(); break
+            // Where the browser has no small window, Ctrl+P stays its print.
+            case 'pip': pipSupported() ? void togglePip() : (done = false); break
+            case 'details': setSheet('details'); break
+            case 'sheet': setSheet('shortcuts'); break
+            case 'jump': seekTo((duration() * a.tenth) / 10); break
+            case 'end': seekTo(duration()); break
+            case 'back': c.close(); break
+        }
         if (done) {
             e.preventDefault()
-            if (!['ArrowUp', 'ArrowDown', 'm', 'M'].includes(k)) show()
+            if (raise) show()
         }
+    }
+    /** Go to a time: the prompt, with the keyboard handed back to where it was when it closes. */
+    const askTime = (from: Element | null = document.activeElement) => {
+        opener = from instanceof HTMLElement && from !== document.body ? from : null
+        setSheet('goto')
+    }
+    const closeTime = () => {
+        setSheet(null)
+        queueMicrotask(() => focusIt(opener?.isConnected ? opener : c.root))
     }
     onMount(() => document.addEventListener('keydown', onKey))
     onCleanup(() => document.removeEventListener('keydown', onKey))
@@ -1108,16 +1522,23 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     createEffect(() => (v.style.filter = brightness() < 0.999 ? `brightness(${brightness()})` : ''))
 
     let down: { x: number; y: number; at: number; id: number; time: number; vol: number; bright: number } | null = null
-    /** Fingers on the picture (the phone's pinch steps the picture shape, once per pinch). */
+    /** Fingers on the picture, in the stage's own pixels (two of them are a pinch, which zooms the picture). */
     const touches = new Map<number, { x: number; y: number }>()
-    let pinch: { dist: number; done: boolean } | null = null
+    /** The pinch under way: the fingers' spread and the point between them at the last step. Null when none. */
+    let pinch: { dist: number; x: number; y: number } | null = null
     const spread = () => {
         const [a, b] = [...touches.values()]
         return Math.hypot(a.x - b.x, a.y - b.y)
     }
+    const middle = () => {
+        const [a, b] = [...touches.values()]
+        return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    }
+    /** Where the drag that moves the enlarged picture was at its last step. */
+    let panAt = { x: 0, y: 0 }
     /** The sideways scrub, slowed to a half and a quarter as the finger leaves its line (FineScrub.Tracker). */
     let fineScrub = { x: 0, last: 0 }
-    let mode: 'tap' | 'hold' | 'scrub' | 'level' = 'tap'
+    let mode: 'tap' | 'hold' | 'scrub' | 'level' | 'pan' = 'tap'
     let holdTimer = 0
     let heldRate = 1
     let lastTap = { at: 0, zone: '' as 'left' | 'right' | 'centre' | '', x: 0 }
@@ -1130,9 +1551,18 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const w = c.root.clientWidth
         return x < w * SIDE ? 'left' : x > w * (1 - SIDE) ? 'right' : 'centre'
     }
-    const local = (e: PointerEvent) => {
-        const r = c.root.getBoundingClientRect()
-        return { x: e.clientX - r.left, y: e.clientY - r.top }
+    /**
+     * Where a pointer is on the stage. The stage's place is read when a touch or press begins and
+     * kept for its moves (`fresh` reads it again), so a drag that writes the zoom's transform never
+     * makes the browser lay the page out again to answer a read.
+     */
+    let rootAt = { left: 0, top: 0 }
+    const local = (e: { clientX: number; clientY: number }, fresh = false) => {
+        if (fresh) {
+            const r = c.root.getBoundingClientRect()
+            rootAt = { left: r.left, top: r.top }
+        }
+        return { x: e.clientX - rootAt.left, y: e.clientY - rootAt.top }
     }
     const jump = (side: 'left' | 'right', x: number, y: number) => {
         seekBy(side === 'left' ? -10 : 10)
@@ -1143,9 +1573,21 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         clearTimeout(rippleTimer)
         rippleTimer = window.setTimeout(() => setRipple(null), RUN_MS + 300)
     }
-    /** The desktop's wheel over the picture: volume, or with Shift ten seconds a notch. */
+    /**
+     * The desktop's wheel over the picture: volume, or with Shift ten seconds a notch. Ctrl+wheel
+     * zooms around the pointer, and so does a trackpad's pinch, which browsers send as Ctrl+wheel;
+     * it is never the page's zoom over the picture (a tablet's trackpad included).
+     */
     const onWheel = (e: WheelEvent) => {
-        if (phone() || tv() || locked() || c.blocked() || sheet() || !e.deltaY) return
+        if (tv()) return
+        if (e.ctrlKey) {
+            e.preventDefault()
+            if (locked() || c.blocked() || sheet()) return
+            const p = local(e, true)
+            zoomBy(wheelSteps(e.deltaY, e.deltaMode), p.x, p.y)
+            return
+        }
+        if (phone() || locked() || c.blocked() || sheet() || !e.deltaY) return
         e.preventDefault()
         if (e.shiftKey) {
             seekBy(e.deltaY < 0 ? 10 : -10)
@@ -1157,20 +1599,24 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
     const onDown = (e: PointerEvent) => {
         if (locked() || e.button > 0) return
-        if (phone() && e.pointerType === 'touch') {
-            touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        // Any touch screen: a phone, an iPad, a touch laptop in the desktop form (the TV has no fingers).
+        if (e.pointerType === 'touch' && !tv()) {
+            touches.set(e.pointerId, local(e, true))
             if (touches.size === 2) {
                 clearTimeout(holdTimer)
                 clearTimeout(tapTimer)
                 if (mode === 'hold') (v.playbackRate = heldRate, setHold(false))
+                // A drag of the first finger that had begun (a scrub, a level) ends where it was.
+                if (mode === 'scrub') scrubTimer = window.setTimeout(() => setScrub(null), 400)
+                if (mode === 'level') levelTimer = window.setTimeout(() => setLevel(null), 1000)
                 mode = 'tap'
                 down = null
-                pinch = { dist: spread(), done: false }
+                pinch = { dist: spread(), ...middle() }
                 return
             }
             if (touches.size > 2 || pinch) return
         }
-        const p = local(e)
+        const p = local(e, true)
         down = { ...p, at: performance.now(), id: e.pointerId, time: v.currentTime, vol: v.volume, bright: brightness() }
         mode = 'tap'
         clearTimeout(holdTimer)
@@ -1186,29 +1632,56 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
     const onMove = (e: PointerEvent) => {
         if (pinch) {
-            if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
-            if (!pinch.done && touches.size === 2) {
-                const ratio = spread() / pinch.dist
-                if (ratio > 1.15 || ratio < 0.85) (pinch.done = true, stepShape(ratio > 1 ? 1 : -1))
+            if (touches.has(e.pointerId)) touches.set(e.pointerId, local(e))
+            if (touches.size !== 2) return
+            // One step of the pinch: the scale by the spread's change, around the point between the
+            // fingers, and moved with that point (a two finger drag pans), as PlayerGestures' onZoom.
+            const dist = spread()
+            const m = middle()
+            if (dist > 0 && pinch.dist > 0 && zoomAllowed()) {
+                const frame = zoomFrame()
+                const dx = m.x - pinch.x
+                const dy = m.y - pinch.y
+                setZoom((z) => panBy(pinchZoom(z, dist / pinch!.dist, m.x, m.y, frame), dx, dy, frame))
+                showZoomChip(true)
             }
+            pinch = { dist, ...m }
             return
         }
-        if (variant() !== 'phone' && e.pointerType === 'mouse') {
+        const mouse = e.pointerType === 'mouse'
+        if (variant() !== 'phone' && mouse) {
             show()
-            return
+            // The mouse's drag moves an enlarged picture (the desktop app's pan); otherwise a move is only a move.
+            if (!down || e.pointerId !== down.id || !(e.buttons & 1) || (mode !== 'pan' && !(mode === 'tap' && zoomed(zoom())))) return
         }
         if (!down || e.pointerId !== down.id || mode === 'hold') return
         const p = local(e)
         const dx = p.x - down.x
         const dy = p.y - down.y
-        if (mode === 'tap' && Math.hypot(dx, dy) > SLOP) {
-            clearTimeout(holdTimer)
-            ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
-            if (Math.abs(dx) > Math.abs(dy)) (mode = 'scrub', (fineScrub = { x: down.x, last: down.x }))
-            else mode = 'level'
-        }
         const w = c.root.clientWidth
         const h = c.root.clientHeight
+        if (mode === 'tap' && Math.hypot(dx, dy) > SLOP) {
+            clearTimeout(holdTimer)
+            // A pointer the browser no longer counts as down cannot be captured; the drag goes on without.
+            try {
+                ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+            } catch {}
+            if (zoomed(zoom()) && zoomAllowed()) {
+                // Enlarged, a drag moves the picture and the scrub waits until it is back at 100 per
+                // cent; an up or down drag from the side strips still sets brightness and volume.
+                const strip = !mouse && (down.x < w * SIDE || down.x > w * (1 - SIDE))
+                if (strip && Math.abs(dy) > Math.abs(dx) * 1.5) mode = 'level'
+                else (mode = 'pan', (panAt = { x: down.x, y: down.y }))
+            } else if (Math.abs(dx) > Math.abs(dy)) (mode = 'scrub', (fineScrub = { x: down.x, last: down.x }))
+            else mode = 'level'
+        }
+        if (mode === 'pan') {
+            const frame = zoomFrame()
+            setZoom((z) => panBy(z, p.x - panAt.x, p.y - panAt.y, frame))
+            panAt = p
+            showZoomChip(true)
+            return
+        }
         if (mode === 'scrub' && duration()) {
             // A full width's drag covers a ninetieth of an hour-long film per pixel, as the app's scrub reads.
             const rate = fineRate(dy)
@@ -1231,16 +1704,27 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             clearTimeout(levelTimer)
         }
     }
-    const onUp = (e: PointerEvent) => {
+    /** The fingers of a pinch lift (or the browser takes them): it comes to rest, just over 100 per cent being 100. */
+    const endPinch = (e: PointerEvent) => {
+        const was = touches.size
         touches.delete(e.pointerId)
-        if (pinch) {
-            if (!touches.size) pinch = null
-            return
+        if (was === 2 && touches.size < 2) {
+            setZoom((z) => settled(z, zoomFrame()))
+            showZoomChip(false)
         }
+        if (!touches.size) pinch = null
+    }
+    const onUp = (e: PointerEvent) => {
+        if (pinch) return endPinch(e)
+        touches.delete(e.pointerId)
         clearTimeout(holdTimer)
         if (!down || e.pointerId !== down.id) return
         const start = down
         down = null
+        if (mode === 'pan') {
+            showZoomChip(false)
+            return
+        }
         if (mode === 'hold') {
             v.playbackRate = heldRate
             setHold(false)
@@ -1287,19 +1771,39 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         tapTimer = window.setTimeout(toggle, DOUBLE_MS)
     }
     const onCancel = (e: PointerEvent) => {
+        if (pinch) return endPinch(e)
         touches.delete(e.pointerId)
-        if (pinch) {
-            if (!touches.size) pinch = null
-            return
-        }
         clearTimeout(holdTimer)
         if (mode === 'hold') {
             v.playbackRate = heldRate
             setHold(false)
         }
+        if (mode === 'pan') showZoomChip(false)
         down = null
     }
     onCleanup(() => [holdTimer, tapTimer, rippleTimer, levelTimer, scrubTimer].forEach(clearTimeout))
+    // Safari's own pinch (gesture events, beside the pointer events above): on an iPhone the page
+    // must not zoom under the fingers, so it is refused and the pointers do the work; on a Mac's
+    // trackpad, where no pointers come, its scale is the zoom, around the pointer.
+    type Gesture = UIEvent & { scale: number; clientX: number; clientY: number }
+    let gestureScale = 1
+    const onGesture = (e: Event) => {
+        e.preventDefault()
+        const g = e as Gesture
+        if (e.type === 'gesturestart') return void (gestureScale = 1)
+        if (e.type !== 'gesturechange' || touches.size || tv() || locked() || c.blocked() || sheet() || !(g.scale > 0)) return
+        const r = c.root.getBoundingClientRect()
+        const frame = zoomFrame()
+        if (!zoomAllowed()) return
+        setZoom((z) => pinchZoom(z, g.scale / gestureScale, g.clientX - r.left, g.clientY - r.top, frame))
+        gestureScale = g.scale
+        showZoomChip(false)
+    }
+    const onGestureEnd = (e: Event) => {
+        e.preventDefault()
+        if (touches.size) return
+        setZoom((z) => settled(z, zoomFrame()))
+    }
 
     // ---- what the row offers ---------------------------------------------------------------
     const info = () => c.info()
@@ -1381,6 +1885,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         >
             <div
                 class="pc-picture"
+                ref={(el) => {
+                    el.addEventListener('gesturestart', onGesture)
+                    el.addEventListener('gesturechange', onGesture)
+                    el.addEventListener('gestureend', onGestureEnd)
+                }}
                 onPointerDown={onDown}
                 onPointerMove={onMove}
                 onPointerUp={onUp}
@@ -1567,6 +2076,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 <div class="pc-note hold" role="status">{speedLabel(2)}</div>
             </Show>
             <Show when={note()}>{(n) => <div class={`pc-note ${n().side}`} role="status">{n().text}</div>}</Show>
+            {/* The zoom's figure (PlayerFeedback's zoom chip): up while the picture moves and a moment after; a tap puts it back at 100 per cent. */}
+            <Show when={zoomChip() && !locked() && !c.blocked() && !sheet()}>
+                <button type="button" class="pc-zoom-chip" data-shot="zoom" aria-live="polite" aria-label={`${zoomText()}. ${t('player.reset_zoom')}`} onClick={() => resetZoom()}>
+                    {zoomText()}
+                </button>
+            </Show>
             <Show when={loop()}>
                 {(l) => (
                     <button type="button" class="pc-chipline loop" onClick={() => (setLoop(null), flash(t('player.repeat_off')))} aria-label={t('player.loop_clear')}>
@@ -1681,7 +2196,19 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         </Show>
                         <Entry text={t('player.playback_options')} trailing={sleepAt() !== null || sleepEnd() ? sleepSummary() : undefined} onClick={() => setSheet('options')} />
                         <Entry text={t('player.picture_shape')} trailing={shapeName(shape())} onClick={() => setSheet('shape')} />
+                        <Entry text={t('player.rotate_picture')} trailing={turn() ? t('player.rotate_picture_degrees', { degrees: turn() }) : undefined} onClick={() => setSheet('rotate')} />
+                        {/* On an iPhone the entry stays and says why it does nothing there. */}
+                        <Show when={boostOk || boostIos}>
+                            <Entry text={t('player.volume_boost')} trailing={boost() > 1 ? t('player.volume_boost_level', { percent: Math.round(boost() * 100) }) : undefined} onClick={() => setSheet('boost')} />
+                        </Show>
+                        {/* PhoneMenuEntry.ResetZoom: the pinch's undo without a gesture, so a screen reader reaches it too. */}
+                        <Show when={zoomed(zoom())}>
+                            <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />
+                        </Show>
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
+                        <Show when={linkOffered(c.item) && !linkBlocked()}>
+                            <Entry text={t('player.copy_link_at_time')} onClick={copyLinkAtTime} />
+                        </Show>
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <hr />
                         <Entry icon={CheckmarkCircle02Icon} text={c.watched() ? t('player.mark_unwatched') : t('player.mark_watched')} onClick={() => (setSheet(null), toggleWatched())} />
@@ -1703,8 +2230,16 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Entry text={t('settings.keep_repeat')} trailing={keepRepeat() ? t('common.on') : t('common.off')} onClick={() => changeKeepRepeat(!keepRepeat())} />
                         <Entry text={t('settings.play_chat_order')} trailing={chatOrder() ? t('common.on') : t('common.off')} onClick={() => changeChatOrder(!chatOrder())} />
                         <Show when={chapters().length}>
-                            <Entry text={t('player.chapter_next')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Right`} onClick={() => (setSheet(null), stepChapter(true))} />
-                            <Entry text={t('player.chapter_previous')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Left`} onClick={() => (setSheet(null), stepChapter(false))} />
+                            <Entry text={t('player.chapter_next')} trailing={plain() ? undefined : `${t(MAC ? 'keys.cmd' : 'keys.ctrl')}+Right`} onClick={() => (setSheet(null), stepChapter(true))} />
+                            <Entry text={t('player.chapter_previous')} trailing={plain() ? undefined : `${t(MAC ? 'keys.cmd' : 'keys.ctrl')}+Left`} onClick={() => (setSheet(null), stepChapter(false))} />
+                        </Show>
+                        {/* Typing a time on a TV's remote is no quicker than the bar's arrows. */}
+                        <Show when={!tv()}>
+                            <Entry
+                                text={t('player.go_to_time')}
+                                trailing={plain() ? undefined : `${t(MAC ? 'keys.cmd' : 'keys.ctrl')}+G`}
+                                onClick={() => askTime(c.root.querySelector('[data-shot="more"]'))}
+                            />
                         </Show>
                     </MorePage>
                 </Match>
@@ -1732,8 +2267,24 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 <Match when={sheet() === 'timing'}>
                     <TimingSheet delay={subDelay} onDelay={setDelay} look={look} onLook={changeLook} onClose={() => setSheet(null)} />
                 </Match>
+                <Match when={sheet() === 'link'}>
+                    <LinkSheet link={linkShown()} onClose={() => setSheet(null)} />
+                </Match>
                 <Match when={sheet() === 'shortcuts'}>
-                    <ShortcutsSheet mac={/Mac/.test(navigator.platform)} onClose={() => setSheet(null)} />
+                    <ShortcutsSheet mac={MAC} onClose={() => setSheet(null)} />
+                </Match>
+                <Match when={sheet() === 'goto'}>
+                    <TimePrompt
+                        position={v.currentTime}
+                        duration={duration()}
+                        clock={clock}
+                        onClose={closeTime}
+                        onGo={(s) => {
+                            closeTime()
+                            seekTo(s)
+                            flash(clock(s))
+                        }}
+                    />
                 </Match>
                 <Match when={sheet() === 'still'}>
                     <div class="pc-sheet-scrim still">
@@ -1755,6 +2306,36 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             </div>
                         </div>
                     </div>
+                </Match>
+                <Match when={sheet() === 'rotate'}>
+                    {/* The picture beside it is the answer, as for the shapes: the panel stays open. */}
+                    <Picker title={t('player.rotate_picture')} note={t('player.rotate_picture_note')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={TURNS}>
+                            {(deg) => (
+                                <Choice
+                                    text={deg === 0 ? t('player.rotate_picture_none') : deg === 90 ? t('player.rotate_picture_right') : deg === 180 ? t('player.rotate_picture_half') : t('player.rotate_picture_left')}
+                                    detail={deg ? t('player.rotate_picture_degrees', { degrees: deg }) : undefined}
+                                    on={turn() === deg}
+                                    phone={phone()}
+                                    onClick={() => (pickTurn(deg), phone() && setSheet(null))}
+                                />
+                            )}
+                        </For>
+                    </Picker>
+                </Match>
+                <Match when={sheet() === 'boost'}>
+                    <Picker title={t('player.volume_boost')} note={boostOk ? t('player.volume_boost_note') : t('web.volume_boost_not_here')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={boostOk ? BOOSTS : []}>
+                            {(level) => (
+                                <Choice
+                                    text={level === 1 ? t('player.volume_boost_off') : t('player.volume_boost_level', { percent: Math.round(level * 100) })}
+                                    on={Math.abs(boost() - level) < 0.001}
+                                    phone={phone()}
+                                    onClick={() => (pickBoost(level), phone() && setSheet(null))}
+                                />
+                            )}
+                        </For>
+                    </Picker>
                 </Match>
                 <Match when={sheet() === 'shape'}>
                     {/* In the panel a pick leaves it open: the picture beside it is the answer. */}
@@ -1791,7 +2372,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </Picker>
                 </Match>
                 <Match when={sheet() === 'msone'}>
-                    <MsoneSheet target={msoneTarget(c.item, info())} onLoad={c.addSubtitle} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
+                    <MsoneSheet target={msoneTarget(c.item, info())} onLoad={async (file, as, hit) => (await layOnline(file, as), subpick.picked(c.item, hit, file))} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'audio'}>
                     <Picker title={t('player.audio')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
@@ -1845,6 +2426,35 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <p>{t('player.details_speed', { speed: speedLabel(rate()) })}</p>
                         <Show when={c.item.dc}>
                             <p>{t('player.details_datacenter', { number: c.item.dc! })}</p>
+                        </Show>
+                        <div class="pc-details-actions">
+                            <Show when={c.stutter()}>
+                                <button type="button" class="pc-details-btn" onClick={() => setDetailsNote(c.stutter()!.press() === 'already' ? t('player.stutter_marked_already') : t('web.stutter_marked'))}>
+                                    {t('player.report_stutter')}
+                                </button>
+                            </Show>
+                            <Show when={!tv()}>
+                                <button type="button" class="pc-details-btn" onClick={copyDetails}>
+                                    {t('player.copy_details')}
+                                </button>
+                            </Show>
+                        </div>
+                        <Show when={c.stutter()}>
+                            <p class="pc-details-hint">{t('web.report_stutter_detail')}</p>
+                        </Show>
+                        <Show when={logsSize() && !tv()}>
+                            <p class="pc-details-hint">{t('feedback.logs_size', { size: logsSize()! })}</p>
+                        </Show>
+                        <p class="pc-details-note" role="status" aria-live="polite">{detailsNote()}</p>
+                        <Show when={copyFallback()}>
+                            <textarea
+                                class="pc-details-copy"
+                                readonly
+                                rows="6"
+                                aria-label={t('player.copy_details')}
+                                value={copyFallback()!}
+                                ref={(el) => queueMicrotask(() => (el.focus({ preventScroll: true }), el.select()))}
+                            />
                         </Show>
                     </div>
                 </Match>

@@ -52,6 +52,9 @@ import androidx.tv.material3.Text
 import com.tmplayer.BuildConfig
 import com.tmplayer.data.DeviceQuirks
 import com.tmplayer.data.Feedback
+import com.tmplayer.data.FeedbackReport
+import com.tmplayer.data.FeedbackReports
+import com.tmplayer.data.FeedbackSender
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WhatsNew
@@ -59,6 +62,10 @@ import com.tmplayer.i18n.LanguageNotice
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.components.ChoiceList
+import com.tmplayer.ui.components.FeedbackActions
+import com.tmplayer.ui.components.FeedbackBody
+import com.tmplayer.ui.components.FeedbackHost
+import com.tmplayer.ui.components.feedbackHeading
 import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
@@ -236,18 +243,36 @@ fun feedbackFacts(context: Context): Feedback.Facts {
 }
 
 /**
- * "Report a problem". A phone opens the prefilled bug report in the browser, with an email as the
- * way round for somebody without a GitHub account. A TV has no browser, so the report is a QR code
- * for the phone in the viewer's hand, with the address to write to under it.
+ * "Report a problem" and "Request a feature". With the build's inbox (HX64) the report is written
+ * in the app, shown word for word and sent ([FeedbackHost]): a phone in the shared dialog, with
+ * GitHub and e-mail kept as the ways round; a TV in [FeedbackTvPanel], beside the QR code for the
+ * phone in the viewer's hand, since typing with a remote is slow.
+ *
+ * Without an inbox (forks, CI): a phone opens the prefilled GitHub page in the browser, with an
+ * email as the way round for somebody without a GitHub account; a TV has no browser, so the page
+ * is a QR code for the phone, with the address to write to under it.
  */
 @Composable
-fun FeedbackDialog(onClose: () -> Unit) {
+fun FeedbackDialog(onClose: () -> Unit, kind: FeedbackReport.Kind = FeedbackReport.Kind.Problem) {
     val s = LocalStrings.current
     val touch = isTouch()
     val context = LocalContext.current
     val facts = remember { feedbackFacts(context) }
-    val issue = remember(facts) { Feedback.issueUrl(facts) }
+    val feature = kind == FeedbackReport.Kind.Feature
+    val issue = remember(facts, feature) { if (feature) Feedback.featureUrl(facts) else Feedback.issueUrl(facts) }
     val close = remember { FocusRequester() }
+
+    if (FeedbackReports.available) {
+        FeedbackHost(
+            kind = kind,
+            facts = facts,
+            onDone = onClose,
+            onGithub = { openLink(context, issue) },
+            onEmail = { sendMail(context, Feedback.mailto(facts, feature)) },
+            tvPanel = { state, logs, actions -> FeedbackTvPanel(state, logs, actions, issue, if (feature) s.feedbackFeatureQr else s.feedbackQr) },
+        )
+        return
+    }
 
     FloatingWindow(onDismiss = onClose, ignoreRelease = true) {
         val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 520.dp else 820.dp)
@@ -255,15 +280,16 @@ fun FeedbackDialog(onClose: () -> Unit) {
             .width(panel)
             .floatingSurface()
             .padding(if (touch) 20.dp else 28.dp)
+        val title = if (feature) s.feedbackFeatureTitle else s.feedbackTitle
         if (touch) {
             Column(frame, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(s.feedbackTitle, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
-                Text(s.feedbackBodyTouch, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                Text(title, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
+                Text(if (feature) s.feedbackFeatureBodyTouch else s.feedbackBodyTouch, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                 TmButton(onClick = { if (openLink(context, issue)) onClose() }, modifier = Modifier.fillMaxWidth()) {
                     Label(s.feedbackOpenGithub)
                 }
                 TmSecondaryButton(
-                    onClick = { if (sendMail(context, Feedback.mailto(facts))) onClose() },
+                    onClick = { if (sendMail(context, Feedback.mailto(facts, feature))) onClose() },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Label(s.feedbackEmail) }
                 Text(s.feedbackEmailDetail(Feedback.EMAIL), style = MaterialTheme.typography.bodySmall, color = Tone.muted)
@@ -273,10 +299,10 @@ fun FeedbackDialog(onClose: () -> Unit) {
             }
         } else {
             Row(frame, horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
-                QrPlate(issue, s.feedbackQr)
+                QrPlate(issue, if (feature) s.feedbackFeatureQr else s.feedbackQr)
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(s.feedbackTitle, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
-                    Text(s.feedbackBodyTv, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                    Text(title, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
+                    Text(if (feature) s.feedbackFeatureBodyTv else s.feedbackBodyTv, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
                     Text(
                         s.feedbackEmailDetailTv(Feedback.EMAIL, facts.version),
                         style = MaterialTheme.typography.bodyMedium,
@@ -289,6 +315,80 @@ fun FeedbackDialog(onClose: () -> Unit) {
         }
     }
     if (!touch) LaunchedEffect(Unit) { runCatching { close.requestFocus() } }
+}
+
+/**
+ * The feedback window under a remote (HX64): the same steps and words as the phone's dialog
+ * ([FeedbackBody]) in the television's own panel, with the phone route beside the form: typing
+ * with a remote is slow, so the QR code of the GitHub page ([qrUrl]) is there too. Back closes and
+ * keeps what is typed.
+ */
+@Composable
+fun FeedbackTvPanel(state: FeedbackSender.State, logsAvailable: Boolean, actions: FeedbackActions, qrUrl: String, qrDescription: String) {
+    FloatingWindow(onDismiss = actions.onClose, ignoreRelease = true) {
+        val panel = min(maxWidth - PhonePad.Side * 2, 1000.dp)
+        FeedbackTvContent(state, logsAvailable, actions, Modifier.width(panel).heightIn(max = maxHeight - 48.dp)) {
+            if (state is FeedbackSender.State.Editing) QrPlate(qrUrl, qrDescription)
+        }
+    }
+}
+
+/** The panel's contents, apart from its window so a test can drive them by remote. [side] is drawn beside the steps (the QR code). */
+@Composable
+internal fun FeedbackTvContent(
+    state: FeedbackSender.State,
+    logsAvailable: Boolean,
+    actions: FeedbackActions,
+    modifier: Modifier = Modifier,
+    side: @Composable () -> Unit = {},
+) {
+    val s = LocalStrings.current
+    val safe = remember { FocusRequester() }
+    Row(modifier.floatingSurface().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(feedbackHeading(s, state), style = MaterialTheme.typography.headlineSmall, color = Tone.text)
+            FeedbackBody(state, logsAvailable, actions)
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+                when (state) {
+                    is FeedbackSender.State.Editing -> {
+                        TmSecondaryButton(onClick = actions.onClose) { Text(s.commonClose) }
+                        TmButton(onClick = actions.onNext) { Text(s.feedbackNext) }
+                    }
+                    is FeedbackSender.State.PreparingLogs ->
+                        TmSecondaryButton(onClick = actions.onBack, modifier = Modifier.focusRequester(safe)) { Text(s.commonBack) }
+                    is FeedbackSender.State.Review -> {
+                        TmSecondaryButton(onClick = actions.onBack, modifier = Modifier.focusRequester(safe)) { Text(s.commonBack) }
+                        TmButton(onClick = actions.onSend) { Text(s.feedbackSend) }
+                    }
+                    is FeedbackSender.State.Sending ->
+                        TmSecondaryButton(onClick = actions.onClose, modifier = Modifier.focusRequester(safe)) { Text(s.commonCancel) }
+                    is FeedbackSender.State.Queued -> {
+                        TmSecondaryButton(onClick = actions.onClose, modifier = Modifier.focusRequester(safe)) { Text(s.commonClose) }
+                        TmSecondaryButton(onClick = actions.onBack) { Text(s.feedbackEdit) }
+                        TmButton(onClick = actions.onSend) { Text(s.commonTryAgain) }
+                    }
+                    is FeedbackSender.State.Refused -> {
+                        TmSecondaryButton(onClick = actions.onClose, modifier = Modifier.focusRequester(safe)) { Text(s.commonClose) }
+                        TmButton(onClick = actions.onBack) { Text(s.feedbackEdit) }
+                    }
+                    is FeedbackSender.State.Sent -> TmButton(onClick = actions.onClose, modifier = Modifier.focusRequester(safe)) { Text(s.commonClose) }
+                    FeedbackSender.State.Idle, FeedbackSender.State.Opening -> Unit
+                }
+            }
+        }
+        if (state is FeedbackSender.State.Editing) {
+            Column(Modifier.width(PLATE), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                side()
+                Text(s.feedbackTvPhoneHint, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+            }
+        }
+    }
+    // The press that changes nothing is focused at each step after the form (where the message
+    // field takes the remote): a stray OK from the press that got here never sends.
+    LaunchedEffect(state::class) { if (state !is FeedbackSender.State.Editing) runCatching { safe.requestFocus() } }
 }
 
 /** Opens a mailto link in the mail app, false when there is none. */

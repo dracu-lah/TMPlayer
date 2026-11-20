@@ -142,7 +142,11 @@
 }
 .pc[data-variant="tv"] .pc-episode:focus .pc-episode-code, .pc[data-variant="tv"] .pc-episode:focus .pc-episode-facts,
 .pc[data-variant="tv"] .pc-season:focus small { color: rgba(14, 15, 19, .7); }
-.pc[data-variant="tv"] .pc-details { font-size: calc(var(--u) * 15); }
+.pc[data-variant="tv"] .pc-details { font-size: calc(var(--u) * 15); line-height: 1.35; width: min(calc(var(--u) * 340), calc(100% - 32px)); top: calc(var(--u) * 40); }
+.pc[data-variant="tv"] .pc-details p { line-height: 1.35; }
+.pc[data-variant="tv"] .pc-details .pc-details-hint { font-size: calc(var(--u) * 11); }
+.pc[data-variant="tv"] .pc-details-btn { min-height: calc(var(--u) * 44); padding: 0 calc(var(--u) * 20); }
+.pc[data-variant="tv"] .pc-details-btn:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }
 
 /* The status sheet (a stall, a failure): sized for a room, its buttons white under the remote. */
 .player[data-variant="tv"] .pc-status-inner { max-width: calc(var(--u) * 560); }

@@ -451,6 +451,21 @@ object MediaName {
     }
 
     /**
+     * The languages a chat's own words name (its title: "Malayalam Movies HD"), ISO 639-1, as a
+     * hint for which of two titles of one name is meant ([com.tmplayer.online.MetaQuery.hints]).
+     * Only the full language names count and a word at the very start does too, unlike
+     * [languages]: a chat is named for what it holds, and "Mal" or "Hin" inside one is not a
+     * language. Any text is safe; one over 300 characters is read to its first 300.
+     */
+    fun languageHints(text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+        return HINT_LANGUAGE.findAll(text.take(300))
+            .mapNotNull { LANGUAGE_CODES[it.value.lowercase()] }
+            .distinct()
+            .toList()
+    }
+
+    /**
      * The file that carries on from [current], out of everything posted in the same chat.
      *
      * Matching is by title and by number rather than by position in the list, because a chat is in
@@ -675,15 +690,40 @@ object MediaName {
     private fun titleEnd(text: String, dated: Int?): Int? {
         val hard = HARD_TAGS.findAll(text).map { it.range.first }.firstOrNull { it > 0 }
         val bound = listOfNotNull(dated, hard).minOrNull() ?: text.length
-        val soft = TAGS.findAll(text).firstOrNull { match ->
-            val at = match.range.first
-            at in 1 until bound &&
-                text.substring(at, bound).replace(TAGS, " ").all { it.isWhitespace() || it in TRIM_CHARS } &&
+        val candidates = TAGS.findAll(text).map { it.range.first }.takeWhile { it < bound }.filter { it > 0 }.toList()
+        if (candidates.isEmpty()) return hard
+        // Whether only tags follow a candidate up to the bound, for all of them in one pass over the
+        // tail from the first: the scan from a later candidate is the same scan's end, so a
+        // candidate past the last word that is not a tag has only tags after it. Scanned once per
+        // candidate, as it was, a name with many soft tags read its tail again for each (HX73).
+        val lastWord = lastUntagged(text, candidates.first(), bound)
+        val soft = candidates.firstOrNull { at ->
+            at > lastWord &&
                 clean(text.substring(0, at)).lowercase() !in ARTICLES &&
                 // "Into the Web", "Tales of Tamil": a word straight after "the" or "of" is the title's.
                 text.substring(0, at).trim().substringAfterLast(' ').lowercase() !in JOINING_WORDS
-        }?.range?.first
+        }
         return listOfNotNull(hard, soft).minOrNull()
+    }
+
+    /**
+     * The index in [text] of the last character from [from] to [bound] that is neither in one of
+     * the [TAGS] nor a separator, or -1 when there is none: what is left of that stretch once its
+     * tags are taken out.
+     */
+    private fun lastUntagged(text: String, from: Int, bound: Int): Int {
+        val tail = text.substring(from, bound)
+        var last = -1
+        var at = 0
+        fun look(until: Int) {
+            for (i in at until until) if (!tail[i].isWhitespace() && tail[i] !in TRIM_CHARS) last = from + i
+        }
+        for (match in TAGS.findAll(tail)) {
+            look(match.range.first)
+            at = match.range.last + 1
+        }
+        look(tail.length)
+        return last
     }
 
     /** A date and where it starts. */
@@ -732,7 +772,7 @@ object MediaName {
             }
             .replace(SITE, " ")
             // Whatever the signature was attached with, once it is gone.
-            .trimStart { it.isWhitespace() || it in TRIM_CHARS }
+            .trimStart { it.isWhitespace() || it in TRIM_CHARS || it == '*' }
             .replace(LEADING_RELEASE_TAG, "")
     }
 
@@ -828,7 +868,10 @@ object MediaName {
 
     private fun clean(raw: String): String =
         // An unterminated "(" is what is left when the title is cut at a bracketed year.
-        collapsedSpaces(raw.trim { it.isWhitespace() || it in TRIM_CHARS }).trim()
+        collapsedSpaces(raw.trim { it.isWhitespace() || it in TRIM_CHARS })
+            // A leading star is decoration ("*SAW X"); a leading # can be a real title ("#Alive") and stays.
+            .trimStart { it == '*' || it.isWhitespace() }
+            .trim()
 
     /**
      * [text] with each run of dots and underscores a space and each run of whitespace one space,
@@ -989,6 +1032,11 @@ object MediaName {
 
     private val LANGUAGE = Regex("""\b(""" + LANGUAGE_CODES.keys.joinToString("|") + """)\b""", RegexOption.IGNORE_CASE)
 
+    private val HINT_LANGUAGE = Regex(
+        """\b(""" + LANGUAGE_CODES.keys.filter { it.length >= 5 && it != "japan" }.joinToString("|") + """)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     /** The short forms of the languages channels write after a title: "Night Train Mal". */
     private val SHORT_LANGUAGE_WORDS = setOf("mal", "tam", "tel", "hin", "eng")
 
@@ -1046,7 +1094,8 @@ object MediaName {
         // "S01E01-06" as well, the range a season split in two files writes (not "S01E05-720p").
         // A letter right after the number is the half of a split episode ("S08 E06b").
         Regex("""\bs(\d{1,2})[\s.-]?e(\d{1,3})(?:-?e(\d{1,3})|-(\d{1,3})(?![\dpPiI]))?([a-d])?\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(\d{1,2})x(\d{1,3})\b""", RegexOption.IGNORE_CASE),
+        // Not "DDP5.1x265": an audio layout glued to the codec (x264, x265) is no season and episode.
+        Regex("""\b(\d{1,2})x(?!26[45]\b)(\d{1,3})\b""", RegexOption.IGNORE_CASE),
         Regex("""\bseason\s?(\d{1,2})\s?episode\s?(\d{1,3})\b""", RegexOption.IGNORE_CASE),
     )
 
@@ -1066,8 +1115,9 @@ object MediaName {
     /**
      * The word has to be there. A bare "E04" is too easy to find inside a title, and guessing
      * wrong turns a standalone video into episode four of a series that does not exist.
+     * "Capítulo 80" and "Capitulo 80" (Spanish, the soap channels) and "Episodio 4" count as the word.
      */
-    private val EPISODE_ONLY = Regex("""\bep(?:isode|i|s)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+    private val EPISODE_ONLY = Regex("""\b(?:ep(?:isode|isodio|i|s)?|cap[ií]tulo)[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
 
     /**
      * A combined range of episodes in one file, "EP(29-32)", "Ep 29-32": the first and the last

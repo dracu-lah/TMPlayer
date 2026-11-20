@@ -101,7 +101,14 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             com.tmplayer.data.HistoryEdits.removeWatchedCards(st, w, cards)
         }
     }
-    val clearAll: () -> Unit = {
+    val historyCards = historyCardCount(state)
+    // Asked first (HX59); Undo still follows the answer.
+    val clearAll = rememberClearAllConfirm(
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+    ) {
         runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
     }
     val gridOrder = remember(records) { records?.let { list -> daySections(list, System.currentTimeMillis()) { it.watchedAt }.sections.flatMap { it.second } }.orEmpty() }
@@ -254,7 +261,13 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.id }, cards.size)
         }
     }
-    val clearAll: () -> Unit = {
+    // Asked first (HX59); Undo still follows the answer.
+    val clearAll = rememberClearAllConfirm(
+        count = saved?.size ?: 0,
+        title = s.browseClearWatchLaterTitle,
+        message = s.browseClearWatchLaterMessage(saved?.size ?: 0),
+        detail = s.browseClearWatchLaterDetail,
+    ) {
         runHistoryEdit(scope, state, undoToast, toast, { s.browseWatchLaterCleared }, s.browseUndo) { _, w -> com.tmplayer.data.HistoryEdits.clearLater(w) }
     }
     val gridOrder = records.orEmpty()

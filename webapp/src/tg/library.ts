@@ -3,10 +3,16 @@
 // chat, the order, the size limits or the words change. The page asks again on every scroll and
 // gets the kept answer.
 import type { Message, Peer, TelegramClient } from '@mtcute/web'
-import { rules, type Shelf, type ShelfTile, type Video } from '../rules'
+import { rules, type Rules, type Shelf, type ShelfTile, type Video } from '../rules'
 import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from './media'
+import { forgetChatTitles, noteChatTitle } from './hints'
 import { forgetSponsored, loadSponsored } from './sponsored'
 import { tally } from '../ui/searchTally'
+import { cleanContext, correctionLines, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
+import { copyRows, groupRefs, playCopy } from './copyPick'
+import { touchesFor } from './touchCache'
+import { forgetTopics, type ForumChat } from './topics'
+import { createVideoCounter } from './counts'
 import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
@@ -30,6 +36,27 @@ const KEEP_CHATS = 6
  * view rather than asking the page again.
  */
 const addedSetOf = (view: Pick<ListView, 'added'>): Set<number> | null => (view.added ? new Set(view.added) : null)
+
+// What the page says of the viewer's copies (HX38, copyFit.ts): the device, the picture kinds the
+// browser cannot play natively, the files kept apart, the copies chosen, the usual quality. A change
+// bumps the epoch, so every kept arrangement and watch answer is built again with it.
+let copyCtx: CopyContext = NO_COPY_CONTEXT
+let copyEpoch = 0
+
+/** The page's copy context (copies.ts), cleaned: the device the copies suit, "Not the same video" and the rest. */
+export async function setCopyContext(raw: unknown): Promise<void> {
+    const r = await rules()
+    const next = cleanContext(raw)
+    if (JSON.stringify(next) === JSON.stringify(copyCtx)) return
+    copyCtx = next
+    r.setCopyDevice(next.device)
+    const lines = correctionLines(next, r.correctionSet)
+    r.setCorrections(lines.ids, lines.texts)
+    copyEpoch++
+    watchKept.clear()
+    // A file kept apart or grouped again: the cards remember their groups afresh.
+    groups.clear()
+}
 
 interface Feed {
     filter: typeof VIDEO_FILTER | typeof DOC_FILTER
@@ -68,6 +95,8 @@ interface ChatState {
     /** The first photo message of each album met so far (by album id), drawn as its videos' picture; bounded. */
     albumPhotos: Map<string, Message>
     selfDestructing: number
+    /** A forum chat read through one of its topics (`ChatView.topic`): its pages are the topic's own, by thread. */
+    topic: { id: number; name: string } | null
     /** Bumped each time videos come in, so a kept arrangement knows it is stale. */
     version: number
     loading: Promise<void> | null
@@ -79,9 +108,15 @@ interface ChatState {
 }
 
 const chats = new Map<number, ChatState>()
+/** Forum chats held to one topic, by "chat:topic": a few at a time, apart from the chat's own state. */
+const topicChats = new Map<string, ChatState>()
+const KEEP_TOPIC_CHATS = 3
 
 export function forgetAll() {
     chats.clear()
+    topicChats.clear()
+    topicHead = null
+    forgetTopics()
     dialogs = null
     dialogsLoading = null
     dialogsSoFar = []
@@ -93,16 +128,36 @@ export function forgetAll() {
     homeStates.clear()
     searches.clear()
     watchKept.clear()
+    groups.clear()
+    // The files kept apart and the copies chosen were the account's: the next one starts with none (the device stays).
+    if (copyCtx.apart.length || copyCtx.chosen.length || copyCtx.habit || copyCtx.titles.length) {
+        copyCtx = { ...copyCtx, apart: [], chosen: [], habit: null, titles: [] }
+        copyEpoch++
+        rulesNow?.setCorrections([], [])
+    }
     recentState = null
     homeChatsKnown = null
-    videoCountCache.clear()
+    videoCounter.forget()
     forgetSponsored()
+    forgetChatTitles()
 }
 
-async function openState(tg: TelegramClient, chatId: number): Promise<ChatState> {
+/** A topic's name, or '' when it cannot be read (the grid still lists its videos). */
+async function topicName(tg: TelegramClient, chatId: number, topic: number): Promise<string> {
+    try {
+        const found = await tg.getForumTopicsById(chatId, [topic])
+        const t = found[0]
+        return t && !t.titleMissing ? String(t.title ?? '').slice(0, 200) : ''
+    } catch {
+        return ''
+    }
+}
+
+async function openState(tg: TelegramClient, chatId: number, topic = 0): Promise<ChatState> {
     const peer = await tg.getPeer(chatId)
     const small = peer.photo?.small ?? null
     if (small) thumbnails.set(small.uniqueFileId, small)
+    noteChatTitle(chatId, peer.displayName)
     return {
         photo: small?.uniqueFileId ?? null,
         id: chatId,
@@ -117,6 +172,7 @@ async function openState(tg: TelegramClient, chatId: number): Promise<ChatState>
         archives: new Map(),
         albumPhotos: new Map(),
         selfDestructing: 0,
+        topic: topic ? { id: topic, name: await topicName(tg, chatId, topic) } : null,
         version: 0,
         loading: null,
         kept: null,
@@ -127,6 +183,9 @@ async function openState(tg: TelegramClient, chatId: number): Promise<ChatState>
     }
 }
 
+/** A topic's reads go through its thread: only its messages come. */
+const threadOf = (s: ChatState) => (s.topic ? { threadId: s.topic.id } : {})
+
 /** The next hundred of each kind (videos, files) the chat has not sent yet, through the rules. */
 async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
     const r = await rules()
@@ -134,7 +193,7 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
         s.feeds
             .filter((f) => !f.done)
             .map(async (f) => {
-                const res = await tg.searchMessages({ chatId: s.id, filter: f.filter, limit: PAGE, offset: f.next })
+                const res = await tg.searchMessages({ chatId: s.id, filter: f.filter, limit: PAGE, offset: f.next, ...threadOf(s) })
                 f.next = res.next
                 f.done = res.next === undefined || res.length === 0
                 return res as Message[]
@@ -262,7 +321,7 @@ async function searchChat(tg: TelegramClient, s: ChatState, query: string): Prom
                 feeds
                     .filter((f) => !f.done)
                     .map(async (f) => {
-                        const res = await tg.searchMessages({ chatId: s.id, query: spelling, filter: f.filter, limit: SEARCH_PAGE, offset: f.next })
+                        const res = await tg.searchMessages({ chatId: s.id, query: spelling, filter: f.filter, limit: SEARCH_PAGE, offset: f.next, ...threadOf(s) })
                         f.next = res.next
                         f.done = res.next === undefined || res.length === 0
                         return res as Message[]
@@ -273,7 +332,7 @@ async function searchChat(tg: TelegramClient, s: ChatState, query: string): Prom
             // others (its first page only, a failure leaves the rest standing), then one read of
             // each hit's album.
             const photoHits = await tg
-                .searchMessages({ chatId: s.id, query: spelling, filter: PHOTO_FILTER, limit: ALBUM_READS * 2 })
+                .searchMessages({ chatId: s.id, query: spelling, filter: PHOTO_FILTER, limit: ALBUM_READS * 2, ...threadOf(s) })
                 .then((res) => res as Message[])
                 .catch(() => [] as Message[])
             const neighbours = await albumNeighbours(tg, photoHits, hits)
@@ -347,7 +406,13 @@ export function joinedItem(t: Pick<ShelfTile, 'pieces' | 'piecesTotal' | 'pieces
 }
 
 /** The page's cards for the rules' tiles, each playing an item `items` holds; a show plays its episode up next. */
-export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoItem>, view: Pick<ListView, 'watched' | 'started'>): Tile[] {
+export function tilesOf(
+    shelf: Pick<Shelf, 'tiles'>,
+    items: Map<string, VideoItem>,
+    view: Pick<ListView, 'watched' | 'started'>,
+    /** The rules and the videos the copies are read from, for the copy each card plays (HX38). */
+    copies?: { r: Rules; videoOf: (id: string) => Video | undefined },
+): Tile[] {
     const watched = new Set(view.watched)
     const started = new Set(view.started)
     const tiles: Tile[] = []
@@ -355,7 +420,10 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
         const video = t.kind === 'show' ? upNext(t, watched, started) : t.video
         const lead = video && items.get(video.id)
         if (!lead) continue
-        const item = t.kind === 'show' ? lead : joinedItem(t, lead, items)
+        // A video posted more than once plays, and wears the badge of, the copy its page recommends
+        // (HX38): the viewer's choice, the one started, else the best this browser plays natively.
+        const played = t.kind === 'file' && t.copies.length > 1 && copies ? pickedItem(t, items, started, copies.r, copies.videoOf) : null
+        const item = t.kind === 'show' ? lead : (played ?? joinedItem(t, lead, items))
         tiles.push({
             key: t.key,
             kind: t.kind === 'show' ? 'show' : 'file',
@@ -364,6 +432,7 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
             seasons: t.seasons.length,
             episodes: t.seasons.reduce((n, season) => n + season.episodes.length, 0),
             copies: Math.max(0, t.copies.length - 1),
+            versions: t.kind === 'show' ? 1 : Math.max(1, t.versions),
             parts: t.parts.length,
             pieces: t.pieces.length,
             extra: t.extra ?? null,
@@ -372,16 +441,74 @@ export function tilesOf(shelf: Pick<Shelf, 'tiles'>, items: Map<string, VideoIte
     return tiles
 }
 
+/** `videos` by id, the map made only when a card with copies first asks. */
+export function lookup(videos: Iterable<Video>): (id: string) => Video | undefined {
+    let byId: Map<string, Video> | null = null
+    return (id) => {
+        if (!byId) {
+            byId = new Map()
+            for (const v of videos) byId.set(v.id, v)
+        }
+        return byId.get(id)
+    }
+}
+
+/** The item of the copy `t` plays when it is not its lead; null to play the lead as it is. */
+function pickedItem(t: ShelfTile, items: Map<string, VideoItem>, started: ReadonlySet<string>, r: Rules, videoOf: (id: string) => Video | undefined): VideoItem | null {
+    const copies = t.copies.flatMap((id) => videoOf(id) ?? [])
+    rememberGroup(copies, items)
+    const id = playCopy(r, copies, copyCtx, started)
+    return id && id !== t.video?.id ? (items.get(id) ?? null) : null
+}
+
+/**
+ * The copies a card counted, by each copy's id, so its page lists the very same group (HX38): a
+ * card in Search or Home's Recently added folds copies from several chats, which the page's own
+ * chat cannot regroup. Bounded: the oldest groups go first.
+ */
+const groups = new Map<string, { videos: Video[]; items: Map<string, VideoItem> }>()
+const GROUPS_MAX = 4_000
+
+function rememberGroup(videos: Video[], items: Map<string, VideoItem>) {
+    if (videos.length < 2 || !videos.some((v, i) => i > 0 && v.chatId !== videos[0].chatId)) return
+    const group = { videos, items: new Map(videos.flatMap((v) => (items.has(v.id) ? [[v.id, items.get(v.id)!] as const] : []))) }
+    for (const v of videos) {
+        groups.delete(v.id)
+        groups.set(v.id, group)
+    }
+    while (groups.size > GROUPS_MAX) groups.delete(groups.keys().next().value!)
+}
+
+/** The group of copies across chats a card counted for `id`, if one did; for tests too. */
+export function groupOf(id: string): { videos: Video[]; items: Map<string, VideoItem> } | undefined {
+    return groups.get(id)
+}
+
 function arrange(s: ChatState, view: ChatView): ChatPage {
-    const key = JSON.stringify(view)
+    const key = `${copyEpoch}|${JSON.stringify(view)}`
     if (s.kept && s.kept.version === s.version && s.kept.view === key) return s.kept.page
     const r = rulesNow!
     const query = view.query.trim()
+    // The Last played order's times, by the version the view names (held once, not posted with every view).
+    const lastPlayed = touchesFor(view.touches)
     // Under words, what Telegram's search found beyond the loaded pages is listed with them.
     const videos = [...s.videos.values()]
     if (query) for (const [id, v] of s.hits) if (!s.videos.has(id)) videos.push(v)
-    const shelf = r.shelf(videos, view.sort, view.minBytes, view.maxBytes, view.watched, view.started)
-    let tiles = tilesOf(shelf, s.items, view)
+    // Words list what Telegram found, whatever the chat's filters say: a filter would hide the very thing looked for.
+    const shelf = r.shelfView(
+        videos,
+        view.sort,
+        query ? 'All' : (view.filter ?? 'All'),
+        query ? null : (view.facets ?? '').slice(0, 200),
+        view.minBytes,
+        view.maxBytes,
+        view.watched,
+        view.started,
+        lastPlayed.ids,
+        lastPlayed.times,
+        Math.floor(Date.now() / 1000),
+    )
+    let tiles = tilesOf(shelf, s.items, view, { r, videoOf: (id) => s.videos.get(id) ?? s.hits.get(id) })
     if (query) {
         const texts = tiles.map((t) => {
             if (t.kind === 'show') return t.title
@@ -397,6 +524,10 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
         photo: s.photo,
         tiles,
         hiddenBySize: shelf.hiddenBySize,
+        total: shelf.total,
+        hiddenByFilter: shelf.hiddenByFilter,
+        unknown: shelf.unknown,
+        languages: shelf.languages.slice(0, 40),
         loaded: s.videos.size,
         done: query ? searchDone(s, query) : done(s),
         archives: [...s.archives.entries()].sort((a, b) => b[0] - a[0]).map(([, name]) => name),
@@ -404,27 +535,29 @@ function arrange(s: ChatState, view: ChatView): ChatPage {
         protected: s.protected,
         sponsored: s.sponsored,
         sponsoredBetween: s.sponsoredBetween,
+        ...(s.topic ? { topic: s.topic } : {}),
     }
     s.kept = { version: s.version, view: key, page }
     return page
 }
 
-const opening = new Map<number, Promise<ChatState>>()
+const opening = new Map<number | string, Promise<ChatState>>()
 
 /** A chat read again from its newest message; a second open or Refresh while one runs waits for it. */
-function fresh(tg: TelegramClient, chatId: number): Promise<ChatState> {
-    let p = opening.get(chatId)
+function fresh(tg: TelegramClient, chatId: number, topic = 0): Promise<ChatState> {
+    const key = topic ? `${chatId}:${topic}` : chatId
+    let p = opening.get(key)
     if (!p) {
         p = (async () => {
-            const s = await openState(tg, chatId)
-            const [, ads] = await Promise.all([loadPage(tg, s), s.channel ? loadSponsored(tg, chatId) : null])
+            const s = await openState(tg, chatId, topic)
+            const [, ads] = await Promise.all([loadPage(tg, s), s.channel && !topic ? loadSponsored(tg, chatId) : null])
             if (ads) {
                 s.sponsored = ads.items
                 s.sponsoredBetween = ads.between
             }
             return s
-        })().finally(() => opening.delete(chatId))
-        opening.set(chatId, p)
+        })().finally(() => opening.delete(key))
+        opening.set(key, p)
     }
     return p
 }
@@ -437,9 +570,12 @@ let rulesNow: Awaited<ReturnType<typeof rules>> | null = null
  */
 export async function chatPage(tg: TelegramClient, chatId: number, view: ChatView, mode: 'open' | 'more' | 'refresh' | 'view'): Promise<ChatPage> {
     rulesNow = await rules()
-    let s = mode === 'refresh' ? undefined : chats.get(chatId)
+    // A topic of a forum chat (the apps' topic tab): its own state, read through the topic's thread.
+    const topic = Number.isSafeInteger(view.topic) && view.topic! > 0 ? view.topic! : 0
+    const topicKey = `${chatId}:${topic}`
+    let s = mode === 'refresh' ? undefined : topic ? topicChats.get(topicKey) : chats.get(chatId)
     const opened = !s
-    if (!s) s = await fresh(tg, chatId)
+    if (!s) s = await fresh(tg, chatId, topic)
     const query = view.query.trim()
     const st = s
     if (query && mode !== 'more') {
@@ -452,9 +588,15 @@ export async function chatPage(tg: TelegramClient, chatId: number, view: ChatVie
         await load(st, () => loadPage(tg, st))
     } else if (st.loading) await st.loading
     // Most recently used last, so the oldest is the one let go.
-    chats.delete(chatId)
-    chats.set(chatId, s)
-    while (chats.size > KEEP_CHATS) chats.delete(chats.keys().next().value!)
+    if (topic) {
+        topicChats.delete(topicKey)
+        topicChats.set(topicKey, s)
+        while (topicChats.size > KEEP_TOPIC_CHATS) topicChats.delete(topicChats.keys().next().value!)
+    } else {
+        chats.delete(chatId)
+        chats.set(chatId, s)
+        while (chats.size > KEEP_CHATS) chats.delete(chats.keys().next().value!)
+    }
     return arrange(s, view)
 }
 
@@ -485,6 +627,7 @@ export function chatItem(peer: Peer, pinned: boolean): ChatItem {
     const small = peer.photo?.small ?? null
     if (small) thumbnails.set(small.uniqueFileId, small)
     const self = peer.type === 'user' && peer.isSelf
+    noteChatTitle(peer.id, peer.displayName)
     return {
         id: peer.id,
         title: peer.displayName,
@@ -615,6 +758,69 @@ export function knownChats(): { chats: ChatItem[]; done: boolean } {
     return dialogs ? { chats: dialogs, done: true } : { chats: dialogsSoFar, done: false }
 }
 
+/** A search by topic name waits this long for a chat list that is already being read (every chat is searched). */
+const TOPIC_LIST_WAIT_MS = 3_000
+/** Added chats the list has not reached whose peer is looked up (from the stored peers, no call) per search. */
+const TOPIC_PEER_CHECKS = 150
+/** The head of the chat list (the chats used most recently), read for a search by topic name when the whole list is not there: kept two minutes. */
+let topicHead: { at: number; chats: ChatItem[] } | null = null
+
+/**
+ * The groups with topics a search by topic name may ask (U14), and the chat list's order for ties.
+ * Telling a group with topics from one without is a read of what the chat list already holds (the
+ * forum flag of the dialog), never a call per chat. Added chats the list has not reached are looked
+ * up among the stored peers, at most TOPIC_PEER_CHECKS. With every chat searched, the list is used
+ * as far as it has come (waiting a few seconds for one already being read); when none is being
+ * read, only its first page (the chats used most recently, one call) is read, so a search never
+ * starts the read of 3,000 chats.
+ */
+export async function topicSources(tg: TelegramClient, added: readonly number[] | null, signal?: AbortSignal): Promise<{ forums: ForumChat[]; order: number[] }> {
+    let head: ChatItem[] = []
+    if (!added && !dialogs) {
+        if (dialogsLoading) {
+            await Promise.race([dialogsLoading.catch(() => []), new Promise((resolve) => setTimeout(resolve, TOPIC_LIST_WAIT_MS))])
+        } else if (dialogsSoFar.length === 0) {
+            if (!topicHead || Date.now() - topicHead.at > 120_000) {
+                const mine = epoch
+                const first: ChatItem[] = []
+                try {
+                    for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) {
+                        // A new letter gave the search up: the read stops with the page it is on, and the part read is not kept.
+                        if (signal?.aborted) break
+                        first.push(chatItem(d.peer, d.isPinned))
+                    }
+                } catch {
+                    // The chats read so far are used; none means no group is asked.
+                }
+                if (mine !== epoch || signal?.aborted) return { forums: [], order: [] }
+                topicHead = { at: Date.now(), chats: first }
+            }
+            head = topicHead.chats
+        }
+    }
+    const known: ChatItem[] = [...(dialogs ?? dialogsSoFar), ...head, ...(archived ?? [])]
+    const byId = new Map<number, ChatItem>()
+    for (const c of known) if (!byId.has(c.id)) byId.set(c.id, c)
+    if (added) {
+        const missing = added.filter((id) => !byId.has(id)).slice(0, TOPIC_PEER_CHECKS)
+        for (let i = 0; i < missing.length; i += 6) {
+            if (signal?.aborted) return { forums: [], order: [] }
+            await Promise.all(
+                missing.slice(i, i + 6).map(async (id) => {
+                    try {
+                        byId.set(id, chatItem(await tg.getPeer(id), false))
+                    } catch {
+                        // Not a peer this device knows (left, never seen): not asked.
+                    }
+                }),
+            )
+        }
+    }
+    const forums: ForumChat[] = []
+    for (const c of byId.values()) if (c.forum && c.kind === 'group') forums.push({ id: c.id, title: c.title, archived: !!c.archived })
+    return { forums, order: known.map((c) => c.id) }
+}
+
 /** Ids of the listed chats whose names answer `query`, best first, by the app's fuzzy search. */
 export async function rankChats(query: string): Promise<number[]> {
     const r = await rules()
@@ -741,7 +947,7 @@ export async function listTiles(lines: { item: VideoItem; show?: string }[]): Pr
         const item = line.item
         if (!item || typeof item.chatId !== 'number' || typeof item.messageId !== 'number') return
         if (line.show) {
-            out.push({ at, tile: { key: `show-${item.chatId}-${line.show}`, kind: 'show', title: item.title, item, seasons: 0, episodes: 0, copies: 0, parts: 0, pieces: 0, extra: null } })
+            out.push({ at, tile: { key: `show-${item.chatId}-${line.show}`, kind: 'show', title: item.title, item, seasons: 0, episodes: 0, copies: 0, versions: 1, parts: 0, pieces: 0, extra: null } })
             return
         }
         const v = r.video({
@@ -767,18 +973,15 @@ export async function searchAll(tg: TelegramClient, query: string, view: ListVie
     const added = addedSetOf(view)
     const { videos, items } = await across(tg, query, added, everyChat)
     const shelf = r.shelf(videos, 'Newest', view.minBytes, view.maxBytes, view.watched, view.started)
-    const tiles = tilesOf(shelf, items, view)
+    const tiles = tilesOf(shelf, items, view, { r, videoOf: lookup(videos) })
     return { tiles, hiddenBySize: shelf.hiddenBySize, ...tally(tiles), addedOnly: !!added }
 }
 
 // The chats the viewer added (HX27): a rough video count, without reading or screening any of
-// them, three chats at a time so the picker never floods Telegram; kept for a while and never for
-// a failure, as the apps' ChatVideoCount does.
-const VIDEO_COUNT_BATCH = 3
-const VIDEO_COUNT_CACHE_MS = 10 * 60_000
-const videoCountCache = new Map<number, { count: number; time: number }>()
+// them, three chats at a time so the picker never floods Telegram (tg/counts.ts holds the budget: kept for a
+// while, never for a failure, a flood wait waited out once and then refused), as the apps' ChatVideoCount does.
 
-/** A chat's rough video count: the two filters' totals Telegram's search already carries, summed; -1 when it could not be read, never cached. */
+/** A chat's rough video count: the two filters' totals Telegram's search already carries, summed. */
 async function oneVideoCount(tg: TelegramClient, chatId: number): Promise<number> {
     const [videos, docs] = await Promise.all([
         tg.searchMessages({ chatId, filter: VIDEO_FILTER, limit: 1 }),
@@ -787,31 +990,13 @@ async function oneVideoCount(tg: TelegramClient, chatId: number): Promise<number
     return videos.total + docs.total
 }
 
-/** `chatIds`' rough video counts, by id; -1 for one Telegram could not answer. */
-export async function videoCounts(tg: TelegramClient, chatIds: readonly number[]): Promise<Record<number, number>> {
-    const now = Date.now()
-    const out: Record<number, number> = {}
-    const need: number[] = []
-    for (const id of chatIds) {
-        const hit = videoCountCache.get(id)
-        if (hit && now - hit.time < VIDEO_COUNT_CACHE_MS) out[id] = hit.count
-        else need.push(id)
-    }
-    for (let i = 0; i < need.length; i += VIDEO_COUNT_BATCH) {
-        const batch = need.slice(i, i + VIDEO_COUNT_BATCH)
-        await Promise.all(
-            batch.map(async (chatId) => {
-                try {
-                    const count = await oneVideoCount(tg, chatId)
-                    videoCountCache.set(chatId, { count, time: now })
-                    out[chatId] = count
-                } catch {
-                    out[chatId] = -1
-                }
-            }),
-        )
-    }
-    return out
+let counterClient: TelegramClient | null = null
+const videoCounter = createVideoCounter((id) => oneVideoCount(counterClient!, id))
+
+/** `chatIds`' rough video counts, by id; -1 for one Telegram could not answer, -2 once it refused (a flood wait). */
+export function videoCounts(tg: TelegramClient, chatIds: readonly number[], signal?: AbortSignal): Promise<Record<number, number>> {
+    counterClient = tg
+    return videoCounter.counts(chatIds, signal)
 }
 
 // Recently added's See all
@@ -967,7 +1152,7 @@ export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open
     // The same floor as Home's row (SizeFilter.HOME_MIN), said on the page.
     const shelf = r.shelf(shown, 'Newest', r.sizeHomeMin(view.minBytes), view.maxBytes, view.watched, view.started)
     return {
-        tiles: tilesOf(shelf, st.items, view),
+        tiles: tilesOf(shelf, st.items, view, { r, videoOf: (id) => st.videos.get(id) }),
         hiddenBySize: shelf.hiddenBySize,
         done: recentDone(st),
         starredOnly: st.starredOnly,
@@ -1063,7 +1248,8 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
     const id = `${chatId}:${messageId}`
     const current = s.videos.get(id) ?? (await addMessage(tg, s, messageId))
     if (!current) return null
-    const viewKey = JSON.stringify(view)
+    // The group a card across chats counted is part of the answer: a card that counts another one asks again.
+    const viewKey = `${copyEpoch}|${groupOf(id)?.videos.map((v) => v.id).join(',') ?? ''}|${JSON.stringify(view)}`
     const kept = watchKept.get(id)
     if (kept && kept.version === s.version && kept.view === viewKey) return kept.info
     const steps = r.steps(current, [...s.videos.values()])
@@ -1091,6 +1277,8 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             .tiles.filter((t) => videoId(t.item) !== id)
             .slice(0, 12)
     }
+    // One read of the picture for the badge, the copies list and the order (QualityRead, HX38).
+    const read = r.qualityRead(current)
     // Every copy of it in the chat, found by the shelf's own grouping (the size limits left open, as the apps' copy list ignores them).
     const wholeShelf = r.shelf([...s.videos.values()], 'Newest', 0, r.sizeLimits().ceiling, [], [])
     const copyIds = new Set<string>()
@@ -1099,29 +1287,15 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             for (const season of t.seasons) for (const e of season.episodes) if (e.video.id === id || e.copies.includes(id)) e.copies.forEach((c) => copyIds.add(c))
         } else if (t.video?.id === id || t.copies.includes(id)) t.copies.forEach((c) => copyIds.add(c))
     }
-    // The same file posted twice (forwarded, or sent again: the same name and size) is one choice, the post this page is about standing for it.
-    const seenFile = new Map<string, string>()
-    for (const cid of copyIds) {
-        const v = s.videos.get(cid)
-        const key = v && v.fileName && v.size > 0 ? `${v.fileName}|${v.size}` : cid
-        if (!seenFile.has(key) || cid === id) seenFile.set(key, cid)
-    }
-    const distinct = new Set(seenFile.values())
-    const copies: CopyRef[] =
-        distinct.size > 1
-            ? [...distinct]
-                  .flatMap((cid) => {
-                      const v = s.videos.get(cid)
-                      const it = s.items.get(cid)
-                      if (!v || !it) return []
-                      const facts = r.copyFacts(v)
-                      // The quality heads the facts ("4K", "1080p"); a copy whose name states none (the size heads it) comes last, as the apps' picker has it.
-                      const height = facts[0] === '4K' ? 2160 : /^(\d+)p$/.test(facts[0] ?? '') ? parseInt(facts[0]) : 0
-                      return [{ item: it, facts, fileName: v.fileName, date: v.date, chat: s.title, height, size: v.size }]
-                  })
-                  .sort((a, b) => b.height - a.height || b.size - a.size)
-                  .map(({ height: _h, size: _s, ...copy }) => copy)
-            : []
+    // In the order the list shows them, recommended first, the same file posted twice once (copyPick.ts): its length is the count.
+    // A card that folded copies from several chats (Search, Recently added) handed its group on: the page lists the same one, so the count and the list agree.
+    const across = groupOf(id)
+    const copyVideos = across ? across.videos : [...copyIds].flatMap((cid) => s.videos.get(cid) ?? [])
+    const copies: CopyRef[] = copyRows(r, copyVideos, id, copyCtx, view.started).flatMap((row) => {
+        const it = s.items.get(row.video.id) ?? across?.items.get(row.video.id)
+        const chat = row.video.chatId === s.id ? s.title : (it?.chat ?? '')
+        return it ? [{ item: it, facts: r.copyFacts(row.video), fileName: row.video.fileName, date: row.video.date, chat, best: row.best, fit: row.fit, started: row.started, mismatch: row.mismatch }] : []
+    })
     // After a video that is not an episode (the apps' ChatOrder): the chat's own list goes on, in the grid's sort.
     const around = view.chatOrder && !steps.next && !steps.previous && !seasons.length ? await chatOrderAround(tg, s, view, id) : null
     const info: WatchInfo = {
@@ -1139,8 +1313,10 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         height: current.height,
         chatTitle: s.title,
         protected: s.protected,
-        quality: r.qualityLabel(current) ?? null,
-        copies,
+        quality: read.label ?? null,
+        qualityHeight: read.height ?? null,
+        copies: copies.length > 1 ? copies : [],
+        group: copyVideos.length > 1 ? groupRefs(copyVideos) : [],
         overview: r.overviewOf(current) ?? null,
     }
     watchKept.set(id, { version: s.version, view: viewKey, info })

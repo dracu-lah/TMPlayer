@@ -28,6 +28,10 @@ import com.tmplayer.data.SearchIdentity
 import com.tmplayer.data.SearchQuery
 import com.tmplayer.data.SearchSort
 import com.tmplayer.data.Td
+import com.tmplayer.data.TitleHit
+import com.tmplayer.online.PosterChoice
+import com.tmplayer.online.PosterChoices
+import com.tmplayer.online.WhereToWatch
 import com.tmplayer.online.KnownMedia
 import com.tmplayer.online.MetaQuery
 import com.tmplayer.online.MetaResult
@@ -120,6 +124,47 @@ fun interface VideoSearchSource {
     }
 }
 
+/**
+ * Where any film or show is looked up by its name (HX41): TMDB through [OnlineMetadata] in the
+ * app, a fake in the tests. A metadata question only: it names titles and services, and never
+ * fetches, requests or searches for a video anywhere the viewer has not added themselves.
+ */
+interface TitleSource {
+    /** The titles [query] could mean. Never throws: off, no key and offline are answers of their own. */
+    suspend fun titles(query: MetaQuery): PosterChoices
+
+    /** Where [title] can be streamed or rented in the viewer's region. Never throws. */
+    suspend fun whereToWatch(title: PosterChoice): WhereToWatch
+
+    companion object {
+        val Online = object : TitleSource {
+            override suspend fun titles(query: MetaQuery): PosterChoices =
+                OnlineMetadata.current?.candidates(query) ?: PosterChoices.Off
+
+            override suspend fun whereToWatch(title: PosterChoice): WhereToWatch =
+                OnlineMetadata.current?.whereToWatch(title) ?: WhereToWatch.Off
+        }
+    }
+}
+
+/** How the title lookup above the cards stands (HX41). */
+enum class TitleLookup {
+    /** Nothing to look up: no words, a quality alone, or no title source. */
+    Idle,
+
+    /** Waiting for the typing to settle, or for TMDB. */
+    Looking,
+
+    /** TMDB answered; [GlobalSearchState.titleHits] says what. */
+    Found,
+
+    /** Lookups are off or there is no key: the search reads the chats alone, and says nothing of it. */
+    Off,
+
+    /** Offline or throttled: a quiet line with Try again, the cards unaffected. */
+    Unavailable,
+}
+
 /** The search across every chat, as the screens draw it. */
 data class GlobalSearchState(
     /** What was typed, read: see [GlobalSearch.parse]. */
@@ -172,7 +217,27 @@ data class GlobalSearchState(
     val addedOnly: Boolean = false,
     /** The one-off "Search my other chats" is on for these words: the whole account, not the added chats. */
     val everyChat: Boolean = false,
+    /** The films and shows TMDB named for the words (HX41), in its ranked order; empty with none. */
+    val titles: List<PosterChoice> = emptyList(),
+    val titleLookup: TitleLookup = TitleLookup.Idle,
+    /** The "Where to watch" sheet: the title it is for, and its answer (null while asking). Null when closed. */
+    val watching: Pair<PosterChoice, WhereToWatch?>? = null,
 ) {
+    /**
+     * The titles over the cards, each with the copies the viewer has (HX41): [GlobalSearch.titles]
+     * over every card found, not only the ones the filters let through, so a filter never makes a
+     * title "Not in your chats".
+     */
+    val titleHits: List<TitleHit> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        if (titles.isEmpty()) emptyList() else GlobalSearch.titles(titles, groups, query)
+    }
+
+    /**
+     * "Not in your chats": TMDB named the title and nothing found carries it. Only once the
+     * chats have answered, so it never shows while the search is still reading them.
+     */
+    val notInChats: Boolean get() = !searching && !settling && !stillSearching && GlobalSearch.notInChats(titleHits)
+
     /** How many videos in how many chats the list holds, for the count line; null for an empty list. */
     val tally: GlobalSearch.Tally? by lazy(LazyThreadSafetyMode.PUBLICATION) {
         if (shown.isEmpty()) null else GlobalSearch.tally(shown)
@@ -240,6 +305,8 @@ class GlobalSearchViewModel(
      * and on the main thread each letter typed on a phone waited for them (2026-10-23).
      */
     private val work: CoroutineDispatcher = Dispatchers.Default,
+    /** Where any film or show is looked up by name (HX41); none for a fixture that does not offer it. */
+    private val titleSource: TitleSource? = if (source === VideoSearchSource.Telegram) TitleSource.Online else null,
 ) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("GlobalSearch")) {
 
     /** Telegram's pages for one query, as the [cache] keeps them: before the kids lock and hidden chats. */
@@ -467,7 +534,85 @@ class GlobalSearchViewModel(
     private fun start(text: String, settle: Long, force: Boolean = false) {
         startVideos(text, settle, force)
         findTopics(GlobalSearch.clean(text), settle, force)
+        findTitles(settle, force)
     }
+
+    private var titleJob: Job? = null
+
+    /** The TMDB question the titles on screen answer (or are being found for); null for none. */
+    private var titleAsked: MetaQuery? = null
+
+    /**
+     * Any film or show the words name (HX41), into [GlobalSearchState.titles]: TMDB once the typing
+     * has settled for [settle], one question per settled set of words (the question itself is at
+     * most four calls through [OnlineMetadata]'s own limiter, and kept in memory for the run). A
+     * quality or a space changing asks nothing new. With lookups off or no key nothing is asked
+     * and the cards are the whole answer; offline or throttled leaves a quiet Try again
+     * ([retryTitles]). A new letter cancels what was asked.
+     */
+    private fun findTitles(settle: Long, force: Boolean) {
+        val source = titleSource ?: return
+        val query = _state.value.query
+        val asking = GlobalSearch.titleQuery(query)
+        if (asking == null) {
+            titleJob?.cancel()
+            titleAsked = null
+            _state.update { it.copy(titles = emptyList(), titleLookup = TitleLookup.Idle, watching = null) }
+            return
+        }
+        val same = asking.title.equals(titleAsked?.title, ignoreCase = true) && asking.year == titleAsked?.year
+        if (same && !force && (titleJob?.isActive == true || _state.value.titleLookup == TitleLookup.Found)) return
+        titleJob?.cancel()
+        titleAsked = asking
+        _state.update { it.copy(titleLookup = TitleLookup.Looking) }
+        titleJob = viewModelScope.launch {
+            if (settle > 0) delay(settle)
+            val answer = try {
+                source.titles(asking)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                PosterChoices.Unavailable
+            }
+            _state.update { s ->
+                when (answer) {
+                    is PosterChoices.Found -> s.copy(titles = answer.choices, titleLookup = TitleLookup.Found)
+                    PosterChoices.Off, PosterChoices.NoKey -> s.copy(titles = emptyList(), titleLookup = TitleLookup.Off)
+                    PosterChoices.Unavailable -> s.copy(titles = emptyList(), titleLookup = TitleLookup.Unavailable)
+                }
+            }
+        }
+    }
+
+    /** The titles' own Try again, after TMDB could not be reached: only the titles are asked again. */
+    fun retryTitles() {
+        if (_state.value.titleLookup != TitleLookup.Unavailable) return
+        findTitles(settle = 0, force = true)
+    }
+
+    /**
+     * Opens "Where to watch" for [title] (HX41): TMDB's legal streaming and rental list for the
+     * viewer's region, one call, kept for the run. A second press while it is asking does nothing.
+     */
+    fun openWhereToWatch(title: PosterChoice) {
+        val source = titleSource ?: return
+        val open = _state.value.watching
+        if (open != null && open.first == title && open.second != WhereToWatch.Unavailable) return
+        _state.update { it.copy(watching = title to null) }
+        viewModelScope.launch {
+            val answer = try {
+                source.whereToWatch(title)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                WhereToWatch.Unavailable
+            }
+            // Closed, or another title opened meanwhile: the answer is not shown over it.
+            _state.update { s -> if (s.watching?.first == title) s.copy(watching = title to answer) else s }
+        }
+    }
+
+    fun closeWhereToWatch() = _state.update { it.copy(watching = null) }
 
     private fun startVideos(text: String, settle: Long, force: Boolean) {
         val query = GlobalSearch.parse(text)
@@ -524,6 +669,10 @@ class GlobalSearchViewModel(
             topicsPartial = now.topicsPartial,
             addedOnly = addedOnlyNow(),
             everyChat = everyChat,
+            // The titles stay up until the new words' own answer replaces them ([findTitles]).
+            titles = now.titles,
+            titleLookup = now.titleLookup,
+            watching = now.watching,
         )
         val kept = cache?.peek<Answer>(keyOf(query, now.filters), PageQueries.SEARCH_STALE_MS)
         if (kept != null) {

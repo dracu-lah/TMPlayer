@@ -60,5 +60,53 @@ export async function openCard(page: Page, name: string) {
 export const choice = (page: Page, name: string) =>
     page.getByRole('menuitemradio', { name }).or(page.getByRole('radio', { name, exact: true })).first()
 
+/**
+ * The raw calls the fake Telegram has answered so far (fake/mtcute.ts `calls`: `searchMessages <chat> <filter> <offset>`,
+ * `searchGlobal <filter> <offset>`, `iterDialogs <archived> <limit>`, `getMessages <chat>`, `getFullChat <chat>`, the
+ * sync file's `sendMedia` and `editMessage`), read from the Telegram worker, which holds them. Empty before the worker starts.
+ */
+export async function workerCalls(page: Page): Promise<string[]> {
+    const worker = page.workers().find((w) => /tg\/worker/.test(w.url()))
+    if (!worker) return []
+    return worker.evaluate(() => [...((globalThis as { fakeCalls?: string[] }).fakeCalls ?? [])])
+}
+
+/** How many of the calls so far start with `kind`. */
+export const countCalls = (calls: string[], kind: string) => calls.filter((c) => c === kind || c.startsWith(`${kind} `)).length
+
+/**
+ * TMDB's split of Harbour Notes (the fake Test Shows chat holds its S01E01 to S01E03), as the worker answers it: season 1 of 25
+ * (the last two not aired), season 2 of 12 (the last two not aired, the seventh untitled at TMDB). `asked` collects the
+ * /tmdb/season queries; `picture` answers every image.
+ */
+export async function mockSplitShow(page: Page, asked: string[], picture: Buffer) {
+    const episodes = (season: number) =>
+        Array.from({ length: season === 1 ? 25 : 12 }, (_, i) => ({
+            number: i + 1,
+            name: season === 1 ? `The ${i + 1}th Tide` : i === 6 ? '' : `The ${26 + i}th Tide`,
+            overview: `What happens in ${season}x${i + 1}.`,
+            still: `/still${season}${String(i + 1).padStart(3, '0')}abc.jpg`,
+            airDate: (season === 1 ? i >= 23 : i >= 10) ? '2099-01-01' : '2024-10-03',
+            runtime: 24,
+        }))
+    await page.route('**/tmdb/**', (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '207347', kind: 'show', title: 'Harbour Notes', year: 2024, poster: null, backdrop: null, overview: '' } })
+        if (url.pathname === '/tmdb/extras')
+            return route.fulfill({
+                json: {
+                    found: true, genres: [], runtime: 24, seasons: 2, rating: null, certification: null, directors: [], creators: [], cast: [], trailer: null, ended: false, imdb: null, logo: null,
+                    seasonList: [{ number: 1, episodes: 25, airDate: '2024-10-03' }, { number: 2, episodes: 12, airDate: '2025-02-01' }], next: null,
+                    seasonGroup: 'seasons001', listedSeasons: [{ number: 1, episodes: 37, airDate: '2024-10-03' }], listedNext: null, groupsRead: true,
+                },
+            })
+        if (url.pathname === '/tmdb/season') {
+            asked.push(url.search)
+            return route.fulfill({ json: { found: true, episodes: episodes(Number(url.searchParams.get('s'))) } })
+        }
+        return route.fulfill({ contentType: 'image/jpeg', body: picture })
+    })
+}
+
 /** The form this project runs in: its name says (`phone-390`, `desktop-1280`, `webkit-iphone`); the rest are auto-detected desktops. */
 export const isPhoneProject = (name: string) => name.startsWith('phone') || name.includes('iphone')

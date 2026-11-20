@@ -1,32 +1,25 @@
 package com.tmplayer.data
 
-import com.tmplayer.i18n.L
-
 /**
  * "What's new": a short sheet on the first run of a new version, with the highlights bundled in
  * the catalog so they are translated with everything else, and the same sheet from Settings.
  *
- * The highlights describe one release, [VERSION]. Release prep moves the two together: new
- * `whatsnew.highlight_*` keys and this constant. A patch release that keeps them shows nothing,
- * because the viewer has already seen those highlights.
+ * The highlights describe one release, [VERSION], held in [ReleaseHighlights] (which the web app
+ * reads too). Release prep moves the two together: new `whatsnew.highlight_*` keys and
+ * [ReleaseHighlights.VERSION]. A patch release that keeps them shows nothing, because the viewer
+ * has already seen those highlights.
  */
 object WhatsNew {
 
     /** The release the bundled highlights describe. */
-    const val VERSION = "1.27.0"
+    const val VERSION = ReleaseHighlights.VERSION
 
     /** Where "Full changelog" and the Settings "Changelog" row go. */
-    const val CHANGELOG = "https://tmplayer.org/changelog/"
+    const val CHANGELOG = ReleaseHighlights.CHANGELOG
 
     /** The highlights, in the order the sheet lists them. */
     val highlights: List<String>
-        get() = listOf(
-            L.whatsnewHighlightSearch,
-            L.whatsnewHighlightCopies,
-            L.whatsnewHighlightCarousel,
-            L.whatsnewHighlightPlayer,
-            L.whatsnewHighlightSort,
-        )
+        get() = ReleaseHighlights.highlights
 
     /** What a launch does: show the sheet or not, and the version to remember, if any. */
     data class Launch(val show: Boolean, val remember: String?)

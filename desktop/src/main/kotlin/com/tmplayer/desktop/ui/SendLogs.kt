@@ -58,6 +58,13 @@ object SendLogs {
         }.onFailure { Logger.w(TAG, "Logs not saved", it) }.getOrNull()
     }
 
+    /** The bundle's text for feedback (HX64), or null when there is no log yet. Off the main thread. */
+    suspend fun bundleText(): String? = withContext(Dispatchers.IO) {
+        val lines = DesktopLog.recentLines(LogExport.MAX_LINES)
+        if (lines.isEmpty()) return@withContext null
+        bundle(lines, LogExport.knownNames(DesktopServices.settings, DesktopServices.watched)).text
+    }
+
     /**
      * The same bundle as the phone's (L5), from the desktop's own log file: the facts of this machine
      * and the log's last lines, scrubbed and under the cap. The desktop keeps no playback trace.

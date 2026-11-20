@@ -218,4 +218,76 @@ class ChatPickingTest {
         assertEquals(1_000, rows.count { it.band == ChatPicking.Band.Added })
         assertEquals(491, rows.count { it.band == ChatPicking.Band.Recommended })
     }
+
+    // ---- Telegram folders as a filter (HX29) ------------------------------------------------
+
+    private fun inFolders(chat: ChatSummary, vararg ids: Int) = chat.copy(folderIds = ids.toList())
+
+    private val folded = listOf(
+        saved,
+        inFolders(chat(2, "Harbour Films"), 7),
+        inFolders(chat(3, "Night Lantern Club", ChatKind.Group), 7, 8),
+        inFolders(chat(4, "Archived Reels", archived = true), 7),
+        chat(5, "Anya", ChatKind.Direct),
+    )
+
+    @Test
+    fun `a folder lists what Telegram puts in it, the archived chats among them, in one band`() {
+        val rows = ChatPicking.rows(folded, emptySet(), recommended = listOf(2L), folder = 7)
+        // No Recommended, Starred or Archived band inside a folder: the folder is the question.
+        assertEquals(listOf(2L, 3L, 4L), rows.map { it.id })
+        assertTrue(rows.all { it.band == ChatPicking.Band.Chats })
+    }
+
+    @Test
+    fun `a chat in several folders is listed in each, and ticking it is one tick`() {
+        val first = ChatPicking.rows(folded, emptySet(), folder = 7).map { it.id }
+        val second = ChatPicking.rows(folded, emptySet(), folder = 8).map { it.id }
+        assertEquals(listOf(3L), second)
+        assertTrue(3L in first)
+        val ticked = ChatPicking.selectAll(emptySet(), ChatPicking.visible(ChatPicking.rows(folded, emptySet(), folder = 7)))
+        // Taking folder 8 after folder 7 adds nothing for the chat both hold.
+        assertEquals(ticked, ChatPicking.selectAll(ticked, ChatPicking.visible(ChatPicking.rows(folded, emptySet(), folder = 8))))
+    }
+
+    @Test
+    fun `Select all in a folder ticks that folder only, and a search inside it stays inside`() {
+        val visible = ChatPicking.visible(ChatPicking.rows(folded, emptySet(), folder = 8))
+        assertEquals(setOf(3L), ChatPicking.selectAll(setOf(5L), visible) - setOf(5L))
+        val searched = ChatPicking.rows(folded, emptySet(), folder = 7, query = "harbour")
+        assertEquals(listOf(2L), searched.map { it.id })
+    }
+
+    @Test
+    fun `a folder nobody holds is empty, and one never read lists nothing yet`() {
+        assertTrue(ChatPicking.rows(folded, emptySet(), folder = 99).isEmpty())
+        // Membership not read: no chat knows its folders, so the folder has no rows, which the screen words as reading.
+        assertTrue(ChatPicking.rows(account, emptySet(), folder = 7).isEmpty())
+    }
+
+    @Test
+    fun `Telegram's suggested kind folders are left out as chips, and a custom folder of the same name stays`() {
+        val folders = listOf(
+            ChatFolderSummary(1, "Channels", icon = "Channels"),
+            ChatFolderSummary(2, "Groups", icon = "Groups"),
+            ChatFolderSummary(3, "Personal", icon = "Private"),
+            ChatFolderSummary(4, "Groups", icon = "Custom"),
+            ChatFolderSummary(5, "Unread", icon = "Unread"),
+            ChatFolderSummary(4, "Groups again", icon = "Custom"),
+        )
+        assertEquals(listOf(4, 5), ChatPicking.pickable(folders).map { it.id })
+        assertEquals(ChatPicking.Scope.Channels, ChatPicking.scopeOf(folders[0]))
+        assertEquals(null, ChatPicking.scopeOf(folders[3]))
+    }
+
+    @Test
+    fun `three thousand chats in folders are filtered in one pass`() {
+        val many = listOf(saved) + (10L..3_009L).map { inFolders(chat(it), (it % 5).toInt()) } +
+            (4_000L..5_499L).map { inFolders(chat(it, archived = true), 3, 4) }
+        val rows = ChatPicking.rows(many, emptySet(), folder = 3)
+        // The ids ending in 3 and 8 are folder 3, and every archived chat is in it.
+        assertEquals(600 + 1_500, rows.size)
+        assertEquals(rows.size, rows.map { it.id }.toSet().size)
+        assertTrue(rows.all { it.band == ChatPicking.Band.Chats })
+    }
 }

@@ -67,6 +67,10 @@ jobs:
       - name: Poster worker tests
         run: pnpm -C webapp test:tmdb
 
+      # The screens' own rules (the series page's merge, what the page keeps of an answer).
+      - name: Screen rules tests
+        run: pnpm -C webapp test:screens
+
       # The Telegram id and hash end up in the page's script, exactly as they are in the APK, so
       # only a push or a manual run gets them; a pull request stops at the type check (a release
       # build refuses to run without them, vite.config.ts).

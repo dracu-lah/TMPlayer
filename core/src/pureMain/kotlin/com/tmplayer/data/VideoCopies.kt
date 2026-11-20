@@ -48,13 +48,40 @@ object VideoCopies {
         copies: List<MediaItem>,
         allowed: Set<Long>? = ChatGate.browsing.value,
     ): List<Pair<MediaItem, List<MediaItem>>> {
+        // One pass with a lookup per way two posts can be one file ([sameFile]), not every copy against every group.
         val groups = mutableListOf<MutableList<MediaItem>>()
+        val byId = HashMap<String, MutableList<Int>>()
+        val byFile = HashMap<Int, MutableList<Int>>()
+        val byName = HashMap<String, MutableList<Int>>()
         for (copy in visible(copies, allowed)) {
-            val same = groups.firstOrNull { group -> group.any { sameFile(it, copy) } }
-            if (same != null) same += copy else groups += mutableListOf(copy)
+            val nameKey = if (copy.fileName.isNotBlank() && copy.sizeBytes > 0) "${copy.sizeBytes}:${copy.fileName}" else null
+            val found = listOfNotNull(
+                byId[copy.id],
+                if (copy.fileId > 0) byFile[copy.fileId] else null,
+                nameKey?.let { byName[it] },
+            ).flatten().minOrNull()
+            val index = if (found != null) {
+                groups[found] += copy
+                found
+            } else {
+                groups += mutableListOf(copy)
+                groups.size - 1
+            }
+            byId.getOrPut(copy.id) { mutableListOf() } += index
+            if (copy.fileId > 0) byFile.getOrPut(copy.fileId) { mutableListOf() } += index
+            nameKey?.let { byName.getOrPut(it) { mutableListOf() } += index }
         }
         return groups.map { it.first() to it.toList() }
     }
+
+    /**
+     * How many versions a card or a page says a film has: the distinct files among [MediaItem.versions]
+     * (the same file posted twice counts once), the one count every surface shares (HX38). 1 for a
+     * film with no folded copies. [allowed] as for [distinctFiles]; the web player, which has no
+     * kids lock, passes null and so never starts the gate's flows.
+     */
+    fun versionCount(item: MediaItem, allowed: Set<Long>? = ChatGate.browsing.value): Int =
+        if (item.versions.size < 2) 1 else distinctFiles(item.versions, allowed).size.coerceAtLeast(1)
 
     /** [distinctFiles], one item per file: the one [playing] where it is among a file's posts. */
     fun oneOfEachFile(
@@ -187,8 +214,20 @@ object VideoCopies {
     fun heightOf(item: MediaItem): Int? {
         val name = item.fileName.ifBlank { item.title }
         val marked = EpisodeCopies.markers(name).firstNotNullOfOrNull { it.toIntOrNull() }
+        // The size Telegram states decides the picture ([QualityRead], HX38): a name that says
+        // 720p over a file 1920 wide is a 1080p. The name's own height stands where it agrees
+        // with the size (1440 stays 1440), and the size's where it does not.
+        val stated = MediaFacts.resolutionOf(item.width, item.height)
+        if (stated != null) {
+            if (marked != null && QualityRead.labelOfHeight(marked) == stated) return marked
+            return when (stated) {
+                "4K" -> 2160
+                "1080p" -> 1080
+                "720p" -> 720
+                else -> snap(minOf(item.width, item.height)).coerceAtMost(SD_TOP)
+            }
+        }
         if (marked != null) return marked
-        if (item.width > 0 && item.height > 0) return snap(minOf(item.width, item.height))
         // "HDRip - 1080.mkv": the height with its "p" left off, which the release reader allows
         // where the rest of the name is release words.
         return when (MediaText.qualityTags(name).firstOrNull()) {
@@ -286,6 +325,8 @@ object VideoCopies {
     fun heightCap(device: String): Int = if (device == "phone") PHONE_CAP else Int.MAX_VALUE
 
     private const val PHONE_CAP = 1080
+
+    private const val SD_TOP = 576
 
     private fun bestOf(copies: List<MediaItem>, cap: Int): MediaItem? {
         val known = copies.mapNotNull { copy -> heightOf(copy)?.let { copy to it } }

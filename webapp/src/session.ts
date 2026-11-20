@@ -3,7 +3,10 @@ import { createSignal } from 'solid-js'
 import type { Navigator } from '@solidjs/router'
 import { api, whenUnauthorized } from './tg/rpc'
 import { clearAll } from './store'
+import { clearLogs } from './logs'
 import { clearThumbs } from './cacheBounds'
+import { forgetLinks } from './ui/tgLinks'
+import { wipeAllPicks } from './player/subpicks-db'
 import type { Me } from './tg/types'
 
 /** undefined while the session is checked, null when signed out. */
@@ -20,6 +23,8 @@ export { sessionEnded }
 export async function signOut() {
     await api.logOut().catch(() => {})
     await clearAll()
+    // The remembered online subtitles and their copies are the account's: none stays for the next one (HX25).
+    await wipeAllPicks()
     setMe(null)
 }
 
@@ -31,8 +36,13 @@ export async function signOut() {
  */
 export async function sessionEndedElsewhere() {
     setSessionEnded(true)
+    forgetLinks()
     await api.logOut().catch(() => {})
+    // Its names are in the page's log: they go with the old session, whoever signs in next (WB18).
+    clearLogs()
     await clearThumbs().catch(() => {})
+    // The remembered online subtitles belong to the account that ended, whoever signs in next (HX25).
+    await wipeAllPicks()
     setMe(null)
 }
 

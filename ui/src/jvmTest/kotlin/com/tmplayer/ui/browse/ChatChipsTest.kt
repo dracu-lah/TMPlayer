@@ -45,17 +45,22 @@ class ChatChipsTest {
     }
 
     @Test
-    fun `a folder lists its archived chats too, and says when it could not be read (HX32)`() {
+    fun `a folder is not a page of the Chats list any more, and a saved folder page comes back as Chats (HX29)`() {
         val inFolder = chats.map { if (it.id == 1L || it.id == 5L) it.copy(folderIds = listOf(7)) else it }
-        val folder = BrowseSection.Folder(7, "Movies")
-        assertEquals(listOf(1L, 5L), filterChats(inFolder, folder, emptySet(), "").map { it.id })
+        // The Chats list ignores folders: the same chats, folder or not.
+        assertEquals(ids(ChatFilter.All), filterChats(inFolder, chatsSection, emptySet(), "").map { it.id })
+        assertEquals(chatsSection, BrowseSection.decode("folder:7:Movies"))
+        assertEquals(chatsSection, BrowseSection.decode("folder:oops"))
+        assertEquals(null, BrowseSection.decode("nonsense"))
+    }
 
-        val loaded = BrowseData(inFolder)
-        assertEquals(FolderRead.Loaded, loaded.folderRead(7))
-        assertEquals(FolderRead.Loading, BrowseData(inFolder, foldersPending = true).folderRead(7))
+    @Test
+    fun `how reading the folders went says loading, not loaded or loaded, folder by folder (HX32)`() {
+        assertEquals(FolderRead.Loaded, FolderStatus().read(7))
+        assertEquals(FolderRead.Loading, FolderStatus(pending = true).read(7))
         // A failed folder is never "loading" or "empty", whatever is pending for the others.
-        assertEquals(FolderRead.NotLoaded, BrowseData(inFolder, foldersPending = true, foldersFailed = setOf(7)).folderRead(7))
-        assertEquals(FolderRead.Loaded, BrowseData(inFolder, foldersFailed = setOf(8)).folderRead(7))
+        assertEquals(FolderRead.NotLoaded, FolderStatus(pending = true, failed = setOf(7)).read(7))
+        assertEquals(FolderRead.Loaded, FolderStatus(failed = setOf(8)).read(7))
     }
 
     @Test

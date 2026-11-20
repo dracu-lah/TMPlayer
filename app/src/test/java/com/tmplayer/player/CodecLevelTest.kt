@@ -51,4 +51,30 @@ class CodecLevelTest {
     fun aPortraitPictureCountsByItsLongSide() {
         assertEquals("hvc1.2.4.L123.90", CodecLevel.relaxed(video(MimeTypes.VIDEO_H265, "hvc1.2.4.L153.90", 1080, 1920))?.codecs)
     }
+
+    @Test
+    fun rateFreeAsks4kAtLevel5WithoutItsFrameRate() {
+        val asked = CodecLevel.rateFree(video(MimeTypes.VIDEO_H265, "hvc1.2.4.L153.90", 3840, 1604).buildUpon().setFrameRate(60f).build())
+        assertEquals("hvc1.2.4.L150.90", asked?.codecs)
+        assertEquals(androidx.media3.common.Format.NO_VALUE.toFloat(), asked?.frameRate)
+        assertEquals(3840, asked?.width)
+        // H.264 4K goes to 5.1, 1080p to 4.1, and a claim already under its target keeps its level.
+        assertEquals("avc1.640033", CodecLevel.rateFree(video(MimeTypes.VIDEO_H264, "avc1.640034", 3840, 2160))?.codecs)
+        assertEquals("avc1.640029", CodecLevel.rateFree(video(MimeTypes.VIDEO_H264, "avc1.640033", 1920, 1080))?.codecs)
+        val low = CodecLevel.rateFree(video(MimeTypes.VIDEO_H265, "hvc1.2.4.L120.90", 1920, 1080).buildUpon().setFrameRate(120f).build())
+        assertEquals("hvc1.2.4.L120.90", low?.codecs)
+    }
+
+    @Test
+    fun rateFreeLeavesWhatItCannotForgive() {
+        // Nothing to change: no frame rate and a level already fine.
+        assertNull(CodecLevel.rateFree(video(MimeTypes.VIDEO_H265, "hvc1.2.4.L120.90", 1920, 1080)))
+        // 8K, no size, and sound are never asked again.
+        assertNull(CodecLevel.rateFree(video(MimeTypes.VIDEO_H265, "hvc1.2.4.L183.90", 7680, 4320).buildUpon().setFrameRate(30f).build()))
+        assertNull(CodecLevel.rateFree(video(MimeTypes.VIDEO_H265, "hvc1.2.4.L153.90", 0, 0).buildUpon().setFrameRate(60f).build()))
+        assertNull(CodecLevel.rateFree(video(MimeTypes.AUDIO_AAC, "mp4a.40.2", 3840, 2160)))
+        // Another codec loses only its frame rate; an unreadable string is kept as it is.
+        assertEquals("vp09.02.51.10", CodecLevel.rateFree(video(MimeTypes.VIDEO_VP9, "vp09.02.51.10", 3840, 2160).buildUpon().setFrameRate(60f).build())?.codecs)
+        assertEquals("hvc1", CodecLevel.rateFree(video(MimeTypes.VIDEO_H265, "hvc1", 3840, 2160).buildUpon().setFrameRate(60f).build())?.codecs)
+    }
 }

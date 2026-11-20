@@ -496,6 +496,9 @@ fun PlayerScreen(
     var undoOffer by remember(current) { mutableStateOf<SeekUndo.Offer?>(null) }
     // The "Go to a time" dialog ({cmd}+G).
     var timePrompt by remember { mutableStateOf(false) }
+    // "Add to a list" (HX43): the video as it was when the line was chosen, so the picker keeps
+    // naming the one it was opened for even if the next episode starts under it.
+    var listPicking by remember { mutableStateOf<com.tmplayer.data.WatchLaterRecord?>(null) }
     LaunchedEffect(undoOffer) {
         val offer = undoOffer ?: return@LaunchedEffect
         delay((offer.untilMs - System.currentTimeMillis()).coerceAtLeast(0))
@@ -600,6 +603,42 @@ fun PlayerScreen(
     }
     // The file's own chapters are the first and best source: free, exact, and offline.
     LaunchedEffect(skipCtl, status.chapters) { skipCtl.chapters(status.chapters) }
+
+    /**
+     * HX25: the online subtitle picked for this video before comes back by itself, and "Off" does
+     * too. The kept file first, a download again only when it is gone and nothing forbids it (the
+     * kids lock, a missing key, a spent allowance say so in one line instead).
+     */
+    fun restoreRememberedSubtitle(opened: MediaItem) {
+        val online = OnlineSubtitles.current ?: return
+        if (online.picks == null || !hasMessage(opened)) return
+        scope.launch {
+            try {
+                val keys = com.tmplayer.online.SubtitlePicks.keysOf(opened)
+                var found = online.restorePick(keys, null, allowDownload = false)
+                if (found is OnlineSubtitles.Restored.Missing && online.inBuild && com.tmplayer.data.ChatGate.allowed.value == null) {
+                    val target = SubtitleTarget(
+                        fileName = opened.fileName.ifBlank { opened.title },
+                        sizeBytes = opened.sizeBytes,
+                        caption = opened.caption.ifBlank { null },
+                        languages = OnlineSubtitles.languagesFor(null),
+                    )
+                    found = online.restorePick(keys, target, allowDownload = true)
+                }
+                when (found) {
+                    OnlineSubtitles.Restored.None -> Unit
+                    OnlineSubtitles.Restored.Off -> engine.selectTrack(TrackType.Subtitle, null)
+                    is OnlineSubtitles.Restored.Ready ->
+                        if (engine.addSubtitle(found.file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(found.label))
+                    is OnlineSubtitles.Restored.Missing -> found.notice?.let { showFlash(Flash.Kind.Text, com.tmplayer.online.OnlineWords.notice(it)) }
+                }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                com.tmplayer.platform.JobFailures.handle("restoreSubtitle", e)
+            }
+        }
+    }
 
     LaunchedEffect(current, attempt) {
         // No video engine: nothing to open, and Try again says the same until the app restarts.
@@ -767,6 +806,7 @@ fun PlayerScreen(
         // Keep watching opens the file again, and a fresh open has no loop in mpv.
         abLoop?.takeIf { it.complete }?.let(engine::setAbLoop)
         phase = Phase.Playing
+        restoreRememberedSubtitle(item)
         // A video whose pieces stop at a gap says so as it starts.
         current.notice?.let { showFlash(Flash.Kind.Text, it) }
         // A file named as 3D says how to watch it, once, unless 3D is on already: never turned
@@ -1319,6 +1359,11 @@ fun PlayerScreen(
     fun selectTrack(type: TrackType, track: MediaTrack?) {
         engine.selectTrack(type, track?.id)
         rememberTracks(type, track)
+        // HX25: Off is remembered for the video; a track chosen again ends an Off.
+        if (type == TrackType.Subtitle) OnlineSubtitles.current?.let { online ->
+            val keys = com.tmplayer.online.SubtitlePicks.keysOf(current.item)
+            if (track == null) online.rememberOff(keys) else online.forgetPick(keys)
+        }
         val audio = type == TrackType.Audio
         showFlash(
             Flash.Kind.Text,
@@ -1669,6 +1714,7 @@ fun PlayerScreen(
     fun loadSubtitle(path: String) {
         if (phase != Phase.Playing) return
         val name = java.io.File(path).name
+        OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(current.item))
         if (engine.addSubtitle(path)) showFlash(Flash.Kind.Text, L.playerSubtitlesTrack(name)) else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(name))
     }
 
@@ -1864,7 +1910,7 @@ fun PlayerScreen(
     // Whether Compose's focus is on the picture or inside it, where [playerKey] hears the keys itself.
     var focusInside by remember { mutableStateOf(false) }
     // A sheet or a menu that takes typing or holds the keyboard itself: the window leaves its keys alone.
-    val typingUp = notePrompt != null || timePrompt || showOnline || menu != null
+    val typingUp = notePrompt != null || timePrompt || showOnline || menu != null || listPicking != null
     val typingUpNow by rememberUpdatedState(typingUp)
     val sheetUpNow by rememberUpdatedState(showEpisodes || showShortcuts || showDetails)
     LaunchedEffect(Unit) { refocus() }
@@ -1998,6 +2044,7 @@ fun PlayerScreen(
                 alwaysOnTopAvailable = onToggleAlwaysOnTop != null,
                 fromTelegram = current.fromTelegram,
                 savable = savable,
+                addToList = watched != null && current.fromTelegram && hasMessage(item),
                 watchedLabel = if (watched != null && current.fromTelegram && hasMessage(item)) {
                     WatchedWords.markLabel(SettingsStore.progressKey(item.chatId, item.messageId) in watchedKeys)
                 } else {
@@ -2064,6 +2111,9 @@ fun PlayerScreen(
                         MenuAction.Details -> showDetails = true
                         MenuAction.Shortcuts -> showShortcuts = true
                         MenuAction.ToggleWatched -> toggleWatched()
+                        MenuAction.AddToList -> if (hasMessage(item)) {
+                            listPicking = com.tmplayer.data.WatchLaterRecord.of(item, current.chatTitle, System.currentTimeMillis())
+                        }
                         MenuAction.SearchOnline -> {
                             onlineMsone = false
                             showOnline = true
@@ -2099,6 +2149,7 @@ fun PlayerScreen(
                                     val file = kotlinx.coroutines.withContext(Dispatchers.IO) {
                                         com.tmplayer.data.ChatSubtitleLoad.write(java.io.File(com.tmplayer.desktop.DesktopPaths.cacheDir, "chat-subtitles"), here.chatId, action.hit, loaded)
                                     }
+                                    if (file != null) OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(here))
                                     if (file != null && engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(loaded.label))
                                     else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(loaded.label))
                                 }
@@ -2217,6 +2268,9 @@ fun PlayerScreen(
                     onClose = {
                         showOnline = false
                         refocus()
+                    },
+                    onPicked = { hit, file ->
+                        OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(item), hit, file)
                     },
                     onPickFile = {
                         showOnline = false
@@ -2414,6 +2468,21 @@ fun PlayerScreen(
                 )
             }
 
+            listPicking?.let { record ->
+                // Nothing to write to without the store: the line is not offered then, so this stays shut.
+                watched?.let { store ->
+                    com.tmplayer.ui.browse.ListPickerDialog(
+                        record = record,
+                        lists = store.lists,
+                        onMessage = { line -> showFlash(Flash.Kind.Text, line) },
+                        onDismiss = {
+                            listPicking = null
+                            refocus()
+                        },
+                    )
+                }
+            }
+
             if (timePrompt) {
                 GoToTimeDialog(
                     durationMs = status.durationMs,
@@ -2462,7 +2531,7 @@ fun PlayerScreen(
     // without focus inside it: take the keyboard again once the change has settled.
     // Not while a sheet or a menu is up: those hold the keyboard themselves, some for typing.
     fun keysBack() {
-        if (!showEpisodes && !showShortcuts && !showDetails && !showOnline && notePrompt == null && !timePrompt && menu == null) refocus()
+        if (!showEpisodes && !showShortcuts && !showDetails && !showOnline && notePrompt == null && !timePrompt && listPicking == null && menu == null) refocus()
     }
     LaunchedEffect(fullscreen) {
         delay(FULLSCREEN_SETTLE_MS)

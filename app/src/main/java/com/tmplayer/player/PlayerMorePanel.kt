@@ -83,6 +83,7 @@ import androidx.tv.material3.Text
 import com.tmplayer.R
 import com.tmplayer.data.Bookmark
 import com.tmplayer.i18n.Translator
+import com.tmplayer.ui.browse.ListPickerActions
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.components.ChoicePage
@@ -158,6 +159,12 @@ interface PlayerMoreHost {
     /** The video's bookmarks and what to do with them, or null for a video with no message. */
     fun bookmarks(): BookmarkSheetActions?
 
+    /**
+     * What "Add to a list" works on (the video as it is now, the lists, the line a write says),
+     * or null for a video with no message, which a list cannot point at.
+     */
+    fun addToList(): PlayerListTarget? = null
+
     /** The playback details' heading and lines, or null before there is a player. */
     fun playbackDetails(): Pair<String, List<String>>?
     fun onPhoneEntry(entry: PhoneMenuEntry)
@@ -208,6 +215,9 @@ class PlayerMorePanel(
         data object Volume : Page
         class Details(val title: String, val lines: List<String>) : Page
         class Bookmarks(val actions: BookmarkSheetActions) : Page
+
+        /** "Add to a list" (HX43) for the video as it was when the page opened. */
+        class Lists(val target: PlayerListTarget) : Page
         class BookmarkActions(val mark: Bookmark, val actions: BookmarkSheetActions) : Page
 
         /** A note for a new bookmark at [positionMs] ([editing] null), or for [editing]. */
@@ -265,6 +275,14 @@ class PlayerMorePanel(
         open()
         openedFrom = Kind.RotatePicture
         page = Page.Rotation
+    }
+
+    /** Opens it straight on "Add to a list", Back leading to the list (the render tests' view). */
+    internal fun openOnLists() {
+        open()
+        val target = host.addToList() ?: return
+        openedFrom = Kind.AddToList
+        page = Page.Lists(target)
     }
 
     /** Opens it straight on Player volume's page, for the render tests. */
@@ -419,7 +437,7 @@ class PlayerMorePanel(
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
         PlayerVolume, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
-        CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, ReportStutter, ReportWrongPicture, RemoteKeys,
+        CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, AddToList, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
 
     private class Line(val kind: Kind, val label: String, val icon: ImageVector, val detail: String?)
@@ -523,6 +541,7 @@ class PlayerMorePanel(
             } else {
                 Line(kind, s.playerMarkWatched, TmIcons.Check, s.playerMarkWatchedDetail)
             }
+            Kind.AddToList -> Line(kind, s.listsAddTo, TmIcons.List, s.listsAddToDetail)
             Kind.ReportStutter -> Line(kind, s.playerReportStutter, TmIcons.Info, if (host.tv) s.playerReportStutterDetailTv else s.playerReportStutterDetail)
             Kind.ReportWrongPicture -> Line(kind, s.playerReportWrongPicture, TmIcons.Info, s.playerReportWrongPictureDetail)
             Kind.RemoteKeys -> Line(kind, s.playerRemoteKeys, TmIcons.Remote, s.playerRemoteKeysDetail)
@@ -544,6 +563,7 @@ class PlayerMorePanel(
             Kind.RotatePicture -> Page.Rotation
             Kind.PlayerVolume -> Page.Volume
             Kind.Bookmarks -> host.bookmarks()?.let { Page.Bookmarks(it) }
+            Kind.AddToList -> host.addToList()?.let { Page.Lists(it) }
             Kind.PlaybackDetails -> host.playbackDetails()?.let { (title, lines) -> Page.Details(title, lines) }
             // The phone asks for a note first, at the moment the line was chosen; the television
             // saves at once, without the keyboard.
@@ -654,6 +674,19 @@ class PlayerMorePanel(
                 )
             }
             is Page.Details -> PlaybackDetailsSheet(current.title, current.lines, onClose = ::back)
+            is Page.Lists -> {
+                val target = current.target
+                val s = LocalStrings.current
+                val all by remember(target.lists) { target.lists.visible }.collectAsState(initial = null)
+                val actions = remember(target, s) { ListPickerActions(target.lists, s, target.record, target.say) }
+                PlayerListsSheet(
+                    record = target.record,
+                    lists = all,
+                    onPick = { list, _ -> actions.toggle(list) },
+                    onNew = { name -> actions.create(name, all?.size ?: 0) },
+                    onBack = ::back,
+                )
+            }
             is Page.Bookmarks -> {
                 val actions = current.actions
                 val list by actions.bookmarks.collectAsState()

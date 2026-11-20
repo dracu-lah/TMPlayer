@@ -121,7 +121,7 @@ g_web() {
   command -v podman >/dev/null || { echo "podman is needed for the e2e run"; return 1; }
   "${GRADLE[@]}" -q :core:webRules || return 1
   local pm; pm=$(grep -oP '"packageManager": "pnpm@\K[0-9.]+' webapp/package.json)
-  local projects="--project=chromium"; [ "$FULL" = 1 ] && projects="--project=chromium --project=webkit"
+  local projects="--project=chromium"; [ "$FULL" = 1 ] && projects="--project=chromium --project=webkit --project=webkit-iphone"
   # sync.spec.ts rewrites the tracked design shots in design/web-sync; put them back unless they
   # had edits of their own before the run.
   local shots_clean=0; git diff --quiet -- design/web-sync && shots_clean=1
@@ -136,6 +136,7 @@ g_web() {
       pnpm -C webapp install --frozen-lockfile --store-dir /root/.local/share/pnpm/store
       pnpm -C webapp check
       pnpm -C webapp test:tmdb
+      pnpm -C webapp test:screens
       pnpm -C webapp exec playwright test $projects
     " || rc=$?
   [ "$shots_clean" = 1 ] && git checkout -- design/web-sync

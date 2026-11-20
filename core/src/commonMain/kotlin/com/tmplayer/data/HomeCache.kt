@@ -148,6 +148,7 @@ object HomeCache {
 
     private fun chat(json: JSONObject): ChatSummary? {
         val kind = ChatKind.entries.firstOrNull { it.name == json.optString("k") } ?: return null
+        com.tmplayer.online.ChatLanguageHints.note(json.optLong("id"), json.optString("t"))
         return ChatSummary(
             id = json.optLong("id"),
             title = json.optString("t"),

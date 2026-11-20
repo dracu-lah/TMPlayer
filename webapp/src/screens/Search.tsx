@@ -6,18 +6,20 @@ import { Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { addedIds, addedMode, addedView, progress, settings } from '../store'
 import { Icon } from '../ui/Icon'
-import { keepsSearch } from '../ui/searchLifetime'
+import { back, entryState } from '../session'
+import { dropsAddressSearch, keepsSearch, loadType } from '../ui/searchLifetime'
+import { SearchTopics } from './SearchTopics'
 import { tileCard, VideoList } from './VideoList'
 
-/** Whether this page load has already shown the search: a reload or a new tab starts with an empty box, though the address may still carry `?q=`. */
+/** Whether this page load has already shown the search: a reload or a new tab starts with an empty box, though the address may still carry `?q=`. The app's own link to it ("Find in other chats") brings its words (dropsAddressSearch). */
 let shownThisLoad = false
 
 /** Videos across every chat, grouped into shows, copies and pieces as a chat's are. The words are in the address (`?q=`), so Back returns to the same results. */
 export function Search() {
     const [params, setParams] = useSearchParams<{ q?: string }>()
     const navigate = useNavigate()
-    // A fresh page load (reload, a pasted address, a restored tab) never brings an old search back.
-    const stale = !shownThisLoad && !!params.q
+    // A fresh page load (reload, a pasted address, a restored tab) never brings an old search back; a link from inside the app does bring its words.
+    const stale = dropsAddressSearch({ shownThisLoad, words: !!params.q, entry: !!entryState(), loadType: loadType() })
     shownThisLoad = true
     const [text, setText] = createSignal(stale ? '' : (params.q ?? ''))
     let input: HTMLInputElement | undefined
@@ -67,7 +69,7 @@ export function Search() {
         if (e.key !== 'Escape') return
         e.preventDefault()
         if (text()) clear()
-        else if (window.history.length > 1) navigate(-1)
+        else back(navigate)
     }
     const onType = (v: string) => {
         setText(v)
@@ -116,6 +118,7 @@ export function Search() {
                     <A class="link" href="/added-chats">{t('picker.add_more')}</A>
                 </Show>
             </div>
+            <SearchTopics words={params.q} everyChat={everyChat()} />
             <VideoList cards={found()?.tiles.map((tile) => tileCard(tile, true)) ?? []} label={t('common.search')} />
             {/* The ways to search further come after the results, so Down from the field reaches the first video on a
                 remote and nothing that can take the focus stands between them (tv.spec, Search). */}

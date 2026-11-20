@@ -125,4 +125,34 @@ class ScaleCpuTest {
         assertTrue(SeriesShelf.arrange(carried, emptyMap()) == SeriesShelf.arrange(answer.map { it.copy() }, emptyMap()))
         assertTrue("carried $again ms against $fromScratch ms", again * 2 < fromScratch)
     }
+
+    /**
+     * Where a title ends is found in one pass over its soft tags (HX73): checked once per tag, a
+     * name with many (the languages of a dubbed release, its edition words) read its tail again
+     * for each, which grows with the square of the tags. Here eight times the tags may cost about
+     * eight times as much (about five measured, twelve allowed for noise), not sixty four (the old check measured twenty five).
+     */
+    @Test
+    fun `a name with many soft tags is read in time that grows with its length`() {
+        val words = listOf("Tamil", "Telugu", "Hindi", "Malayalam", "Kannada", "Uncut", "Complete", "Extended")
+        // A word of the title after each tag, so no tag ends it and every one is looked at: the
+        // worst case, which descriptive names of creator uploads come close to.
+        fun names(tags: Int) = (0 until 2_000).map { i -> "Harbour Notes $i " + List(tags) { words[(it + i) % words.size] + " Part" }.joinToString(" ") + ".mkv" }
+        val few = names(4)
+        val many = names(32)
+        repeat(3) { few.forEach { MediaName.parse(it, maxYear = 2027) }; many.forEach { MediaName.parse(it, maxYear = 2027) } }
+        // This thread's CPU time, not the wall clock, and the best of five rounds each: a loaded
+        // machine (a build beside the tests) stretches the wall clock of one side more than the other.
+        val cpu = java.lang.management.ManagementFactory.getThreadMXBean()
+        fun cpuMs(names: List<String>): Long = (1..5).minOf {
+            val start = cpu.currentThreadCpuTime
+            names.forEach { MediaName.parse(it, maxYear = 2027) }
+            (cpu.currentThreadCpuTime - start) / 1_000_000
+        }
+        val fewMs = cpuMs(few).coerceAtLeast(1)
+        val manyMs = cpuMs(many)
+        report("MediaName.parse, 2,000 names, best of five, CPU: 4 soft tags $fewMs ms, 32 soft tags $manyMs ms")
+        assertTrue("names read in time growing faster than their tags: $fewMs ms against $manyMs ms", manyMs < fewMs * 12)
+        assertTrue(many.all { MediaName.parse(it, maxYear = 2027).title.startsWith("Harbour Notes") })
+    }
 }

@@ -99,6 +99,13 @@ object StutterReport {
         /** The hardware decoders the device lists for the picture's type, as [hwDecodersOf] writes them, or empty. */
         val hwDecoders: String = "",
         /**
+         * How the device's hardware decoder fits the picture (HX71), one of [HW_FITS]: `rated` (as
+         * the file asks), `level` (only with the level its size needs), `rate` (only past its rated
+         * frame rate, which the player still prefers to FFmpeg), `none` (no hardware decoder takes
+         * it), or `unknown`. A hardware stutter with `rate` is the chip's rating, not a mystery.
+         */
+        val hwFit: String = UNKNOWN,
+        /**
          * Plays started on this device in the last 7 days with this ABI, decoder and engine
          * ([playsSame]) and in all ([playsAll]), from [PlayCounts]; -1 when not known. Sent only
          * as a bucket ([bucketOf]), never as the number. Filled by [StutterReporter].
@@ -116,7 +123,7 @@ object StutterReport {
         "decoder", "decoder_type", "prediction", "speed_percent", "dropped_frames", "frames", "underruns",
         "manufacturer", "model", "android", "cores", "abi", "app_version", "symptom", "fps_source",
         "source", "buffered_ahead_ms", "verdict", "remedies", "hops",
-        "policy", "prefer_software", "software_by", "process_bits", "hw_decoders", "plays_7d_same", "plays_7d_all",
+        "policy", "prefer_software", "software_by", "process_bits", "hw_decoders", "hw_fit", "plays_7d_same", "plays_7d_all",
     )
 
     /** A count as a coarse bucket, never the number itself: `0`, `1`, `2-4`, `5-9`, `10-19`, `20-49`, `50+`, or `unknown`. */
@@ -160,6 +167,9 @@ object StutterReport {
         setting -> "setting"
         else -> "selector"
     }
+
+    /** The words [Facts.hwFit] may be: the names of the player's decoder fits, lower case, and `unknown`. */
+    val HW_FITS = setOf("rated", "level", "rate", "none", UNKNOWN)
 
     private val POLICY = Regex("[a-z0-9_+]{1,64}")
 
@@ -240,6 +250,7 @@ object StutterReport {
         "software_by" to (facts.softwareBy.takeIf { it in SOFTWARE_BY } ?: UNKNOWN),
         "process_bits" to (facts.processBits.takeIf { it == 32 || it == 64 }?.toString() ?: UNKNOWN),
         "hw_decoders" to clean(facts.hwDecoders).ifEmpty { UNKNOWN },
+        "hw_fit" to (facts.hwFit.lowercase().takeIf { it in HW_FITS } ?: UNKNOWN),
         "plays_7d_same" to bucketOf(facts.playsSame),
         "plays_7d_all" to bucketOf(facts.playsAll),
     )

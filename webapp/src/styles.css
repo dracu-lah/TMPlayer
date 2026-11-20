@@ -858,6 +858,8 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .picker-band { margin: 16px 0 4px; padding: 0 8px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--muted); }
 .picker-blurb { margin: 0 0 16px; }
 .picker-note { margin: 0 0 8px; padding: 0 8px; }
+.picker-count-more { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; padding: 0 8px; }
+.picker-count-more > .link { flex: none; }
 .picker-gone-head { margin: 24px 0 8px; font-size: 14px; color: var(--muted); }
 .picker-gone-row { display: flex; align-items: center; gap: 16px; padding: 8px; }
 .picker-gone-row .chat-name { flex: 1; }
@@ -1060,14 +1062,14 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Home opens on the app's mark and name (the TV keeps its bar's), over the carousel's picture. */
-.home-title { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; min-height: 40px; margin: 0 0 12px; font-size: 18px; line-height: 24px; font-weight: 600; }
+/* The brand's size is one set of tokens, as the apps' BrandSize: Small on a phone (the mark a little over the app's 26), Desktop (32 px mark, 22 px name, 12 px apart, HX60) on a computer. */
+:root { --brand-mark: 28px; --brand-mark-radius: 7px; --brand-name: 18px; --brand-line: 24px; --brand-gap: 10px; }
+:root[data-form="desktop"] { --brand-mark: 32px; --brand-mark-radius: 8px; --brand-name: 22px; --brand-line: 28px; --brand-gap: 12px; }
+.home-title { position: relative; z-index: 2; display: flex; align-items: center; gap: var(--brand-gap); min-height: 40px; margin: 0 0 12px; font-size: var(--brand-name); line-height: var(--brand-line); font-weight: 600; }
 /* The head holds the title and, off a TV, the way into Choose chats at the end (it must not wrap at 320 px). */
 .home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .home-head .home-title { min-width: 0; }
-.home-mark { width: 28px; height: 28px; border-radius: 7px; flex: none; }
-/* The desktop's Home sets it a size up (40 dp mark, 28 sp name, 14 dp apart), above the row headings under it (2026-11-01). */
-:root[data-form="desktop"] .home-title { gap: 14px; font-size: 28px; line-height: 36px; }
-:root[data-form="desktop"] .home-mark { width: 40px; height: 40px; border-radius: 10px; }
+.home-mark { width: var(--brand-mark); height: var(--brand-mark); border-radius: var(--brand-mark-radius); flex: none; }
 .page:has(> .hero) > .home-head > .home-title { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 /* The row headings: the app's title medium, semibold. */
 .row-title { font-size: 20px; line-height: 28px; font-weight: 600; }
@@ -1142,24 +1144,31 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .hero-nav > * { pointer-events: auto; }
 .hero-dots { display: flex; align-items: center; gap: 6px; }
 /* The arrows keep their places while hidden, so the dots never move when they come and go. */
+/* The pause toggle (WCAG 2.2.2): at the nav's start on a phone, before the dots on the desktop. */
+.hero-pause { position: absolute; inset-inline-start: calc(var(--gutter) + env(safe-area-inset-left)); width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; color: var(--fg); cursor: pointer; }
+.hero-pause:hover { background: color-mix(in srgb, var(--fg) 12%, transparent); }
+:root[data-form="desktop"] .hero-pause { position: static; width: 28px; height: 28px; margin-inline-end: 8px; }
 .hero-arrow-slot { width: 36px; height: 36px; display: grid; opacity: 0; visibility: hidden; transition: opacity 200ms var(--ease), visibility 0s 200ms; }
 .hero[data-arrows] .hero-arrow-slot { opacity: 1; visibility: visible; transition-delay: 0s; }
 .hero-arrow { width: 36px; height: 36px; box-shadow: none; }
 [dir=rtl] .hero-arrow .icon { transform: scaleX(-1); }
 .hero-dots button { position: relative; width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: color-mix(in srgb, var(--fg) 40%, transparent); cursor: pointer; transition: width 200ms var(--ease), background var(--fast); }
 .hero-dots button.on { width: 22px; background: var(--fg); }
-/* The mark is small; the target round it is not. */
-.hero-dots button::after { content: ''; position: absolute; inset: -12px -4px; }
+/* The mark is small; the target round it is not (at least 24 px each way, WCAG 2.5.8). */
+.hero-dots button::after { content: ''; position: absolute; inset: -12px -9px; }
 /* The desktop's carousel (HomeCarousel, raised 2026-11-07): 42% of the window's width tall, within 62% of its height and no less than 340 px. */
 :root[data-form="desktop"] .hero { height: max(340px, min(42vw, 62dvh)); }
 :root[data-form="desktop"] .hero-art { background: var(--bg); }
 :root[data-form="desktop"] .hero-text { inset-inline: calc(var(--gutter) + 10px + env(safe-area-inset-left)) auto; width: min(640px, 55%); align-items: flex-start; text-align: start; bottom: 12px; gap: 8px; }
 :root[data-form="desktop"] .hero-text .hero-facts, :root[data-form="desktop"] .hero-text .hero-overview { max-width: 560px; }
 :root[data-form="desktop"] .hero-title { font-size: 36px; line-height: 44px; font-weight: 600; }
-:root[data-form="desktop"] .hero-arrow-slot, :root[data-form="desktop"] .hero-arrow { width: 44px; height: 44px; }
 :root[data-form="desktop"] .hero-actions { width: auto; }
 :root[data-form="desktop"] .hero-play { flex: none; padding: 0 28px; }
-:root[data-form="desktop"] .hero-nav { inset-inline: auto calc(var(--gutter) + env(safe-area-inset-right)); bottom: 16px; }
+:root[data-form="desktop"] .hero-nav { inset-inline: auto calc(var(--gutter) + env(safe-area-inset-right)); bottom: 16px; gap: 0; }
+/* No arrow buttons on the desktop (HX65, D1): the dots are the mouse's way, so they are a little larger than the phone's. */
+:root[data-form="desktop"] .hero-dots { gap: 8px; }
+:root[data-form="desktop"] .hero-dots button { width: 8px; height: 8px; border-radius: 4px; }
+:root[data-form="desktop"] .hero-dots button.on { width: 26px; }
 /* The whole width at its own 16:9, cropped from its foot, set into the page by the edge fades; nothing behind it. */
 :root[data-form="desktop"] .hero-fill { display: none; }
 :root[data-form="desktop"] .hero-frame {
@@ -1187,6 +1196,12 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 :root[data-form="desktop"] .hero-title.title-logo-slot { justify-content: flex-start; }
 :root[data-form="desktop"] .hero-title .title-logo { object-position: left bottom; }
 :root[data-form="desktop"] .hero-title .title-logo-skeleton { margin-inline: 0; }
+/* The full words (a 130 px logo, 3 lines of overview) need a frame about 400 px tall under the brand. The frame is min(42vw, 62dvh) with a 340 px floor, so it is that tall only from a window 645 px tall and 950 px wide (a laptop's 1366x650 browser area, a browser zoomed to 150 or 200 percent is 400 to 540 px tall, a narrow window): below that the words are set a size down, a logo 80 px tall and two lines of overview, to stay under the brand and inside the frame. */
+@media (max-height: 645px), (max-width: 950px) {
+  :root[data-form="desktop"] .hero-title { --logo-h: 80px; --logo-w: 320px; font-size: 28px; line-height: 34px; }
+  :root[data-form="desktop"] .hero-overview { -webkit-line-clamp: 2; }
+  :root[data-form="desktop"] .hero-text { gap: 6px; }
+}
 :root[data-theme="light"] .title-logo.bright { filter: brightness(0); opacity: .88; }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]):not([data-theme="black"]):not([data-form="tv"]) .title-logo.bright { filter: brightness(0); opacity: .88; }
@@ -1245,6 +1260,11 @@ button.primary.danger:disabled { opacity: .4; }
 .card { -webkit-touch-callout: none; }
 .card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 16px; width: 100%; }
 .card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 13px; }
+.card-menu a.menu-row { text-decoration: none; box-sizing: border-box; }
+/* The link to copy by hand (ui/tgLinks.ts), when the browser refused the clipboard: one line, selected, scrolls sideways. */
+.link-field { box-sizing: border-box; width: 100%; margin: 4px 0 8px; padding: 10px 12px; font: inherit; font-size: 14px; color: inherit; background: var(--surface-high); border: 1px solid var(--line); border-radius: var(--r-md, 12px); text-overflow: ellipsis; }
+.link-sheet .link-field { width: calc(100% - 32px); margin: 16px; }
+.link-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 
 /* Choose the right poster (ui/PosterPicker.tsx): the titles TMDB has for a name, one to press. */
 .poster-picker { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }

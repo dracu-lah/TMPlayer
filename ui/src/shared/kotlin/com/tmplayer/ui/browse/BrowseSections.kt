@@ -1,7 +1,6 @@
 package com.tmplayer.ui.browse
 
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.Fuzzy
@@ -170,12 +169,9 @@ enum class HistoryTab(val icon: ImageVector) {
 }
 
 /**
- * A place in the rail, which is either one of the app's own tabs or one of the viewer's folders.
- *
- * Folders cannot be an enum: they are whatever this account happens to have, they may be renamed
- * while this app is looking at them, and there may be none at all. They navigate exactly like a
- * tab does, so both wear the same four properties and everything downstream, the rail, the drawer,
- * the heading, the empty state, is written once against this.
+ * A place in the rail: one of the app's own tabs. It was once also one of the viewer's Telegram
+ * folders, which moved into Add chats as a filter (HX29), so the browser lists only the chats
+ * that were chosen and a folder is a way to choose them, not a page.
  */
 @androidx.compose.runtime.Immutable
 sealed interface BrowseSection {
@@ -190,14 +186,6 @@ sealed interface BrowseSection {
         override val heading get() = tab.heading
         override val blurb get() = tab.blurb
         override val icon get() = tab.icon
-    }
-
-    @androidx.compose.runtime.Immutable
-    data class Folder(val id: Int, val name: String) : BrowseSection {
-        override val label get() = name
-        override val heading get() = name
-        override val blurb get() = L.browseFolderBlurb
-        override val icon get() = TmIcons.Folder
     }
 
     /** Home's rows, which are neither a list of chats nor one list of videos. */
@@ -218,15 +206,10 @@ sealed interface BrowseSection {
         /**
          * Written down as a string so a rotation, or the process being killed behind a video,
          * comes back to the section the viewer was in rather than to the default one.
-         *
-         * A folder is stored by id and name together: the name is what the heading shows while the
-         * folder list is still on its way from TDLib, otherwise the screen comes back titled after
-         * a number.
          */
         fun encode(section: BrowseSection?): String = when (section) {
             null -> ""
             is Tab -> "tab:${section.tab.name}"
-            is Folder -> "folder:${section.id}:${section.name}"
         }
 
         fun decode(encoded: String?): BrowseSection? {
@@ -234,10 +217,9 @@ sealed interface BrowseSection {
             val body = encoded.substringAfter(':', "")
             return when {
                 encoded.startsWith("tab:") -> BrowseTab.decode(body)?.let(::Tab)
-                encoded.startsWith("folder:") -> {
-                    val id = body.substringBefore(':').toIntOrNull() ?: return null
-                    Folder(id, body.substringAfter(':', "").ifBlank { L.browseFolderFallback(id.toString()) })
-                }
+                // A folder page saved by an older build (HX29): its folder is a filter of Add chats now,
+                // so the viewer comes back to their chats.
+                encoded.startsWith("folder:") -> Tab(BrowseTab.Chats)
                 else -> null
             }
         }
@@ -245,52 +227,29 @@ sealed interface BrowseSection {
 }
 
 /**
- * Every place the browser can show, Home first, then the viewer's folders.
- *
- * The sidebar offers the fixed entries ([navGroups]): Home, History, Favourites and Chats. The
- * folders are not sidebar entries but chips on the Chats page ([chatPageChips]), so they are
- * listed here for the page to find a remembered folder by, not for a rail to draw. Saved Messages
- * has no entry of its own: it is a chat among the others, and the People chip lists it.
+ * Every place the browser can show, Home first. The sidebar offers the fixed entries
+ * ([navGroups]): Home, History, Favourites and Chats. Saved Messages has no entry of its own: it
+ * is a chat among the others, and the People chip lists it. Telegram's folders are not here:
+ * they filter Add chats (HX29).
  */
-fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSection> = buildList {
+fun browseSections(): List<BrowseSection> = buildList {
     add(BrowseSection.of(BrowseTab.Home))
     add(BrowseSection.of(BrowseTab.History))
     add(BrowseSection.of(BrowseTab.Favorites))
     add(BrowseSection.of(BrowseTab.Chats))
-    folders.forEach { add(BrowseSection.Folder(it.id, it.title)) }
 }
 
-/**
- * The sidebar entry that stands for [this] section: a folder is shown on the Chats page, so it is
- * Chats that the sidebar marks as current.
- */
+/** The sidebar entry that stands for [this] section: the section itself, since every page has its own. */
 val BrowseSection.navSection: BrowseSection
-    get() = if (this is BrowseSection.Folder) BrowseSection.of(BrowseTab.Chats) else this
+    get() = this
 
-/** The Chats page, by its own tab or by one of its folder chips. */
+/** The Chats page. */
 val BrowseSection.onChatsPage: Boolean
-    get() = isChats || this is BrowseSection.Folder
+    get() = isChats
 
-/**
- * One chip over the Chats page: "All chats" or one of TMPlayer's own filters ([Filter]), or one
- * of the account's Telegram folders ([Folder]), whose [Folder.iconName] is the icon Telegram gave
- * it.
- */
-@androidx.compose.runtime.Immutable
-sealed interface ChatPageChip {
-    val label: String
-    val icon: ImageVector
-
-    data class Filter(val filter: ChatFilter) : ChatPageChip {
-        override val label: String get() = if (filter == ChatFilter.All) L.browseFilterAllChats else filter.label
-        override val icon: ImageVector get() = filter.icon
-    }
-
-    data class Folder(val folder: BrowseSection.Folder, val iconName: String = "") : ChatPageChip {
-        override val label: String get() = folder.name
-        override val icon: ImageVector get() = folderIcon(iconName)
-    }
-}
+/** The words on a chip over the Chats page: "All chats" for the first, the filter's own name for the rest. */
+val ChatFilter.chipLabel: String
+    get() = if (this == ChatFilter.All) L.browseFilterAllChats else label
 
 /**
  * The glyph for a Telegram folder's icon name: the four Telegram suggests for its own folders
@@ -306,45 +265,11 @@ fun folderIcon(name: String): ImageVector = when (name) {
     else -> TmIcons.Folder
 }
 
-/** The one of TMPlayer's filters a Telegram folder already is, by its icon or its name. */
-private fun filterOf(folder: ChatFolderSummary): ChatFilter? {
-    val byIcon = when (folder.icon) {
-        "Unread" -> ChatFilter.Unread
-        "Channels" -> ChatFilter.Channels
-        "Groups" -> ChatFilter.Groups
-        "Private" -> ChatFilter.People
-        else -> null
-    }
-    return byIcon ?: ChatFilter.entries.firstOrNull { it != ChatFilter.All && it.label.equals(folder.title.trim(), ignoreCase = true) }
-}
-
-/**
- * The chips over the Chats page, as Telegram's own folder tab bar has them: "All chats" at
- * [mainListPosition] (where Telegram puts the main list, first unless the viewer moved it) among
- * the account's [folders] in Telegram's order, its suggested folders (Unread, Personal, Groups,
- * Channels, Bots) included when the viewer added them. Then TMPlayer's own filters (Unread,
- * Channels, Groups, People, Archived) that no folder already is, so there is never a second
- * "Unread"; Archived is always there, since a Telegram folder never lists the archive.
- */
-fun chatPageChips(folders: List<ChatFolderSummary>, mainListPosition: Int = 0): List<ChatPageChip> {
-    val tabs: MutableList<ChatPageChip> = folders.mapTo(ArrayList()) { ChatPageChip.Folder(BrowseSection.Folder(it.id, it.title), it.icon) }
-    tabs.add(mainListPosition.coerceIn(0, tabs.size), ChatPageChip.Filter(ChatFilter.All))
-    val covered = folders.mapNotNull(::filterOf).toSet()
-    val extras = ChatFilter.entries.filter { it != ChatFilter.All && it !in covered }.map { ChatPageChip.Filter(it) }
-    return tabs + extras
-}
-
-/** Whether [chip] is the one lit for [section] under [filter]. */
-fun ChatPageChip.isSelected(section: BrowseSection, filter: ChatFilter): Boolean = when (this) {
-    is ChatPageChip.Filter -> section.isChats && this.filter == filter
-    is ChatPageChip.Folder -> section is BrowseSection.Folder && section.id == folder.id
-}
-
 /**
  * The chats [section] lists, ranked against [query].
  *
- * [filter] and [sort] are the chips over the Chats list and apply to that section only: a folder,
- * Saved Messages and Favourites are already narrow, and keep Telegram's order.
+ * [filter] and [sort] are the chips over the Chats list and apply to that section only: Saved
+ * Messages and Favourites are already narrow, and keep Telegram's order.
  */
 fun filterChats(
     chats: List<ChatSummary>,
@@ -361,15 +286,9 @@ fun filterChats(
     val listed = when {
         archived -> chats.filter { it.isArchived }
         section == BrowseSection.of(BrowseTab.Favorites) -> chats
-        // A folder lists what Telegram puts in it, archived channels included (HX32): the members
-        // come from TDLib's own folder list, which leaves an archived chat out only when the
-        // folder is set to exclude the archive, so hiding them again here emptied folders of
-        // archived movie channels.
-        section is BrowseSection.Folder -> chats
         else -> chats.filterNot { it.isArchived }
     }
     val bySection = when (section) {
-        is BrowseSection.Folder -> listed.filter { section.id in it.folderIds }
         is BrowseSection.Tab -> when (section.tab) {
             BrowseTab.Favorites -> listed.filter { it.id in favorites }
             BrowseTab.Saved -> listed.filter { it.kind == ChatKind.Saved }
@@ -410,41 +329,34 @@ fun emptyTabIcon(
 ): ImageVector = when {
     query.isNotBlank() -> TmIcons.SearchRemove
     history != null -> history.emptyIcon
-    tab is BrowseSection.Folder -> TmIcons.FolderOpen
     tab.isChats -> filter.emptyIcon
     else -> tab.icon
 }
 
 /** The one button under an empty tab, decided in one place for the phone, the television and the desktop. */
 enum class EmptyTabNext {
-    /** Nothing to press: the page says where to go (a folder) or there is nowhere else to go. */
+    /** Nothing to press: the page says where to go or there is nowhere else to go. */
     None,
 
     /** The same words across every chat ([SearchRequest]); also asks Telegram for that @username. */
     SearchAllChats,
-
-    /** A folder that could not be read is not an empty one: read the folders again. */
-    ReadFoldersAgain,
 
     /** Back to every chat, with Telegram's filters cleared. */
     GoToChats,
 }
 
 /**
- * What an empty tab offers (U18): a search that found nothing offers Search all chats, a folder
- * that could not be read offers Try again, every other empty tab (Favourites, Watch later, Unread,
- * Archived, Saved, the History tabs) offers Go to Chats, and a page that is already every chat,
- * or a folder still reading or really empty (made and filled in Telegram), offers nothing.
+ * What an empty tab offers (U18): a search that found nothing offers Search all chats, every other
+ * empty tab (Favourites, Watch later, Unread, Archived, Saved, the History tabs) offers Go to
+ * Chats, and a page that is already every chat offers nothing.
  */
 fun emptyTabNext(
     tab: BrowseSection,
     query: String,
     filter: ChatFilter = ChatFilter.All,
     history: HistoryTab? = null,
-    folderRead: FolderRead = FolderRead.Loaded,
 ): EmptyTabNext = when {
     query.isNotBlank() -> EmptyTabNext.SearchAllChats
-    tab is BrowseSection.Folder -> if (folderRead == FolderRead.NotLoaded) EmptyTabNext.ReadFoldersAgain else EmptyTabNext.None
     history != null -> EmptyTabNext.GoToChats
     tab.isChats && filter == ChatFilter.All -> EmptyTabNext.None
     else -> EmptyTabNext.GoToChats

@@ -117,23 +117,24 @@ fun SeasonsSection(
     val today = remember { LocalDate.now().toString() }
     // The provider's seasons only where the chats' episodes sit in them: another show of the same
     // name, or a release numbered another way, would call everything missing.
-    val listedSeasons = remember(series, extras) {
-        extras?.seasonList.orEmpty().takeIf { EpisodeGuide.agrees(series, it) }.orEmpty()
+    val numbering = remember(series, extras) { EpisodeGuide.numbering(series, extras) }
+    val listedSeasons = remember(series, numbering) {
+        numbering.seasons.takeIf { EpisodeGuide.agrees(series, it) }.orEmpty()
     }
-    val seasons = remember(series, listedSeasons, extras, today) {
-        EpisodeGuide.seasons(series, listedSeasons, extras?.nextEpisode, today)
+    val seasons = remember(series, listedSeasons, numbering, today) {
+        EpisodeGuide.seasons(series, listedSeasons, numbering.next, today)
     }
     // A lone episode with nothing else to say: the page already shows it.
-    if (seasons.isEmpty() || (series == null && extras?.seasonList.isNullOrEmpty())) return
+    if (seasons.isEmpty() || (series == null && numbering.seasons.isEmpty())) return
 
     val start = parsed.season ?: meta?.episode?.season ?: seasons.firstOrNull { it.state == EpisodeGuide.State.InChat }?.number ?: seasons.first().number
     var selected by remember(item.id) { mutableIntStateOf(start) }
     val online = OnlineMetadata.current
-    val listed by produceState(meta?.let { online?.peekSeason(it, selected) }, meta, selected) {
-        value = if (meta == null || online == null) null else withContext(Dispatchers.IO) { online.season(meta, selected) }
+    val listed by produceState(meta?.let { online?.peekSeason(it, selected, numbering.split) }, meta, selected, numbering.split) {
+        value = if (meta == null || online == null) null else withContext(Dispatchers.IO) { online.season(meta, selected, numbering.split) }
     }
     val episodes = remember(selected, series, listed, listedSeasons, today) {
-        EpisodeGuide.episodes(selected, series, listed, today, listedSeasons.firstOrNull { it.number == selected }, extras?.nextEpisode)
+        EpisodeGuide.episodes(selected, series, listed, today, listedSeasons.firstOrNull { it.number == selected }, numbering.next)
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
