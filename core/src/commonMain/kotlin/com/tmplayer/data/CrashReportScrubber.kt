@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.online.SubMakerSecret
 import io.sentry.SentryEvent
 import io.sentry.protocol.App
 import io.sentry.protocol.Contexts
@@ -127,7 +128,7 @@ object CrashReportScrubber {
         """(?<![\w.])(?:[A-Za-z]:[\\/]|\\\\[^\s\\"']+\\)(?:[^\\/"'\n:;()\[\]]+[\\/])*[^\s"':,;()\[\]]*""",
     )
 
-    fun redact(text: String): String = text
+    fun redact(text: String): String = SubMakerSecret.scrub(text)
         .replace(QUOTED_VIDEO, "[file]")
         .replace(WINDOWS_PATH, "[path]")
         .replace(PATH, "[path]")

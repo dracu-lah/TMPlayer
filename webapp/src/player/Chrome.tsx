@@ -66,9 +66,13 @@ import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extr
 import { copyLink, linkOf, linkOffered } from '../ui/tgLinks'
 import { MsoneSheet, trackLabel as onlineLabel, type MsoneTarget } from './msone-sheet'
 import { episodeOf } from './msone'
+import { SubmakerJobLine, SubmakerSheet } from './submaker-sheet'
+import { createJobs } from './submaker-job'
+import { idFor, type Kind } from './submaker'
+import { submakerBase, submakerSet } from '../submakerBase'
 import * as subpick from './subpick-use'
 import { mergeSkips } from './skipOnline'
-import { answer, askOf, loadAnimeSkips } from '../screens/posters'
+import { answer, askOf, loadAnimeSkips, loadExtras } from '../screens/posters'
 import { openingSpeed, readBoost, rememberSpeed, settings, writeBoost } from '../store'
 import { msoneOn } from '../msoneFlag'
 import { AUTOPLAY_LIMIT, BOOSTS, fineRate, IDLE_LIMIT, nextTurn, noteInput, pressLoop, repeats, repeatState, SeekUndo, sidewaysTurn, pictureTransform, SLEEP_CHOICES, sleepState, speedScopes, TURNS, turnedPictureSize, turnFrame, watching, wrapLoop, type Loop } from './extras'
@@ -181,7 +185,7 @@ export interface Ctl {
     copyLogs: () => Promise<boolean>
     loadSubtitleFile: () => void
     /** Lays a subtitle file over the video and shows it; throws when the file cannot be read. */
-    addSubtitle: (file: File, as?: { label: string; language: string }) => Promise<void>
+    addSubtitle: (file: File, as?: { label: string; language: string }, replacing?: TextTrack | null) => Promise<void>
     frames: () => Frames | null
     /** The video's own frames for the seek bar's card, for a natively played file; null otherwise. */
     grabber: () => FrameGrabber | null
@@ -199,7 +203,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'submaker' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
 
 /** A file name the three systems all take: no path or reserved characters, not too long. */
 function shotName(title: string, at: number): string {
@@ -533,6 +537,41 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         await c.addSubtitle(file, as)
         onlineTrack = Array.from(v.textTracks).find((tt) => !before.has(tt)) ?? null
         readSubs()
+    }
+    // SubMaker (the viewer's own addon): a subtitle it lists loads as MSone's does; a translation it makes runs as a background
+    // job whose track is replaced in place as the file grows, and ends with the video or the player (submaker-job.ts).
+    let makerTrack: TextTrack | null = null
+    const onlineLabelFor = (language: string) => t('online.track_label', { language, provider: 'SubMaker' })
+    const layMaker = async (file: File, as: { label: string; language: string }) => {
+        await c.addSubtitle(file, as)
+        readSubs()
+    }
+    const jobs = createJobs({
+        videoKey: () => `${c.item.chatId}:${c.item.messageId}`,
+        duration: () => duration(),
+        said: (what, language) => flash(what === 'started' ? t('submaker.started', { language }) : t('submaker.cancelled')),
+        lay: async (srt, language, replace) => {
+            const before = new Set(Array.from(v.textTracks))
+            await c.addSubtitle(new File([srt], `${language}.srt`), { label: onlineLabelFor(language), language: '' }, replace ? makerTrack : null)
+            makerTrack = Array.from(v.textTracks).find((tt) => !before.has(tt)) ?? makerTrack
+            if (!replace) subpick.choseOther(c.item)
+            readSubs()
+        },
+    })
+    onCleanup(() => jobs.dispose())
+    createEffect(on(() => `${c.item.chatId}:${c.item.messageId}`, () => (makerTrack = null, jobs.dispose()), { defer: true }))
+    /** The IMDb id the addon is asked about, from the poster lookup the page already makes (the apps' ids); null when it names none (posters off, no match, an anime AniList matched). */
+    const submakerTarget = async (): Promise<{ kind: Kind; id: string } | null> => {
+        const ask = askOf(c.item)
+        if (!ask || !settings().posters) return null
+        const found = await answer(ask)
+        if (!found.match || !found.id || !found.kind) return null
+        const m = /^S(\d+)E(\d+)/i.exec(info()?.episode?.code ?? '')
+        const ep = m ? { season: Number(m[1]), episode: Number(m[2]) } : null
+        if (found.kind === 'show' && !ep) return null
+        const extras = await loadExtras(found, found.kind === 'show' ? ep : null)
+        const id = idFor(extras.found ? extras.imdb : null, found.kind === 'show' ? ep!.season : null, found.kind === 'show' ? ep!.episode : null)
+        return id ? { kind: found.kind === 'show' ? 'series' : 'movie', id } : null
     }
     const pickSub = (track: TextTrack | null) => {
         for (const tt of subs()) tt.mode = tt === track ? 'showing' : 'disabled'
@@ -2168,6 +2207,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             </Show>
 
             {props.children}
+            <SubmakerJobLine jobs={jobs} />
 
             <Switch>
                 <Match when={sheet() === 'more'}>
@@ -2362,6 +2402,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Show when={msoneOn()}>
                             <Choice icon={TranslateIcon} text={t('msone.search')} detail={t('msone.search_detail')} phone={phone()} onClick={() => setSheet('msone')} />
                         </Show>
+                        <Show when={submakerSet()}>
+                            <Choice icon={TranslateIcon} text={t('submaker.search')} detail={t('submaker.search_detail')} phone={phone()} onClick={() => setSheet('submaker')} />
+                        </Show>
                     </Picker>
                 </Match>
                 <Match when={sheet() === 'chatsubs'}>
@@ -2373,6 +2416,22 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 </Match>
                 <Match when={sheet() === 'msone'}>
                     <MsoneSheet target={msoneTarget(c.item, info())} onLoad={async (file, as, hit) => (await layOnline(file, as), subpick.picked(c.item, hit, file))} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
+                </Match>
+                <Match when={sheet() === 'submaker' && submakerBase()}>
+                    {(base) => (
+                        <SubmakerSheet
+                            base={base()}
+                            resolve={submakerTarget}
+                            jobs={jobs}
+                            onLoad={async (file, as) => (await layMaker(file, as), subpick.choseOther(c.item))}
+                            phone={phone()}
+                            panel={inPanel()}
+                            anchor={anchor()}
+                            root={c.root}
+                            onClose={() => setSheet(null)}
+                            onBack={panelBack('subtitles')}
+                        />
+                    )}
                 </Match>
                 <Match when={sheet() === 'audio'}>
                     <Picker title={t('player.audio')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>

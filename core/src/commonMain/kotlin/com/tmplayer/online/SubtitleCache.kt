@@ -80,6 +80,12 @@ class SubtitleCache(
         return file
     }
 
+    /** Deletes one kept file, such as the half of a translation once the whole one is saved. */
+    @Synchronized
+    fun removeFile(provider: SubtitleProvider, id: String) {
+        files.listFiles { f -> f.name.startsWith(fileStem(provider, id) + ".") }?.forEach { it.delete() }
+    }
+
     /**
      * Brings the cache under [maxBytes]: the oldest searches go first (they are asked again for
      * nothing), then the oldest files, never [keep], the one just written. A subtitle is a few tens of

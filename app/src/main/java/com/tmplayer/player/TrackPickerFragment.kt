@@ -40,6 +40,7 @@ import androidx.compose.material3.Text as M3Text
 import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,7 @@ import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.OnlineWords
 import com.tmplayer.online.SearchResult
 import com.tmplayer.online.SubtitleHit
+import com.tmplayer.online.TranslationState
 import com.tmplayer.online.SubtitleNotice
 import com.tmplayer.online.SubtitleTarget
 import com.tmplayer.ui.components.ChoiceLine
@@ -129,7 +131,7 @@ class TrackPickerFragment : Fragment() {
         val tags: List<FormatFacts.Tag> = emptyList(),
     )
 
-    private enum class Page { Tracks, Online, Msone, Chat }
+    private enum class Page { Tracks, Online, Msone, SubMaker, Chat }
 
     /** The groups a page's lines fall into, in order, with the heading each one carries. */
     private enum class Group(val heading: () -> String?) {
@@ -212,6 +214,7 @@ class TrackPickerFragment : Fragment() {
                             onChat = { page = Page.Chat },
                             onOnline = { page = Page.Online },
                             onMsone = { page = Page.Msone },
+                            onSubmaker = { page = Page.SubMaker },
                             onInPlace = { tick++ },
                             lookIcon = lookIcon,
                         )
@@ -231,13 +234,14 @@ class TrackPickerFragment : Fragment() {
             }
             Page.Online -> OnlinePage(closeFocus, firstFocus, back, msone = false)
             Page.Msone -> OnlinePage(closeFocus, firstFocus, { page = Page.Tracks }, msone = true)
+            Page.SubMaker -> OnlinePage(closeFocus, firstFocus, { page = Page.Tracks }, msone = false, submaker = true)
             Page.Chat -> ChatPage(closeFocus, firstFocus) { if (chatHits.isEmpty() || startOnline) close() else page = Page.Tracks }
         }
     }
 
     // ---- the tracks ---------------------------------------------------------------------------
 
-    private fun trackLines(onChat: () -> Unit, onOnline: () -> Unit, onMsone: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
+    private fun trackLines(onChat: () -> Unit, onOnline: () -> Unit, onMsone: () -> Unit, onSubmaker: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
         val host = host ?: return emptyList()
         val player = host.trackPlayer ?: return emptyList()
         // Tracks the player cannot decode on this device: listed dimmed below, so a file with only
@@ -272,6 +276,7 @@ class TrackPickerFragment : Fragment() {
                     chatLine(onChat)?.let(::add)
                     onlineLine(onOnline)?.let(::add)
                     msoneLine(onMsone)?.let(::add)
+                    submakerLine(onSubmaker)?.let(::add)
                 }
                 if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addAll(timingLines(host, onInPlace))
                 return@buildList
@@ -286,6 +291,7 @@ class TrackPickerFragment : Fragment() {
                     chatLine(onChat)?.let(::add)
                     onlineLine(onOnline)?.let(::add)
                     msoneLine(onMsone)?.let(::add)
+                    submakerLine(onSubmaker)?.let(::add)
                 }
                 return@buildList
             }
@@ -311,6 +317,7 @@ class TrackPickerFragment : Fragment() {
                 chatLine(onChat)?.let(::add)
                 onlineLine(onOnline)?.let(::add)
                 msoneLine(onMsone)?.let(::add)
+                submakerLine(onSubmaker)?.let(::add)
             }
             addAll(timingLines(host, onInPlace))
             if (trackType == C.TRACK_TYPE_TEXT) addAll(styleLines(host, onInPlace, lookIcon))
@@ -352,6 +359,12 @@ class TrackPickerFragment : Fragment() {
     private fun msoneLine(onMsone: () -> Unit): Line? {
         if (OnlineSubtitles.current?.msoneShown != true) return null
         return Line("msone", L.msoneSearch, L.msoneSearchDetail, icon = TmIcons.Search, group = Group.Online, onClick = onMsone)
+    }
+
+    /** SubMaker's list, once the viewer has set the address of their own under Settings, Online subtitles. */
+    private fun submakerLine(onSubmaker: () -> Unit): Line? {
+        if (OnlineSubtitles.current?.submakerOn != true) return null
+        return Line("submaker", L.submakerSearch, L.submakerSearchDetail, icon = TmIcons.Search, group = Group.Online, onClick = onSubmaker)
     }
 
     /** The offset now in force, under each timing line, so a press shows where it got to. */
@@ -437,8 +450,11 @@ class TrackPickerFragment : Fragment() {
      * with the gateway's own words under it, Check again, and a subtitle file of the viewer's own.
      */
     @Composable
-    private fun OnlinePage(closeFocus: FocusRequester, firstFocus: FocusRequester, onBack: () -> Unit, msone: Boolean) {
+    private fun OnlinePage(closeFocus: FocusRequester, firstFocus: FocusRequester, onBack: () -> Unit, msone: Boolean, submaker: Boolean = false) {
         val online = OnlineSubtitles.current ?: return close()
+        // SubMaker's translations run outside this page: it only shows them, and starts or ends them.
+        val jobs by online.translations.states.collectAsState()
+        var asking by remember { mutableStateOf<SubtitleHit?>(null) }
         val scope = rememberCoroutineScope()
         var attempt by remember { mutableIntStateOf(0) }
         // Check again asks the gateway even inside the six hours between checks.
@@ -458,13 +474,14 @@ class TrackPickerFragment : Fragment() {
             result = when {
                 wanted == null -> SearchResult(emptyList())
                 msone -> online.searchMsone(wanted)
+                submaker -> online.searchSubMaker(wanted)
                 else -> online.search(wanted)
             }
         }
 
         ChoiceSheet(
-            title = if (msone) L.msoneTitle else L.onlineResultsTitle,
-            note = if (msone) L.msoneCredit else L.onlineSearchOnlineDetail,
+            title = if (msone) L.msoneTitle else if (submaker) L.submakerTitle else L.onlineResultsTitle,
+            note = if (msone) L.msoneCredit else if (submaker) L.submakerSearchDetail else L.onlineSearchOnlineDetail,
             onDismiss = onBack,
             onClose = ::close,
             closeFocus = closeFocus,
@@ -475,7 +492,7 @@ class TrackPickerFragment : Fragment() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = Tone.accent, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text(if (msone) L.msoneSearching else L.onlineSearching, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                    Text(if (msone) L.msoneSearching else if (submaker) L.submakerSearching else L.onlineSearching, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                 }
                 // A search that runs long says so, with Retry, rather than spinning in silence.
                 com.tmplayer.ui.components.SlowAnswerNotice(key = attempt, onRetry = { attempt++ }, modifier = Modifier.padding(top = 12.dp))
@@ -501,16 +518,74 @@ class TrackPickerFragment : Fragment() {
             } else if (shown.hits.isEmpty()) {
                 Text(if (msone) L.msoneNoResults else L.onlineNoResults, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
             }
+            // The first time a language is translated the viewer is told it spends their own AI quota.
+            val question = asking
+            if (question != null) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(Corner.Medium))
+                        .background(Tone.surfaceHigh)
+                        .padding(12.dp),
+                ) {
+                    Text(L.submakerAskTitle(question.translateTo), style = MaterialTheme.typography.titleSmall, color = Tone.text)
+                    Text(L.submakerAskMessage, style = MaterialTheme.typography.bodySmall, color = Tone.muted, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+            /** Starts the job; the page then shows its progress line. */
+            fun begin(hit: SubtitleHit) {
+                val t = target ?: return
+                online.translations.clear(online.translationKey(t.videoKey, hit))
+                host?.startTranslation(hit, t)
+            }
             val lines = buildList {
+                if (question != null) {
+                    add(Line("ask_yes", L.submakerAskConfirm, icon = TmIcons.Check, group = Group.Online) {
+                        online.markSubMakerAsked(question.translateTo)
+                        asking = null
+                        begin(question)
+                    })
+                    add(Line("ask_no", L.commonCancel, icon = TmIcons.Close, group = Group.Online) { asking = null })
+                    return@buildList
+                }
                 shown.hits.forEach { hit ->
+                    val jobKey = target?.let { online.translationKey(it.videoKey, hit) }
+                    val job = if (hit.translateTo.isNotEmpty() && jobKey != null) jobs[jobKey] else null
+                    if (job != null) {
+                        // The progress line is also the control: it cancels a running job and retries a stopped one.
+                        add(
+                            Line(
+                                key = "job:${hit.id}",
+                                title = OnlineWords.translation(hit.translateTo, job),
+                                detail = when {
+                                    job.active -> L.submakerCancel
+                                    job is TranslationState.Failed -> L.commonTryAgain
+                                    else -> null
+                                },
+                                icon = if (job.active) TmIcons.Close else TmIcons.Refresh,
+                                group = Group.Online,
+                            ) {
+                                when {
+                                    job.active -> online.translations.cancel(jobKey!!)
+                                    job is TranslationState.Failed -> begin(hit)
+                                    else -> online.translations.clear(jobKey!!)
+                                }
+                            },
+                        )
+                        return@forEach
+                    }
                     add(
                         Line(
                             key = "hit:${hit.provider}:${hit.id}",
-                            title = hit.release.ifBlank { hit.fileName },
+                            title = OnlineWords.hitTitle(hit),
                             detail = if (busy == hit) L.onlineDownloading else OnlineWords.hitDetail(hit),
                             enabled = online.blockedFor(hit) == null,
                         ) {
                             if (busy != null) return@Line
+                            if (hit.translateTo.isNotEmpty()) {
+                                if (online.submakerAsked(hit.translateTo)) begin(hit) else asking = hit
+                                return@Line
+                            }
                             busy = hit
                             scope.launch {
                                 when (val done = online.download(hit, target)) {
@@ -528,7 +603,7 @@ class TrackPickerFragment : Fragment() {
                 }
                 if (notice is SubtitleNotice.MsoneOff) {
                     add(Line("retry", L.msoneCheckAgain, icon = TmIcons.Refresh, group = Group.Online) { force = true; attempt++ })
-                } else if (notice == SubtitleNotice.Offline || notice == SubtitleNotice.Busy || notice == SubtitleNotice.MsoneBusy) {
+                } else if (notice == SubtitleNotice.Offline || notice == SubtitleNotice.Busy || notice == SubtitleNotice.MsoneBusy || notice == SubtitleNotice.SubMakerBusy) {
                     add(Line("retry", L.commonTryAgain, icon = TmIcons.Refresh, group = Group.Online) { attempt++ })
                 }
                 // Nothing found online: a file of the viewer's own is the way on, where there is a

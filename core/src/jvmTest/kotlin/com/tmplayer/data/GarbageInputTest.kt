@@ -29,6 +29,10 @@ import com.tmplayer.online.AnimeSkipApi
 import com.tmplayer.online.ChapterSkips
 import com.tmplayer.online.IdMapApi
 import com.tmplayer.online.SkipModes
+import com.tmplayer.online.SubMakerApi
+import com.tmplayer.online.SubMakerSecret
+import com.tmplayer.online.SubMakerTranslator
+import com.tmplayer.online.SubMakerUrl
 import com.tmplayer.online.SkipSession
 import com.tmplayer.online.UserSkipMarks
 import com.tmplayer.online.HttpResponse
@@ -623,6 +627,18 @@ class GarbageInputTest {
                     listOf(text),
                 )
             }
+            survive("SubMakerApi.parse", text) {
+                val base = "https://addon.test/tok"
+                SubMakerApi.parseList(text, base)
+                SubMakerApi.parseList("{\"subtitles\":[{\"id\":$text,\"lang\":$text,\"label\":$text,\"url\":$text}]}", base)
+                SubMakerApi.parseList("{\"subtitles\":[{\"id\":\"a\",\"lang\":\"Make $text\",\"url\":\"$base/translate/x\"}]}", base)
+                SubMakerApi.parseManifest(text)
+                SubMakerApi.cueCount(text)
+                SubMakerApi.isPlaceholder(text)
+                SubMakerApi.lastCueEndMs(text)
+                SubMakerUrl.normalize(text)
+                SubMakerSecret.scrub(text)
+            }
             survive("ChatSubtitleText.read (text as a file)", text) {
                 runBlocking {
                     for (name in listOf("a.srt", "a.ass", "a.vtt", "a.sub", "a.zip", text)) ChatSubtitleText.read(text.toByteArray(), name, 1, 2, text)
@@ -995,6 +1011,18 @@ class GarbageInputTest {
                     msone.search(MsoneApi.Query(imdb = "tt1234567"))
                     msone.search(MsoneApi.Query())
                     msone.fetch(com.tmplayer.online.SubtitleHit(com.tmplayer.online.SubtitleProvider.Msone, "1", "ml", "r"), 1_000)
+                }
+            }
+            val submaker = SubMakerApi(http, limiter, "t")
+            survive("SubMakerApi", shown) {
+                runBlocking {
+                    submaker.list("https://addon.test/tok", "movie", "tt1234567")
+                    submaker.list("https://addon.test/tok", "series", "tt1234567:1:2")
+                    submaker.list("https://addon.test/tok", "bogus", "x")
+                    submaker.check("https://addon.test/tok")
+                    submaker.fetch("https://addon.test/tok/translate/x")
+                    val translator = SubMakerTranslator(submaker, { }, pollMs = 1, stableMs = 3, capMs = 8)
+                    translator.run("https://addon.test/tok/translate/x", 1_000L, kotlinx.coroutines.flow.MutableStateFlow(true), { }, { _, _, _ -> })
                 }
             }
             val skips = SkipTimesApi(http, limiter, limiter, "t")

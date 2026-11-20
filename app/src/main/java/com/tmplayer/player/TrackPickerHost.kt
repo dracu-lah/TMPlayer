@@ -29,6 +29,12 @@ interface TrackPickerHost {
     /** Loads a downloaded online subtitle over the video, as a picked file would be. */
     fun attachOnlineSubtitle(file: File, label: String)
 
+    /**
+     * Runs SubMaker's "Make <Language>" [hit] for [target] as a background job: the video plays
+     * on, and the loaded track is replaced as lines arrive. False when one runs for it already.
+     */
+    fun startTranslation(hit: com.tmplayer.online.SubtitleHit, target: SubtitleTarget): Boolean = false
+
     /** [hit], downloaded as [file], was picked for this video: remembered, so it comes back by itself (HX25). */
     fun onlineSubtitlePicked(hit: com.tmplayer.online.SubtitleHit, file: File) = Unit
 

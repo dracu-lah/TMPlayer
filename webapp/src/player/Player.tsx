@@ -651,10 +651,13 @@ export function Player(props: {
     }
 
     /** A subtitle file laid over the video and shown at once; throws when it cannot be read (MSone's sheet says so itself). */
-    const addSubtitle = async (picked: File, as?: { label: string; language: string }) => {
+    const addSubtitle = async (picked: File, as?: { label: string; language: string }, replacing?: TextTrack | null) => {
         const sub = await readSubtitle(picked)
         if (closed) return URL.revokeObjectURL(sub.url)
         subtitleUrls.push(sub.url)
+        // A translation that grew (SubMaker): the track laid before is swapped for this one, and keeps the choice made of it.
+        const old = replacing ? Array.from(video.querySelectorAll('track')).find((el) => el.track === replacing) : undefined
+        const wasShowing = !old || replacing!.mode === 'showing'
         const track = document.createElement('track')
         track.kind = 'subtitles'
         track.label = as?.label ?? sub.label
@@ -663,8 +666,17 @@ export function Player(props: {
         track.src = sub.url
         track.addEventListener('load', () => (placeCues(video, controlsUp), applyDelay(video)))
         video.append(track)
-        // Shown at once: the one just loaded is the one wanted.
-        for (const tt of Array.from(video.textTracks)) if (tt.kind === 'subtitles' || tt.kind === 'captions') tt.mode = tt === track.track ? 'showing' : 'disabled'
+        if (old) {
+            const gone = old.src
+            old.remove()
+            URL.revokeObjectURL(gone)
+            const at = subtitleUrls.indexOf(gone)
+            if (at >= 0) subtitleUrls.splice(at, 1)
+        }
+        if (wasShowing) {
+            // Shown at once: the one just loaded is the one wanted.
+            for (const tt of Array.from(video.textTracks)) if (tt.kind === 'subtitles' || tt.kind === 'captions') tt.mode = tt === track.track ? 'showing' : 'disabled'
+        } else if (track.track) track.track.mode = 'disabled'
         setNotice('')
     }
     const loadSubtitle = async (picked: File) => {

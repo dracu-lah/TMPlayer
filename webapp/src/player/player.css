@@ -610,3 +610,14 @@
 .player[data-variant="tv"] .pc-loader-words { padding: 0 48px 27px; }
 .player[data-variant="tv"] .pc-loader-back { display: none; }
 @media (prefers-reduced-motion: reduce) { .pc-loader-art { animation: pc-loader-fade 600ms ease-out; } }
+
+/* SubMaker: the line over the picture while a translation runs, and the notes in its picker. It sits under the notice's place and stays out of the seek bar's way. */
+.pc-submaker-job {
+  position: absolute; left: 50%; top: 124px; transform: translateX(-50%); z-index: 2; width: min(560px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 20px; border-radius: 22px; background: var(--chip);
+}
+.pc-submaker-job p { flex: 1; margin: 0; font-size: 14px; line-height: 20px; }
+.pc-submaker-job .pc-sheet-button { flex: none; }
+.pc-submaker-close { width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; }
+.pc-sheet .pc-submaker-line { margin: 12px 24px; color: var(--muted); font-size: 15px; line-height: 20px; }
+.pc-submaker-job .pc-sheet-button:focus-visible, .pc-submaker-close:focus-visible { box-shadow: inset 0 0 0 2px #fff; }

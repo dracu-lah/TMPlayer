@@ -928,6 +928,23 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         return ok
     }
 
+    /** The growing file loaded last and the track id mpv gave it, so the same file reloads that track only. */
+    private var growing: Pair<String, Int>? = null
+
+    override fun replaceSubtitle(path: String): Boolean {
+        if (!_state.value.opened) return false
+        val known = growing?.takeIf { it.first == path }
+        if (known != null) {
+            // `sub-reload <id>` re-reads the file under that track and leaves the selection alone.
+            val ok = runCatching { handle.command("sub-reload", known.second.toString()) }.getOrDefault(false)
+            if (ok) return true
+        }
+        val ok = addSubtitle(path)
+        // The track just added is the one selected.
+        growing = if (ok) handle.int("sid")?.let { path to it } else null
+        return ok
+    }
+
     /**
      * Through mediamp's [Screenshots], which renders the frame off the same render context the
      * picture comes from, at the size it is drawn, and writes the PNG itself. mpv's own

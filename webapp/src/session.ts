@@ -3,6 +3,7 @@ import { createSignal } from 'solid-js'
 import type { Navigator } from '@solidjs/router'
 import { api, whenUnauthorized } from './tg/rpc'
 import { clearAll } from './store'
+import { forgetSubmaker } from './submakerBase'
 import { clearLogs } from './logs'
 import { clearThumbs } from './cacheBounds'
 import { forgetLinks } from './ui/tgLinks'
@@ -25,6 +26,7 @@ export async function signOut() {
     await clearAll()
     // The remembered online subtitles and their copies are the account's: none stays for the next one (HX25).
     await wipeAllPicks()
+    forgetSubmaker()
     setMe(null)
 }
 

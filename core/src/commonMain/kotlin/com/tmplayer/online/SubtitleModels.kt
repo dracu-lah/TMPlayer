@@ -10,6 +10,9 @@ enum class SubtitleProvider(val label: String) {
 
     /** Malayalam subtitles from malayalamsubtitles.org, through TMPlayer's gateway; see [MsoneApi]. */
     Msone("MSone"),
+
+    /** The viewer's own SubMaker install (a Stremio subtitles addon); see [SubMakerApi]. */
+    SubMaker("SubMaker"),
 }
 
 /**
@@ -26,7 +29,12 @@ data class SubtitleTarget(
     val imdb: String? = null,
     /** Its TMDB id, which MSone's gateway turns into the IMDb id when that is not known here. */
     val tmdb: String? = null,
-)
+    /** The video's length when known, so a SubMaker translation can tell it has reached the end. */
+    val durationMs: Long? = null,
+) {
+    /** What a SubMaker translation job is kept under for this video: its hash, else its name and size. */
+    val videoKey: String get() = hash ?: "$fileName|$sizeBytes"
+}
 
 /** One subtitle a provider offers. [id] is OpenSubtitles' file id, or SubDL's download path. */
 data class SubtitleHit(
@@ -56,6 +64,12 @@ data class SubtitleHit(
     val pageUrl: String = "",
     /** MSone: the file's own download address (https only); [MsoneApi.fetch] decides whether to use it. */
     val link: String = "",
+    /**
+     * SubMaker: the language name of a "Make <Language>" entry, an AI translation to run on the
+     * viewer's own key; blank for a subtitle that is ready. [link] is then the address to poll. It
+     * holds the viewer's secret address, so it is never written to disk (see [toJson]).
+     */
+    val translateTo: String = "",
 ) {
     internal fun toJson(): JSONObject = JSONObject()
         .put("provider", provider.name)
@@ -75,7 +89,9 @@ data class SubtitleHit(
             if (translator.isNotEmpty()) put("translator", translator)
             if (translatorUrl.isNotEmpty()) put("translator_url", translatorUrl)
             if (pageUrl.isNotEmpty()) put("page", pageUrl)
-            if (link.isNotEmpty()) put("link", link)
+            // SubMaker's address carries the viewer's secret token: kept in memory only.
+            if (link.isNotEmpty() && provider != SubtitleProvider.SubMaker) put("link", link)
+            if (translateTo.isNotEmpty()) put("translate_to", translateTo.take(60))
         }
 
     internal companion object {
@@ -97,7 +113,8 @@ data class SubtitleHit(
                 translator = o.optString("translator"),
                 translatorUrl = MsoneApi.https(o.optString("translator_url")).orEmpty(),
                 pageUrl = MsoneApi.https(o.optString("page")).orEmpty(),
-                link = MsoneApi.https(o.optString("link")).orEmpty(),
+                link = if (o.optString("provider") == SubtitleProvider.SubMaker.name) "" else MsoneApi.https(o.optString("link")).orEmpty(),
+                translateTo = o.optString("translate_to").take(60),
             )
         }.getOrNull()
 
@@ -161,6 +178,24 @@ sealed interface SubtitleNotice {
 
     /** The video's name gave nothing MSone could search with. */
     data object MsoneTooShort : SubtitleNotice
+
+    /** No SubMaker address is set (or it was removed): Settings, Online subtitles takes it. */
+    data object SubMakerOff : SubtitleNotice
+
+    /** The title's IMDb id is not known, and SubMaker is asked by it. */
+    data object SubMakerNoId : SubtitleNotice
+
+    /** SubMaker did not take the viewer's address (a 401, 403 or 404): check it in Settings. */
+    data object SubMakerRejected : SubtitleNotice
+
+    /** SubMaker's list answered with nothing in it for this video. */
+    data object SubMakerNoResults : SubtitleNotice
+
+    /** A translation finished with no line in it. */
+    data object SubMakerEmpty : SubtitleNotice
+
+    /** SubMaker asked for a rest (429). */
+    data object SubMakerBusy : SubtitleNotice
 }
 
 /** A search's answer: the hits, best first, and why there may be fewer than hoped. */

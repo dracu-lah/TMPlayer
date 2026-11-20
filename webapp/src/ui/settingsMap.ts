@@ -81,6 +81,7 @@ const defs: MapRow[] = [
 
     { id: 'resume_rewind', page: 'playback', core: true, title: 'settings.resume_rewind' },
     { id: 'msone', page: 'playback', core: true, title: 'msone.title', shown: (c) => c.msone },
+    { id: 'submaker', page: 'playback', core: false, title: 'submaker.settings_title', details: ['submaker.settings_message'] },
 
     { id: 'resume_sync', page: 'privacy', core: true, title: 'settings.resume_sync' },
     { id: 'resume_sync_delete', page: 'privacy', core: true, title: 'settings.resume_sync_delete', shown: (c) => c.sync || c.syncFile },

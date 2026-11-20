@@ -123,6 +123,76 @@ class OnlineSubtitlesRenderTest {
         }
     }
 
+    /**
+     * The viewer's own SubMaker in the player's panel and in Settings, over a fake addon: the list
+     * with a ready subtitle and "Make <Language>" entries, the progress line of a running job (with
+     * Cancel), a stopped one (with Try again), and the states that cannot search (no address, an
+     * address the addon turned down, no IMDb id).
+     */
+    @Test
+    fun subMakerPanelInEachState() {
+        val base = "https://addon.test/tok-3f9a2b7c1d"
+        val target = SubtitleTarget("The.Coast.2024.1080p.WEB.H264.mkv", 1_400_000_000, imdb = "tt1234567")
+        fun install(status: Int, makeAddress: Boolean = true): OnlineSubtitles {
+            val dir = java.nio.file.Files.createTempDirectory("tm-submaker").toFile()
+            val online = OnlineSubtitles(
+                apiKey = "promo-key",
+                store = com.tmplayer.online.OnlineSubtitlesStore(File(dir, "account.properties")),
+                cache = com.tmplayer.online.SubtitleCache(File(dir, "cache")),
+                appVersion = "1.0.0",
+                http = com.tmplayer.online.HttpTransport { request ->
+                    when {
+                        "/subtitles/" in request.url -> com.tmplayer.online.HttpResponse(status, body = SUBMAKER_LIST.replace("BASE", base).toByteArray())
+                        "/translate/" in request.url -> com.tmplayer.online.HttpResponse(403)
+                        else -> com.tmplayer.online.HttpResponse(404)
+                    }
+                },
+            )
+            if (makeAddress) online.setSubMakerUrl("$base/manifest.json")
+            OnlineSubtitles.current = online
+            return online
+        }
+        val shown = mapOf(
+            "list" to 200, "rejected" to 404, "busy" to 429, "offline" to 500,
+        )
+        for ((state, status) in shown) {
+            val online = install(status)
+            val result = runBlocking { online.searchSubMaker(target) }
+            if (state == "list") assertTrue(result.hits.size == 3 && result.hits.count { it.translateTo.isNotEmpty() } == 2)
+            else assertTrue(state, result.hits.isEmpty() && result.notice != null)
+            save(
+                "desktop-player-submaker-$state.png",
+                render(height = 720, background = Color(0xFF203040)) {
+                    Box(Modifier.fillMaxSize()) {
+                        OnlineSubtitlesPanel(target = { target }, onLoaded = { _, _ -> }, onClose = {}, submaker = true, preset = result)
+                    }
+                },
+            )
+            save("desktop-settings-submaker-$state.png", render(height = 520) { OnlineSubtitlesGroup() })
+        }
+        // A running job and a stopped one, in the panel that finds them by the video and the language.
+        val online = install(200)
+        online.translations.setForeground(false)
+        val result = runBlocking { online.searchSubMaker(target) }
+        val make = result.hits.first { it.translateTo == "Malayalam" }
+        assertTrue(online.translate(target.videoKey, make, null) { _, _ -> })
+        save(
+            "desktop-player-submaker-running.png",
+            render(height = 720, background = Color(0xFF203040)) {
+                Box(Modifier.fillMaxSize()) {
+                    OnlineSubtitlesPanel(target = { target }, onLoaded = { _, _ -> }, onClose = {}, submaker = true)
+                }
+            },
+        )
+        online.translations.cancelAll()
+        assertTrue(online.translations.states.value.isEmpty())
+        // No address: no row in Settings reads set, and a search says where to add it.
+        online.setSubMakerUrl("")
+        assertTrue(runBlocking { online.searchSubMaker(target) }.notice == com.tmplayer.online.SubtitleNotice.SubMakerOff)
+        save("desktop-settings-submaker-none.png", render(height = 520) { OnlineSubtitlesGroup() })
+        save("desktop-submaker-dialog.png", render(height = 700) { SubMakerDialog(onClose = {}) })
+    }
+
     private fun render(height: Int, background: Color? = null, page: @Composable () -> Unit): ByteArray =
         ImageComposeScene(WIDTH, height, Density(1.5f)) {
             TmMaterialTheme(dark = true) {
@@ -144,6 +214,13 @@ class OnlineSubtitlesRenderTest {
 
     private companion object {
         const val WIDTH = 1280
+
+        const val SUBMAKER_LIST = """{"subtitles":[
+            {"id":"sub_toolbox","lang":"Sub Toolbox","url":"BASE/sub-toolbox/x"},
+            {"id":"os_1","lang":"eng","label":"The.Coast.2024.1080p.WEB • OpenSubtitles","url":"BASE/sub/eng.srt"},
+            {"id":"translate_mal","lang":"Make Malayalam","url":"BASE/translate/mal"},
+            {"id":"translate_fra","lang":"Make French","url":"BASE/translate/fra"}
+        ]}"""
 
         const val MSONE_HITS = """{"hits":[
             {"id":"9001","title":"The Coast","year":2024,"kind":"single","season":1,"episode":4,
