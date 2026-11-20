@@ -131,6 +131,15 @@ class BooksMatchStoresTest {
         book.keepAllChats()
         assertEquals(AddedMode.All, store.addedChats.first().mode)
         assertEquals(null, store.addedChats.first().ids)
+        // All chats on keeps the ticks beside the switch, in both stores (HX86), and off brings them back.
+        val kept = listOf(AddedChat(-100L, "Show"), AddedChat(42L, "Clips"))
+        store.setAddedChoice(AddedChoice(AddedMode.All, kept))
+        assertEquals(AddedChoice(AddedMode.All, kept), store.addedChats.first())
+        assertEquals(null, store.addedChats.first().ids)
+        book.setAddedChoice(AddedChoice(AddedMode.Picked, kept))
+        assertEquals(AddedChoice(AddedMode.Picked, kept), store.addedChats.first())
+        book.setAddedChoice(AddedChoice(AddedMode.All, kept))
+        assertEquals(AddedChoice(AddedMode.All, kept), book.addedChats.first())
         // An empty choice stays an answer in both: the key is not dropped with its last chat.
         book.setAddedChats(emptyList())
         assertEquals(AddedMode.Picked, store.addedChats.first().mode)

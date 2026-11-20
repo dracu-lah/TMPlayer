@@ -71,7 +71,7 @@ class OneQuestionSetupTest {
     }
 
     @Test
-    fun `the question draws at every width in both themes, nothing ticked and Done off`() {
+    fun `the question draws at every width in both themes, Saved Messages ticked and Done on`() {
         for ((w, h) in listOf(420 to 860, 820 to 1000, 1280 to 800)) {
             for (dark in listOf(true, false)) {
                 val model = AddChatsViewModel(counts = Counts, write = {})
@@ -83,7 +83,7 @@ class OneQuestionSetupTest {
                         )
                     }
                 }
-                assertTrue("nothing is ticked for the viewer", model.state.value.ticked.isEmpty())
+                assertEquals("Saved Messages is ticked for a fresh start (HX86)", setOf(200L), model.state.value.ticked)
                 model.stop()
             }
         }
@@ -104,7 +104,7 @@ class OneQuestionSetupTest {
         waitForIdle()
         onNode(hasText("Which chats have your videos?")).assertExists()
         onNode(hasText("Back") and hasClickAction()).assertDoesNotExist()
-        onNode(hasText("Choose at least one chat")).assertExists()
+        onNode(hasText("Choose at least one chat")).assertDoesNotExist()
         // No video counts anywhere (user, 2026-11-16).
         val countLine = SemanticsMatcher("a video count") { node ->
             node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { Regex("\\d+\\+? videos").containsMatchIn(it.text) }
@@ -128,6 +128,9 @@ class OneQuestionSetupTest {
                 }
             }
         }
+        waitForIdle()
+        onNode(hasText("Done") and hasClickAction()).assertExists()
+        onNode(hasText("Saved Messages") and hasClickAction()).performClick()
         waitForIdle()
         onNode(hasText("Done") and hasClickAction()).assertDoesNotExist()
         onNode(hasText("Harbour Notes") and hasClickAction()).performClick()
@@ -154,6 +157,10 @@ class OneQuestionSetupTest {
                 }
             }
         }
+        waitForIdle()
+        // Ticked for a fresh start (HX86): the hint comes once the viewer unticks it.
+        onNode(hasText("Forward a video to Saved Messages in Telegram, then tick Saved Messages here.")).assertDoesNotExist()
+        onNode(hasText("Saved Messages") and hasClickAction()).performClick()
         waitForIdle()
         onNode(hasText("Forward a video to Saved Messages in Telegram, then tick Saved Messages here.")).assertExists()
         onNode(hasText("Saved Messages") and hasClickAction()).assertExists()

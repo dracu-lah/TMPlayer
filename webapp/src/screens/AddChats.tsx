@@ -14,13 +14,13 @@ import { useBeforeLeave, useNavigate, useSearchParams } from '@solidjs/router'
 import { Search01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { call } from '../tg/rpc'
 import { t } from '../i18n'
-import { addedChats, setAddedChats, setStarred, starredIds, type AddedChat } from '../store'
+import { addedChats, addedMode, setAddedChats, setStarred, starredIds, type AddedChat } from '../store'
 import { back } from '../session'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
-import { adding, allTicked, changed, clearVisible, counted, headStart, needsConfirm, pickRows, refine, RECOMMEND_BY_MS, scanOrder, SCOPES, selectAll, visibleIds, type Band, type PickRow, type Scope, type Suggestion } from '../ui/picking'
+import { adding, afterAllOff, allTicked, changed, clearVisible, counted, freshTicks, headStart, needsConfirm, pickRows, refine, RECOMMEND_BY_MS, savedId, scanOrder, SCOPES, selectAll, visibleIds, type Band, type PickRow, type Scope, type Suggestion } from '../ui/picking'
 import { COUNT_DWELL_MS, createCountPlan } from '../ui/pickCount'
 import { createDwell } from '../ui/dwell'
 import { REFUSED, UNKNOWN } from '../tg/counts'
@@ -95,15 +95,42 @@ export function AddChats() {
     let start: ReadonlySet<number> = new Set()
     let seeded = false
     const [seededNow, setSeededNow] = createSignal(false)
+    // "All chats" (HX86): every chat counts, the ticks are disabled but kept, and off brings them back.
+    // Off by default; a stored 'all' opens on. A visitor who never answered starts on Saved Messages once the list has it.
+    const [allChats, setAllChats] = createSignal(false)
+    let startAll = false
+    let touchedAll = false
+    let fresh = false
+    let freshSeeded = false
     createEffect(() => {
         const s = stored()
         if (s && !seeded) {
             seeded = true
             start = new Set(s.map((a) => a.chatId))
             setTicked(start)
+            startAll = addedMode() === 'all'
+            fresh = addedMode() === 'unanswered'
+            if (!touchedAll) setAllChats(startAll)
             setSeededNow(true)
         }
     })
+    createEffect(() => {
+        if (!seededNow() || !fresh || freshSeeded || !savedId(list())) return
+        freshSeeded = true
+        // Only on an empty choice: a tick made first is the viewer's. The untouched picker then counts as unchanged.
+        if (untrack(ticked).size) return
+        const first = freshTicks(list())
+        setTicked(first)
+        if (!start.size) start = first
+    })
+    const flipAll = () => {
+        touched = true
+        touchedAll = true
+        if (allChats()) {
+            setAllChats(false)
+            setTicked(afterAllOff(ticked(), list(), loaded()))
+        } else setAllChats(true)
+    }
 
     const [text, setText] = createSignal('')
     const [scope, setScope] = createSignal<Scope>('all')
@@ -117,7 +144,7 @@ export function AddChats() {
         pickRows({
             chats: list(),
             name: chatName,
-            added: new Set((stored() ?? []).map((a) => a.chatId)),
+            added: allChats() ? new Set<number>() : new Set((stored() ?? []).map((a) => a.chatId)),
             addedNames: new Map((stored() ?? []).map((a) => [a.chatId, a.title])),
             starred: starredIds(),
             recommended: recommended(),
@@ -297,6 +324,7 @@ export function AddChats() {
 
     const toggle = (id: number) => {
         touched = true
+        if (allChats()) return
         setTicked((t) => {
             const next = new Set(t)
             if (next.has(id)) next.delete(id)
@@ -310,6 +338,8 @@ export function AddChats() {
     const [asking, setAsking] = createSignal(0)
     const selectAllNow = () => {
         touched = true
+        // Ctrl+A and the button do nothing while every chat counts.
+        if (allChats()) return
         const n = adding(ticked(), visible())
         if (!n) return
         if (needsConfirm(n)) {
@@ -331,6 +361,7 @@ export function AddChats() {
     })
 
     const footer = () => {
+        if (allChats()) return t('picker.all_chats_on')
         const n = ticked().size
         return n ? t('picker.total', { chats: n }) : t('picker.total_none')
     }
@@ -341,7 +372,7 @@ export function AddChats() {
     let retryLeave: (() => void) | null = null
     // The gate asks nothing: leaving it only meets it again (App.tsx), so there is nothing to lose.
     useBeforeLeave((e) => {
-        if (leaving || gate() || e.defaultPrevented || !changed(start, ticked())) return
+        if (leaving || gate() || e.defaultPrevented || (!changed(start, ticked()) && startAll === allChats())) return
         e.preventDefault()
         retryLeave = () => e.retry(true)
         discard.showModal()
@@ -349,15 +380,15 @@ export function AddChats() {
 
     const [saving, setSaving] = createSignal(false)
     // The gate needs at least one chat; Settings takes an empty choice as a real answer.
-    const blocked = () => gate() && !ticked().size
-    const doneLabel = () => (ticked().size ? t('common.done') : gate() ? t('picker.gate_done_none') : t('picker.done_none'))
+    const blocked = () => gate() && !ticked().size && !allChats()
+    const doneLabel = () => (ticked().size || allChats() ? t('common.done') : gate() ? t('picker.gate_done_none') : t('picker.done_none'))
     const done = () => {
         if (saving() || blocked()) return
         setSaving(true)
         const byId = new Map(list().map((c) => [c.id, chatName(c)]))
         const oldNames = new Map((stored() ?? []).map((a: AddedChat) => [a.chatId, a.title]))
         const chosen = [...ticked()].map((chatId) => ({ chatId, title: byId.get(chatId) ?? oldNames.get(chatId) ?? '' }))
-        setAddedChats(chosen)
+        setAddedChats(chosen, allChats())
         leaving = true
         const next = setupNext()
         if (next) navigate(next, { replace: true })
@@ -380,10 +411,17 @@ export function AddChats() {
                 <h1 class="page-title">{t('setup.which_title')}</h1>
                 <p class="muted picker-blurb">{t('setup.which_body')}</p>
             </Show>
+            <button type="button" role="switch" class="picker-all" aria-checked={allChats()} onClick={flipAll} data-tv-first>
+                <span class="picker-all-text">
+                    <span class="picker-all-title">{t('picker.all_chats_switch')}</span>
+                    <span class="muted small">{allChats() ? t('picker.all_chats_on') : t('picker.all_chats_detail')}</span>
+                </span>
+                <span class="switch" aria-hidden="true" />
+            </button>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
                 {/* The TV's remote starts here, as the apps' picker does; the field stays read only until OK. */}
-                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => { touched = true; setText(e.currentTarget.value) }} data-tv-first />
+                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => { touched = true; setText(e.currentTarget.value) }} />
             </label>
             <div class="picker-actions">
                 <div class="picker-scopes" role="group" aria-label={t('picker.choose_chats')}>
@@ -395,7 +433,7 @@ export function AddChats() {
                         )}
                     </For>
                 </div>
-                <button class="link" type="button" onClick={() => { touched = true; if (allOn()) setTicked(clearVisible(ticked(), visible())); else selectAllNow() }} disabled={!visible().length}>
+                <button class="link" type="button" onClick={() => { touched = true; if (allOn()) setTicked(clearVisible(ticked(), visible())); else selectAllNow() }} disabled={!visible().length || allChats()}>
                     {allOn() ? t('common.clear') : t('browse.select_all')}
                 </button>
             </div>
@@ -432,7 +470,7 @@ export function AddChats() {
                     ) : 'note' in item ? (
                         <p class="muted small picker-note">{item.note}</p>
                     ) : item.row.chat ? (
-                        <PickRowView chat={item.row.chat} on={ticked().has(item.row.id)} onToggle={() => toggle(item.row.id)} onStar={() => (touched = true)} onFocused={(el) => (lastRow = el)} onStarRef={toDone} onShown={() => rowDwell.enter(String(item.row.id), () => {})} onGone={() => rowDwell.leave(String(item.row.id))} reason={item.row.band === 'recommended' ? t(belowBar() ? 'picker.reason_some' : 'picker.reason_many') : ''} />
+                        <PickRowView chat={item.row.chat} disabled={allChats()} on={allChats() || ticked().has(item.row.id)} onToggle={() => toggle(item.row.id)} onStar={() => (touched = true)} onFocused={(el) => (lastRow = el)} onStarRef={toDone} onShown={() => rowDwell.enter(String(item.row.id), () => {})} onGone={() => rowDwell.leave(String(item.row.id))} reason={item.row.band === 'recommended' ? t(belowBar() ? 'picker.reason_some' : 'picker.reason_many') : ''} />
                     ) : (
                         <div class="picker-gone-row">
                             <span class="chat-name">{item.row.title}</span>
@@ -490,14 +528,14 @@ export function AddChats() {
     )
 }
 
-function PickRowView(props: { chat: ChatItem; on: boolean; onToggle: () => void; onStar: () => void; onShown: () => void; onGone: () => void; onFocused: (el: HTMLElement) => void; onStarRef: (el: HTMLElement) => void; reason: string }) {
+function PickRowView(props: { chat: ChatItem; on: boolean; disabled: boolean; onToggle: () => void; onStar: () => void; onShown: () => void; onGone: () => void; onFocused: (el: HTMLElement) => void; onStarRef: (el: HTMLElement) => void; reason: string }) {
     // On screen: the picker counts it once it has stayed (the row is drawn only while it is near the screen).
     onMount(props.onShown)
     onCleanup(props.onGone)
     return (
         <div class="chat-row" onFocusIn={(e) => props.onFocused(e.target as HTMLElement)}>
             <label class="pick-chat">
-                <input type="checkbox" class="chat-tick" checked={props.on} onChange={props.onToggle} aria-label={chatName(props.chat)} />
+                <input type="checkbox" class="chat-tick" checked={props.on} disabled={props.disabled} onChange={props.onToggle} aria-label={chatName(props.chat)} />
                 <ChatPicture photo={props.chat.photo} name={chatName(props.chat)} self={props.chat.self} />
                 <span class="chat-text">
                     <span class="chat-name">{chatName(props.chat)}</span>

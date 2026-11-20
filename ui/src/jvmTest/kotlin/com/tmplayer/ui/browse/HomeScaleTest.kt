@@ -30,6 +30,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -140,7 +141,20 @@ class HomeScaleTest {
     }
 
     @Test
-    fun `home fills on a large account within its budget`() = runTest(dispatcher, timeout = 5.minutes) {
+    fun `home fills on a large account within its budget`() = runTest(dispatcher, timeout = 5.minutes) { homeFillsOnALargeAccount() }
+
+    /**
+     * The same account with "All chats" switched on and forty ticks kept beside it (HX86): the gate
+     * reads every chat whatever is kept, so Home pages by recent activity under the same budgets.
+     */
+    @Test
+    fun `home fills on a large account within its budget with all chats on and ticks kept`() = runTest(dispatcher, timeout = 5.minutes) {
+        AddedChats.set(AddedChoice(AddedMode.All, (1L..40L).map { AddedChat(it, "Chat $it") }))
+        assertNull(AddedChats.ids.value)
+        homeFillsOnALargeAccount()
+    }
+
+    private suspend fun TestScope.homeFillsOnALargeAccount() {
         val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
         val connected = MutableStateFlow(true)
         val model = HomeViewModel(account.homeSource, work = dispatcher, disk = dispatcher, connected = connected, clock = { testScheduler.currentTime })

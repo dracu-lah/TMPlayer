@@ -81,9 +81,9 @@ class AddChatsRenderTest {
     fun `rows hold their place while the counts are still coming`() {
         val model = AddChatsViewModel(counts = Silent)
         save("add-chats-counting-phone.png", render(tv = false, model, SILENT_CHATS))
-        // Nothing answered, so nothing is recommended or ticked, and every row is a placeholder.
+        // Nothing answered, so nothing is recommended, only Saved Messages is ticked (HX86), and every row is a placeholder.
         assertTrue(model.state.value.recommended.isEmpty())
-        assertTrue(model.state.value.ticked.isEmpty())
+        assertEquals(setOf(50_100L), model.state.value.ticked)
         model.stop()
         // The cancelled counts hand their permits back on the looper; left unrun they would hold
         // all three for the next test, whose counts would then never land.
@@ -119,8 +119,9 @@ class AddChatsRenderTest {
         idle()
         assertTrue(node(activity, "Which chats have your videos?") != null)
         assertTrue("no Back button", node(activity, "Back", clickable = true) == null)
-        assertTrue(node(activity, "Choose at least one chat") != null)
-        assertTrue("Done waits for a tick", node(activity, "Choose at least one chat", clickable = true) == null)
+        // Saved Messages is ticked for a fresh start (HX86), so Done is pressable at once.
+        assertTrue("Done is pressable with Saved Messages ticked", node(activity, "Done", clickable = true) != null)
+        assertTrue(node(activity, "Choose at least one chat") == null)
 
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
@@ -128,6 +129,10 @@ class AddChatsRenderTest {
         assertEquals(0, closed)
         assertTrue("never asks to discard", node(activity, "Discard changes?") == null)
 
+        click(activity, "Saved Messages")
+        idle()
+        assertTrue(node(activity, "Choose at least one chat") != null)
+        assertTrue("Done waits for a tick", node(activity, "Choose at least one chat", clickable = true) == null)
         click(activity, "Harbour Notes")
         idle()
         assertTrue("a tick makes Done pressable", node(activity, "Done", clickable = true) != null)
@@ -159,14 +164,14 @@ class AddChatsRenderTest {
         }
         idle()
         assertTrue("three chats reach the bar: ${model.state.value}", model.state.value.recommended.size == 3)
-        assertTrue("nothing is ticked for the viewer", model.state.value.ticked.isEmpty())
+        assertEquals("only Saved Messages is ticked for a fresh start", setOf(100L), model.state.value.ticked)
         click(activity, "Add these 3 chats")
         idle()
-        assertEquals(model.state.value.recommended.toSet(), model.state.value.ticked)
+        assertEquals(model.state.value.recommended.toSet() + 100L, model.state.value.ticked)
         assertTrue("the button now takes them out", node(activity, "Remove these 3 chats", clickable = true) != null)
         click(activity, "Remove these 3 chats")
         idle()
-        assertTrue(model.state.value.ticked.isEmpty())
+        assertEquals(setOf(100L), model.state.value.ticked)
         click(activity, "Add these 3 chats")
         idle()
 
@@ -177,7 +182,7 @@ class AddChatsRenderTest {
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
         assertTrue("Back from the question keeps the choice", node(activity, "Leave without choosing?") == null)
-        assertEquals(3, model.state.value.ticked.size)
+        assertEquals(4, model.state.value.ticked.size)
         assertEquals(0, left)
         activity.onBackPressedDispatcher.onBackPressed()
         idle()
@@ -282,6 +287,12 @@ class AddChatsRenderTest {
         idle()
         assertTrue(node(activity, "Which chats have your videos?") != null)
         assertTrue("Saved Messages is the row", node(activity, "Saved Messages", clickable = true) != null)
+        // Saved Messages is ticked for a fresh start (HX86): Done works and nothing is asked. Untick it
+        // and the hint and the way on come back.
+        assertTrue("Done works with Saved Messages ticked", node(activity, "Done", clickable = true) != null)
+        assertTrue(node(activity, "Forward a video to Saved Messages in Telegram, then tick Saved Messages here.") == null)
+        click(activity, "Saved Messages")
+        idle()
         assertTrue(
             "the hint says what to do",
             node(activity, "Forward a video to Saved Messages in Telegram, then tick Saved Messages here.") != null,
@@ -292,6 +303,56 @@ class AddChatsRenderTest {
         assertEquals(1, went)
         model.stop()
         idle()
+    }
+
+    /**
+     * The All chats switch on a phone (HX86): above the search, off at first, a screen reader hears
+     * Off then On, the ticks are disabled while it is on and come back with it off, and Done works in
+     * the required choice with nothing ticked.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `the All chats switch on a phone disables the ticks while on and gives them back off`() {
+        com.tmplayer.data.ChatVideoCount.forget()
+        FormFactor.override(false)
+        val written = ArrayList<com.tmplayer.data.AddedChoice>()
+        val model = AddChatsViewModel(counts = Counts, write = {}, writeChoice = { written += it }, countsRest = false)
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        activity.setContent {
+            TmMaterialTheme(dark = true) {
+                AddChatsScreen(chats = CHATS, listComplete = true, starred = emptySet(), model = model, onClose = {}, required = true)
+            }
+        }
+        idle()
+        val switchNode = { nodes(activity).first { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == "All chats" } && n.config.getOrNull(SemanticsActions.OnClick) != null } }
+        assertEquals("Off to a screen reader", "Off", switchNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertTrue("above the search", node(activity, "Search") != null)
+        click(activity, "Harbour Notes")
+        idle()
+        assertEquals(setOf(100L, 101L), model.state.value.ticked)
+        click(activity, "All chats")
+        idle()
+        assertTrue(model.state.value.allChats)
+        assertEquals("On to a screen reader", "On", switchNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertTrue("the line says why things are greyed", node(activity, "All chats is on") != null)
+        assertTrue("Add these N is greyed", node(activity, "Add these 3 chats")?.config?.contains(SemanticsProperties.Disabled) == true)
+        assertTrue("a row takes no press while it is on", node(activity, "Mira", clickable = true) == null)
+        assertTrue("the row is still listed", node(activity, "Mira") != null)
+        model.toggle(104)
+        assertEquals("a tick is ignored while it is on", setOf(100L, 101L), model.state.value.ticked)
+        click(activity, "All chats")
+        idle()
+        assertEquals("the kept ticks are back", setOf(100L, 101L), model.state.value.ticked)
+        click(activity, "All chats")
+        idle()
+        click(activity, "Done")
+        idle()
+        assertEquals(1, written.size)
+        assertEquals(com.tmplayer.data.AddedMode.All, written.single().mode)
+        assertEquals(listOf(100L, 101L), written.single().chats.map { it.id })
+        model.stop()
+        idle()
+        com.tmplayer.data.ChatVideoCount.forget()
     }
 
     /** The offline card (R3): the same words and two buttons on a phone and on a television. */

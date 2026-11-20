@@ -109,10 +109,13 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
     }
 
     /** As SettingsStore.setAddedChats: an empty choice is still an answer, so the key stays. */
-    suspend fun setAddedChats(chats: List<AddedChat>) {
+    suspend fun setAddedChats(chats: List<AddedChat>) = setAddedChoice(AddedChoice(AddedMode.Picked, chats))
+
+    /** As SettingsStore.setAddedChoice: under All the kept picks stay beside the switch (HX86). */
+    suspend fun setAddedChoice(choice: AddedChoice) {
         kv.edit {
-            it[AddedChats.KEY] = AddedChats.encode(chats)
-            it[AddedChats.MODE_KEY] = AddedChats.MODE_PICKED
+            it[AddedChats.KEY] = AddedChats.encode(choice.chats)
+            it[AddedChats.MODE_KEY] = if (choice.mode == AddedMode.All) AddedChats.MODE_ALL else AddedChats.MODE_PICKED
         }
     }
 

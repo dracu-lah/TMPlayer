@@ -307,6 +307,35 @@ class ChatPickerScaleTest {
         }
     }
 
+    /**
+     * "All chats" on (HX86): nothing is recommended, so the background scan of a 3,000 chat account
+     * asks Telegram for nothing while it is on, carries on from where it stopped when it is off, and
+     * the switch itself costs no call.
+     */
+    @Test
+    fun `the background count asks for nothing while all chats is on and goes on when it is off`() = runTest(dispatcher, timeout = 5.minutes) {
+        val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
+        picker(account) { model ->
+            val chats = account.mainList()
+            model.start(chats)
+            model.countRest(chats)
+            until(10 * 60_000) { model.headStartDone() }
+            until(10 * 60_000) { model.state.value.counted.size >= ChatPicking.COUNT_AHEAD + 100 }
+            val before = account.countRequests
+            model.setAllChats(true, chats, listComplete = true)
+            // What was already in flight lands; after that, nothing is asked for a long while.
+            advanceTimeBy(30_000)
+            val settled = account.countRequests
+            advanceTimeBy(5 * 60_000)
+            assertEquals("the scan asked while every chat counts", settled, account.countRequests)
+            assertTrue("the switch is a state change, not a call: ${settled - before} asked after it", settled - before <= ChatVideoCount.AT_ONCE)
+            model.setAllChats(false, chats, listComplete = true)
+            advanceTimeBy(30_000)
+            assertTrue("the scan did not go on once it was off", account.countRequests > settled)
+            report("all chats on: $before asked before, $settled when it settled, ${account.countRequests} after off")
+        }
+    }
+
     /** On the television the background count asks for one chat at a time (HX76). */
     @Test
     fun `the television counts one chat at a time in the background`() = runTest(dispatcher, timeout = 5.minutes) {
@@ -388,7 +417,7 @@ class ChatPickerScaleTest {
 
     /** What the picker really recommends is made from the head start's answers alone, and from the ones that answered. */
     @Test
-    fun `the picker recommends thirty of the head start's chats with twenty videos, fullest first, and ticks none`() = runTest(dispatcher, timeout = 5.minutes) {
+    fun `the picker recommends thirty of the head start's chats with twenty videos, fullest first, and ticks only Saved Messages`() = runTest(dispatcher, timeout = 5.minutes) {
         val account = SyntheticAccount(backgroundScope, { testScheduler.currentTime })
         picker(account) { model ->
             val chats = account.mainList()
@@ -401,7 +430,7 @@ class ChatPickerScaleTest {
             val unknown = state.counted.filterValues { it == ChatCount.Unknown }.keys
             report("recommended ${state.recommended.size} of ${head.size} counted (${unknown.size} could not be counted: ${unknown.sorted()}) at ${took / 1000.0} s; ticked ${state.ticked.size}; first ${state.recommended.take(5)}")
             assertEquals(want, state.recommended)
-            assertTrue("nothing is ticked for the viewer", state.ticked.isEmpty())
+            assertEquals("only Saved Messages is ticked for a fresh start, nothing from the band", setOf(account.savedId), state.ticked)
             assertEquals("the band is capped", ChatSuggestions.MAX_BAND, want.size)
             // A chat that could not be counted is left out, not written off as empty.
             assertTrue(unknown.none { it in state.recommended })

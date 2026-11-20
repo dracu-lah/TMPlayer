@@ -4,6 +4,8 @@ package com.tmplayer.ui.browse
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -104,6 +107,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
@@ -224,6 +228,9 @@ fun AddChatsScreen(
     val tv = form == DeviceForm.Tv
     val state by model.state.collectAsState()
     val choice by AddedChats.choice.collectAsState()
+    // "All chats" (HX86): every chat counts, the ticks are disabled (and kept), the folders and the
+    // Recommended band are greyed.
+    val allOn = state.allChats
     // The television's held Down jumps a screen at a time: the rows it lands on are composed ahead (HX76).
     val listState = rememberJumpAheadListState(enabled = tv)
     val searchFocus = remember { FocusRequester() }
@@ -240,12 +247,13 @@ fun AddChatsScreen(
     // Telegram, or the list read again without it) is not chosen any more: the list falls back to
     // every chat rather than sit on a filter with no chip.
     val pickable = remember(folders) { ChatPicking.pickable(folders) }
-    val folderId = state.folder?.takeIf { id -> pickable.any { it.id == id } }
+    val folderId = state.folder?.takeIf { id -> !allOn && pickable.any { it.id == id } }
     val folderRead = folderId?.let { folderStatus.read(it) } ?: FolderRead.Loaded
-    val rows = remember(chats, state.query, state.scope, folderId, state.recommended, state.added, starred, listComplete, strays, choice.chats) {
+    val rows = remember(chats, state.query, state.scope, folderId, state.recommended, state.added, starred, listComplete, strays, choice.chats, allOn) {
         ChatPicking.rows(
             chats = chats,
-            added = strays,
+            // A chat left since it was ticked has nothing to remove while every chat counts.
+            added = if (allOn) emptySet() else strays,
             addedNames = choice.chats,
             starred = starred,
             recommended = state.recommended,
@@ -322,6 +330,9 @@ fun AddChatsScreen(
     val rowFocus = remember { HashMap<Long, FocusRequester>() }
     val lazyIndex = remember { HashMap<Long, Int>() }
     var inFoot by remember { mutableStateOf(false) }
+    // The remote is on the "All chats" switch, the first stop on the television (HX86).
+    val switchFocus = remember { FocusRequester() }
+    var onSwitch by remember { mutableStateOf(false) }
     // The remote is on the Recommended band's button, which is not a row: Back from it climbs too.
     var onBandButton by remember { mutableStateOf(false) }
     // Once a key is pressed the remote is the viewer's, and the first focus stops following the list.
@@ -337,11 +348,11 @@ fun AddChatsScreen(
     val settle = remember { arrayOfNulls<Job>(1) }
     val nowShown by rememberUpdatedState(shown)
     val nowPlace by rememberUpdatedState(placeOf)
-    val doneReady = !(required && state.ticked.isEmpty())
+    val doneReady = !(required && state.ticked.isEmpty() && !allOn)
     // The way out of a required choice with nothing to choose (ON-4): the head start has finished
     // with no recommendation and the whole list is in.
     val escapeFocus = remember { FocusRequester() }
-    val showHint = required && listComplete && !state.recommending &&
+    val showHint = required && listComplete && !state.recommending && !allOn &&
         state.recommended.isEmpty() && state.ticked.isEmpty()
     val showEscape = showHint && onContinue != null
 
@@ -481,6 +492,9 @@ fun AddChatsScreen(
 
     LaunchedEffect(Unit) { if (typed != state.query) model.type(typed) }
     LaunchedEffect(chats.isNotEmpty()) { if (chats.isNotEmpty()) model.start(chats) }
+    // Saved Messages may arrive after the rest of the list: a fresh start ticks it when it does (HX86).
+    val savedId = remember(chats) { ChatPicking.savedId(chats) }
+    LaunchedEffect(savedId) { model.knowSaved(savedId) }
     // Nothing is counted once the screen is gone, and a count already running is cancelled.
     DisposableEffect(model) { onDispose { model.stop() } }
     LaunchedEffect(state.saved) { if (state.saved) onClose() }
@@ -492,14 +506,19 @@ fun AddChatsScreen(
     // late (up to 3 s) never moves a remote that has already moved. No chats at all: it starts
     // on the rail.
     val firstId = shown.firstOrNull()?.id
-    val startOnDone = tv && !state.recommending && state.recommended.isNotEmpty() && state.ticked.isNotEmpty() && doneReady
-    LaunchedEffect(firstId, startOnDone) {
+    // Only over a choice already made (HX86): a fresh install starts with Saved Messages ticked, and
+    // its remote still starts on the first row.
+    val startOnDone = tv && !state.recommending && state.recommended.isNotEmpty() && state.ticked.isNotEmpty() && doneReady &&
+        state.added.isNotEmpty() && !allOn
+    LaunchedEffect(firstId, startOnDone, allOn) {
         if (!tv || keyed) return@LaunchedEffect
         // The list lays its first items out a frame after this runs, and a request before that
         // finds nothing to focus.
         withFrameNanos { }
         withFrameNanos { }
         if (keyed) return@LaunchedEffect
+        // Every row is disabled while all chats count, so the switch is where the remote starts.
+        if (allOn && runCatching { switchFocus.requestFocus() }.isSuccess) return@LaunchedEffect
         if (startOnDone && runCatching { doneFocus.requestFocus() }.isSuccess) return@LaunchedEffect
         val first = firstId?.let { rowFocus[it] }
         if (first == null || runCatching { first.requestFocus() }.isFailure) {
@@ -541,7 +560,7 @@ fun AddChatsScreen(
             typed.isNotEmpty() && (!tv || inSearch) -> onType("")
             // On the television Back from the list or the foot goes up to the filters first, so
             // the top of a long list is one press away; Back there leaves.
-            tv && (onRow != null || inFoot || inSearch || onBandButton) -> toTop()
+            tv && (onRow != null || inFoot || inSearch || onBandButton || onSwitch) -> toTop()
             // Nothing behind the mandatory choice to go back to: Back leaves the app (or, on the
             // desktop, does nothing). It always asks "Leave without choosing?" first.
             required && confirmLeave && !state.saving -> asking = Ask.Leave
@@ -554,11 +573,13 @@ fun AddChatsScreen(
 
 
     val tick = rememberToggleTick()
+    val flipAll = { tick(!allOn); model.setAllChats(!allOn, chats, listComplete) }
     val compact = form != DeviceForm.Phone
     // A phone on its side is about 400 dp high: the header, the foot and one row filled it, so Back
     // sits beside the title and the words under it give way (HX56); the search stays.
     val windowHeight = LocalWindowInfo.current.containerSize.height
     val shortWindow = windowHeight in 1 until with(LocalDensity.current) { 480.dp.roundToPx() }
+    val bigFont = LocalDensity.current.fontScale >= 1.5f
 
     val outer = when (form) {
         DeviceForm.Tv -> Modifier.padding(horizontal = Tv.SafeH, vertical = Tv.SafeV)
@@ -662,9 +683,13 @@ fun AddChatsScreen(
                                     color = Tone.text,
                                     modifier = Modifier.semantics { heading() },
                                 )
-                                Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                                // At a large font the words give way to the switch (HX86): the filters and a whole row stay in sight.
+                                if (!bigFont) Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                             }
                         }
+                    }
+                    item(key = "all-chats") {
+                        Box(Modifier.padding(top = 12.dp)) { AllChatsSwitch(allOn, tv = false, onToggle = flipAll) }
                     }
                     item(key = "search") { searchBox() }
                     item(key = "scopes") {
@@ -689,6 +714,7 @@ fun AddChatsScreen(
                                             chosen = folderId == folder.id,
                                             onClick = { model.folder(folder.id) },
                                             modifier = if (folderId == folder.id) Modifier.focusRequester(chipFocus) else Modifier,
+                                            enabled = !allOn,
                                         )
                                     }
                                 }
@@ -821,6 +847,7 @@ fun AddChatsScreen(
                                 val words = if (every) s.pickerRemoveThese(ids.size) else s.pickerAddThese(ids.size)
                                 SetupButton(
                                     words,
+                                    enabled = !allOn,
                                     modifier = Modifier
                                         .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
                                         .onFocusChanged { onBandButton = it.hasFocus }
@@ -859,7 +886,7 @@ fun AddChatsScreen(
                                 }.first { !it }
                                 model.count(row.id)
                             }
-                            val ticked = row.id in state.ticked
+                            val ticked = allOn || row.id in state.ticked
                             val requester = remember(row.id) { FocusRequester() }
                             DisposableEffect(row.id) {
                                 rowFocus[row.id] = requester
@@ -888,6 +915,7 @@ fun AddChatsScreen(
                                         null
                                     },
                                     tv = tv,
+                                    enabled = !allOn,
                                     modifier = card,
                                     onToggle = { tick(!ticked); model.toggle(row.id) },
                                     onToggleStar = { model.toggleStar(row.id) },
@@ -967,7 +995,7 @@ fun AddChatsScreen(
         // Nothing ticked is an answer in Settings, and Done reads as what it will do; the
         // mandatory choice needs at least one chat, and says so instead.
         val doneButton: @Composable () -> Unit = {
-            val none = state.ticked.isEmpty()
+            val none = state.ticked.isEmpty() && !allOn
             if (required && none) {
                 DisabledDone(s.pickerGateDoneNone)
             } else {
@@ -1009,7 +1037,7 @@ fun AddChatsScreen(
                     failure()
                     val totalWords: @Composable (Modifier) -> Unit = { m ->
                         Text(
-                            totalLine(chosen, s),
+                            if (allOn) s.pickerAllChatsOn else totalLine(chosen, s),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Tone.text,
                             maxLines = 2,
@@ -1112,13 +1140,14 @@ fun AddChatsScreen(
                                 icon = folderIcon(folder.icon),
                                 detail = if (read == FolderRead.Loaded && n > 0) s.formatter.number(n) else null,
                                 chosen = folderId == folder.id,
-                                dim = read == FolderRead.Loaded && n == 0,
-                                onClick = { intoFolder(folder.id) },
+                                dim = allOn || (read == FolderRead.Loaded && n == 0),
+                                onClick = { if (!allOn) intoFolder(folder.id) },
                                 modifier = Modifier
                                     .focusRequester(folderFocus.getOrPut(folder.id) { FocusRequester() })
                                     .onPreviewKeyEvent { event ->
                                         if (event.type == KeyEventType.KeyDown && event.key == end) {
-                                            intoFolder(folder.id)
+                                            // Greyed while every chat counts: Right goes nowhere.
+                                            if (!allOn) intoFolder(folder.id)
                                             true
                                         } else {
                                             false
@@ -1146,6 +1175,24 @@ fun AddChatsScreen(
                         )
                     }
                     Column(Modifier.weight(1f).fillMaxHeight()) {
+                        // The first stop (HX86): OK flips it, Right goes to Done, and Down goes to Done
+                        // too while every chat counts, since the rows under it are disabled.
+                        AllChatsSwitch(
+                            allOn,
+                            tv = true,
+                            onToggle = flipAll,
+                            modifier = Modifier
+                                .focusRequester(switchFocus)
+                                .onFocusChanged { onSwitch = it.hasFocus }
+                                .onPreviewKeyEvent { event ->
+                                    when {
+                                        event.type != KeyEventType.KeyDown -> false
+                                        event.key == end -> toFoot()
+                                        event.key == Key.DirectionDown && allOn -> toFoot()
+                                        else -> false
+                                    }
+                                },
+                        )
                         if (searching || state.query.isNotBlank()) searchBox()
                         listPane()
                     }
@@ -1155,11 +1202,16 @@ fun AddChatsScreen(
                             .fillMaxHeight()
                             .onFocusChanged { inFoot = it.hasFocus }
                             .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && event.key == start) {
-                                    backToRow()
-                                    true
-                                } else {
-                                    false
+                                when {
+                                    event.type != KeyEventType.KeyDown -> false
+                                    event.key == start -> {
+                                        backToRow()
+                                        true
+                                    }
+                                    // Done is the one control here: Up and Down stay on it, and never
+                                    // drop into whichever row a focus search finds beside it (HX86).
+                                    event.key == Key.DirectionDown || event.key == Key.DirectionUp -> true
+                                    else -> false
                                 }
                             },
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1175,7 +1227,7 @@ fun AddChatsScreen(
                                 modifier = Modifier.semantics { heading() },
                             )
                             Text(
-                                totalLine(chosen, s),
+                                if (allOn) s.pickerAllChatsOn else totalLine(chosen, s),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Tone.text,
                                 maxLines = 3,
@@ -1325,6 +1377,60 @@ private fun DisabledDone(label: String) {
     }
 }
 
+/** How faint a row is drawn while "All chats" is on and its tick is disabled (HX86). */
+private const val DISABLED_ROW_ALPHA = 0.55f
+
+/**
+ * The "All chats" switch (HX86), at the top of the picker above the search: the whole row is the
+ * control, a screen reader hears On or Off, and on the television it is the first stop of the focus
+ * order, OK flipping it. [onToggle] is the screen's one flip (the thumb's tick and the model).
+ */
+@Composable
+private fun AllChatsSwitch(on: Boolean, tv: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    val round = RoundedCornerShape(Corner.Large)
+    val onWord = s.commonOn
+    val offWord = s.commonOff
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(round)
+            .background(if (focused) Tone.focusFill else Tone.surface)
+            .focusRing(focused, round)
+            .semantics(mergeDescendants = true) {
+                stateDescription = if (on) onWord else offWord
+                toggleableState = ToggleableState(on)
+            }
+            .clickable(
+                interactionSource = interactions,
+                indication = if (tv) null else LocalIndication.current,
+                role = Role.Switch,
+                onClick = onToggle,
+            )
+            .padding(horizontal = ROW_INSET, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                s.pickerAllChatsSwitch,
+                style = if (tv) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+                color = if (focused) Tone.onFocusFill else Tone.text,
+            )
+            // On, the line the greyed controls point at; off, what turning it on does. One place, so the
+            // switch stays two lines tall at a large font (HX86).
+            Text(
+                if (on) s.pickerAllChatsOn else s.pickerAllChatsDetail,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (focused) Tone.onFocusFill else Tone.muted,
+            )
+        }
+        Switch(checked = on, onCheckedChange = null)
+    }
+}
+
 /** The directions a key can move focus in, which is all the screen holds back from leaving it. */
 private val ARROWS = setOf(FocusDirection.Up, FocusDirection.Down, FocusDirection.Left, FocusDirection.Right)
 
@@ -1353,6 +1459,8 @@ private fun PickRow(
     onToggle: () -> Unit,
     onToggleStar: () -> Unit,
     modifier: Modifier = Modifier,
+    /** False while "All chats" is on (HX86): the tick is drawn dimmed, the row takes no press and no focus. */
+    enabled: Boolean = true,
 ) {
     val s = LocalStrings.current
     val interactions = remember { MutableInteractionSource() }
@@ -1386,8 +1494,10 @@ private fun PickRow(
             // TV has no ripple to bound, so its fill and ring take the shape without one.
             .then(if (tv) Modifier else Modifier.clip(round))
             .focusDrawn(focused, focusRingColor(), round, fill = Tone.focusFill)
+            .then(if (enabled) Modifier else Modifier.alpha(DISABLED_ROW_ALPHA).focusProperties { canFocus = false })
             .semantics(mergeDescendants = true) {
                 toggleableState = ToggleableState(ticked)
+                if (!enabled) disabled()
                 // The words are read here, when semantics are asked for, not while the row composes.
                 customActions = listOf(
                     CustomAccessibilityAction(
@@ -1395,12 +1505,18 @@ private fun PickRow(
                     ) { onToggleStar(); true },
                 )
             }
-            .combinedClickable(
-                interactionSource = interactions,
-                indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
-                role = Role.Checkbox,
-                onLongClick = onToggleStar,
-                onClick = onToggle,
+            .then(
+                if (enabled) {
+                    Modifier.combinedClickable(
+                        interactionSource = interactions,
+                        indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
+                        role = Role.Checkbox,
+                        onLongClick = onToggleStar,
+                        onClick = onToggle,
+                    )
+                } else {
+                    Modifier
+                },
             )
             .padding(horizontal = ROW_INSET, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1441,7 +1557,7 @@ private fun PickRow(
         if (tv) {
             PickTick(ticked)
         } else {
-            Checkbox(checked = ticked, onCheckedChange = null)
+            Checkbox(checked = ticked, onCheckedChange = null, enabled = enabled)
         }
     }
 }
