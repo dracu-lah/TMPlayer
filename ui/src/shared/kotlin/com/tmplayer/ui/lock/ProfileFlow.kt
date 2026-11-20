@@ -725,9 +725,7 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
                     brand = true,
                 )
             }
-            // The picker, and with one profile too any panel a press asked for (Add account behind
-            // the app lock's PIN, or asked first while a video plays).
-            show || flow.stage != ProfileFlow.Stage.Picker -> ProfileFlowScreen(flow, list, signInStep)
+            show -> ProfileFlowScreen(flow, list, signInStep)
             // The open profile's PIN, not given in this process: nothing of it shows until it is.
             // Back offers the other profiles when there are some; with one it leaves the app.
             ProfileUnlock.needsUnlock(list, unlockedId) -> key(list.activeId) {
@@ -745,6 +743,10 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
                 key(list.activeId) { content() }
                 // A profile on its sign in with others beside it: Back brings the picker.
                 BackHandler(enabled = several && signInStep) { flow.ask() }
+                // A panel a press in the shell asked for (Add account behind the app lock's PIN, or
+                // asked first while a video plays), with one profile too: drawn over the shell,
+                // which stays composed, so Cancel lands back where it came from (Settings).
+                if (flow.stage != ProfileFlow.Stage.Picker) ProfileFlowScreen(flow, list, signInStep)
             }
         }
         flow.notice?.let { notice ->
