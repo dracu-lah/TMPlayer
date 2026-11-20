@@ -39,7 +39,8 @@ class OwnedSessionsTest {
         val sent = mutableListOf<AccountStamp>()
         // A's client starts closing: no session for a while, and a switch under way.
         live.value = null
-        val run = async {
+        // Undispatched: the run passes its first check while A is still open, as a real one does.
+        val run = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             // The run passed its first checks before the switch was asked for.
             val session = OwnedSessions.await(
                 owner = a,
@@ -58,6 +59,19 @@ class OwnedSessionsTest {
         live.value = FakeSession(b)
         assertNull("A's run gets no session at all", run.await())
         assertTrue("nothing went to B's account", sent.isEmpty())
+    }
+
+    @Test
+    fun `a client that came up for B is refused even when nothing else says so`() = runTest {
+        // Every other check passes (the switch flag already cleared, the stamp not yet read):
+        // only the session's own profile tells it is B's.
+        val live = MutableStateFlow<FakeSession?>(null)
+        val run = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            OwnedSessions.await(a, mayAct = { true }, ownerOf = FakeSession::owner, timeoutMs = 30_000L) { live.filterNotNull().first() }
+        }
+        delay(3_000L)
+        live.value = FakeSession(b)
+        assertNull("B's client is never A's", run.await())
     }
 
     @Test

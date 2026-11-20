@@ -1784,7 +1784,11 @@ object Td {
 
     suspend fun myId(): Long {
         cachedMyId.takeIf { it != 0L }?.let { return it }
-        val id = client.getMe().valueOrNull?.id ?: return 0L
+        val session = _session.value ?: return 0L
+        val id = session.client.getMe().valueOrNull?.id ?: return 0L
+        // Kept only while that client is still the live one (HX88): an answer of the client that
+        // was closing for a switch never becomes the next profile's id.
+        if (!session.isCurrent()) return 0L
         cachedMyId = id
         return id
     }

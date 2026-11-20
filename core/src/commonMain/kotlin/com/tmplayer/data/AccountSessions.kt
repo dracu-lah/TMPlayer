@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Messages
+import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.SessionDeviceType
 import dev.g000sha256.tdl.dto.SessionDeviceTypeAndroid
@@ -132,6 +133,15 @@ object AccountSessions {
         }
     }
 
+    /**
+     * The authorized client, waited for exactly as before (HX88 keeps the wait: one profile sees
+     * no change), handed out only when it is [owner]'s and no switch is under way.
+     */
+    private suspend fun ownSession(owner: AccountStamp): TdlClient? {
+        val session = runCatching { Td.awaitAuthorizedSession() }.getOrNull() ?: return null
+        return session.client.takeIf { session.owner == owner && OwnedSessions.mayAct(owner) }
+    }
+
     /** The account's sessions, or the reason they could not be read. */
     suspend fun load(): Result<List<AccountSession>> {
         val td = runCatching { Td.awaitAuthorizedSession().client }.getOrElse { return Result.failure(it) }
@@ -165,8 +175,9 @@ object AccountSessions {
      */
     suspend fun end(id: Long): String? {
         // The open profile's own client (HX88): never the next one's if a switch lands meanwhile.
+        // Waited for as before (no timeout of its own), then checked for its profile.
         val owner = Accounts.stamp
-        val td = Td.sessionFor(owner)?.client ?: return L.errorsNotConnected
+        val td = ownSession(owner) ?: return L.errorsNotConnected
         val listed = when (val read = td.getActiveSessions()) {
             is TdlResult.Success -> read.result.sessions.orEmpty()
             is TdlResult.Failure -> return Failures.humanise(read.message)
@@ -184,7 +195,7 @@ object AccountSessions {
      */
     suspend fun endAllOthers(): String? {
         val owner = Accounts.stamp
-        val td = Td.sessionFor(owner)?.client ?: return L.errorsNotConnected
+        val td = ownSession(owner) ?: return L.errorsNotConnected
         val sessions = when (val result = td.getActiveSessions()) {
             is TdlResult.Success -> result.result.sessions.orEmpty()
             is TdlResult.Failure -> return Failures.humanise(result.message)
