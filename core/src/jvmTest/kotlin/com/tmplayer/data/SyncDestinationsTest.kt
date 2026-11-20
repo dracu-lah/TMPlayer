@@ -27,7 +27,14 @@ class SyncDestinationsTest {
         public: Boolean = false,
         restricted: Boolean = false,
         title: String = "TMPlayer sync",
-    ) = ProbeAnswer.Facts(ChannelFacts(channel, title, isChannel, public, role, restricted, count))
+        linked: Boolean = false,
+        forum: Boolean = false,
+    ) = ProbeAnswer.Facts(
+        ChannelFacts(
+            channel, title, isChannel, public, hasLinkedChat = linked, isForum = forum,
+            role = role, restricted = restricted, memberCount = count,
+        ),
+    )
 
     private fun judged(answer: ProbeAnswer) = SyncChannelCheck.judge(answer)
 
@@ -69,6 +76,52 @@ class SyncDestinationsTest {
     @Test
     fun aChannelMadePublicBlocksWriting() {
         assertEquals(SyncChannelBlock.Public, blockOf(facts(public = true)))
+    }
+
+    @Test
+    fun aLinkedDiscussionGroupBlocksEvenWithOneMember() {
+        // The group's members read the channel's posts, so "1 member" is not "only you".
+        assertEquals(SyncChannelBlock.LinkedGroup, blockOf(facts(count = 1, linked = true)))
+        assertTrue(SyncChannelBlock.LinkedGroup.words().isNotBlank())
+        assertEquals(SyncChannelBlock.LinkedGroup, SyncChannelBlock.decode(SyncChannelBlock.LinkedGroup.encode()))
+    }
+
+    @Test
+    fun aForumOrBroadcastGroupIsNeverUsed() {
+        assertEquals(SyncChannelBlock.NotAChannel, blockOf(facts(forum = true)))
+    }
+
+    @Test
+    fun aMemberJoinedByInviteLinkOrRequestCountsAsAMember() {
+        // An invite link or a join request adds nobody until they are in; once in, the count says 2.
+        assertTrue(judged(facts(count = 1)) is SyncJudgement.Use)
+        assertEquals(SyncChannelBlock.MoreMembers(2), blockOf(facts(count = 2)))
+    }
+
+    @Test
+    fun withoutTheFullInfoNothingIsKnownAndNothingIsWritten() {
+        val failed = ChannelFactsAssembler.assemble(
+            channel, "T", true, false, false, ChannelFacts.Role.Owner, false,
+            groupMemberCount = 1, groupHasLinkedChat = false, full = null, failure = "no line",
+        )
+        assertEquals(ProbeAnswer.Unreachable("no line"), failed)
+        assertEquals(SyncJudgement.Retry("no line"), judged(failed))
+    }
+
+    @Test
+    fun theFullInfoAddsALinkedGroupAndTheLargerCountWins() {
+        fun assembled(groupCount: Int, groupLinked: Boolean, full: FullInfoFacts) = ChannelFactsAssembler.assemble(
+            channel, "T", true, false, false, ChannelFacts.Role.Owner, false, groupCount, groupLinked, full, "x",
+        )
+        // The supergroup says 1 and no link; the full info says a group is linked.
+        assertEquals(SyncChannelBlock.LinkedGroup, blockOf(assembled(1, false, FullInfoFacts(1, linkedChatId = -1002L))))
+        // The supergroup says it is linked; the full info does not.
+        assertEquals(SyncChannelBlock.LinkedGroup, blockOf(assembled(1, true, FullInfoFacts(1, 0L))))
+        // Either count over 1 blocks, and either 0 with the other 1 is still 1.
+        assertEquals(SyncChannelBlock.MoreMembers(2), blockOf(assembled(1, false, FullInfoFacts(2, 0L))))
+        assertEquals(SyncChannelBlock.MoreMembers(2), blockOf(assembled(2, false, FullInfoFacts(1, 0L))))
+        assertTrue(judged(assembled(0, false, FullInfoFacts(1, 0L))) is SyncJudgement.Use)
+        assertEquals(SyncChannelBlock.CountUnknown, blockOf(assembled(0, false, FullInfoFacts(0, 0L))))
     }
 
     @Test
@@ -227,6 +280,35 @@ class SyncDestinationsTest {
         // Not checkable: the viewer must still be able to sign out with a backup in Saved Messages.
         assertEquals(saved, SyncDestinations.chatForBackup(f.settings, me, saved, probe { ProbeAnswer.Unreachable("x") }))
         assertEquals(saved, SyncDestinations.chatForBackup(null, me, saved, probe { facts() }))
+    }
+
+    @Test
+    fun theCheckRunsAgainRightBeforeEveryWrite() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        var answer: ProbeAnswer = facts()
+        val live = probe { answer }
+        // Safe at the start of the sync...
+        assertTrue(SyncDestinations.resolve(f.settings, me, saved, live, 1_000L) is SyncPlace.Channel)
+        assertNull(SyncDestinations.verifyBeforeWrite(f.settings, live, channel))
+        // ...somebody joins while the sync merges: the write is refused with the reason, and kept.
+        answer = facts(count = 2)
+        assertEquals(SyncChannelBlock.MoreMembers(2).words(), SyncDestinations.verifyBeforeWrite(f.settings, live, channel))
+        assertEquals(SyncChannelBlock.MoreMembers(2), f.settings.syncChannelBlock.first())
+        // A group linked in between, a name made public, the owner changed, no answer: each stops the write.
+        for (unsafe in listOf(facts(linked = true), facts(public = true), facts(role = ChannelFacts.Role.Admin), ProbeAnswer.Gone)) {
+            answer = unsafe
+            assertTrue(SyncDestinations.verifyBeforeWrite(f.settings, live, channel) != null)
+        }
+        answer = ProbeAnswer.Unreachable("no line")
+        assertEquals("no line", SyncDestinations.verifyBeforeWrite(f.settings, live, channel))
+    }
+
+    @Test
+    fun theBackupChecksAgainAtTheWrite() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        val answers = ArrayDeque(listOf(facts(), facts(count = 2)))
+        // The first look (resolve) is safe, the second (right before the write) is not: Saved Messages.
+        assertEquals(saved, SyncDestinations.chatForBackup(f.settings, me, saved, probe { answers.removeFirst() }))
     }
 
     // ---- picking and moving ----------------------------------------------------------------------
