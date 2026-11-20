@@ -49,22 +49,54 @@ object ProfileNotifications {
         else -> choose(hidden, kind)
     }
 
-    /** What was posted, and for which profile ([Accounts.activeFolder] when posted, "" for the adopted one). */
-    private class Posted(val real: Notification, val kind: Kind, val folder: String = Accounts.active.folder.orEmpty())
+    /** What was posted, and for which profile: the [owner] the job that posted it started under. */
+    private class Posted(val real: Notification, val kind: Kind, val owner: AccountStamp) {
+        val folder: String get() = owner.folder.orEmpty()
+    }
 
     private val posted = ConcurrentHashMap<Int, Posted>()
 
-    fun post(context: Context, id: Int, notification: Notification, kind: Kind) {
+    /** The extra every profile notification carries: which profile's it is, so a later process can find it. */
+    internal const val PROFILE_EXTRA = "com.tmplayer.profile"
+
+    /**
+     * Whether a post of [kind] made for [owner] may go up now: the device's always; a profile's
+     * only while [owner] is the open profile's turn ([Accounts.stamp]). A job that outlived a
+     * switch never posts its profile's titles into the next one's shade.
+     */
+    fun mayPost(kind: Kind, owner: AccountStamp, current: AccountStamp = Accounts.stamp): Boolean =
+        kind == Kind.Device || owner == current
+
+    /**
+     * Posts [notification] for [owner], the profile the job started under (taken when it started,
+     * not now). Dropped when [owner] is no longer the open profile's turn.
+     */
+    fun post(context: Context, id: Int, notification: Notification, kind: Kind, owner: AccountStamp = Accounts.stamp) {
         val app = context.applicationContext
-        if (kind != Kind.Device) posted[id] = Posted(notification, kind)
+        if (!mayPost(kind, owner)) {
+            Logger.i(TAG, "a notification of a profile no longer open was dropped")
+            return
+        }
+        if (kind != Kind.Device) {
+            posted[id] = Posted(notification, kind, owner)
+            notification.extras.putString(PROFILE_EXTRA, owner.folder.orEmpty())
+        }
         runCatching { manager(app).notify(id, shown(app, notification, kind)) }
             .onFailure { Logger.w(TAG, "a notification was not posted", it) }
     }
 
-    /** A service's foreground notification, as [post] would show it. [type] is the service type on Android 10 and later. */
-    fun foreground(service: Service, id: Int, notification: Notification, kind: Kind, type: Int) {
-        if (kind != Kind.Device) posted[id] = Posted(notification, kind)
-        val shown = shown(service, notification, kind)
+    /**
+     * A service's foreground notification, as [post] would show it, for [owner]. Android wants one
+     * however late the service starts, so for a profile no longer open it is the neutral one.
+     * [type] is the service type on Android 10 and later.
+     */
+    fun foreground(service: Service, id: Int, notification: Notification, kind: Kind, type: Int, owner: AccountStamp = Accounts.stamp) {
+        val stale = !mayPost(kind, owner)
+        if (kind != Kind.Device) {
+            posted[id] = Posted(notification, kind, owner)
+            notification.extras.putString(PROFILE_EXTRA, owner.folder.orEmpty())
+        }
+        val shown = if (stale) neutral(service, notification) else shown(service, notification, kind)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) service.startForeground(id, shown, type) else service.startForeground(id, shown)
     }
 
@@ -93,6 +125,8 @@ object ProfileNotifications {
         // Still dismissed on a tap, and still telling its owner when it is swiped away.
         builder.setAutoCancel(real.flags and Notification.FLAG_AUTO_CANCEL != 0)
         real.deleteIntent?.let(builder::setDeleteIntent)
+        // Still the profile's, so a later process can find and clear it.
+        real.extras?.getString(PROFILE_EXTRA)?.let { owner -> builder.addExtras(android.os.Bundle().apply { putString(PROFILE_EXTRA, owner) }) }
         return builder.build()
     }
 
@@ -123,10 +157,16 @@ object ProfileNotifications {
 
     /**
      * A cold start with the open profile hidden: what an earlier process posted is unknown here,
-     * so all of it comes down (the device's notices are posted again by their own schedules).
+     * so every profile notification (each carries [PROFILE_EXTRA]) comes down; the device's stay.
      */
     internal fun clearLeftBehind(context: Context) {
-        runCatching { manager(context).cancelAll() }
+        // Only the profile's (they carry PROFILE_EXTRA): an update or low storage notice stays.
+        runCatching {
+            val manager = manager(context)
+            for (each in manager.activeNotifications) {
+                if (each.notification.extras.containsKey(PROFILE_EXTRA)) manager.cancel(each.tag, each.id)
+            }
+        }
     }
 
     internal fun republish(context: Context, hidden: Boolean) {

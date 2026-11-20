@@ -1106,7 +1106,7 @@ class DownloadService : Service() {
             }
             if (lines[row.fileId] == line) continue
             lines[row.fileId] = line
-            com.tmplayer.data.ProfileNotifications.post(this, row.fileId.notificationId(), videoNotification(row, line), com.tmplayer.data.ProfileNotifications.Kind.Ongoing)
+            com.tmplayer.data.ProfileNotifications.post(this, row.fileId.notificationId(), videoNotification(row, line), com.tmplayer.data.ProfileNotifications.Kind.Ongoing, synchronized(lock) { stampOf(row.fileId) })
         }
 
         // Anything that has left the list takes its notification with it: a finished video's row

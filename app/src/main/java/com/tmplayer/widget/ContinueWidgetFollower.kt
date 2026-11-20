@@ -185,6 +185,7 @@ object ContinueWidgetFollower {
                     options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0) ?: 0,
                     options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0) ?: 0,
                 )
+                // profile-notifications: the tile is Locked while the profile is hidden (ContinueWidget.lockedBy)
                 runCatching { manager.updateAppWidget(id, ContinueWidgetViews.build(context, tile, size, poster)) }
                     .onFailure { Logger.w(TAG, "widget $id not updated", it) }
             }

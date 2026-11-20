@@ -31,6 +31,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 class AndroidTransferNotifier(context: Context) : TransferNotifier {
 
     private val app = context.applicationContext
+
+    /** The profile the transfers it tells of belong to (HX88): taken when it is made, with the job. */
+    private val owner = Accounts.stamp
     private val titles = java.util.concurrent.ConcurrentHashMap<Long, String>()
     private val kinds = java.util.concurrent.ConcurrentHashMap<Long, TransferNotifier.Kind>()
 
@@ -88,7 +91,7 @@ class AndroidTransferNotifier(context: Context) : TransferNotifier {
     private fun post(id: Int, notification: Notification, kind: com.tmplayer.data.ProfileNotifications.Kind = com.tmplayer.data.ProfileNotifications.Kind.Ongoing) {
         ensureChannel(app)
         // A refused permission is not a failure of the transfer: it simply goes unseen.
-        runCatching { com.tmplayer.data.ProfileNotifications.post(app, id, notification, kind) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(app, id, notification, kind, owner) }
     }
 
     private fun builder(): Notification.Builder =

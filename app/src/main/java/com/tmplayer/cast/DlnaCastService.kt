@@ -54,6 +54,16 @@ class DlnaCastService : Service() {
     private var device = ""
     private var watching = false
 
+    /** The profile whose video is on the TV (HX88); a switch ends the cast and its notification. */
+    private val owner = com.tmplayer.data.Accounts.stamp
+
+    init {
+        com.tmplayer.data.ProfileJobs.stopOnSwitch(scope) {
+            Cast.existing()?.endSession()
+            stopSelf()
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -77,7 +87,7 @@ class DlnaCastService : Service() {
         runCatching {
             val first = notification(true)
             // Through the one choke point (HX88): neutral while the open profile is hidden.
-            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK, owner)
         }.onFailure { Log.w(TAG, "Not allowed into the foreground", it) }
         holdLocks()
         ensureSession()
@@ -116,7 +126,7 @@ class DlnaCastService : Service() {
                     .build(),
             )
         }
-        runCatching { com.tmplayer.data.ProfileNotifications.post(this, NOTIFICATION_ID, notification(isPlaying), com.tmplayer.data.ProfileNotifications.Kind.Ongoing) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(this, NOTIFICATION_ID, notification(isPlaying), com.tmplayer.data.ProfileNotifications.Kind.Ongoing, owner) }
     }
 
     private fun ensureSession() {

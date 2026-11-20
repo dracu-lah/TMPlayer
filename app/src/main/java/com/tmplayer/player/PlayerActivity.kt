@@ -4917,6 +4917,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 .setAlbumTitle("")
                 .setSubtitle("")
                 .setDescription("")
+                // The app's own icon, so Media3 never fills the artwork from the file's own cover.
+                .setArtworkUri(android.net.Uri.parse("android.resource://$packageName/${applicationInfo.icon}"))
                 .build()
         }
         val here = currentItem()
@@ -4960,6 +4962,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val metadata = sessionMetadata()
         if (metadata == subtitleFiles.metadata) return
         subtitleFiles.metadata = metadata
+        // libVLC's player takes no change of its item: its item is written and the session told.
+        vlcEngine?.let { vlc ->
+            // profile-notifications: sessionMetadata() above
+            vlc.mediaItem = vlc.mediaItem.buildUpon().setMediaMetadata(metadata).build()
+            vlc.metadataChanged()
+        }
         val exo = playing ?: return
         val playing = exo.currentMediaItem ?: return
         // profile-notifications: sessionMetadata() above

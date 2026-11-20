@@ -520,6 +520,9 @@ class FolderExportService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("FolderExport"))
     private var started = false
 
+    /** The profile this copy was started under (HX88): its notifications are that profile's alone. */
+    private var owner = com.tmplayer.data.Accounts.stamp
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -528,9 +531,18 @@ class FolderExportService : Service() {
             return START_NOT_STICKY
         }
         AndroidTransferNotifier.ensureChannel(this)
+        if (!started) {
+            owner = com.tmplayer.data.Accounts.stamp
+            // A switch stops the copy: it is that profile's, and its titles must not follow.
+            com.tmplayer.data.ProfileJobs.stopOnSwitch(scope) {
+                FolderExport.cancel()
+                runCatching { stopForegroundRemoving() }
+                stopSelf()
+            }
+        }
         val foreground = runCatching {
             val first = notification(FolderExport.state.value.progress)
-            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, owner)
         }.onFailure { Log.w(TAG, "Android would not let Save to folder run in the foreground", it) }.isSuccess
         if (started) return START_NOT_STICKY
         started = true
@@ -542,7 +554,7 @@ class FolderExportService : Service() {
                 val step = (progress.overall * 1000).toInt()
                 if (foreground && step / 5 != lastShown / 5) {
                     lastShown = step
-                    runCatching { com.tmplayer.data.ProfileNotifications.post(this@FolderExportService, NOTIFICATION_ID, notification(progress), com.tmplayer.data.ProfileNotifications.Kind.Ongoing) }
+                    runCatching { com.tmplayer.data.ProfileNotifications.post(this@FolderExportService, NOTIFICATION_ID, notification(progress), com.tmplayer.data.ProfileNotifications.Kind.Ongoing, owner) }
                 }
             }
             runCatching { stopForegroundRemoving() }
@@ -559,6 +571,7 @@ class FolderExportService : Service() {
                             .setAutoCancel(true)
                             .build(),
                         com.tmplayer.data.ProfileNotifications.Kind.Result,
+                        owner,
                     )
                 }
             }

@@ -31,6 +31,18 @@ class DownloadRelocationService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + JobFailures.handler(TAG))
 
+    /** The profile whose downloads are moving (HX88). */
+    private val owner = com.tmplayer.data.Accounts.stamp
+
+    init {
+        // A switch stops the move with its own Cancel: the files are that profile's.
+        com.tmplayer.data.ProfileJobs.stopOnSwitch(scope) {
+            DownloadRelocation.cancel()
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+            stopSelf()
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -41,7 +53,7 @@ class DownloadRelocationService : Service() {
         AndroidTransferNotifier.ensureChannel(this)
         runCatching {
             val first = notification(DownloadRelocation.moving.value)
-            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, owner)
         }
         scope.launch {
             DownloadRelocation.moving.collect { moving ->
@@ -49,7 +61,7 @@ class DownloadRelocationService : Service() {
                     stopSelf()
                     return@collect
                 }
-                runCatching { com.tmplayer.data.ProfileNotifications.post(this@DownloadRelocationService, NOTIFICATION_ID, notification(moving), com.tmplayer.data.ProfileNotifications.Kind.Ongoing) }
+                runCatching { com.tmplayer.data.ProfileNotifications.post(this@DownloadRelocationService, NOTIFICATION_ID, notification(moving), com.tmplayer.data.ProfileNotifications.Kind.Ongoing, owner) }
             }
         }
         return START_NOT_STICKY
