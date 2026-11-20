@@ -237,8 +237,14 @@ Two choke points, one rule each:
   hidden the shade gets a neutral notification (the app's name, the same channel, icon and tap,
   nothing of the profile); on every flip of `hidden()` what is still up is posted again (ongoing
   ones neutral or real, the profile's results taken down). Each post says its kind: `Ongoing`,
-  `Result` or `Device` (the device's, never changed). `ProfileNotificationsPolicyTest` fails on a
-  direct post anywhere else.
+  `Result` or `Device` (the device's, never changed). Each is tagged with the profile it was
+  posted for: a switch takes down every profile notification of the profile left, a sign out
+  all of its own, and a cold start with the open profile hidden takes down what an earlier
+  process left. The neutral copy keeps the tap, auto cancel and the swipe's delete intent.
+- `ProfileNotificationsPolicyTest` scans every source set under app/src but the tests (main,
+  cast, nocast, vlc, novlc, dev, debug, preview, promo, fdroid) for posts, media sessions and
+  their metadata, cast items, widgets and shortcuts; each hit routes through the wrapper or
+  carries a `// profile-notifications: <its rule>` marker on its line or the two above.
 
 | Surface | Rule |
 | --- | --- |
@@ -250,7 +256,9 @@ Two choke points, one rule each:
 | Save to folder (`FolderExport`), moving downloads (`DownloadRelocationService`), transfer progress | `Ongoing` |
 | New video, episode and piece alerts | not even checked while hidden (`BackgroundChecks`, checked again before each post); posted as `Result` |
 | Playback stopped notice (`PlaybackService`) | `Result` |
-| Cast to a TV (`DlnaCastService`): notification and media session | `Ongoing`, and `ProfileMedia`: the app's name only while hidden |
+| Cast to a TV (`DlnaCastService`, both builds): notification and media session | `Ongoing`, and `ProfileMedia`: the app's name only while hidden |
+| Google Cast (regular build, app/src/cast `CastBuild`): the framework's own notification, lock screen and Bluetooth controls, and the TV's screen | with a PIN profile open the item is loaded with the app's name only (`OutsideWrites.castTitles`), from the load on: the framework cannot change a loaded item's titles, so a PIN profile's casts stay neutral even while unlocked; other profiles' casts name the video |
+| The dev build's name dump (app/src/dev `NameDumpService`) | a fixed title, nothing of a profile |
 | External player stream (`ExternalStreams`) | `Ongoing` |
 | Updates, update installed, low storage, the sponsor card | `Device`: unchanged, nothing of a profile in them |
 | Player media session and controls (Media3, `PlayerActivity`) | its own private metadata (the app's name) while hidden or while the app lock asks on open; the player closes on start when `lockedNow()` and before a switch |
