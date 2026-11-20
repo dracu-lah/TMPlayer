@@ -32,7 +32,8 @@ object WatchCache {
         rules ?: context.applicationContext.let { app ->
             WatchCacheRules(
                 settings = SettingsStore(app),
-                filesRoot = { AndroidPaths.cacheDir(app) },
+                // The open profile's own TDLib folder (HX88), never the adopted one's for everyone.
+                filesRoot = { Td.paths?.filesDir ?: AndroidPaths.cacheDir(app) },
                 playing = ::playingNow,
                 rule = { CacheRule.OneVideo },
                 sparePlaying = false,

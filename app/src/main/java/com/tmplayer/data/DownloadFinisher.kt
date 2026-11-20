@@ -134,7 +134,8 @@ class DownloadFinisher(
         // Gone from the cache path already; this keeps TDLib's own figures honest rather than
         // waiting for it to notice. Nothing asks TDLib to stream this file again: the index is
         // asked first everywhere.
-        runCatching { td.deleteFile(fileId) }
+        // Only for the profile whose file it is (HX88).
+        if (runCatching { OwnedSessions.ensure() }.isSuccess) runCatching { td.deleteFile(fileId) }
         return Outcome.Moved(target)
     }
 
@@ -231,7 +232,8 @@ class DownloadFinisher(
         record(request.item().copy(sizeBytes = size), request, uri)
         runCatching { SupportReminder.downloadFinished() }
         runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }
-        runCatching { td.deleteFile(fileId) }
+        // Only for the profile whose file it is (HX88).
+        if (runCatching { OwnedSessions.ensure() }.isSuccess) runCatching { td.deleteFile(fileId) }
         runCatching { source.delete() }
         return Outcome.MovedToTree(uri)
     }

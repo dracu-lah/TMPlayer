@@ -16,7 +16,7 @@ import java.io.File
  */
 class TdSessionPolicyTest {
 
-    private val uses = Regex("""awaitConnectedSessionOrNull\(|awaitConnectedSession\(\)|awaitAuthorizedSession\(\)|Td\.(deleteFile|cancelDownload\w*|myId|downloadFileInBackground|logOut|localDownloadedBytes|currentFileId|trimStorage|dropStalledDownload|clearPicturesAndPreviews)\(""")
+    private val uses = Regex("""awaitConnectedSessionOrNull\(|awaitConnectedSession\(\)|awaitAuthorizedSession\(\)|\b[Tt]d\.(deleteFile|cancelDownload\w*|myId|downloadFileInBackground|logOut|localDownloadedBytes|currentFileId|trimStorage|dropStalledDownload|clearPicturesAndPreviews)\(""")
 
     private val screenRead = "a read for the screen on screen, in the shell keyed on the open profile"
     private val desktop = "the desktop's, bound to its owner in phase B2 (its player and downloads run as the open profile)"
@@ -26,8 +26,10 @@ class TdSessionPolicyTest {
         "app/src/dev/java/com/tmplayer/dev/NameDumpReceiver.kt" to (1 to "the dev build's name dump, a read"),
         "app/src/main/java/com/tmplayer/App.kt" to (2 to "the storage trim after sign in, of the open profile's own cache, and the cache trim at start"),
         "app/src/main/java/com/tmplayer/MainActivity.kt" to (1 to "a press in the shell, keyed on the open profile"),
+        "app/src/main/java/com/tmplayer/data/DownloadFinisher.kt" to (2 to "a finished download's move, in the download service as its owner, checked (OwnedSessions.ensure) before each delete"),
         "app/src/main/java/com/tmplayer/data/DownloadService.kt" to (8 to "a download's cancels and bytes on the live client: the service stops every download of a profile on a switch, and each request carries its stamp"),
         "app/src/main/java/com/tmplayer/data/FolderExport.kt" to (3 to "the removal of a saved copy, checked against its owner right before the delete"),
+        "app/src/main/java/com/tmplayer/data/LegacyDownloads.kt" to (3 to "the one-time move of old downloads after sign in, for the open profile, checked before the delete"),
         "app/src/main/java/com/tmplayer/data/LocalDownloads.kt" to (4 to "deleteAnyKind runs in the background for Remove after watching, as the owner of the mark, and checks it (OwnedSessions.ensure) after the lookup and before the delete; the other uses are the Downloads screen's presses"),
         "app/src/main/java/com/tmplayer/data/RoomOnDisk.kt" to (6 to "Free up space and its measuring, pressed on the screen of the open profile"),
         "app/src/main/java/com/tmplayer/data/StorageSplit.kt" to (4 to "the storage figures of the open profile, a read for the screen on screen"),
@@ -47,9 +49,10 @@ class TdSessionPolicyTest {
         "core/src/commonMain/kotlin/com/tmplayer/data/PageQueries.kt" to (1 to "a chat grid's read; its cache is stamped and dropped on a switch"),
         "core/src/commonMain/kotlin/com/tmplayer/data/ResumeSync.kt" to (2 to "this account's id, read on the owner's own session (sessionFor) inside the owned run"),
         "core/src/commonMain/kotlin/com/tmplayer/data/SavedMessagesBackup.kt" to (1 to "this account's id, read on the owner's session (sessionFor)"),
-        "core/src/commonMain/kotlin/com/tmplayer/data/Td.kt" to (3 to "the waits themselves, and sessionFor over them"),
-        "core/src/commonMain/kotlin/com/tmplayer/data/WatchCacheRules.kt" to (1 to "the watch cache's eviction of the open profile's own cache, from the player that holds it"),
-        "core/src/commonMain/kotlin/com/tmplayer/player/StreamWarmup.kt" to (1 to "warming the next video's bytes, a read the player's closing stops"),
+        "core/src/commonMain/kotlin/com/tmplayer/data/Td.kt" to (6 to "the waits themselves, and sessionFor over them"),
+        "core/src/commonMain/kotlin/com/tmplayer/data/WatchCacheRules.kt" to (4 to "the watch cache's claims, sweep and clear over the open profile's own folder; a sweep or clear stops when the open profile changes (stamp checked before the walk and each delete)"),
+        "core/src/commonMain/kotlin/com/tmplayer/player/StreamWarmup.kt" to (3 to "warming the next video's bytes, a read the player's closing stops"),
+        "core/src/commonMain/kotlin/com/tmplayer/player/TdByteWindow.kt" to (4 to "the player's byte window on its own client, a read that closes with the player"),
         "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopDownloads.kt" to (12 to desktop),
         "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopStorage.kt" to (1 to desktop),
         "desktop/src/main/kotlin/com/tmplayer/desktop/DownloadIndex.kt" to (3 to desktop),

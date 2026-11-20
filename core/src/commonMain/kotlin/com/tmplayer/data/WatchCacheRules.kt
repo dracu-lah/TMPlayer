@@ -74,6 +74,12 @@ class WatchCacheRules(
     private val now: () -> Long = System::currentTimeMillis,
     private val rule: () -> CacheRule = { CacheRule.OneVideo },
     private val sparePlaying: Boolean = true,
+    /**
+     * The open profile's turn (HX88). A sweep or a clear is the open profile's, over [filesRoot]
+     * (its own TDLib folder); it stops the moment another profile is open, before its walk and
+     * before each delete, so it never walks one profile's folder against another's records.
+     */
+    private val stamp: () -> AccountStamp = { Accounts.stamp },
 ) {
     /**
      * Held for the whole of a claim, because stepping through a series overlaps two of them.
@@ -239,6 +245,9 @@ class WatchCacheRules(
      * @return how many bytes went.
      */
     suspend fun sweep(): Long = withContext(Dispatchers.IO) {
+        val owner = stamp()
+        // The folder of the profile this sweep is for, taken now, with its records below.
+        val folder = filesRoot()
         val capped = (rule() as? CacheRule.UnderCap)?.let { evictOverCap(it.capBytes) } ?: 0L
         // A download with a path is in the Downloads folder, not in TDLib's: TDLib was told to let
         // go of it, so it has no path to give, and asking would make the sweep give up every time.
@@ -259,7 +268,11 @@ class WatchCacheRules(
         val open = playing().mapNotNull { runCatching { td.localPathAnyway(it) }.getOrNull() }
         val settled = now() - STRAY_MIN_AGE_MS
         var freed = capped
-        for (stray in strays((accounted + open).toSet())) {
+        // Another profile opened while the records were resolved: its folder and its records are
+        // not this sweep's, and nothing is walked or deleted.
+        if (stamp() != owner) return@withContext capped
+        for (stray in straysIn(folder, (accounted + open).toSet())) {
+            if (stamp() != owner) break
             if (stray.modifiedAt > settled) continue
             if (forget(stray)) freed += stray.bytes
         }
@@ -273,6 +286,7 @@ class WatchCacheRules(
      * @return how many bytes went.
      */
     suspend fun clearAll(): Long = withContext(Dispatchers.IO) {
+        val owner = stamp()
         val kept = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList())
         val keptIds = kept.map { it.fileId }.toSet()
         // On the message too, because one video can hold two file ids.
@@ -281,7 +295,10 @@ class WatchCacheRules(
         val playingNow = if (sparePlaying) playing() else emptySet()
         var freed = 0L
         for (record in runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())) {
+            if (stamp() != owner) return@withContext freed
             val fileId = resolve(record)
+            // After the lookup, which suspends: never the next profile's file of that id.
+            if (stamp() != owner) return@withContext freed
             if (fileId in keptIds || record.fileId in keptIds || fileId in busyNow || fileId in playingNow) continue
             if ((record.chatId to record.messageId) in keptMessages) continue
             freed += deleteAndForget(record, fileId)
