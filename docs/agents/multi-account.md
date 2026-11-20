@@ -225,9 +225,14 @@ given in this process.
 | Surface | Rule |
 | --- | --- |
 | Continue watching widget (phone) | the Locked tile (`ContinueWidget.lockedBy(lock, profileLocked)`) |
-| TV home channels (Android TV) | not published while hidden; cleared when the profile locks again |
-| TV Play next row | cleared when the profile locks again (`WatchNextPublisher.clearAll`) |
-| New video, episode and piece alerts | none posted for a hidden profile, nor for a sleeping one |
+| TV home channels (Android TV) | not published while hidden; cleared whenever `hidden()` is true, its first value included (a cold start with the profile locked), by `OutsideSurfaces` |
+| TV Play next row | cleared with the channels (`WatchNextPublisher.clearAll`) |
+| New video, episode and piece alerts | none posted for a hidden profile (the absence counted when read), nor for a sleeping one |
+
+The background lock is counted where it is read: `hiddenNow()`, `hidden()` and `isUnlocked()`
+treat more than 60 s away (or a clock that went backwards) as locked before any timer ran, and
+`onBackground` also schedules the `lock()` itself, so the listeners and the flows hear it while
+the app is still away.
 | Download notifications | titles of the open profile's own downloads; a switch stops them (open) |
 | Player media session and picture in picture | the player closes before a switch (open: a locked state while playing in the background is not checked) |
 | Recents screenshot | not covered: the app lock's own rule applies (open) |
