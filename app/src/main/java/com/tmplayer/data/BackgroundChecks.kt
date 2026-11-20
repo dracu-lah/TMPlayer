@@ -205,17 +205,17 @@ class BackgroundChecks : JobService() {
                 if (newVideos) {
                     val alert = NewVideoAlerts.check(session.client, settings, allowed)
                     // With the app on screen the lists already show what came in.
-                    if (alert != null && !App.inFront && stamp.isCurrent) postNewVideos(context, alert)
+                    if (alert != null && !App.inFront && stamp.isCurrent && !ProfileUnlock.hiddenNow()) postNewVideos(context, alert)
                 }
                 if (episodes) {
                     val alert = EpisodeAlerts.check(session.client, settings, WatchedStore(context), allowed)
-                    if (alert != null && !App.inFront && stamp.isCurrent && AppNotices.allowed(context, Notice.NewEpisodes)) {
+                    if (alert != null && !App.inFront && stamp.isCurrent && !ProfileUnlock.hiddenNow() && AppNotices.allowed(context, Notice.NewEpisodes)) {
                         AppNotices.postEpisode(context, alert)
                     }
                 }
                 if (pieces) {
                     val alerts = PieceAlerts.check(session.client, settings, allowed, System.currentTimeMillis())
-                    if (!App.inFront && stamp.isCurrent && AppNotices.allowed(context, Notice.MissingPieces)) {
+                    if (!App.inFront && stamp.isCurrent && !ProfileUnlock.hiddenNow() && AppNotices.allowed(context, Notice.MissingPieces)) {
                         alerts.forEachIndexed { index, alert -> AppNotices.postPieces(context, alert, index) }
                     }
                 }

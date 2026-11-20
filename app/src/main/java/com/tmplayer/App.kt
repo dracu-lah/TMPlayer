@@ -240,12 +240,12 @@ class App : Application() {
         // A profile's PIN (HX88): locked again on a switch, the app lock and a long absence, and
         // then its cards come off the TV's home screen, so nothing of it shows outside the app.
         com.tmplayer.data.ProfileUnlock.install()
-        com.tmplayer.data.ProfileUnlock.onLock {
-            if (com.tmplayer.data.ProfileUnlock.hiddenNow() && com.tmplayer.data.FormFactor.isTv(this)) {
-                backgroundScope.launch {
-                    runCatching { com.tmplayer.data.TvChannelsPublisher.clearPrograms(this@App) }
-                    runCatching { com.tmplayer.data.WatchNextPublisher.clearAll(this@App) }
-                }
+        // Its first value too: a cold start with the profile already locked (the process was
+        // killed) clears what an earlier run left on the launcher.
+        if (com.tmplayer.data.FormFactor.isTv(this)) {
+            com.tmplayer.data.OutsideSurfaces.follow(backgroundScope) {
+                runCatching { com.tmplayer.data.TvChannelsPublisher.clearPrograms(this@App) }
+                runCatching { com.tmplayer.data.WatchNextPublisher.clearAll(this@App) }
             }
         }
         OnlineMetadata.current = OnlineMetadata(
