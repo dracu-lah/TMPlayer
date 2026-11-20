@@ -31,6 +31,7 @@ internal object ContinueWidgetViews {
 
     /** [poster] is only drawn on a video tile in the regular layout; anything else gets the plate. */
     fun build(context: Context, tile: Tile, size: Size, poster: Bitmap?): RemoteViews {
+        // profile-notifications: the widget's tile, Locked while the profile is hidden (ContinueWidget.lockedBy)
         val views = RemoteViews(context.packageName, layoutFor(size))
         val regular = size == Size.Regular
         when (tile) {

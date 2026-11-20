@@ -122,6 +122,7 @@ class DlnaCastService : Service() {
     private fun ensureSession() {
         if (session != null) return
         session = runCatching {
+            // profile-notifications: its metadata goes through ProfileMedia
             MediaSession(this, "TMPlayerDlna").apply {
                 setCallback(object : MediaSession.Callback() {
                     override fun onPlay() { Cast.existing()?.play() }

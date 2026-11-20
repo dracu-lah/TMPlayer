@@ -2876,6 +2876,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             val (vlc, source) = built
             vlcEngine = vlc
+            // profile-notifications: sessionMetadata(), private while the profile is hidden
             vlc.mediaItem = androidx.media3.common.MediaItem.Builder().setMediaMetadata(sessionMetadata()).build()
             vlc.player.addListener(playerListener)
             // Asked before it opens, so libVLC is not paused as it starts ([VlcEngine.prepare]).
@@ -4886,6 +4887,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             session.release()
         }
         mediaSession = runCatching {
+            // profile-notifications: its metadata is sessionMetadata(), private while the profile is hidden
             MediaSession.Builder(this, EpisodeStepping(exo))
                 // Distinct per activity instance: stepping to the next episode builds a second
                 // activity before the first has been destroyed, and two sessions sharing an id
@@ -4960,6 +4962,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         subtitleFiles.metadata = metadata
         val exo = playing ?: return
         val playing = exo.currentMediaItem ?: return
+        // profile-notifications: sessionMetadata() above
         runCatching { exo.replaceMediaItem(exo.currentMediaItemIndex, playing.buildUpon().setMediaMetadata(metadata).build()) }
     }
 

@@ -79,4 +79,42 @@ class ProfileNotificationsTest {
         assertEquals("A private video title", shade.getNotification(77).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
         assertTrue(shade.size() >= 1)
     }
+
+    @Test
+    fun `a switch takes down the last profile's notifications, the device's stay`() {
+        ProfileNotifications.post(context, 81, real("Downloaded: a private title"), ProfileNotifications.Kind.Result)
+        ProfileNotifications.post(context, 82, real("An update is ready"), ProfileNotifications.Kind.Device)
+        val shade = shadowOf(manager)
+        ProfileNotifications.leftProfile(context, open = "pnext1")
+        assertNull("the profile left behind its PIN leaves nothing in the shade", shade.getNotification(81))
+        assertEquals("An update is ready", shade.getNotification(82).extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+    }
+
+    @Test
+    fun `signing a profile out takes all of its notifications down`() {
+        ProfileNotifications.post(context, 83, real("A private video title"), ProfileNotifications.Kind.Ongoing)
+        ProfileNotifications.clearProfile(context)
+        assertNull(shadowOf(manager).getNotification(83))
+    }
+
+    @Test
+    fun `the neutral copy is still dismissed on a tap and still says when it is swiped away`() {
+        val delete = android.app.PendingIntent.getBroadcast(context, 1, android.content.Intent("swiped"), android.app.PendingIntent.FLAG_IMMUTABLE)
+        val source = notificationBuilder(context, "t", NotificationManager.IMPORTANCE_LOW)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("A private video title")
+            .setAutoCancel(true)
+            .setDeleteIntent(delete)
+            .build()
+        val neutral = ProfileNotifications.neutral(context, source)
+        assertTrue(neutral.flags and Notification.FLAG_AUTO_CANCEL != 0)
+        assertEquals(delete, neutral.deleteIntent)
+    }
+
+    @Test
+    fun `a cold start with the profile hidden takes down what an earlier process left`() {
+        manager.notify(90, real("Left by the last process"))
+        ProfileNotifications.clearLeftBehind(context)
+        assertNull(shadowOf(manager).getNotification(90))
+    }
 }

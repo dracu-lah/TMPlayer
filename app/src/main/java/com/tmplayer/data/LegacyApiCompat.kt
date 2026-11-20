@@ -21,8 +21,10 @@ import androidx.annotation.ChecksSdkIntAtLeast
  */
 fun notificationBuilder(context: Context, channelId: String, importance: Int): Notification.Builder =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // profile-notifications: the builder factory, it posts nothing
         Notification.Builder(context, channelId)
     } else {
+        // profile-notifications: the builder factory, it posts nothing
         @Suppress("DEPRECATION")
         Notification.Builder(context).apply {
             setPriority(OldAndroid.priorityFor(importance))
