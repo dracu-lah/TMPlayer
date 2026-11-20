@@ -363,6 +363,8 @@ object FolderExport {
                     LocalDownloads.delete(settings, record)
                 } else {
                     val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }.getOrDefault(record.fileId)
+                    // Again after the lookup, which suspends: never another profile's file of that id.
+                    if (!ProfileJobs.mayWrite(owner)) return@runCatching false
                     runCatching { Td.deleteFile(fileId) }
                     val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
                     if (left > 0) {

@@ -47,7 +47,7 @@ object AndroidProfiles {
 internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatform {
 
     /** The player registers its save with [BeforeSwitch] while it is open; a cast or picture in picture counts too. */
-    override fun playing(): Boolean = WatchCache.anyPlaying() || BeforeSwitch.count > 0
+    override fun playing(): Boolean = WatchCache.anyPlaying() || BeforeSwitch.playerCount > 0
 
     override fun downloading(): Boolean = OfflineDownloads.active.value.values.any { it.busy }
 

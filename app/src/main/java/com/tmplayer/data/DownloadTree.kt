@@ -95,13 +95,15 @@ object DownloadTree {
      */
     suspend fun releaseUnused(context: Context, settings: SettingsStore) {
         val keep = runCatching { settings.downloadRootNow() }.getOrDefault("")
-        val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+        // Every profile's downloads (HX88): the grant is the device's, one profile's change never
+        // lets go of a folder another profile's downloads are still in.
+        val paths = runCatching { settings.downloadPathsOfEveryProfileNow() }.getOrDefault(emptyList())
         val held = runCatching { context.contentResolver.persistedUriPermissions.toList() }.getOrDefault(emptyList())
         for (grant in held) {
             val tree = grant.uri.toString()
             if (StoredLocation.kindOf(tree) != StoredLocation.Kind.Tree) continue
             if (tree == keep) continue
-            if (records.any { StoredLocation.documentIsIn(tree, it.localPath.orEmpty()) }) continue
+            if (paths.any { StoredLocation.documentIsIn(tree, it) }) continue
             release(context, grant.uri)
         }
     }

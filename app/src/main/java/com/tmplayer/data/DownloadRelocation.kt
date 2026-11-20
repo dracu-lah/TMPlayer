@@ -365,7 +365,9 @@ object DownloadRelocation {
                     }
                     // The file is whole at its new place and the original gone: its record follows
                     // at once, never cut off by a cancel in between (a switch waits for this).
-                    withContext(NonCancellable) { settings.setDownloadPath(record.chatId, record.messageId, newPath) }
+                    // Addressed to the owner's own record (HX88): even if a switch could not wait for
+                    // this file, its record follows it in the profile it belongs to.
+                    withContext(NonCancellable + AccountAddress(owner.folder)) { settings.setDownloadPath(record.chatId, record.messageId, newPath) }
                     movedCount++
                 } catch (e: Exception) {
                     // A cancel is not a failure: it stops the move here, between files.

@@ -2030,7 +2030,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // ends the process: the place is written first (HX5).
         com.tmplayer.data.SelfInstaller.addBeforeInstall(saveBeforeInstall)
         // A profile switch (HX88) saves the place here, for this profile, and closes the player.
-        com.tmplayer.data.BeforeSwitch.add(stopBeforeSwitch)
+        com.tmplayer.data.BeforeSwitch.addPlayer(stopBeforeSwitch)
         // A PIN profile's video stays out of the recents screen (HX88).
         com.tmplayer.ui.profiles.SecureWindow.follow(this)
         // Before the first layout pass, on purpose: a window that turns after it has drawn is a
@@ -10585,7 +10585,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         endTranslations()
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
-        com.tmplayer.data.BeforeSwitch.remove(stopBeforeSwitch)
+        com.tmplayer.data.BeforeSwitch.removePlayer(stopBeforeSwitch)
         loopHandler.removeCallbacks(watchTick)
         remedies.stop()
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
