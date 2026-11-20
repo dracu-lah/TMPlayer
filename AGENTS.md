@@ -20,6 +20,7 @@ Where the rest lives, read when the task touches it:
 | Screenshots (WebP, quality 88, convert command) | [docs/agents/screenshots.md](docs/agents/screenshots.md) |
 | Onboarding pictures and tour badges | [docs/agents/onboarding-pictures.md](docs/agents/onboarding-pictures.md) |
 | Branches and worktrees tidy-up | [docs/agents/branches.md](docs/agents/branches.md) |
+| Multi-account profiles: what is per account, the single live client, switching | [docs/agents/multi-account.md](docs/agents/multi-account.md) |
 | Local checks before a push, what GitHub CI still runs, nightly | [docs/agents/CI-LOCAL-PLAN.md](docs/agents/CI-LOCAL-PLAN.md) |
 
 ## Token budget and publishing
