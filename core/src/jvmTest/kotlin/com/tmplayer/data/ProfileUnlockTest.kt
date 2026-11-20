@@ -121,6 +121,30 @@ class ProfileUnlockTest {
     }
 
     @Test
+    fun `nothing is written outside the app while hidden or for a profile no longer open, a removal always is`() {
+        val now = AccountStamp(3L, "pa")
+        assertTrue(OutsideWrites.mayWrite(hidden = false, stamp = now, current = now))
+        assertTrue(OutsideWrites.mayWrite(hidden = false, stamp = null, current = now))
+        assertFalse(OutsideWrites.mayWrite(hidden = true, stamp = now, current = now))
+        assertFalse("the profile it was made for is closed", OutsideWrites.mayWrite(hidden = false, stamp = AccountStamp(2L, null), current = now))
+        assertTrue(OutsideWrites.mayWrite(hidden = true, stamp = AccountStamp(2L, null), current = now, removing = true))
+        assertTrue(OutsideWrites.secureWindow(openHasPin = true))
+        assertFalse(OutsideWrites.secureWindow(openHasPin = false))
+    }
+
+    @Test
+    fun `the player's write after leaving the screen comes after the clear and is refused`() {
+        val own = lockedBookUnlocked()
+        assertTrue(OutsideWrites.mayWriteNow(Accounts.stamp))
+        // The player's onStop: the app leaves the screen first (the clear), then it publishes.
+        ProfileUnlock.onBackground(lockAfterMs = 600_000L)
+        assertFalse(OutsideWrites.mayWriteNow(Accounts.stamp))
+        ProfileUnlock.onForeground()
+        assertTrue(OutsideWrites.mayWriteNow(Accounts.stamp))
+        assertTrue(ProfileUnlock.isUnlocked(own.list.value.activeId))
+    }
+
+    @Test
     fun `a profile with no PIN is never hidden`() {
         val own = AccountBook(AccountStore(File(Files.createTempDirectory("unlock3").toFile(), Accounts.FILE_NAME)))
         Accounts.resetForTest(own)

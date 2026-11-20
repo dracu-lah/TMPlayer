@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 /**
  * Whether the open profile's PIN was given (HX88), for the process, in memory only: never saved,
@@ -143,5 +144,32 @@ object ProfileUnlock {
         open.value = null
         leftAt = -1L
         away.value = false
+    }
+}
+
+/**
+ * The one rule every writer to a surface outside the app obeys (HX88): the launcher's Play next
+ * row and channels, notifications with titles. Nothing of a profile is written while it is hidden
+ * ([ProfileUnlock.hiddenNow]) or once its turn is over ([stamp] no longer [Accounts.stamp]);
+ * taking an entry away is always allowed.
+ */
+object OutsideWrites {
+    fun mayWrite(hidden: Boolean, stamp: AccountStamp?, current: AccountStamp, removing: Boolean = false): Boolean =
+        removing || (!hidden && (stamp == null || stamp == current))
+
+    /** [mayWrite] for the profile and the moment now. */
+    fun mayWriteNow(stamp: AccountStamp? = null, removing: Boolean = false): Boolean =
+        mayWrite(ProfileUnlock.hiddenNow(), stamp, Accounts.stamp, removing)
+
+    /**
+     * Whether a window showing the open profile keeps out of the recents thumbnail (and, below
+     * Android 13, of screenshots): only while the open profile has a PIN, never otherwise.
+     */
+    fun secureWindow(openHasPin: Boolean): Boolean = openHasPin
+
+    /** Whether the open profile has a PIN, as it changes. */
+    fun openHasPin(): Flow<Boolean> {
+        val book = Accounts.book ?: return flowOf(false)
+        return book.list.map { it.active?.pin != null }.distinctUntilChanged()
     }
 }
