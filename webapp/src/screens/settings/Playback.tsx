@@ -47,7 +47,7 @@ function SubmakerBlock() {
         } else setInvalid(true)
     }
     return (
-        <form class="set-block" id={rowDomId('submaker')} onSubmit={save} autocomplete="off">
+        <form class="set-block" id={rowDomId('submaker_base')} onSubmit={save} autocomplete="off">
             <h3 class="set-block-title" id="submaker-label">{t('submaker.settings_title')}</h3>
             <p class="muted small">{t('submaker.settings_message')}</p>
             <p class="set-sub" role="status">{submakerSet() ? t('submaker.settings_set') : t('submaker.settings_none')}</p>

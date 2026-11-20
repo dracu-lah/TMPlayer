@@ -71,9 +71,9 @@ test('the apps rows are searched only among the ones this page draws', () => {
     assert.ok(!phone.some((x) => x.id === 'msone'))
     assert.ok(!phone.some((x) => x.id === 'layout'), 'a phone has no Layout')
     const only = phone.filter((x) => x.core).map((x) => x.id)
-    // The map has subtitle rows the web does not draw: they never come back.
-    assert.deepEqual(r.settingsSearch('subtitle', 'phone', only), [])
-    assert.ok(r.settingsSearch('subtitle', 'phone', null).length > 0)
+    // The map has subtitle rows (the SubDL key) the web does not draw: they never come back.
+    assert.deepEqual(r.settingsSearch('subdl', 'phone', only), [])
+    assert.ok(r.settingsSearch('subdl', 'phone', null).length > 0)
 })
 
 test('a form takes the rows it has: layout not on a phone or a fixed layout, nothing on a TV', () => {

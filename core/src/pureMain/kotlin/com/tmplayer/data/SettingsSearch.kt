@@ -138,6 +138,12 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     /** "Check it under Settings, Online subtitles" for a SubDL key refused. */
     SubdlRefused("online.notice_subdl_refused", SettingsGroup.Subtitles, "subdl_key", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
+    /** "Add your SubMaker address under Settings, Online subtitles" when none is set. */
+    SubMakerOff("submaker.off", SettingsGroup.Subtitles, "submaker_base", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+
+    /** "SubMaker didn't accept your address. Check it under Settings, Online subtitles". */
+    SubMakerRejected("submaker.rejected", SettingsGroup.Subtitles, "submaker_base", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+
     /** The kids lock's empty Chats: "Choose them in Settings, App lock". */
     KidsEmpty("lock.kids_empty", SettingsGroup.Account, "allowed_chats", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
