@@ -69,9 +69,13 @@ class WatchedStore(private val store: DataStore<Preferences>) {
      * later card left behind for a copy would offer a finished video again.
      */
     suspend fun markWatched(record: WatchedRecord, copies: List<MediaItem> = emptyList()) {
+        var fresh = false
         store.edit { prefs ->
             val key = keyOf(record.chatId, record.messageId)
             val before = WatchedRecord.decode(record.key, prefs[key])
+            // Only a video not marked before is newly watched: a replay of one already watched,
+            // or leaving it past the end again, keeps its download (as the setting has always said).
+            fresh = before == null
             val kept = if (before?.manual == true && !record.manual) record.copy(manual = true) else record
             prefs[key] = kept.encode()
             SyncRemovals.forgetWatched(prefs, record.key)
@@ -81,7 +85,7 @@ class WatchedStore(private val store: DataStore<Preferences>) {
         }
         // A mark made here, now, for the profile it was written for: what "Remove after
         // watching" acts on, and nothing else is (HX88).
-        noteMarked(setOf(record.key))
+        if (fresh) noteMarked(setOf(record.key))
         // The player saw it through to the end: a good moment, and a finished watch for the
         // support ladder. A manual mark is neither.
         if (!record.manual) SupportReminder.watchFinished(record.key)

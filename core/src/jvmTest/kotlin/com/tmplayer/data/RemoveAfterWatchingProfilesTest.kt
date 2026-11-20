@@ -140,4 +140,20 @@ class RemoveAfterWatchingProfilesTest {
         assertEquals(setOf(key(9)), mark!!.keys)
         assertEquals(Accounts.stamp, mark.owner)
     }
+
+    @Test
+    fun `replaying a video already watched, or leaving it past the end again, raises no mark and keeps its download`() = runBlocking {
+        val watched = store()
+        assertNotNull("the first completion is a mark", firstMarkWithin(2_000L) { watched.markWatched(record(11).copy(manual = false)) })
+        assertNull("watched again: no mark", firstMarkWithin(500L) { watched.markWatched(record(11).copy(manual = false)) })
+        assertNull("marked by hand after: no mark", firstMarkWithin(500L) { watched.markWatched(record(11)) })
+    }
+
+    @Test
+    fun `a mark written for a profile no longer open raises nothing`() = runBlocking {
+        val watched = store()
+        val stale = AccountStamp(Long.MAX_VALUE, "pgone1")
+        val mark = firstMarkWithin(500L) { kotlinx.coroutines.withContext(AccountOwner(stale)) { watched.markWatched(record(12)) } }
+        assertNull(mark)
+    }
 }

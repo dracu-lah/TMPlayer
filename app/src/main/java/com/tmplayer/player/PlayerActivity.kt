@@ -9281,7 +9281,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (item.chatId == 0L || item.messageId == 0L) return
         val store = watchedStore
         val title = chatTitle
-        App.backgroundScope.launch {
+        track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) {
             runCatching {
                 if (store.isWatched(item.chatId, item.messageId)) {
                     store.markUnwatched(item.chatId, item.messageId)
@@ -9290,7 +9290,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     settings.clearResumePosition(item.chatId, item.messageId, item)
                 }
             }
-        }
+        })
     }
 
     /** The list's autoplay switch: the same setting Settings shows. */
@@ -10705,6 +10705,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private val stopBeforeSwitch: suspend () -> Unit = {
         withContext(Dispatchers.Main) { saveResumePosition(leaving = true) }?.join()
+        // And every watched mark of this player still under way: written for this profile first.
+        for (job in markJobs.toList()) job.join()
         withContext(Dispatchers.Main) {
             // Written already: the close must not write again, for the next profile.
             savedForHandOver = true
@@ -10831,7 +10833,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         onWatchedList = true
         val record = watchedRecord(manual = false)
         val store = watchedStore
-        App.backgroundScope.launch { runCatching { store.markWatched(record) } }
+        // As the profile this player opened under (HX88): a late mark never lands in the next
+        // profile's list, and a switch waits for it ([stopBeforeSwitch]).
+        track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) { runCatching { store.markWatched(record) } })
+    }
+
+    /** The watched writes of this player still under way, which a switch waits for. */
+    private val markJobs = java.util.concurrent.CopyOnWriteArrayList<kotlinx.coroutines.Job>()
+
+    private fun track(job: kotlinx.coroutines.Job) {
+        markJobs += job
+        job.invokeOnCompletion { markJobs -= job }
     }
 
     /** The menus' "Mark as watched" and "Mark as unwatched". */
@@ -10843,18 +10855,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (onWatchedList) {
             onWatchedList = false
             markedWatchedHere = false
-            App.backgroundScope.launch { runCatching { store.markUnwatched(chat, message) } }
+            track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) { runCatching { store.markUnwatched(chat, message) } })
             showGestureFeedback(L.playerMarkedUnwatched)
         } else {
             onWatchedList = true
             markedWatchedHere = true
             val record = watchedRecord(manual = true)
-            App.backgroundScope.launch {
+            val item = currentItem()
+            track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) {
                 runCatching {
                     store.markWatched(record)
-                    settings.clearResumePosition(chat, message, currentItem())
+                    settings.clearResumePosition(chat, message, item)
                 }
-            }
+            })
             showGestureFeedback(L.playerMarkedWatched)
         }
     }
