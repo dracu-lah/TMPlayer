@@ -22,6 +22,18 @@ class ChatGridDisk(private val base: File) : GridStore {
     /** The open profile's file. */
     private val file: File get() = Accounts.scopedFile(base)
 
+    init {
+        // A removed profile's listings go with its folders (HX88): "" is the adopted profile's own file.
+        Accounts.onPurge { folder ->
+            val doomed = Accounts.scopedFile(base, folder.ifEmpty { null })
+            synchronized(this) {
+                runCatching { doomed.delete() }
+                runCatching { File(doomed.path + ".tmp").delete() }
+                if (written?.first == doomed) written = null
+            }
+        }
+    }
+
     override fun load(): List<SavedGrid> =
         runCatching { file.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull().orEmpty()
 

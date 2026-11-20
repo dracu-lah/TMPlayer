@@ -305,7 +305,8 @@ object Accounts {
         synchronized(purgers) { purgers += block }
     }
 
-    private suspend fun purge(folder: String) {
+    /** Every purger ([onPurge]) for the profile on [folder]; the book's sweep calls it. */
+    internal suspend fun purge(folder: String) {
         for (each in synchronized(purgers) { purgers.toList() }) each(folder)
     }
 

@@ -34,6 +34,19 @@ object HomeCache {
     @Volatile
     var file: File? = null
 
+    init {
+        // A removed profile's copy goes with its folders (HX88): "" is the adopted profile's own name.
+        Accounts.onPurge { folder ->
+            val base = file ?: return@onPurge
+            val doomed = Accounts.scopedFile(base, folder.ifEmpty { null })
+            synchronized(this) {
+                runCatching { doomed.delete() }
+                runCatching { File(doomed.path + ".tmp").delete() }
+                if (readFor?.folder == folder.ifEmpty { null }) readFor = null
+            }
+        }
+    }
+
     /** What Home had, ready to draw. */
     data class Snapshot(
         val loaded: Map<Long, List<MediaItem>>,
