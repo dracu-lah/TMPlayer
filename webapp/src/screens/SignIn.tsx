@@ -3,6 +3,8 @@ import { renderSVG } from 'uqr'
 import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { sessionEnded, signedIn } from '../session'
+import { many, openPicker } from '../accounts'
+import { addingHere, cancelAdding } from '../accountFlows'
 import { form } from '../form'
 import { clock, t } from '../i18n'
 import { failure } from '../errors'
@@ -579,6 +581,11 @@ export function SignIn() {
                     )}
                 </Match>
             </Switch>
+
+            {/* Profiles (HX88): the sign in of an account being added goes back; another profile is a choice away. */}
+            <Show when={addingHere()} fallback={<Show when={many()}><button class="link alt" type="button" onClick={openPicker}>{t('accounts.switch')}</button></Show>}>
+                <button class="link alt" type="button" onClick={() => void cancelAdding()}>{t('accounts.add_cancel')}</button>
+            </Show>
 
             <SignInFooter />
 

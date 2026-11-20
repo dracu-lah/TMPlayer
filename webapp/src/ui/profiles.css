@@ -1,0 +1,88 @@
+/* "Who's watching?" (Profiles.tsx): a screen of its own over the page, the profiles as round pictures
+   in a row that wraps, the name under each, Add account last. Borders, not shadows; the focus is a
+   ring and a small lift, the same on every form. Sizes scale with --dp on the TV. */
+.profiles {
+  position: fixed; inset: 0; z-index: 30; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--bg); color: var(--fg); text-align: center;
+}
+.profiles h1 { font-size: 28px; line-height: 36px; font-weight: 500; margin: 0; }
+.profiles-mark { width: 48px; height: 48px; }
+.profiles-close { position: absolute; top: max(16px, env(safe-area-inset-top)); inset-inline-end: max(16px, env(safe-area-inset-right)); }
+.profiles-hint, .profiles-limit { margin: 0; max-width: 420px; }
+.profile-row {
+  list-style: none; margin: 8px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 20px 24px; max-width: 720px;
+}
+.profile-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; width: 132px; padding: 8px 4px; min-height: 44px;
+  background: none; border: 0; border-radius: var(--r-l); color: var(--fg); font: inherit; cursor: pointer;
+}
+.profile-avatar {
+  position: relative; display: grid; place-items: center; width: 112px; height: 112px; border-radius: 50%;
+  border: 2px solid var(--line); background: var(--surface); overflow: visible;
+  transition: transform var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.profile-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.profile-avatar .profile-initial { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; font-size: 44px; font-weight: 500; }
+.profile-lock {
+  position: absolute; inset-block-end: 0; inset-inline-end: 0; display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 50%; background: var(--menu); border: 1px solid var(--line); color: var(--fg);
+}
+.profile-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 20px; }
+.profile-note { font-size: 12px; line-height: 16px; color: var(--muted); }
+.profile-note.warn { color: var(--caution); }
+.profile-tile.attention .profile-avatar { border-color: var(--caution); border-style: dashed; }
+.profile-tile.editing .profile-avatar { border-style: dashed; }
+.profile-tile[aria-current="true"] .profile-avatar { border-color: var(--accent); }
+.profile-add .profile-avatar { color: var(--muted); border-style: dashed; }
+.profile-tile:focus-visible { outline: none; }
+.profile-tile:focus-visible .profile-avatar { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); transform: scale(1.04); }
+.profile-tile:active .profile-avatar { transform: scale(.96); }
+.profiles-manage { margin-top: 8px; }
+
+/* Its options, the name and the PIN: the shared question's look. */
+.profile-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.profile-actions .outline-button, .profile-actions .danger-button, .profile-actions .primary { min-height: 44px; justify-content: center; }
+.profile-rename { display: flex; flex-direction: column; gap: 16px; }
+.profile-rename input { min-height: 44px; }
+.pin-dialog { align-items: center; text-align: center; }
+.pin-dialog .confirm-buttons { flex-wrap: wrap; justify-content: center; }
+.pin-dots { display: flex; gap: 14px; justify-content: center; padding: 4px 0; }
+.pin-dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--fg); }
+.pin-dots span.filled { background: var(--fg); }
+.pin-line { min-height: 20px; margin: 0; font-size: 14px; }
+.pin-line.error { color: var(--error); }
+.pin-pad .keypad { display: grid; grid-template-columns: repeat(3, 64px); gap: 8px; justify-content: center; }
+.pin-pad .keypad .key {
+  height: 52px; border-radius: var(--r-m); border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  font: inherit; font-size: 20px; display: grid; place-items: center; cursor: pointer;
+}
+.pin-pad .keypad .key:active { transform: scale(.94); }
+.pin-pad.held { opacity: .5; pointer-events: none; }
+/* The settings' profile menu under the account. */
+.set-profiles { margin: 4px 16px 0; align-self: flex-start; }
+
+@media (max-width: 420px) {
+  .profile-row { gap: 16px; }
+  .profile-tile { width: 108px; }
+  .profile-avatar { width: 88px; height: 88px; }
+  .profile-avatar .profile-initial { font-size: 34px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-avatar { transition: none; }
+  .profile-tile:focus-visible .profile-avatar, .profile-tile:active .profile-avatar { transform: none; }
+}
+
+/* The TV: the remote's ring on the focused picture, everything by --dp. */
+html[data-form=tv] .profiles { gap: calc(var(--dp) * 20); }
+html[data-form=tv] .profiles h1 { font-size: calc(var(--dp) * 32); line-height: calc(var(--dp) * 40); }
+html[data-form=tv] .profile-row { gap: calc(var(--dp) * 28); max-width: none; }
+html[data-form=tv] .profile-tile { width: calc(var(--dp) * 150); padding: calc(var(--dp) * 8); }
+html[data-form=tv] .profile-avatar { width: calc(var(--dp) * 128); height: calc(var(--dp) * 128); }
+html[data-form=tv] .profile-avatar .profile-initial { font-size: calc(var(--dp) * 48); }
+html[data-form=tv] .profile-name { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 22); }
+html[data-form=tv][data-tv-keys] .profile-tile:focus { outline: none; }
+html[data-form=tv][data-tv-keys] .profile-tile:focus .profile-avatar { border-color: var(--accent); box-shadow: 0 0 0 calc(var(--dp) * 4) var(--accent); transform: scale(var(--focus-scale, 1.06)); }
+html[data-form=tv] .pin-pad .keypad { grid-template-columns: repeat(3, calc(var(--dp) * 56)); }

@@ -97,7 +97,8 @@ function scope(): Element {
         }
     })
     if (modal) return modal
-    const other = document.querySelector('.other-tab')
+    // Another tab holds the session, or "Who's watching?" (HX88) is up: a screen of its own.
+    const other = document.querySelector('.other-tab') ?? document.querySelector('.profiles')
     if (other) return other
     // A menu that is open (the player keeps its own, hidden, in the page).
     const menu = [...document.querySelectorAll('[role=menu]')].find((m) => m.getClientRects().length && !m.closest('[hidden], .player'))
@@ -210,7 +211,7 @@ export function reveal(el: Element) {
         if (r.right > s.right - padR) strip.scrollLeft += r.right - (s.right - padR)
         else if (r.left < s.left + padL) strip.scrollLeft -= s.left + padL - r.left
     }
-    if (inBar(el) || el.closest('dialog, [role=menu], .other-tab, .update-notice, .offline-line, [data-tv-reach]')) return
+    if (inBar(el) || el.closest('dialog, [role=menu], .other-tab, .profiles, .update-notice, .offline-line, [data-tv-reach]')) return
     if (el.closest('[data-tv-top]')) {
         if (scrollY) scrollTo({ top: 0, behavior: 'instant' })
         return
@@ -533,6 +534,13 @@ export function createFocusMap(host: Host) {
             return true
         }
         if (within.matches?.('.other-tab')) return false
+        // The picker opened from the menu closes, as its own Close; at launch Back leaves the app as from Home.
+        if (within.matches?.('.profiles')) {
+            const close = within.querySelector<HTMLElement>('[data-picker-close]')
+            if (!close) return false
+            close.click()
+            return true
+        }
         const path = host.path()
         if (path.startsWith('/watch/')) {
             // Escape is the player's own; the remote's Back keys close it the same way.

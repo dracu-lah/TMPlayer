@@ -15,6 +15,7 @@ import { HOME_SWITCHES, HomeOrder } from './Home'
 import { LanguageBlock } from './Language'
 import { Rewind, TvMsone } from './Playback'
 import { SignOut } from './SignOut'
+import { ProfileMenuButton, RemoveAllButton } from '../../ui/Profiles'
 import { Install, StorageBlock } from './Storage'
 import { chosenDetail, LayoutChoices, LICENCES, ThemeChoices } from './shared'
 
@@ -76,7 +77,9 @@ export function TvSettings() {
                 </Show>
                 <p class="muted small">{t('auth.unofficial')}</p>
                 <a class="link" href="https://tmplayer.org/legal" target="_blank" rel="noopener">{t('login.legal')}</a>
+                <ProfileMenuButton />
                 <SignOut />
+                <RemoveAllButton />
             </div>
             <TvPanel title={t('feedback.title')} id="feedback-label" anchor={rowDomId('report_problem')}>
                 <p class="muted small">{t('feedback.tv_phone_hint')}</p>

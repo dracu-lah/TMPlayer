@@ -1,8 +1,10 @@
-import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type ParentProps } from 'solid-js'
+import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Suspense, Switch, type ParentProps } from 'solid-js'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online, unreachable, watchReach } from './net'
 import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
+import { picker } from './accounts'
+import { afterSessionRead, attachSignedIn, cleanStaleProfiles, sessionUnreadable, showCarriedNotice } from './accountFlows'
 import { loadSubmaker } from './submakerBase'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
 import { openSync, stopSync } from './sync'
@@ -52,6 +54,8 @@ const later = [loadChats, loadChat, loadChatInfo, loadSearch, loadRecent, loadSe
 const loadTv = () => import('./tv')
 const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
 const TvBar = lazy(() => loadTv().then((m) => ({ default: m.TvBar })))
+// "Who's watching?" (HX88): only fetched where a browser has profiles to choose from.
+const Profiles = lazy(() => import('./ui/Profiles').then((m) => ({ default: m.Profiles })))
 
 /** The pages the chats gate leaves alone: signing in, and the gate's own two. */
 const GATE_FREE = ['/signin', '/setup/chats', '/added-chats']
@@ -75,12 +79,28 @@ function Shell(props: ParentProps) {
     watchReach(() => !!me() && sessionHere() === 'here')
 
     onMount(async () => {
+        // A line a reload carried over (a profile signed out, the same account twice), and profiles a closed tab left half added.
+        showCarriedNotice()
+        void cleanStaleProfiles()
         try {
+            // At launch with profiles to choose from, the session is read once one is chosen (rpc.openSession).
             const [user] = await Promise.all([api.me(), loadSettings(), loadSubmaker()])
+            const next = await afterSessionRead(user)
+            if (next === 'leaving') return
+            if (next === 'signedOut') return void setMe(null)
             setMe(user)
             // The saved session is used at once; Telegram's answer follows, and says when it was ended elsewhere.
-            if (user) api.whoami().then((u) => void (u ? setMe(u) : sessionEndedElsewhere()), () => {})
+            if (user)
+                api.whoami().then(
+                    async (u) => {
+                        if (!u) return sessionEndedElsewhere()
+                        if (await attachSignedIn(u)) setMe(u)
+                    },
+                    () => {},
+                )
         } catch (e) {
+            // With other profiles, this one needs attention and the picker opens over the error.
+            sessionUnreadable()
             setError(errorText(e))
         }
     })
@@ -158,7 +178,7 @@ function Shell(props: ParentProps) {
                 </Match>
                 <Match when={me() === null && location.pathname === '/signin'}>{props.children}</Match>
                 <Match when={signedIn()}>
-                    <main class="page" classList={{ playing: playing(), bleed: detail() }}>
+                    <main class="page" classList={{ playing: playing(), bleed: detail() }} inert={picker() ? true : undefined}>
                         <ErrorBoundary
                             fallback={(e, reset) => (
                                 <div class="boot">
@@ -183,6 +203,11 @@ function Shell(props: ParentProps) {
                 <Show when={!online()} fallback={<Show when={unreachable()} fallback={<UpdateNotice />}><ReachBanner /></Show>}>
                     <p class="offline-line" role="status">{t('web.offline')}</p>
                 </Show>
+            </Show>
+            <Show when={picker()}>
+                <Suspense>
+                    <Profiles />
+                </Suspense>
             </Show>
             <Toaster />
             <CardMenu />

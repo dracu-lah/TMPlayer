@@ -19,6 +19,7 @@ import { LanguageBlock } from './settings/Language'
 import { Playback } from './settings/Playback'
 import { Privacy } from './settings/Privacy'
 import { SignOut } from './settings/SignOut'
+import { ProfileMenuButton, RemoveAllButton } from '../ui/Profiles'
 import { LayoutChoices, ThemeChoices } from './settings/shared'
 import { StoragePage } from './settings/Storage'
 import { Support } from './settings/Support'
@@ -169,6 +170,7 @@ function PageList(props: { selected: PageId | null }) {
                 </div>
             </Show>
             <SignOut />
+            <RemoveAllButton />
             <p class="muted small set-foot">{t('auth.unofficial')}</p>
         </nav>
     )
@@ -187,6 +189,7 @@ function AccountHeader() {
                     </Show>
                 </span>
             </div>
+            <ProfileMenuButton />
         </Show>
     )
 }
