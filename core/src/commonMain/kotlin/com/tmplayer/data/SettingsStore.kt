@@ -66,6 +66,16 @@ private val RESUME_SYNC_AT = longPreferencesKey("resume_sync_at")
 private val RESUME_SYNC_ACCOUNT = longPreferencesKey("resume_sync_account")
 private val RESUME_SYNC_SENT_AT = longPreferencesKey("resume_sync_sent_at")
 private val RESUME_SYNC_STATUS = stringPreferencesKey("resume_sync_status")
+// HX87, where the sync file and the backups are kept: the private channel the viewer chose (0 is
+// Saved Messages), its title, whose account chose it, why it is not used right now, which chat the
+// remembered file message and the last new file belong to, and where an older copy was left.
+private val SYNC_CHANNEL = longPreferencesKey("sync_channel")
+private val SYNC_CHANNEL_TITLE = stringPreferencesKey("sync_channel_title")
+private val SYNC_CHANNEL_ACCOUNT = longPreferencesKey("sync_channel_account")
+private val SYNC_CHANNEL_BLOCK = stringPreferencesKey("sync_channel_block")
+private val SYNC_FILE_CHAT = longPreferencesKey("sync_file_chat")
+private val SYNC_SENT_CHAT = longPreferencesKey("sync_sent_chat")
+private val SYNC_OLD_COPY = stringPreferencesKey("sync_old_copy")
 // "Keep my place on all my devices": the Home card that asks once (answered or left), and when this
 // device last wrote the file, so a restart does not start the few minutes' pause over.
 private val KEEP_PLACE_CARD_SEEN = booleanPreferencesKey("keep_place_card_seen")
@@ -407,6 +417,7 @@ private fun downloadKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("dl_${chatId}_$messageId")
 
 /** The same line again for a video nobody asked to keep, which playing one leaves behind. */
+private const val SYNC_TITLE_MAX = 120
 private const val CACHED_PREFIX = "wc_"
 private const val SETUP_PENDING = "pending"
 private const val SETUP_DONE = "done"
@@ -1156,6 +1167,64 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setResumeSyncSentAt(at: Long) {
         prefs.edit { it[RESUME_SYNC_SENT_AT] = at }
+    }
+
+    /** The private channel chosen for the sync file and backups (HX87); null is Saved Messages. */
+    val syncChannel: Flow<SyncChannelChoice?> = read { decodeSyncChannel(it) }
+
+    suspend fun syncChannelNow(): SyncChannelChoice? = decodeSyncChannel(prefs.data.first())
+
+    private fun decodeSyncChannel(p: Preferences): SyncChannelChoice? {
+        val chat = p[SYNC_CHANNEL] ?: return null
+        if (chat == 0L) return null
+        return SyncChannelChoice(chat, p[SYNC_CHANNEL_TITLE].orEmpty(), p[SYNC_CHANNEL_ACCOUNT] ?: 0L)
+    }
+
+    /**
+     * Chooses the channel, or Saved Messages for null, in one edit. The block that was shown for
+     * the old choice goes with it.
+     */
+    suspend fun setSyncChannel(choice: SyncChannelChoice?) {
+        prefs.edit {
+            if (choice == null) {
+                it.remove(SYNC_CHANNEL)
+                it.remove(SYNC_CHANNEL_TITLE)
+                it.remove(SYNC_CHANNEL_ACCOUNT)
+            } else {
+                it[SYNC_CHANNEL] = choice.chatId
+                it[SYNC_CHANNEL_TITLE] = choice.title.take(SYNC_TITLE_MAX)
+                it[SYNC_CHANNEL_ACCOUNT] = choice.account
+            }
+            it.remove(SYNC_CHANNEL_BLOCK)
+        }
+    }
+
+    /** Why the chosen channel is not used now; null when it is, or none is chosen. */
+    val syncChannelBlock: Flow<SyncChannelBlock?> = read { SyncChannelBlock.decode(it[SYNC_CHANNEL_BLOCK]) }
+
+    suspend fun setSyncChannelBlock(block: SyncChannelBlock?) {
+        prefs.edit { if (block == null) it.remove(SYNC_CHANNEL_BLOCK) else it[SYNC_CHANNEL_BLOCK] = block.encode() }
+    }
+
+    /** The chat the remembered sync file message is in; 0 before it is known (Saved Messages, as before HX87). */
+    suspend fun syncFileChatNow(): Long = prefs.data.first()[SYNC_FILE_CHAT] ?: 0L
+
+    suspend fun setSyncFileChat(chatId: Long) {
+        prefs.edit { it[SYNC_FILE_CHAT] = chatId }
+    }
+
+    /** The chat the last new sync file was sent to, so the pause after sending holds for that chat only. */
+    suspend fun syncSentChatNow(): Long = prefs.data.first()[SYNC_SENT_CHAT] ?: 0L
+
+    suspend fun setSyncSentChat(chatId: Long) {
+        prefs.edit { it[SYNC_SENT_CHAT] = chatId }
+    }
+
+    /** Where an older copy of the sync file was left after the viewer moved it ("" for none). */
+    val syncOldCopy: Flow<String> = read { it[SYNC_OLD_COPY].orEmpty() }
+
+    suspend fun setSyncOldCopy(place: String) {
+        prefs.edit { if (place.isBlank()) it.remove(SYNC_OLD_COPY) else it[SYNC_OLD_COPY] = place.take(SYNC_TITLE_MAX) }
     }
 
     /** What the last sync came to, for the Settings row; null before the first or on a line it cannot read. */
