@@ -348,6 +348,8 @@ fun SettingsScreen(
     val resumeSyncStatus by settings.resumeSyncStatus.collectAsStateWithLifecycle(initialValue = null)
     val resumeSyncAt by settings.resumeSyncAt.collectAsStateWithLifecycle(initialValue = 0L)
     val resumeSyncRunning by com.tmplayer.data.ResumeSync.running.collectAsStateWithLifecycle()
+    val syncChannel by settings.syncChannel.collectAsStateWithLifecycle(initialValue = null)
+    val syncChannelBlock by settings.syncChannelBlock.collectAsStateWithLifecycle(initialValue = null)
     val mobileData by settings.mobileData.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.MobileData.Ask)
     val trickplayOn by settings.trickplay.collectAsStateWithLifecycle(initialValue = true)
     val watchNextOn by settings.watchNext.collectAsStateWithLifecycle(initialValue = false)
@@ -495,7 +497,7 @@ fun SettingsScreen(
                     appVersion = com.tmplayer.BuildConfig.VERSION_NAME,
                     bookmarks = com.tmplayer.data.BookmarkStore(context),
                 )
-                val result = com.tmplayer.data.SignOutBackup.save({ service.export() }, service.fileName())
+                val result = com.tmplayer.data.SignOutBackup.save({ service.export() }, service.fileName(), settings = settings)
                 if (result is com.tmplayer.data.BackupSend.Failed) {
                     prompt = Prompt.SignOutBackupFailed(result.reason)
                     return@launch
@@ -526,6 +528,10 @@ fun SettingsScreen(
     var devicesOpen by rememberSaveable { mutableStateOf(false) }
     var devicesClosed by remember { mutableStateOf(false) }
     val devicesFocus = remember { FocusRequester() }
+    // Where the sync file and backups are kept (HX87): its page, over Settings while it is open.
+    var syncChannelOpen by rememberSaveable { mutableStateOf(false) }
+    var syncChannelClosed by remember { mutableStateOf(false) }
+    val syncChannelFocus = remember { FocusRequester() }
     // A fresh scroll position for every page opened.
     val pageState = remember(page) { LazyListState() }
     // One per category row, so Back from a page can put focus on the row that opened it.
@@ -1900,6 +1906,18 @@ fun SettingsScreen(
                         )
                     }
                 }
+                // Where the file and the backups are kept: Saved Messages, or a private channel of the
+                // viewer's own with only them in it (HX87). Its page has the guide. Shown with sync
+                // off too: the sign out backup goes there as well.
+                item {
+                    ActionRow(
+                        title = s.syncchannelRowTitle,
+                        subtitle = com.tmplayer.ui.settings.syncChannelRowLine(s, syncChannel, syncChannelBlock),
+                        icon = TmIcons.Account,
+                        modifier = Modifier.focusRequester(syncChannelFocus),
+                        onClick = { syncChannelOpen = true },
+                    )
+                }
                 // Last, under the cards rather than in one: the one press here that ends the
                 // session, asked first (Prompt.SignOut).
                 settingsNote {
@@ -2390,6 +2408,18 @@ fun SettingsScreen(
     if (devicesOpen) {
         com.tmplayer.ui.settings.DevicesScreen(onClose = { devicesOpen = false; devicesClosed = true })
         return
+    }
+    if (syncChannelOpen) {
+        com.tmplayer.ui.settings.SyncChannelScreen(settings, onClose = { syncChannelOpen = false; syncChannelClosed = true })
+        return
+    }
+    // Back from the sync channel page on a television lands on its row again.
+    LaunchedEffect(syncChannelClosed) {
+        if (syncChannelClosed && !touch) {
+            kotlinx.coroutines.delay(60)
+            runCatching { syncChannelFocus.requestFocus() }
+        }
+        syncChannelClosed = false
     }
     // Back from Devices on a television lands on its row again.
     LaunchedEffect(devicesClosed) {

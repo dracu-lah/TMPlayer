@@ -45,15 +45,24 @@ object SavedMessagesBackup : BackupSender {
     /** The caption the file is told apart by, a hashtag so Telegram's search finds it. */
     const val TAG = "#TMPlayerBackup"
 
-    override suspend fun send(text: String, fileName: String): BackupSend {
+    override suspend fun send(text: String, fileName: String): BackupSend = send(text, fileName, null)
+
+    /**
+     * [settings] given, the file goes to the private channel the viewer chose for it (HX87) when
+     * only they are in it, else to Saved Messages; a channel that cannot be checked right now is
+     * not a reason to keep the viewer from signing out, so Saved Messages takes it then.
+     */
+    suspend fun send(text: String, fileName: String, settings: SettingsStore?): BackupSend {
         val session = Td.awaitConnectedSessionOrNull() ?: return BackupSend.Failed(L.signoutBackupOffline)
         var folder: File? = null
         return try {
             val td = session.client
             val myId = Td.myId().takeIf { it != 0L } ?: return BackupSend.Failed(L.signoutBackupOffline)
-            val chat = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
+            val saved = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
+            val chat = SyncDestinations.chatForBackup(settings, myId, saved, TdChannelProbe(td))
             val dir = ResumeSync.uploadDir() ?: return BackupSend.Failed(L.signoutBackupNoFolder)
             ResumeSync.sweep(dir)
+            if (!ResumeSync.hasRoomFor(dir, text.toByteArray().size.toLong())) return BackupSend.Failed(L.syncchannelNoSpace)
             folder = File(dir, "$FOLDER_PREFIX${System.currentTimeMillis()}").apply { mkdirs() }
             val local = File(folder, fileName)
             local.writeText(text)
@@ -130,6 +139,8 @@ object SignOutBackup {
         fileName: String,
         sender: BackupSender = this.sender,
         timeoutMs: Long = TIMEOUT_MS,
+        /** The viewer's settings: where the file goes when they chose a channel (HX87). */
+        settings: SettingsStore? = null,
     ): BackupSend {
         val text = try {
             export()
@@ -139,7 +150,9 @@ object SignOutBackup {
             return BackupSend.Failed(L.backupFailed)
         }
         return try {
-            withTimeoutOrNull(timeoutMs) { sender.send(text, fileName) } ?: BackupSend.Failed(L.signoutBackupSlow)
+            withTimeoutOrNull(timeoutMs) {
+                if (sender === SavedMessagesBackup) SavedMessagesBackup.send(text, fileName, settings) else sender.send(text, fileName)
+            } ?: BackupSend.Failed(L.signoutBackupSlow)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

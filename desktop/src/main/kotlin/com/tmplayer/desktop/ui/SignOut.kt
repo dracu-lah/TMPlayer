@@ -77,7 +77,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
         phase = SignOutPhase.Saving
         saving = scope.launch {
             val service = BackupService(settings, state.watched, OnlineMetadata.current?.store, com.tmplayer.desktop.BuildInfo.VERSION, bookmarks = state.bookmarks)
-            val result = SignOutBackup.save({ service.export() }, service.fileName())
+            val result = SignOutBackup.save({ service.export() }, service.fileName(), settings = settings)
             if (result is BackupSend.Failed) phase = SignOutPhase.Failed(result.reason) else signOutNow()
         }
     }

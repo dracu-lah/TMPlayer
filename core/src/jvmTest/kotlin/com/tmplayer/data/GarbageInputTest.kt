@@ -432,6 +432,11 @@ class GarbageInputTest {
             survive("ChatGridDisk.decode", text) { ChatGridDisk.decode(text) }
             survive("ChatSnapshot.decode", text) { ChatSnapshot.decode(text) }
             survive("ResumeSyncDoc.decode", text) { ResumeSyncDoc.decode(text) }
+            // HX87: the stored reason a sync channel is not used, and Telegram's words for a refused post.
+            survive("SyncChannelBlock.decode", text) {
+                for (line in listOf(text, "members:$text", "posting:$text", "$text:5")) SyncChannelBlock.decode(line)?.let { it.encode(); it.words() }
+            }
+            survive("SyncChannelCheck.refusedPosting", text) { SyncChannelCheck.refusedPosting(text) }
             survive("PlaybackTrace.read", text) {
                 for (session in PlaybackTrace.read(text)) StutterVerdict.analyse(session.samples)
                 PlaybackTrace.read(text + "\n" + PlaybackTrace.sampleLine(com.tmplayer.player.TraceSample(atMs = 1)))

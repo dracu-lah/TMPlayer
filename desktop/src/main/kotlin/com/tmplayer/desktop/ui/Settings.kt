@@ -222,6 +222,13 @@ fun SettingsPage(
         com.tmplayer.ui.settings.DevicesScreen(onClose = { com.tmplayer.ui.settings.DevicesScreenState.open = false })
         return
     }
+    // Where the sync file and backups are kept (HX87): its page, in place of Settings, the same way.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.tmplayer.ui.settings.SyncChannelScreenState.open = false } }
+    if (com.tmplayer.ui.settings.SyncChannelScreenState.open) {
+        CoverWindowControls()
+        com.tmplayer.ui.settings.SyncChannelScreen(settings, onClose = { com.tmplayer.ui.settings.SyncChannelScreenState.open = false })
+        return
+    }
 
     // The page open, by name so it survives a trip to another destination and back.
     var openName by rememberSaveable { mutableStateOf(initialCategory?.name) }

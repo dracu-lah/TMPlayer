@@ -18,7 +18,8 @@ import java.io.File
  * sponsored message signals (Telegram's terms), never to mark a chat read.
  *
  * Allowed: the sync file in Saved Messages (ResumeSync), the settings backup file
- * (SavedMessagesBackup), sponsored message view, click and report signals, Active sessions
+ * (SavedMessagesBackup), the one private channel "Create it for me" makes (SyncDestinations, HX87),
+ * sponsored message view, click and report signals, Active sessions
  * (AccountSessions, always behind a confirm), open and close of the chat on screen, and sign out.
  */
 class TelegramWritesPolicyTest {
@@ -136,6 +137,14 @@ class TelegramWritesPolicyTest {
         assertEquals(emptyMap<String, Set<String>>(), offenders)
     }
 
+    @Test
+    fun `the sync channel is made as a channel, never a group, and only once per press`() {
+        val file = sources().first { it.invariantSeparatorsPath.endsWith("data/SyncDestinations.kt") }
+        val calls = Regex("createNewSupergroupChat\\(([^)]*)\\)").findAll(code(file)).map { it.groupValues[1].replace(" ", "") }.toList()
+        // title, isForum = false, isChannel = true: a group would let others in by its link.
+        assertEquals(listOf("name,false,true,description,null,0,false"), calls)
+    }
+
     private companion object {
         /** TDLib methods that only read. */
         val READ_PREFIXES = listOf("get", "search", "check", "test", "can", "is", "parse", "load")
@@ -167,6 +176,10 @@ class TelegramWritesPolicyTest {
             "data/ResumeSync.kt" to setOf("sendMessage", "editMessageMedia", "editMessageText", "deleteMessages", "pinChatMessage"),
             // The settings backup file, on the viewer's press.
             "data/SavedMessagesBackup.kt" to setOf("sendMessage"),
+            // HX87, on purpose: "Create it for me" makes one private channel (is_channel, never a group)
+            // with only the viewer in it, on the viewer's press and after a confirm, for the sync file
+            // and backups. Nothing else is written there until its member count is exactly 1.
+            "data/SyncDestinations.kt" to setOf("createNewSupergroupChat"),
             // Sponsored message signals Telegram's terms ask for.
             "data/SponsoredMessageRepository.kt" to setOf("viewMessages", "clickChatSponsoredMessage", "reportChatSponsoredMessage"),
             // Active sessions, always behind a confirm that names the device.

@@ -57,6 +57,7 @@ object ResumeSync {
     @Volatile private var lastAutoAt = 0L
     @Volatile private var lastPullAt = 0L
     @Volatile private var lastSendAt = 0L
+    @Volatile private var lastSendChat = 0L
 
     /** Marks this process asked Telegram about without finding the message, not asked again. */
     private val healTried: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
@@ -191,23 +192,46 @@ object ResumeSync {
     }
 
     /**
+     * Moves where the sync file is kept (HX87): a private channel the viewer owns, or Saved
+     * Messages for null. It waits for a sync that is running (the file it is writing is finished,
+     * never half), then drops what was remembered about the old place; the old copy is left where
+     * it is and its place is returned for the viewer to be told. The next sync fills the new
+     * place: it reads what is there first, then merges, so a channel already holding a file from
+     * another device loses nothing.
+     */
+    suspend fun changeDestination(settings: SettingsStore, choice: SyncChannelChoice?): String? = lock.withLock {
+        SyncDestinations.applyChoice(settings, choice)
+    }
+
+    /**
      * Turns the sync off here and deletes the file (and an older TMPlayer's message) from Saved
-     * Messages. This device's lists stay. True when there was nothing left to delete afterwards.
+     * Messages, and from the chosen channel too when there is one. This device's lists stay. True
+     * when there was nothing left to delete afterwards.
      */
     suspend fun turnOffAndDelete(settings: SettingsStore): Boolean = lock.withLock {
         withContext(Dispatchers.IO) {
             val known = runCatching { settings.resumeSyncFileNow() }.getOrDefault(0L)
+            val knownFileChat = runCatching { settings.syncFileChatNow() }.getOrDefault(0L)
             val knownLegacy = runCatching { settings.resumeSyncMessageNow() }.getOrDefault(0L)
+            val choice = runCatching { settings.syncChannelNow() }.getOrNull()
             settings.setResumeSync(false)
+            settings.setSyncOldCopy("")
             val session = Td.awaitConnectedSessionOrNull() ?: return@withContext false
             try {
                 val td = session.client
                 val myId = Td.myId().takeIf { it != 0L } ?: return@withContext false
-                val chat = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
-                val ids = findFiles(td, chat, known).map { it.id }.toMutableSet()
-                findLegacy(td, chat, knownLegacy)?.let { ids += it.id }
-                if (ids.isEmpty()) return@withContext true
-                waited { td.deleteMessages(chat, ids.toLongArray(), true) } is TdlResult.Success
+                val saved = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
+                var clean = true
+                // Saved Messages first, then the chosen channel: a copy may be in either, or both.
+                val chats = listOfNotNull(saved, choice?.takeIf { it.account == myId }?.chatId)
+                for (chat in chats) {
+                    val hint = if (knownFileChat == chat || (knownFileChat == 0L && chat == saved)) known else 0L
+                    val ids = findFiles(td, chat, hint).map { it.id }.toMutableSet()
+                    if (chat == saved) findLegacy(td, chat, knownLegacy)?.let { ids += it.id }
+                    if (ids.isEmpty()) continue
+                    if (waited { td.deleteMessages(chat, ids.toLongArray(), true) } !is TdlResult.Success) clean = false
+                }
+                return@withContext clean
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -232,7 +256,13 @@ object ResumeSync {
                 settings.setResumeSync(false)
                 return Outcome.OtherAccount
             }
-            val chat = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
+            val saved = td.createPrivateChat(myId, false).valueOrNull?.id ?: myId
+            // Where the file lives: the viewer's private channel only while it is provably theirs alone,
+            // else Saved Messages (HX87). A channel that could not be checked: nothing is done this time.
+            val place = SyncDestinations.resolve(settings, myId, saved, TdChannelProbe(td))
+            if (place is SyncPlace.Unreachable) return Outcome.Failed(place.reason)
+            val chat = place.chatId
+            val inChannel = place is SyncPlace.Channel
             val now = System.currentTimeMillis()
             val budget = Budget(LOOKUP_BUDGET)
             val repository = ChatRepository(td)
@@ -242,11 +272,11 @@ object ResumeSync {
 
             // The older TMPlayer's message first, so its places are here before this device's
             // lists are read.
-            val legacy = findLegacy(td, chat, settings.resumeSyncMessageNow())
+            val legacy = if (inChannel) null else findLegacy(td, chat, settings.resumeSyncMessageNow())
             var received = legacy?.let { takeInLegacy(it, settings, repository, budget, ::chatTitle) } ?: 0
 
             // The file: every copy found, read and merged; nothing is written over one not read.
-            val files = findFiles(td, chat, settings.resumeSyncFileNow())
+            val files = findFiles(td, chat, knownFileFor(settings, chat, saved))
             var remote = SyncDocument(account = myId)
             var unreadable = false
             var newest = 0
@@ -310,10 +340,17 @@ object ResumeSync {
             val changed = files.isEmpty() || unreadable || files.size > 1 || !sameLists(remote, encoded.doc)
             var wrote = false
             if (changed) {
-                when (val write = write(td, chat, files.firstOrNull(), encoded.bytes, settings)) {
+                // The channel is checked again right before the write: the reads and the merge took time,
+                // and nobody may have joined since. Not safe or not known: nothing is written.
+                if (inChannel) SyncDestinations.verifyBeforeWrite(settings, TdChannelProbe(td), chat)?.let { return Outcome.Failed(it) }
+                when (val write = write(td, chat, files.firstOrNull(), encoded.bytes, settings, pin = !inChannel)) {
                     WriteResult.Written -> wrote = true
                     WriteResult.WaitingForFile -> return Outcome.WaitingForFile
-                    is WriteResult.Failed -> return Outcome.Failed(write.reason)
+                    is WriteResult.Failed -> {
+                        // Telegram refused the account a post in the channel: Saved Messages for the next hour.
+                        if (inChannel && write.refused) SyncDestinations.notePostingRefused(settings)
+                        return Outcome.Failed(if (inChannel && write.refused) SyncChannelBlock.PostingBlocked().words() else write.reason)
+                    }
                 }
                 // Every other copy is in the file now: gone, so one message stays.
                 val extra = files.drop(1).map { it.id }
@@ -362,6 +399,16 @@ object ResumeSync {
 
     // ---- the file ------------------------------------------------------------------------------
 
+    /**
+     * The remembered file message, when it is in [chat]: a sync file id belongs to one chat, so
+     * after the destination moved (or fell back to Saved Messages for a while) it is not used
+     * there. A device from before HX87 remembers no chat, and its file is in Saved Messages.
+     */
+    private suspend fun knownFileFor(settings: SettingsStore, chat: Long, saved: Long): Long {
+        val at = settings.syncFileChatNow()
+        return if (at == chat || (at == 0L && chat == saved)) settings.resumeSyncFileNow() else 0L
+    }
+
     /** Every sync file in Saved Messages: the one remembered, by its caption, pinned, or recent. Newest first. */
     private suspend fun findFiles(td: TdlClient, chatId: Long, known: Long): List<Message> {
         val found = LinkedHashMap<Long, Message>()
@@ -407,16 +454,27 @@ object ResumeSync {
     private sealed interface WriteResult {
         data object Written : WriteResult
         data object WaitingForFile : WriteResult
-        class Failed(val reason: String) : WriteResult
+
+        /** [refused]: Telegram's own word that this account may not post in that chat. */
+        class Failed(val reason: String, val refused: Boolean = false) : WriteResult
     }
 
     /**
      * The file put in place: [target] edited when there is one, else sent once and pinned. A
      * file sent within [RESEND_GUARD_MS] and not confirmed yet is waited for, never sent twice.
      */
-    private suspend fun write(td: TdlClient, chatId: Long, target: Message?, bytes: ByteArray, settings: SettingsStore): WriteResult {
+    private suspend fun write(
+        td: TdlClient,
+        chatId: Long,
+        target: Message?,
+        bytes: ByteArray,
+        settings: SettingsStore,
+        pin: Boolean = true,
+    ): WriteResult {
         val dir = uploadDir() ?: return WriteResult.Failed("no folder")
         sweep(dir)
+        // Nothing half written: the copy for the upload needs room first, and a full disk is said so.
+        if (!hasRoomFor(dir, bytes.size.toLong())) return WriteResult.Failed(L.syncchannelNoSpace)
         val now = System.currentTimeMillis()
         val folder = File(dir, now.toString()).apply { mkdirs() }
         val local = File(folder, "$FILE_STEM.json.gz")
@@ -427,6 +485,7 @@ object ResumeSync {
             val edited = waited { td.editMessageMedia(chatId, target.id, null, content) }
             if (edited is TdlResult.Success) {
                 settings.setResumeSyncFile(edited.result.id)
+                settings.setSyncFileChat(chatId)
                 return WriteResult.Written
             }
             // Gone since it was read (deleted by the viewer): sent anew below. Anything else is tried next time.
@@ -436,16 +495,23 @@ object ResumeSync {
                 is TdlResult.Success -> false
                 is TdlResult.Failure -> StaleEntries.classify(answer.code, answer.message) is MessageLookup.Gone
             }
-            if (!gone) return WriteResult.Failed(Failures.humanise(edited.errorMessage ?: "edit"))
+            if (!gone) return WriteResult.Failed(Failures.humanise(edited.errorMessage ?: "edit"), SyncChannelCheck.refusedPosting(edited.errorMessage))
         }
-        val sentAt = maxOf(lastSendAt, settings.resumeSyncSentAtNow())
-        if (now - sentAt in 0 until RESEND_GUARD_MS) return WriteResult.WaitingForFile
+        // The pause after a new file was sent holds for the chat it was sent to (a file sent to
+        // Saved Messages says nothing about the channel); a chat not recorded is taken as this one.
+        val storedAt = settings.resumeSyncSentAtNow()
+        val sentAt = maxOf(lastSendAt, storedAt)
+        val sentChat = if (lastSendAt >= storedAt && lastSendAt > 0) lastSendChat else settings.syncSentChatNow()
+        if ((sentChat == 0L || sentChat == chatId) && now - sentAt in 0 until RESEND_GUARD_MS) return WriteResult.WaitingForFile
         lastSendAt = now
+        lastSendChat = chatId
         settings.setResumeSyncSentAt(now)
+        settings.setSyncSentChat(chatId)
         settings.setResumeSyncFile(0L)
+        settings.setSyncFileChat(chatId)
         val options = MessageSendOptions(null, true, false, false, false, 0L, false, null, 0L, 0, false)
         val sent = waited { td.sendMessage(chatId, null, null, options, null, content) }
-        if (sent !is TdlResult.Success) return WriteResult.Failed(Failures.humanise(sent.errorMessage ?: "send"))
+        if (sent !is TdlResult.Success) return WriteResult.Failed(Failures.humanise(sent.errorMessage ?: "send"), SyncChannelCheck.refusedPosting(sent.errorMessage))
         // The id given is a stand in until Telegram confirms it: the confirmed one is looked for
         // briefly, then pinned so the viewer sees what it is. Not found yet: found by caption later.
         repeat(CONFIRM_TRIES) {
@@ -455,7 +521,8 @@ object ResumeSync {
             }
             if (confirmed != null) {
                 settings.setResumeSyncFile(confirmed.id)
-                runCatching { td.pinChatMessage(chatId, confirmed.id, true, false) }
+                // A pin in a channel adds a line to it; the file is found by its caption there.
+                if (pin) runCatching { td.pinChatMessage(chatId, confirmed.id, true, false) }
                 return WriteResult.Written
             }
         }
@@ -467,6 +534,12 @@ object ResumeSync {
         val paths = Td.paths ?: return null
         val parent = paths.databaseDir.parentFile ?: paths.databaseDir
         return File(parent, "tmplayer-sync").takeIf { it.isDirectory || it.mkdirs() }
+    }
+
+    /** Room for the file's copy (and what TDLib makes of it) on the disk [dir] is on; unknown room counts as enough. */
+    internal fun hasRoomFor(dir: File, bytes: Long): Boolean {
+        val free = DiskInfo.of(dir).freeBytes
+        return free <= 0L || free >= bytes * 3 + MIN_FREE_BYTES
     }
 
     /** Uploads of an hour ago and more: Telegram has them by now. */
@@ -588,6 +661,7 @@ object ResumeSync {
     /** Messages looked up per sync, for places, the older message's places and file ids together. */
     private const val LOOKUP_BUDGET = 80
     private const val HEAL_LIMIT = 200
+    private const val MIN_FREE_BYTES = 1_048_576L
     private const val TRIES = 3
     private const val MAX_FLOOD_WAIT_S = 60
 }

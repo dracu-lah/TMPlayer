@@ -555,6 +555,15 @@ internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onK
         color = Tone.muted,
         modifier = Modifier.padding(horizontal = SETTING_INSET),
     )
+    // Where the file and the backups are kept: Saved Messages, or a private channel of the viewer's
+    // own with only them in it (HX87). Its page has the guide.
+    val syncChannel by settings.syncChannel.collectAsState(initial = null)
+    val syncChannelBlock by settings.syncChannelBlock.collectAsState(initial = null)
+    Action(
+        s.syncchannelRowTitle,
+        com.tmplayer.ui.settings.syncChannelRowLine(s, syncChannel, syncChannelBlock),
+        TmIcons.Account,
+    ) { com.tmplayer.ui.settings.SyncChannelScreenState.open = true }
     if (resumeSync) {
         // Sync now, with how the last sync went under it; Replace when the file there could not
         // be read, which asks first. Run in the app's own scope, so leaving Settings does not
