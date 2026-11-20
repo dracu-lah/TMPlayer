@@ -1065,6 +1065,8 @@ private fun Root() {
         // cache and cold start snapshot go ([forgetSession]).
         com.tmplayer.ui.connect.handleSessionEnd(auth, settings) {
             com.tmplayer.ui.settings.forgetSession(settings)
+            // The session's database is gone: what a switch paused in it is other videos now.
+            runCatching { com.tmplayer.ui.profiles.PausedForSwitch.take(context, com.tmplayer.data.Accounts.stamp.folder) }
         }
         if (Setup.isSignInStep(auth)) {
             // The setup is for a new start: after an ended session the preferences are still there.

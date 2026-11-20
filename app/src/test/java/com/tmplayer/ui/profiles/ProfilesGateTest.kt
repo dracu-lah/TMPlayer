@@ -430,6 +430,43 @@ class ProfilesGateTest {
         assertTrue(k.platform.wiped.isEmpty())
     }
 
+    @Test
+    fun `an Add account with no room left, with one profile, resumes what its wait paused`() {
+        val k = ProfileKit("Asha").also { kit = it }
+        k.base.free = 1L
+        val flow = k.flow()
+        show(flow)
+        flow.add()
+        rule.waitUntil(15_000) { k.platform.resumed == 1 }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesNoSpaceTitle).assertExists()
+        assertEquals(1, k.book.list.value.profiles.size)
+    }
+
+    @Test
+    fun `an Add account at the limit resumes what its wait paused`() {
+        val k = ProfileKit("Asha", "Ben", "Cleo").also { kit = it }
+        val flow = k.flow()
+        show(flow)
+        flow.add()
+        rule.waitUntil(15_000) { k.platform.resumed == 1 }
+    }
+
+    @Test
+    fun `a switch that fails resumes what its wait paused, and so does its retry`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.host.failReopen = true
+        show(k.flow())
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitUntil(15_000) { k.platform.resumed == 1 }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.commonOk).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitUntil(15_000) { k.platform.resumed == 2 }
+        assertEquals(k.ids[0], k.book.list.value.activeId)
+    }
+
     private companion object {
         const val HOME = "The shell of the open profile"
     }

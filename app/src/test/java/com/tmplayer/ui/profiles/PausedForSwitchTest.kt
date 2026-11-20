@@ -43,4 +43,35 @@ class PausedForSwitchTest {
         AndroidProfilePlatform(context).wipe(Profile("main", null), last = true, deleteDownloads = false)
         assertTrue("a sign out discards what its wait paused", PausedForSwitch.take(context, null).isEmpty())
     }
+
+    @Test
+    fun `a retry's wait that finds nothing moving never loses what the first wait paused`() {
+        PausedForSwitch.record(context, "pa", listOf(four))
+        PausedForSwitch.record(context, "pa", emptyList())
+        PausedForSwitch.record(context, "pa", listOf(five))
+        assertEquals(listOf(four, five), PausedForSwitch.take(context, "pa"))
+    }
+
+    @Test
+    fun `wiping another profile keeps the open one's paused downloads`() = runBlocking {
+        val platform = AndroidProfilePlatform(context)
+        platform.pausedForSwitch = listOf(four)
+        platform.pausedFor = com.tmplayer.data.AccountStamp(1L, null)
+        platform.wipe(Profile("pbbbbb", "pbbbbb"), last = false, deleteDownloads = false)
+        assertEquals("not the profile being wiped", listOf(four), platform.pausedForSwitch)
+        platform.wipe(Profile("main", null), last = true, deleteDownloads = false)
+        assertTrue(platform.pausedForSwitch.isEmpty())
+    }
+
+    @Test
+    fun `the cache folder of each profile comes from its own folder name`() {
+        val base = object : com.tmplayer.platform.Paths {
+            override val databaseDir = java.io.File("/data/app/tdlib")
+            override val filesDir = java.io.File("/data/app/tdlib-files")
+            override val downloadsDir = java.io.File("/data/app/downloads")
+            override fun disk() = com.tmplayer.data.DiskInfo.EMPTY
+        }
+        assertEquals(java.io.File("/data/app/tdlib-files"), com.tmplayer.data.WatchCache.rootOf(base, com.tmplayer.data.AccountStamp(1L, null)))
+        assertEquals(java.io.File("/data/app/tdlib-files-pbbbbb"), com.tmplayer.data.WatchCache.rootOf(base, com.tmplayer.data.AccountStamp(2L, "pbbbbb")))
+    }
 }

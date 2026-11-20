@@ -57,17 +57,19 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
      * ones. The service is told on the main thread and given a moment to stop what moves.
      */
     /** The downloads this switch paused, to resume if the viewer cancels it, and the profile they are. */
-    @Volatile private var pausedForSwitch: List<PausedForSwitch.Paused> = emptyList()
-    @Volatile private var pausedFor: com.tmplayer.data.AccountStamp? = null
+    @Volatile internal var pausedForSwitch: List<PausedForSwitch.Paused> = emptyList()
+    @Volatile internal var pausedFor: com.tmplayer.data.AccountStamp? = null
 
     override suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit) {
         // The downloads pause alongside the other work, under the same deadline.
-        pausedForSwitch = OfflineDownloads.active.value.values.filter { it.busy }
+        // Added to what an earlier wait of the same profile paused: a retry finds nothing moving.
+        val now = OfflineDownloads.active.value.values.filter { it.busy }
             .map { PausedForSwitch.Paused(it.fileId, it.request.chatId, it.request.messageId) }
+        pausedForSwitch = if (pausedFor == com.tmplayer.data.Accounts.stamp) (pausedForSwitch + now).distinctBy { it.fileId } else now
         pausedFor = com.tmplayer.data.Accounts.stamp
         // Kept on the device too: they go on again when this profile is open next, even after the
         // process died while the switch waited.
-        PausedForSwitch.record(app, com.tmplayer.data.Accounts.stamp.folder, pausedForSwitch)
+        PausedForSwitch.record(app, com.tmplayer.data.Accounts.stamp.folder, now)
         if (downloading()) withContext(Dispatchers.Main) { runCatching { OfflineDownloads.pauseAll(app) } }
         val pausing = downloading()
         BeforeSwitch.runAll(onWaiting = { what -> onWaiting(if (pausing && downloading()) what + com.tmplayer.i18n.L.profilesWaitingDownloads else what) })
@@ -106,8 +108,12 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
         // A sign out discards what its wait paused: the next sign in, on the same folder, is a new
         // database whose ids are other videos (HX88).
         PausedForSwitch.take(app, profile.folder)
-        pausedForSwitch = emptyList()
-        pausedFor = null
+        // Only that profile's: Remove all accounts wipes the others first, and if it fails the open
+        // one's paused downloads still go on again.
+        if (pausedFor?.folder == profile.folder) {
+            pausedForSwitch = emptyList()
+            pausedFor = null
+        }
         // Its results, alerts and Play actions leave the shade with it (HX88).
         com.tmplayer.data.ProfileNotifications.clearProfile(app)
         forgetProfile(app, SettingsStore(app), WatchedStore(app), deleteDownloads, last)

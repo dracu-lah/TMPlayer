@@ -16,25 +16,30 @@ internal object PausedForSwitch {
     /** One paused download: its file id and the video it is, so a new database's id is never taken for it. */
     data class Paused(val fileId: Int, val chatId: Long, val messageId: Long)
 
+    /**
+     * Adds [paused] to what is kept for [folder]: never overwritten, so a retry's wait, which finds
+     * nothing moving any more, does not lose what the first wait paused.
+     */
     fun record(context: Context, folder: String?, paused: List<Paused>) {
+        if (paused.isEmpty()) return
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (paused.isEmpty()) {
-            prefs.edit().remove(key(folder)).apply()
-        } else {
-            prefs.edit().putString(key(folder), paused.joinToString(";") { "${it.fileId},${it.chatId},${it.messageId}" }).apply()
-        }
+        val merged = (read(prefs, folder) + paused).distinctBy { it.fileId }
+        prefs.edit().putString(key(folder), merged.joinToString(";") { "${it.fileId},${it.chatId},${it.messageId}" }).apply()
     }
 
-    /** What was paused for [folder]'s switch, taken: asked again, there is nothing. */
-    fun take(context: Context, folder: String?): List<Paused> {
-        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val paused = prefs.getString(key(folder), null)?.split(';')?.mapNotNull { entry ->
+    private fun read(prefs: android.content.SharedPreferences, folder: String?): List<Paused> =
+        prefs.getString(key(folder), null)?.split(';')?.mapNotNull { entry ->
             val parts = entry.split(',')
             val id = parts.getOrNull(0)?.trim()?.toIntOrNull() ?: return@mapNotNull null
             val chat = parts.getOrNull(1)?.trim()?.toLongOrNull() ?: return@mapNotNull null
             val message = parts.getOrNull(2)?.trim()?.toLongOrNull() ?: return@mapNotNull null
             Paused(id, chat, message)
         }.orEmpty()
+
+    /** What was paused for [folder]'s switch, taken: asked again, there is nothing. */
+    fun take(context: Context, folder: String?): List<Paused> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val paused = read(prefs, folder)
         prefs.edit().remove(key(folder)).apply()
         return paused
     }

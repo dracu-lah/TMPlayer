@@ -30,7 +30,8 @@ internal class KitPaths(val root: File = Files.createTempDirectory("profiles").t
     override val databaseDir: File get() = File(root, "tdlib")
     override val filesDir: File get() = File(root, "cache")
     override val downloadsDir: File get() = File(root, "downloads")
-    override fun disk(): DiskInfo = DiskInfo(50L shl 30, 100L shl 30)
+    @Volatile var free: Long = 50L shl 30
+    override fun disk(): DiskInfo = DiskInfo(free, 100L shl 30)
 
     init {
         databaseDir.mkdirs()
@@ -42,7 +43,11 @@ internal class KitHost : ClientHost {
     @Volatile
     var generation = 1L
 
+    /** Set: closing the client fails part way, as a TDLib refusing would. */
+    @Volatile var failReopen = false
+
     override suspend fun reopen(paths: Paths, timeoutMs: Long, onClosed: () -> Unit): Boolean {
+        if (failReopen) throw IllegalStateException("TDLib could not be closed")
         onClosed()
         paths.databaseDir.mkdirs()
         generation++

@@ -550,9 +550,17 @@ class ProfileFlow(
                     if (left != null && left.id != id && left.adding && !left.signedIn) switcher.remove(left.id)
                     enter()
                 }
+                // A newer switch took over: it is that one's to finish or resume.
                 SwitchResult.Superseded -> Unit
-                is SwitchResult.Recoverable -> stage = Stage.Recoverable(id, result.state.reason)
-                else -> notice = Notice(L.profilesSwitchFailed(name = name), "")
+                is SwitchResult.Recoverable -> {
+                    stage = Stage.Recoverable(id, result.state.reason)
+                    resumePaused()
+                }
+                else -> {
+                    notice = Notice(L.profilesSwitchFailed(name = name), "")
+                    // Nothing switched: what the wait paused goes on again.
+                    resumePaused()
+                }
             }
         }
     }
@@ -562,7 +570,8 @@ class ProfileFlow(
         work(L.profilesSwitching(name = L.profilesAdd)) {
             stopFirst()
             ProfileUnlock.lock()
-            when (val result = switcher.add()) {
+            val result = switcher.add()
+            when (result) {
                 is AddResult.Added -> enter()
                 AddResult.Full -> notice = Notice(L.profilesAdd, L.profilesLimit(count = com.tmplayer.data.AccountRules.MAX))
                 is AddResult.NoSpace -> notice = Notice(
@@ -571,6 +580,8 @@ class ProfileFlow(
                 )
                 else -> notice = Notice(L.profilesAdd, L.profilesAddFailed)
             }
+            // Nothing added, the open profile stays: what the wait paused goes on again.
+            if (result !is AddResult.Added) resumePaused()
         }
     }
 
