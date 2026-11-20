@@ -23,6 +23,17 @@ removed in the commit that added this file), the listing plan artifact
 
 ## Progress / handoff (session f7d1e1d6-da4f-4926-9044-e56e81f05ad0, 2026-10-31, read this first)
 
+RUN LOG 2026-11-19 (hands-free "do all the doables", workers in worktrees, nothing pushed):
+- HX69 hardening merged to main 4934ef5 (596935a, 1c957d6, ca84671 after review). Root cause still unknown (no stack). Not run: ui/desktop tests, catalog test, device. Decisions: a record write that fails after the move is logged and the download counts as done; SecurityException and OutOfMemoryError are logged, not reported as bugs.
+- Running: 1A HX81/HX82/HX73 (opus), 1B HX85/HX71 (opus), 2E HX24/HX38/HX25 (sonnet). Queued: D desktop (HX60,65,54,55,63), F site HX68, G picker HX29/28/76/56, H HX59, I HX57, J HX64, K HX66/58, L HX41/43, web HX15/17/79. Skipped (need device/secret): HX70, HX72, HX78, HX67, HX40 ph4.
+- MERGED to main (local, nothing pushed): HX69 4934ef5, HX71 60f3471, desktop bugs HX60/65/54/55/63 ec070e0, HX68 site edd0338, HX81/82/73 (a019073 incl.), HX24/38/25 (sign-out wipe + 6 review fixes), HX66/HX58 b5e0ae9. HX85 was already on main. Decisions: stated size beats the name tag (reverses 2026-10-23); phone cap 1080 so 4K never leads on a phone; cam copy never leads; HX65 arrows removed on hero only; Recently added 3 per chat; HX64 reports private in log-inbox R2, not GitHub issues.
+- IN FLIGHT: HX64 review fixes (feedback), picker HX29/28/76/56, web plan private/WEB-GAPS-PLAN.md (31 items, 8 waves; WB1 and WB23 running). Next: HX59, HX57, HX41/43, web waves 1 to 8, then privacy page line for feedback. Needs the user: deploy command for log-inbox (see HX64 report), translations for new site/en keys, fake-TDLib flavor decision (HX58), HX72 hideVideoUnseen decision.
+- 2026-11-20 UPDATE (still local, nothing pushed). MERGED since: HX64 a83e128, HX29/HX56 9973498, HX59 54e8adc, HX57 4cd9cfb (+c9ed595 fix: named onProgress after HX69 transfer param), web WB1 1dce630, WB23 8758a40, WB24 f02a5e6, WB4 868732e, WB8 9d1c683, WB10 ea0313d, WB9 0d8119b, WB3 58a573d, WB2 d374656 (+bf101ad wipe race fix). RUNNING: WB5, WB15, WB19 (web wave 4); HX41 review fixes (branch worktree-agent-a902870042eb60344, not merged). NOT BUILT: HX28 (mandatory gate already shipped 1.28.4; suggested 14-day gap, one re-ask), HX43 UI, HX79 residue, web waves 5 to 8 (WB6 WB7 WB13 | WB11 WB14 WB17 | WB12 WB16 WB21 | WB18 WB20 WB22), fake-TDLib flavor (needs user). NEEDS USER: log-inbox deploy command (HX64, see run notes), translations for new keys (picker.*, WhereToWatch, site faq, web.*), WebKit passes, device passes, privacy page line for feedback (not written), decision to reverse 2026-10-23 name-first quality rule (kept: stated size wins).
+- 2026-11-20 LATER (local, nothing pushed): MERGED HX41 a28067b; web WB5 fef611f, WB19 1c36783, WB15 edd5c6d, WB7 33e7959, WB6 6c49db4, WB13 e9002db, WB11 a5591e5, WB17 1720b40. RUNNING: WB14 fixes, WB21 fixes, WB12 (i18n 22 langs), WB18 (stutter/logs/crash web). NOT STARTED: WB16, WB20, WB22 (needs WB21; also fix uncapped picker count, test.fail in webapp/e2e/scale.spec.ts). Plan file private/WEB-GAPS-PLAN.md has per-item detail. NEEDS USER: the log-inbox Worker publish (HX64 plus CORS for web.tmplayer.org; exact commands and the three post-checks are in the HX64 report of the 2026-11-19 run, ask Claude to reprint them), translations for new keys, WebKit/iPhone runs (host lacks libjpeg-turbo8), device passes, privacy page line for feedback, the web.tmplayer.org publish, adding webkit-iphone to .github/workflows/webapp.yml. KNOWN: playwright.config.ts FORM_SPECS regex conflicts on every web merge (keep union).
+- 2026-11-20 END OF RUN (hands-free, all local, nothing pushed, main 3cd3b83): every doable row and every web wave (WB1 to WB22, WB24) is MERGED. Native: HX69 HX71 HX60/65/54/55/63 HX68 HX81/82/73 HX24/38/25 HX66 HX58 HX64 HX29 HX56 HX59 HX57 HX41 and Add to list from the player; HX43 ticked (named lists replaced tags). Web: WB1 to WB22 incl. WB12 (22 languages) and WB22 (picker budget, test.fail removed). Checks on merged main: core jvmTest full, app/desktop/ui compile incl. tests, webapp tsc + 8 node groups, Chromium scale 24/24. NOT RUN: full app/desktop/ui test suites, WebKit/iPhone Safari (host lacks libjpeg-turbo8), devices. NOT BUILT: HX28 (gate shipped 1.28.4), HX79 leftovers, fake-TDLib flavor (needs decision), HX70/72/78 (need device or Sentry data), HX67/40 ph4 (user). 45 git worktrees (about 22 GB) under .claude/worktrees are not tidied (docs/agents/branches.md). Incidents: webapp/node_modules symlink got committed by a worker (fixed e1d40f0); conflict markers committed then fixed (3fe95bb); desktop compile break after HX69+HX57 (fixed c9ed595).
+- 2026-11-20 HANDOFF (read this first in a new session; main 85caa31, all local, 240+ commits ahead of origin, nothing pushed): ALL BUILT AND MERGED: native HX69 HX71 HX60/65/54/55/63 HX68 HX81/82/73 HX24/38/25 HX66 HX58 HX64 HX29 HX56 HX59 HX57 HX41, Add to list from the player, HX79 tablet columns + audio passthrough (device decoder check, no-sound message), settings map fix; web WB1 to WB22 and WB24. HX43 ticked. OPEN, in order: (1) ONE REAL TEST FAILURE on main: app SettingsGroupsTvTest 'Forget all in the remembered languages asks first and Cancel keeps them' (SettingsGroupsTvTest.kt:216 expected 0 but was 1), probably a TV remote order shift from the new Audio passthrough row (HX79) or HX59; find it, fix, then rerun with the tmp fix below. The last full run: app 1312 of 1315 pass, desktop 823 of 824 pass, the other 3 failures were the SettingsMap About-row bug, FIXED in 85caa31 (rerun to confirm). (2) HOW TO RUN FULL TESTS: /tmp is a 16 GB memory disk with a user quota ('Disk quota exceeded' made 809 app tests fail the first time): mkdir -p build/tmp-tests; export JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=$PWD/build/tmp-tests; JAVA_HOME=$HOME/.jdks/jdk-21.0.12+8 ./gradlew :app:testDebugUnitTest :desktop:test :ui:jvmTest --continue --max-workers=2 --offline (about 23 minutes; the shell has noclobber: use >| to overwrite a log). (3) Worktree tidy-up: 44 merged worktree-agent-* branches and ~22 GB of worktrees: a safety check blocks Claude from bulk removal, the user runs the script in the scratchpad: tidy-worktrees.sh (keeps agent-af732749f853f25d0, agent-a86521ca1dd6e3a00, agent-a9a5b6cdf7cd6c329). (4) Needs the user: real-player fake-adapter test needs media3-test-utils added online (draft in the HX79 worktree build/hx79-real-player-draft, uncommitted); log-inbox Worker publish (HX64 + CORS for web.tmplayer.org; the commands are in the 2026-11-19 HX64 report, ask Claude to reprint with the release cadence check); translations of new keys (picker.*, WhereToWatch, site faq, web.*, home.featured_pause/resume, grid.*, link.*, share.no_message_links, audio_passthrough.*, player.no_sound_here, web.copy_*, web.language_*); WebKit and iPhone Safari runs (host lacks libjpeg-turbo8); device passes; push. NOT BUILT: HX28, fake-TDLib flavor (decision), HX70/72/78 (device or Sentry), HX67 (key), HX40 phase 4 (real TVs), WB25 to WB31 (user). RULES LEARNED: workers must never git add -A (a webapp/node_modules symlink got committed once and replaced the real folder on merge), never run pnpm install/exec in a worktree, playwright.config.ts FORM_SPECS conflicts on every web merge (keep the union, check for markers BEFORE committing, never chain a commit after a failing resolve script).
+
+
 A fresh session resumes from this section alone. Nothing below HX31's core is built yet. Rules that bind every item:
 HX27 to HX41 below are the plan; AGENTS.md rules apply (no dashes, outside data untrusted, en.json only, no langsync, no
 releases without the guard). Max two agents at a time, compile and unit tests only while they work, one device pass at the
@@ -1603,7 +1614,7 @@ goes into this table at its place by severity and is taken before any feature wo
   a real TV has no touch mode to race) rather than proving anything about the fix, so it was discarded rather
   than kept failing. `:ui:compileKotlinJvm`, `:app:compileDebugKotlin`, `:desktop:compileKotlin` and
   `:ui:jvmTest`'s theme tests clean. Worth a real-TV screenshot next time one is signed in.
-- [ ] HX43 (GitHub Discussion #10, asked 2026-10-18, feature, after HX27) Tags for videos, across chats. The
+- [x] HX43 (2026-11-20 check: named lists replaced tags on phone, TV, desktop and web, see b2f48d3, 0171387, aaf3dce; #tag chips not built on purpose; "Add to list" from the player was the one gap, built as a follow-up) (GitHub Discussion #10, asked 2026-10-18, feature, after HX27) Tags for videos, across chats. The
   reporter filters tutorial videos out of busy chats and wants to label videos into categories, by hand if
   need be, so they can be found again to rewatch. The reply on the discussion asked whether this means
   bookmarks: it does NOT. `Bookmarks` (`core/src/pureMain/.../Bookmarks.kt`) is a moment INSIDE one video; this
@@ -4445,6 +4456,56 @@ Linux, win11 still on system fonts. `msone.gone` and `msone.*` need translating 
    plan has email, not Slack).
 4. **Settings → Subscription (or Spike Protection):** check spike protection is on for the project.
 5. Tell Claude: done, and which token kind worked.
+
+## HX86 All chats switch and HX87 Sync channel (asked 2026-11-20, researched, decisions made, not built)
+
+Research (2026-11-20): Plex, Emby and Jellyfin only have a one-shot "select all" bulk action, no persistent
+all mode, so the label and the restore behaviour must be spelled out in the UI. Telegram creates a channel
+with no other member (TDLib `createNewSupergroupChat` with `is_channel`), but never a group; TDLib's
+`supergroupFullInfo.member_count` is 0 when unknown, so "only you" must treat 0 as unverified.
+
+### HX86 All chats switch (every platform: phone, tablet, TV, desktop, web, iPhone and iPad). model: opus plan, sonnet build. depends: none.
+- Decisions (user answers): switch at the top of the picker, above search, in the first-run setup and in
+  Add more chats. Off by default. On: literally every chat counts (archive, muted, bots, 1:1) and the
+  per-chat ticks are disabled. The ticked set is kept and comes back when it is turned off. Fresh installs
+  start with Saved Messages ticked; existing users keep their picks and see the switch off (reverses
+  the old "nothing ticked for a new viewer" rule, remove that test expectation on purpose).
+  Folder chips, the Recommended band and "Add these N" are greyed with the line "All chats is on".
+  Favourites, Continue watching, Watch later and lists show items from any chat in both modes.
+  Home pages by recent activity with the usual TDLib budget (first content within 3 s, stops when idle).
+- Edge cases to handle: ticks made before the stored choice is read; the switch turned on with nothing
+  ticked (off returns to Saved Messages, never an empty set); the switch turned on and off quickly
+  (one write, last wins); sign out and a different account (the kept ticks are per account and wiped);
+  a kept tick for a chat the viewer has since left (dropped quietly); a chat joined while All is on
+  (included at once); 3,000 chats and 20,000 videos in one chat (SyntheticAccount, HomeScaleTest);
+  FLOOD_WAIT during paging; offline start; TV: the switch is the first focus stop, OK toggles, Down
+  skips the disabled ticks to Done, Back asks only when the choice changed; screen reader says On or
+  Off; large font; desktop Ctrl+A with All on does nothing; web wording matches core.
+- Platform parts: core (SettingsStore keys allChats + savedPicks, picker model), app phone/tablet/TV,
+  desktop, ui shared, webapp, ios (shared ui). Strings in en.json only (translations are the user's).
+- Tests: model unit tests, TV key test (performKeyInput, assertIsFocused), phone and desktop render
+  per form factor, scale test, webapp unit + Playwright. Also repair AddChatsTvKeysTest (6 failing,
+  "expected Saved Messages but was empty", since HX29's folder rail) in the same change.
+
+### HX87 Sync channel for backup and sync (phone, tablet, TV, desktop, iPhone and iPad; web skipped, it has no sync). model: opus plan, sonnet build. depends: none (HX86 independent).
+- Decisions: the user may choose a private channel they own (only them in it) instead of Saved Messages for
+  the sync file (ResumeSync) and the settings backup (SavedMessagesBackup). Saved Messages stays the
+  default. A Settings guide card (steps, and a Create it for me button that makes the private channel
+  with TDLib; on a TV the button plus a short step list) explains the setup. Writes happen only when the
+  member count is exactly 1; unknown (0) or 2 or more blocks writing, says why, and falls back to
+  Saved Messages. Privacy page gets a line.
+- Edge cases to handle: member count unknown, a second member joins later, the owner leaves or is
+  demoted, the channel is deleted or made public (username set), the viewer is not the creator, posting
+  blocked (channel restricted or the account limited), the channel archived or muted, two devices
+  writing at once (existing merge: file version, last write wins per item, no lost entries), a device
+  offline for days then syncing (merge, not overwrite), a file over the size cap (oldest entries first,
+  as today), the pinned file message deleted by hand (recreate once), switching destination back and
+  forth (the old copy is left, not deleted, and the viewer is told), switching while an upload runs
+  (finish or cancel, never half), sign out and another account (the chosen channel is per account and
+  wiped), FLOOD_WAIT on posting (wait it out, no loop), no free disk for the upload folder, and the
+  same channel picked on a second device (it reads first, then merges).
+- Tests: fake TDLib sender for each blocked case above, merge tests with two writers, TV focus test for
+  the guide card, desktop and phone render tests, garbage input in GarbageInputTest for the file read.
 
 ## Design reference
 
