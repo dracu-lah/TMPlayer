@@ -694,9 +694,9 @@ private fun Root() {
     // The favourites the kids lock lets through, as the Favourites tab lists them, so every count
     // of them (the badge, Clear all) says the same number.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
-    // The Favourites tab lists the starred chats the gate shows: the kids lock and the chats
-    // the viewer added (HX27). A star on a chat they removed stays stored, for when it is back.
-    val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
+    // The Favourites tab lists the starred chats the kids lock shows, whether or not the viewer
+    // added the chat in the picker (HX86): a star is their own act, in "All chats" and in picks.
+    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsStateWithLifecycle()
     val favorites = remember(storedFavorites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavorites, allowedChats) }
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val continueWatching by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -926,7 +926,9 @@ private fun Root() {
     val chatsState = chatsViewModel.state.collectAsStateWithLifecycle()
     val chatList = remember {
         derivedStateOf(androidx.compose.runtime.referentialEqualityPolicy()) {
-            (chatsState.value as? UiState.Content)?.value?.chats.orEmpty()
+            // With the starred chats the viewer did not add (HX86): Home's starred rows and the
+            // lookups by id read them too. Chats itself lists BrowseData.chats alone.
+            (chatsState.value as? UiState.Content)?.value?.withStarred.orEmpty()
         }
     }
     // Whether the list is still arriving, the one thing the launch's jumps wait on.
@@ -2018,6 +2020,14 @@ private fun Root() {
                             val everything = chatsViewModel.everything.value.map { com.tmplayer.data.AddedChat(it.id, it.title) }
                             runCatching { settings.removeChat(chat.id, everything) }
                                 .onFailure { android.util.Log.w("TMPlayer", "removing a chat failed", it) }
+                        }
+                    },
+                    onTurnOffAllChats = {
+                        scope.launch {
+                            // Whole only once the list says it has no more to read (a chat still on its way is never called gone).
+                            val whole = !chatsViewModel.paging.value.more && !chatsViewModel.paging.value.partial
+                            runCatching { settings.turnOffAllChats(chatsViewModel.everything.value, whole) }
+                                .onFailure { android.util.Log.w("TMPlayer", "turning off All chats failed", it) }
                         }
                     },
                     onClearHistory = { scope.launch { settings.clearWatchHistory() } },

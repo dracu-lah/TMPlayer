@@ -66,7 +66,9 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     // The chats the viewer added (HX27), or null for every chat: narrows the rows Home builds
     // (starred chat rows, Recently added) and the search across chats it reads for the carousel.
     const gate = view.added ? new Set(view.added) : null
-    const allowed = (id: number) => !gate || gate.has(id)
+    // A starred chat keeps its row whether or not it was added (HX86): a star is the viewer's own act.
+    const stars = new Set(view.starred)
+    const allowed = (id: number) => !gate || gate.has(id) || stars.has(id)
     // Settings > Home (HomeLayout): a row that is off is not built and nothing is read for it.
     const layout = view.layout ?? ALL_ON
     const needsRecent = layout.carousel || layout.recentlyAdded

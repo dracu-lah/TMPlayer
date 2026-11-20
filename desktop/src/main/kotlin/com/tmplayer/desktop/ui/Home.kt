@@ -130,7 +130,7 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         }
     }
     val chatState by chats.state.collectAsState()
-    val list = (chatState as? UiState.Content)?.value?.chats.orEmpty()
+    val list = (chatState as? UiState.Content)?.value?.withStarred.orEmpty()
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
     val history by state.settings.continueWatching.collectAsState(initial = emptyList())
     val later by state.watched.watchLater.items.collectAsState(initial = emptyList())

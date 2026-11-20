@@ -336,7 +336,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     LaunchedEffect(Unit) {
         val target = runCatching { state.settings.autoOpenTarget() }.getOrNull() ?: return@LaunchedEffect
         val chat = chats.state
-            .mapNotNull { (it as? UiState.Content)?.value?.chats?.firstOrNull { chat -> chat.id == target } }
+            .mapNotNull { (it as? UiState.Content)?.value?.withStarred?.firstOrNull { chat -> chat.id == target } }
             .firstOrNull() ?: return@LaunchedEffect
         if (state.openChat == null && (state.destination == Destination.Home || state.destination == Destination.Chats)) state.openChat(chat)
     }

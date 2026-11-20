@@ -374,7 +374,7 @@ fun SettingsScreen(
     val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
     // Only those the kids lock shows, as the Favourites tab counts them.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
-    val allowedChats by com.tmplayer.data.ChatGate.browsing.collectAsStateWithLifecycle()
+    val allowedChats by com.tmplayer.data.ChatGate.allowed.collectAsStateWithLifecycle()
     val favorites = remember(storedFavorites, allowedChats) { com.tmplayer.data.KidsLock.favourites(storedFavorites, allowedChats) }
     val liveFolders by Td.folders.collectAsStateWithLifecycle()
     val folders = accountFolders ?: liveFolders
