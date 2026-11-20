@@ -303,14 +303,6 @@ class SyncDestinationsTest {
         assertEquals("no line", SyncDestinations.verifyBeforeWrite(f.settings, live, channel))
     }
 
-    @Test
-    fun theBackupChecksAgainAtTheWrite() = runBlocking {
-        val f = Fixture().also { it.choose() }
-        val answers = ArrayDeque(listOf(facts(), facts(count = 2)))
-        // The first look (resolve) is safe, the second (right before the write) is not: Saved Messages.
-        assertEquals(saved, SyncDestinations.chatForBackup(f.settings, me, saved, probe { answers.removeFirst() }))
-    }
-
     // ---- picking and moving ----------------------------------------------------------------------
 
     @Test
@@ -318,10 +310,8 @@ class SyncDestinationsTest {
         val f = Fixture()
         val refused = SyncDestinations.choose(f.settings, probe { facts(count = 2) }, me, channel)
         assertEquals(ChooseResult.Refused(SyncChannelBlock.MoreMembers(2)), refused)
-        assertNull(f.settings.syncChannelNow())
         val failed = SyncDestinations.choose(f.settings, probe { ProbeAnswer.Unreachable("offline") }, me, channel)
         assertEquals(ChooseResult.Failed("offline"), failed)
-        assertNull(f.settings.syncChannelNow())
         val picked = SyncDestinations.choose(f.settings, probe { facts() }, me, channel)
         assertEquals(ChooseResult.Picked("TMPlayer sync", created = false), picked)
         assertEquals(SyncChannelChoice(channel, "TMPlayer sync", me), f.settings.syncChannelNow())
@@ -450,5 +440,81 @@ class SyncDestinationsTest {
         val all = setOf(key(1), key(2), key(3), key(4))
         assertEquals(all, marks(tv))
         assertEquals(all, marks(phone))
+    }
+
+    // ---- review fixes (HX87) ---------------------------------------------------------------------
+
+    private fun outcome(sent: Boolean, raw: String? = null) =
+        SavedMessagesBackup.PostOutcome(if (sent) BackupSend.Sent else BackupSend.Failed("no"), raw)
+
+    @Test
+    fun aRefusedBackupPostGoesOnceToSavedMessagesAndNowhereElse() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        val tried = mutableListOf<Long>()
+        val result = SavedMessagesBackup.postWithFallback(channel, saved, f.settings) { to ->
+            tried += to
+            if (to == channel) outcome(false, "CHAT_WRITE_FORBIDDEN") else outcome(true)
+        }
+        assertEquals(BackupSend.Sent, result)
+        assertEquals(listOf(channel, saved), tried)
+        assertTrue(f.settings.syncChannelBlock.first() is SyncChannelBlock.PostingBlocked)
+    }
+
+    @Test
+    fun aRefusedBackupResendIsNotRepeatedWhenSavedMessagesFailsToo() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        val tried = mutableListOf<Long>()
+        val result = SavedMessagesBackup.postWithFallback(channel, saved, f.settings) { to ->
+            tried += to
+            outcome(false, "CHAT_WRITE_FORBIDDEN")
+        }
+        assertTrue(result is BackupSend.Failed)
+        assertEquals(listOf(channel, saved), tried)
+    }
+
+    @Test
+    fun otherBackupFailuresAndSavedMessagesItselfAreNotResent() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        var calls = 0
+        // An outage is not a refusal: no second post, no block kept.
+        SavedMessagesBackup.postWithFallback(channel, saved, f.settings) { calls++; outcome(false, "Timeout") }
+        assertEquals(1, calls)
+        assertNull(f.settings.syncChannelBlock.first())
+        // Posting to Saved Messages in the first place never falls back.
+        calls = 0
+        SavedMessagesBackup.postWithFallback(saved, saved, f.settings) { calls++; outcome(false, "CHAT_WRITE_FORBIDDEN") }
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun turningTheSyncOffForgetsTheFileChatTheSentChatAndTheBlock() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        f.settings.setResumeSync(true)
+        f.settings.setSyncFileChat(channel)
+        f.settings.setSyncSentChat(channel)
+        f.settings.setSyncChannelBlock(SyncChannelBlock.PostingBlocked(5L))
+        f.settings.setResumeSync(false)
+        assertEquals(0L, f.settings.syncFileChatNow())
+        assertEquals(0L, f.settings.syncSentChatNow())
+        assertNull(f.settings.syncChannelBlock.first())
+    }
+
+    @Test
+    fun theBackupReadsTheChannelAnewRightBeforeThePost() = runBlocking {
+        val f = Fixture().also { it.choose() }
+        var answer: ProbeAnswer = facts()
+        var reads = 0
+        val live = probe { reads++; answer }
+        assertEquals(channel, SyncDestinations.chatForBackup(f.settings, me, saved, live))
+        val afterResolve = reads
+        assertEquals(channel, SyncDestinations.backupChatBeforeWrite(f.settings, live, channel, saved))
+        assertEquals(afterResolve + 1, reads)
+        // Somebody joins while the file is made: Saved Messages takes the backup.
+        answer = facts(count = 2)
+        assertEquals(saved, SyncDestinations.backupChatBeforeWrite(f.settings, live, channel, saved))
+        // Saved Messages needs no check.
+        reads = 0
+        assertEquals(saved, SyncDestinations.backupChatBeforeWrite(f.settings, live, saved, saved))
+        assertEquals(0, reads)
     }
 }

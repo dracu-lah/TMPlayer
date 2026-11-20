@@ -319,17 +319,27 @@ object SyncDestinations {
         }
     }
 
-    /** For the backup before sign out: the channel when it is safe, else Saved Messages, never a stop. */
+    /**
+     * For the backup before sign out: the channel when [resolve] finds it safe, else Saved Messages,
+     * never a stop. The check at the moment of the write is [backupChatBeforeWrite], run by the
+     * sender right before the post (a second probe straight after [resolve] would add nothing).
+     */
     suspend fun chatForBackup(settings: SettingsStore?, myId: Long, savedChat: Long, probe: ChannelProbe): Long {
         if (settings == null) return savedChat
         return when (val place = resolve(settings, myId, savedChat, probe)) {
-            // Checked again at the moment of the write, as the sync does: a join since resolve is caught.
-            is SyncPlace.Channel -> if (verifyBeforeWrite(settings, probe, place.chatId) == null) place.chatId else savedChat
+            is SyncPlace.Channel -> place.chatId
             is SyncPlace.SavedMessages -> place.chatId
             is SyncPlace.Unreachable -> savedChat
         }
     }
 
+    /**
+     * The backup's last check, right before the post: reads the channel's facts anew from the
+     * probe (nothing from [resolve] is reused), so somebody who joined while the file was being
+     * made is caught. The channel when still the viewer's alone, else [savedChat].
+     */
+    suspend fun backupChatBeforeWrite(settings: SettingsStore, probe: ChannelProbe, chat: Long, savedChat: Long): Long =
+        if (chat == savedChat || verifyBeforeWrite(settings, probe, chat) == null) chat else savedChat
     /**
      * The check again, right before a write: the sync's reads and merge take time, and somebody
      * can join in between. Null when the channel is still the viewer's alone; else the words for

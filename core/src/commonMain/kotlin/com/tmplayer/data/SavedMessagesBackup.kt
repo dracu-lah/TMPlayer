@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
+import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.FormattedText
 import dev.g000sha256.tdl.dto.InputDocument
@@ -69,35 +70,11 @@ object SavedMessagesBackup : BackupSender {
             val caption = FormattedText("$TAG\n${L.signoutBackupCaption}", emptyArray())
             val content = InputMessageDocument(InputDocument(InputFileLocal(local.absolutePath), null, true), caption)
             val options = MessageSendOptions(null, true, false, false, false, 0L, false, null, 0L, 0, false)
-            // Telegram's own word that the file arrived, by the temporary id the send gave: no clock
-            // is compared, so a device whose clock is wrong confirms like any other. Subscribed
-            // before the send, so an answer that beats the send's own reply is not missed.
-            val results = java.util.concurrent.ConcurrentHashMap<Long, BackupSend>()
-            coroutineScope {
-                val ok = launch(start = CoroutineStart.UNDISPATCHED) {
-                    td.messageSendSucceededUpdates.collect { results[it.oldMessageId] = BackupSend.Sent }
-                }
-                val failed = launch(start = CoroutineStart.UNDISPATCHED) {
-                    td.messageSendFailedUpdates.collect { results[it.oldMessageId] = BackupSend.Failed(Failures.humanise(it.error.message)) }
-                }
-                try {
-                    val sent = waitingOutFlood(3, 60, { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
-                        td.sendMessage(chat, null, null, options, null, content)
-                    }
-                    if (sent !is TdlResult.Success) return@coroutineScope BackupSend.Failed(Failures.humanise(sent.errorMessage ?: "send"))
-                    val id = sent.result.id
-                    // Already past "sending" in the reply itself: nothing to wait for.
-                    if (sent.result.sendingState == null) return@coroutineScope BackupSend.Sent
-                    repeat(CONFIRM_TRIES) {
-                        results[id]?.let { return@coroutineScope it }
-                        delay(CONFIRM_STEP_MS)
-                    }
-                    results[id] ?: BackupSend.Failed(L.signoutBackupSlow)
-                } finally {
-                    ok.cancel()
-                    failed.cancel()
-                }
-            }
+            // The channel is checked once more right before the post (the reads above took time and
+            // somebody may have joined); not safe or not known: Saved Messages takes it.
+            val target = if (chat == saved || settings == null) chat else SyncDestinations.backupChatBeforeWrite(settings, TdChannelProbe(td), chat, saved)
+            // Telegram refusing the post in the channel: Saved Messages, once, and nowhere else.
+            postWithFallback(target, saved, settings) { to -> post(td, to, options, content) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -107,6 +84,61 @@ object SavedMessagesBackup : BackupSender {
             // Sent or not, the copy of the viewer's lists made for the upload does not stay on disk.
             folder?.deleteRecursively()
         }
+    }
+
+    /** One post of the file to [chat]: Telegram's own word that it arrived, [PostOutcome.raw] the error text when it did not. */
+    private suspend fun post(td: TdlClient, chat: Long, options: MessageSendOptions, content: InputMessageDocument): PostOutcome =
+        coroutineScope {
+            // By the temporary id the send gave: no clock is compared, so a device whose clock is wrong
+            // confirms like any other. Subscribed before the send, so an answer that beats the send's
+            // own reply is not missed.
+            val results = java.util.concurrent.ConcurrentHashMap<Long, PostOutcome>()
+            val ok = launch(start = CoroutineStart.UNDISPATCHED) {
+                td.messageSendSucceededUpdates.collect { results[it.oldMessageId] = PostOutcome(BackupSend.Sent) }
+            }
+            val failed = launch(start = CoroutineStart.UNDISPATCHED) {
+                td.messageSendFailedUpdates.collect {
+                    results[it.oldMessageId] = PostOutcome(BackupSend.Failed(Failures.humanise(it.error.message)), it.error.message)
+                }
+            }
+            try {
+                val sent = waitingOutFlood(3, 60, { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } }) {
+                    td.sendMessage(chat, null, null, options, null, content)
+                }
+                if (sent !is TdlResult.Success) return@coroutineScope PostOutcome(BackupSend.Failed(Failures.humanise(sent.errorMessage ?: "send")), sent.errorMessage)
+                val id = sent.result.id
+                // Already past "sending" in the reply itself: nothing to wait for.
+                if (sent.result.sendingState == null) return@coroutineScope PostOutcome(BackupSend.Sent)
+                repeat(CONFIRM_TRIES) {
+                    results[id]?.let { return@coroutineScope it }
+                    delay(CONFIRM_STEP_MS)
+                }
+                results[id] ?: PostOutcome(BackupSend.Failed(L.signoutBackupSlow))
+            } finally {
+                ok.cancel()
+                failed.cancel()
+            }
+        }
+
+    /** What one post came to; [raw] is Telegram's error text (for [SyncChannelCheck.refusedPosting]), null when none. */
+    internal class PostOutcome(val result: BackupSend, val raw: String? = null)
+
+    /**
+     * Posts to [chat]; when that is not Saved Messages and Telegram refuses the account a post there
+     * (HX87), the refusal is noted (Saved Messages for the next hour) and the file goes ONCE to
+     * [saved], the only other chat allowed. Never to anywhere else, never in a loop: the second
+     * answer is final.
+     */
+    internal suspend fun postWithFallback(
+        chat: Long,
+        saved: Long,
+        settings: SettingsStore?,
+        post: suspend (Long) -> PostOutcome,
+    ): BackupSend {
+        val first = post(chat)
+        if (chat == saved || first.result is BackupSend.Sent || !SyncChannelCheck.refusedPosting(first.raw)) return first.result
+        if (settings != null) SyncDestinations.notePostingRefused(settings)
+        return post(saved).result
     }
 
     /** Leftovers of an upload that never finished: gone with the account (sign out). */
