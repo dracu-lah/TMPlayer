@@ -1,0 +1,331 @@
+package com.tmplayer.ui.profiles
+
+import androidx.activity.ComponentActivity
+import androidx.compose.material3.Text
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.tmplayer.data.FormFactor
+import com.tmplayer.data.ProfilePin
+import com.tmplayer.data.ProfileUnlock
+import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
+import com.tmplayer.ui.lock.ProfileFlow
+import com.tmplayer.ui.lock.ProfilesGate
+import com.tmplayer.ui.theme.TmMaterialTheme
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * The gate round the shell on a phone (HX88): one profile goes straight in, two meet the picker,
+ * and a profile's PIN guards its content on every way in (a cold start, a sign out, a remove, a
+ * process started again), with the five tries and the 30 second wait of [ProfilePin].
+ */
+@OptIn(ExperimentalTestApi::class)
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "w360dp-h640dp-port-night-xhdpi")
+class ProfilesGateTest {
+
+    @get:Rule
+    val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
+    private var kit: ProfileKit? = null
+
+    @org.junit.Before
+    fun setUp() {
+        ProfileUnlock.lock()
+    }
+
+    @After
+    fun tearDown() {
+        kit?.close()
+        ProfileUnlock.lock()
+        FormFactor.override(false)
+    }
+
+    private fun show(flow: ProfileFlow, signInStep: Boolean = false) {
+        rule.setContent {
+            TmMaterialTheme(dark = true) {
+                ProfilesGate(flow, signInStep = signInStep) { Text(HOME) }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    private fun typePin(pin: String) {
+        for (digit in pin) {
+            rule.onNodeWithText(digit.toString()).performClick()
+        }
+        rule.waitForIdle()
+    }
+
+    private fun waitFor(text: String) {
+        rule.waitUntil(15_000) { runCatching { rule.onNodeWithText(text, substring = true).assertExists() }.isSuccess }
+    }
+
+    @Test
+    fun `with one profile the launch goes straight in, no picker`() {
+        val k = ProfileKit("Asha").also { kit = it }
+        show(k.flow())
+        rule.onNodeWithText(HOME).assertExists()
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertDoesNotExist()
+        rule.onNodeWithText(L.profilesManage).assertDoesNotExist()
+    }
+
+    @Test
+    fun `with two profiles the picker comes first, a tap opens the profile`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        show(k.flow())
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+        rule.onNodeWithText(L.profilesAdd).assertExists()
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        waitFor(HOME)
+        assertEquals(k.ids[1], k.book.list.value.activeId)
+    }
+
+    @Test
+    fun `at the limit of three the Add tile goes and the line says the limit`() {
+        val k = ProfileKit("Asha", "Ben", "Cleo").also { kit = it }
+        show(k.flow())
+        rule.onNodeWithText(L.profilesAdd).assertDoesNotExist()
+        rule.onNodeWithText(L.profilesLimit(count = 3)).assertExists()
+    }
+
+    @Test
+    fun `one profile with a PIN asks it on a cold start, and a process started again asks again`() {
+        val k = ProfileKit("Asha").also { kit = it }
+        k.pin(0, "1234")
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithText(L.profilesPinFor(name = "Asha")).assertExists()
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+        typePin("1234")
+        waitFor(HOME)
+        assertTrue(ProfileUnlock.isUnlocked(k.ids[0]))
+        // The process dies: the unlock lived in memory alone, so the next process asks again
+        // (what a new process starts with: nothing unlocked).
+        ProfileUnlock.lock()
+        val again = k.flow()
+        assertTrue(again.needsUnlock(k.book.list.value))
+    }
+
+    @Test
+    fun `signing out one profile leaves the other behind its PIN`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.pin(1, "4321")
+        val flow = k.flow()
+        show(flow)
+        // Asha is open and picked; she signs herself out from Settings.
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        flow.signOutOpen(deleteDownloads = false)
+        waitFor(L.profilesPinFor(name = "Ben"))
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+        assertEquals(listOf(k.ids[0]), k.platform.wiped.toList())
+        typePin("4321")
+        waitFor(HOME)
+    }
+
+    @Test
+    fun `removing a broken profile keeps the picker, and the locked one still asks its PIN`() {
+        val k = ProfileKit("Asha", "Ben", "Cleo").also { kit = it }
+        k.pin(1, "4321")
+        // Cleo's folder is gone behind the app's back.
+        val cleo = k.book.list.value.byId(k.ids[2])!!
+        com.tmplayer.data.AccountDirs.pathsFor(k.base, cleo).databaseDir.deleteRecursively()
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithText(L.profilesNeedsAttention).assertExists()
+        rule.onNodeWithContentDescription("Cleo", substring = true).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesRemove).performClick()
+        rule.waitUntil(15_000) { k.book.list.value.byId(k.ids[2]) == null }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists()
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+    }
+
+    @Test
+    fun `five wrong PINs start the 30 second wait, counted down`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.pin(1, "4321")
+        show(k.flow())
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitForIdle()
+        repeat(ProfilePin.TRIES) { n ->
+            typePin("0000")
+            rule.waitUntil(15_000) { k.book.list.value.byId(k.ids[1])!!.pinFailures == n + 1 }
+            rule.waitForIdle()
+        }
+        waitFor(L.lockWaitSeconds(seconds = 30).substringBefore("30"))
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+        assertEquals(ProfilePin.WAIT_MS, k.book.list.value.byId(k.ids[1])!!.pinWaitLeftMs)
+    }
+
+    @Test
+    fun `switching while a video plays asks first, then stops it before the switch`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        k.platform.playing = true
+        flow.ask()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesSwitchPlayTitle(name = "Ben")).assertExists()
+        assertEquals(k.ids[0], k.book.list.value.activeId)
+        rule.onNodeWithText(L.profilesSwitch).performClick()
+        waitFor(HOME)
+        assertEquals(1, k.platform.stopped)
+        assertEquals(k.ids[1], k.book.list.value.activeId)
+    }
+
+    @Test
+    fun `Back on the picker the menu opened goes back to the open profile`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        flow.ask()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText(HOME).assertExists()
+        assertFalse(rule.activity.isFinishing)
+    }
+
+    @Test
+    fun `Back on the picker at launch leaves the app`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        show(k.flow())
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        assertTrue(rule.activity.isFinishing)
+    }
+
+    @Test
+    fun `Back on a sign in screen with another profile beside it brings the picker`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        val flow = k.flow()
+        show(flow, signInStep = true)
+        rule.onNodeWithText(L.profilesSignInAgain).assertExists()
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
+        assertFalse(rule.activity.isFinishing)
+    }
+
+    @Test
+    fun `switching away from a profile and back asks its PIN again`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.pin(1, "4321")
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitForIdle()
+        typePin("4321")
+        waitFor(HOME)
+        assertTrue(ProfileUnlock.isUnlocked(k.ids[1]))
+        flow.ask()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        assertFalse("switching away locks it", ProfileUnlock.isUnlocked(k.ids[1]))
+        flow.ask()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Ben", substring = true).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists()
+        rule.onNodeWithText(HOME).assertDoesNotExist()
+    }
+
+    @Test
+    fun `signing out a locked profile asks its PIN first`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.pin(1, "4321")
+        val flow = k.flow()
+        show(flow)
+        flow.signOut(k.ids[1])
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists()
+        rule.onNodeWithText(L.profilesSignOutTitle(name = "Ben")).assertDoesNotExist()
+        // A caller that skips the gate is sent through it.
+        flow.confirmSignOut(k.ids[1], deleteDownloads = false)
+        rule.waitForIdle()
+        assertTrue(k.platform.wiped.isEmpty())
+        rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists()
+        typePin("4321")
+        waitFor(L.profilesSignOutTitle(name = "Ben"))
+    }
+
+    @Test
+    fun `remove all accounts with one wrong PIN wipes nothing`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.pin(1, "4321")
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        flow.removeAll(deleteDownloads = false)
+        rule.waitForIdle()
+        rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists()
+        typePin("0000")
+        rule.waitUntil(15_000) { k.book.list.value.byId(k.ids[1])!!.pinFailures == 1 }
+        rule.waitForIdle()
+        // Given up at the wrong PIN: back where it came from, every profile still there.
+        rule.onNodeWithText(L.commonCancel).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(HOME).assertExists()
+        assertEquals(2, k.book.list.value.profiles.size)
+        assertTrue(k.platform.wiped.isEmpty())
+    }
+
+    @Test
+    fun `remove all accounts asks the app lock's PIN, then every profile's, then wipes`() {
+        val k = ProfileKit("Asha", "Ben").also { kit = it }
+        k.pin(1, "4321")
+        k.platform.appPin = "9999"
+        val flow = k.flow()
+        show(flow)
+        rule.onNodeWithContentDescription("Asha", substring = true).performClick()
+        waitFor(HOME)
+        flow.removeAll(deleteDownloads = false)
+        rule.waitForIdle()
+        rule.onNodeWithText(L.lockEnterPin).assertExists()
+        typePin("9999")
+        rule.waitUntil(15_000) { runCatching { rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists() }.isSuccess }
+        assertTrue("nothing wiped before every PIN", k.platform.wiped.isEmpty())
+        typePin("4321")
+        rule.waitUntil(15_000) { k.book.list.value.profiles.size == 1 && k.platform.wiped.size == 2 }
+    }
+
+    private companion object {
+        const val HOME = "The shell of the open profile"
+    }
+}
