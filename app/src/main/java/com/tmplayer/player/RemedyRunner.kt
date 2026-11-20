@@ -62,7 +62,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         fun facts(excluded: Set<String>): LadderFacts
 
         /** Whether one of the device's own decoders takes sound of [mime]: passthrough off needs one (A2). */
-        fun deviceDecodesAudio(mime: String?): Boolean = AudioPolicy.deviceDecodes(mime)
+        fun deviceDecodesAudio(format: androidx.media3.common.Format?): Boolean = AudioPolicy.deviceDecodes(format)
 
         /** The class of what plays ([com.tmplayer.data.RemedyClassKey]), null while its formats are not known. */
         fun classKey(): String?
@@ -328,7 +328,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             // Passthrough off (A2) helps only where the output refused Dolby or DTS and the device has its
             // own decoder for it; with none the track would go silent, so the engine hop comes next instead.
             val refused = AudioPolicy.refusedFormat(error)
-            facts = facts.copy(passthrough = facts.passthrough && AudioPolicy.dolbyOrDts(refused) && host.deviceDecodesAudio(refused?.sampleMimeType))
+            facts = facts.copy(passthrough = facts.passthrough && AudioPolicy.dolbyOrDts(refused) && host.deviceDecodesAudio(refused))
             // The output refused the bitstream: the next video of this class starts its sound in PCM (RL8).
             if (AudioPolicy.teachesSoftware(error, facts.audioSoftwareTakes)) {
                 memory = memory.learned(k, Remedy.AudioSoftware, host.today())

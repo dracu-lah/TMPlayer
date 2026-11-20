@@ -1186,7 +1186,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /** Whether this video already said its sound cannot play here ([soundUnplayable]). */
-    private var soundSaid = false
+    private val soundNotice = SoundNotice()
 
     /**
      * Says once per video, when its sound cannot play on this device (no decoder for it here and
@@ -1194,8 +1194,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * why it is silent rather than leaving the viewer to guess. Not while casting or on VLC.
      */
     private fun soundUnplayable(tracks: Tracks) {
-        if (soundSaid || vlcEngine != null || !AudioPolicy.soundUnplayable(tracks)) return
-        soundSaid = true
+        if (!soundNotice.shouldSay(tracks, otherEngine = vlcEngine != null)) return
         val format = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO }?.getTrackFormat(0)
         Log.w("TMPlayer", "No decoder for the sound: ${format?.sampleMimeType} ${format?.codecs.orEmpty()}")
         feedback?.message(L.playerNoSoundHere, holdMs = SEEK_NOTICE_MS)
@@ -5185,7 +5184,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         hideSkipPill()
         creditsSkipped = false
         pictureChecked = false
-        soundSaid = false
+        soundNotice.newVideo()
         hideNextUp()
         nextUpShown = false
         nextUpDismissed = false

@@ -91,6 +91,56 @@ class PcmOnlyOutputProviderTest {
         booleanArrayOf(selected),
     )
 
+    private val joc: Format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_E_AC3_JOC).setChannelCount(6).setSampleRate(48_000).build()
+    private val dtsHd: Format = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_DTS_HD).setChannelCount(8).setSampleRate(48_000).build()
+
+    /** A device whose own decoders are [decoders], each type with the channels it takes. */
+    private fun device(vararg decoders: Pair<String, Int>): (String) -> Int? = { type -> decoders.toMap()[type] }
+
+    @Test
+    fun atmosCountsAsDecodableOnAnEac3OnlyDeviceAsMediasRendererFallsBack() {
+        val eac3Only = device(MimeTypes.AUDIO_E_AC3 to 8)
+        assertTrue(AudioPolicy.deviceDecodes(joc, eac3Only))
+        assertTrue(AudioPolicy.decodable(joc, eac3Only) { false })
+    }
+
+    @Test
+    fun dtsHdCountsOnADtsOnlyDeviceAsMediasRendererPlaysItsCore() {
+        val dtsOnly = device(MimeTypes.AUDIO_DTS to 8)
+        assertTrue(AudioPolicy.deviceDecodes(dtsHd, dtsOnly))
+        assertTrue(AudioPolicy.deviceDecodes(dts, dtsOnly))
+        // An E-AC-3 decoder is no help for DTS-HD; FFmpeg's still makes it decodable.
+        val eac3Only = device(MimeTypes.AUDIO_E_AC3 to 8)
+        assertFalse(AudioPolicy.deviceDecodes(dtsHd, eac3Only))
+        assertFalse(AudioPolicy.decodable(dtsHd, eac3Only) { false })
+        assertTrue(AudioPolicy.decodable(dtsHd, eac3Only) { it == MimeTypes.AUDIO_DTS_HD })
+    }
+
+    @Test
+    fun noDecoderTooFewChannelsAndAFailingLookupAllCountAsNot() {
+        assertFalse(AudioPolicy.deviceDecodes(trueHd, device()))
+        assertFalse(AudioPolicy.decodable(trueHd, device()) { false })
+        // A stereo-only E-AC-3 decoder for a 5.1 track.
+        assertFalse(AudioPolicy.deviceDecodes(EAC3, device(MimeTypes.AUDIO_E_AC3 to 2)))
+        assertTrue(AudioPolicy.deviceDecodes(EAC3, device(MimeTypes.AUDIO_E_AC3 to 6)))
+        assertFalse(AudioPolicy.deviceDecodes(EAC3) { error("query failed") })
+        assertFalse(AudioPolicy.deviceDecodes(null, device(MimeTypes.AUDIO_E_AC3 to 8)))
+        assertFalse(AudioPolicy.deviceDecodes(PCM.buildUpon().setSampleMimeType("video/avc").build(), device("video/avc" to 8)))
+    }
+
+    @Test
+    fun theNoSoundLineIsSaidOncePerVideoAndNotOnAnotherEngine() {
+        val silent = tracks(soundGroup(trueHd, supported = false, selected = false))
+        val playing = tracks(soundGroup(ac3, supported = true, selected = true))
+        val notice = SoundNotice()
+        assertFalse("sound that plays does not use the line up", notice.shouldSay(playing, otherEngine = false))
+        assertFalse("not on VLC", notice.shouldSay(silent, otherEngine = true))
+        assertTrue(notice.shouldSay(silent, otherEngine = false))
+        assertFalse("once per video", notice.shouldSay(silent, otherEngine = false))
+        notice.newVideo()
+        assertTrue(notice.shouldSay(silent, otherEngine = false))
+    }
+
     @Test
     fun soundThatCannotPlayIsSaidAndSoundThatCanIsNot() {
         assertTrue(AudioPolicy.soundUnplayable(tracks(soundGroup(trueHd, supported = false, selected = false))))

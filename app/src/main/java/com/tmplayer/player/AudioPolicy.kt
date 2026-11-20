@@ -74,17 +74,40 @@ object AudioPolicy {
      */
     fun dolbyOrDts(format: Format?): Boolean = format?.sampleMimeType in DOLBY_DTS
 
-    /** Whether one of this device's own decoders takes sound of [mime] (TV sticks often have none for TrueHD or DTS-HD). */
-    fun deviceDecodes(mime: String?): Boolean {
+    /**
+     * The most channels any of the device's own decoders for [mime] takes, or null with no decoder
+     * for it. A decoder that does not say (no audio capabilities) counts as taking any number.
+     */
+    fun deviceDecoderChannels(mime: String): Int? = runCatching {
+        val infos = MediaCodecUtil.getDecoderInfos(mime, false, false)
+        if (infos.isEmpty()) null else infos.maxOf { it.capabilities?.audioCapabilities?.maxInputChannelCount ?: Int.MAX_VALUE }
+    }.getOrNull()
+
+    /**
+     * Whether one of this device's own decoders takes [format] (TV sticks often have none for TrueHD
+     * or DTS-HD), looked up the way Media3's audio renderer looks: the format's own type, then its
+     * alternative ([MediaCodecUtil.getAlternativeCodecMimeType]: E-AC-3 JOC, Atmos, falls back to an
+     * E-AC-3 decoder; DTS-HD and DTS:X to a DTS decoder, which plays their core). A decoder that
+     * takes fewer channels than the track has does not count, as far as it says ([channels] is
+     * [deviceDecoderChannels] outside tests); a decoder that says nothing is trusted.
+     */
+    fun deviceDecodes(format: Format?, channels: (String) -> Int? = ::deviceDecoderChannels): Boolean {
+        val mime = format?.sampleMimeType
         if (mime.isNullOrBlank() || !MimeTypes.isAudio(mime)) return false
-        return runCatching { MediaCodecUtil.getDecoderInfos(mime, false, false).isNotEmpty() }.getOrDefault(false)
+        val alternative = runCatching { MediaCodecUtil.getAlternativeCodecMimeType(format) }.getOrNull()
+        val needed = format.channelCount
+        return listOfNotNull(mime, alternative).distinct().any { type ->
+            val most = runCatching { channels(type) }.getOrNull() ?: return@any false
+            needed <= 0 || most >= needed
+        }
     }
 
-    /** Whether a decoder here, the device's or FFmpeg's, turns [format] into PCM. */
-    fun decodable(format: Format?): Boolean {
-        val mime = format?.sampleMimeType
-        return deviceDecodes(mime) || softwareTakes(mime)
-    }
+    /** Whether a decoder here, the device's ([deviceDecodes]) or FFmpeg's ([softwareTakes]), turns [format] into PCM. */
+    fun decodable(
+        format: Format?,
+        channels: (String) -> Int? = ::deviceDecoderChannels,
+        ffmpeg: (String?) -> Boolean = ::softwareTakes,
+    ): Boolean = deviceDecodes(format, channels) || ffmpeg(format?.sampleMimeType)
 
     /**
      * Settings' Audio passthrough as the player applies it: the row is the television's, so on a
@@ -116,4 +139,25 @@ object AudioPolicy {
         MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_AC4, MimeTypes.AUDIO_TRUEHD,
         MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD, MimeTypes.AUDIO_DTS_EXPRESS, MimeTypes.AUDIO_DTS_X,
     )
+}
+
+/**
+ * The once per video "no sound here" line ([AudioPolicy.soundUnplayable]): said the first time the
+ * tracks show sound that cannot play, never again for that video, and not while another engine
+ * plays. Tracks whose sound plays do not use it up, so a rebuild that loses the sound still says so.
+ */
+internal class SoundNotice {
+    private var said = false
+
+    /** True when the line is to be said now for [tracks]. */
+    fun shouldSay(tracks: Tracks, otherEngine: Boolean): Boolean {
+        if (said || otherEngine || !AudioPolicy.soundUnplayable(tracks)) return false
+        said = true
+        return true
+    }
+
+    /** A new video: it may be said again. */
+    fun newVideo() {
+        said = false
+    }
 }

@@ -127,7 +127,7 @@ class RemedyRunnerTest {
             autoSwitch = autoSwitch,
         )
 
-        override fun deviceDecodesAudio(mime: String?) = deviceDecodes
+        override fun deviceDecodesAudio(format: Format?) = deviceDecodes
         override fun classKey() = key
         override fun failedRenderer(error: PlaybackException): RemedyRunner.FailedRenderer? {
             val format = (error as? ExoPlaybackException)?.rendererFormat ?: return null
@@ -510,7 +510,9 @@ class RemedyRunnerTest {
         player.soundPlays = false
         play()
         clock.advance(RemedyLadder.WORKED_MS + 5_000)
-        val learned = player.saved?.records?.values?.flatMap { it.working }.orEmpty()
+        val saved = player.saved
+        assertTrue("the hop was written to the class memory", saved != null && saved.records.isNotEmpty())
+        val learned = saved!!.records.values.flatMap { it.working }
         assertFalse("silent play must not teach the class: $learned", Remedy.PassthroughOff in learned)
     }
 
