@@ -207,10 +207,29 @@ Work that writes for its owner, not for whoever is open when it writes (each tak
 - Folder grants for downloads are the device's: one is kept while any profile's downloads are in
   it (`SettingsStore.downloadPathsOfEveryProfileNow`).
 
+Telegram sessions are bound too: a job that writes to Telegram, or outlives a screen, takes
+its client through `Td.sessionFor(owner)`, null while a switch is under way, once another
+profile is open, or when the client that came up meanwhile is the next profile's (each
+`TdSession` knows the profile it was made for). The sync, the sign out's backup, the sync
+channel's page and its "Create it for me", the Devices page's sign outs, downloads and the new
+video alerts take theirs there, and check `OwnedSessions.ensure()` again before each Telegram
+write. `TdSessionPolicyTest` lists every other wait and why it is safe (a read for the screen on
+screen, or the player, which closes before a switch).
+
+The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
+background scope as the profile open when they were asked (`AccountOwner`), so one that lands
+after a switch is dropped.
+
 Still resolving the open profile when they write, and why that is safe: the players' history
-edits, watched marks and bookmarks, and every screen's own edits run on the activity's
-`lifecycleScope` or a view model of the shell keyed on the open profile; a switch closes the
-player and rebuilds the shell before the old client closes, so they end with their profile.
+edits, watched marks and bookmarks carry the player's owner (taken when it opened) or run on its
+`lifecycleScope`, and the player closes before a switch; every other screen's edit runs on the
+screen's own scope, which a switch ends when it rebuilds the shell, right after the flip and before
+the next profile's first frame.
+
+The hooks before a switch run together under one deadline of 30 s (`BeforeSwitch.runAll`); the
+picker says what it is still waiting for ("Finishing first: a sync, moving downloads") with a
+Cancel that stays on the open profile. Work that has not stopped by the deadline is left to end
+on its own: its writes carry their owner and are dropped.
 
 Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
 
