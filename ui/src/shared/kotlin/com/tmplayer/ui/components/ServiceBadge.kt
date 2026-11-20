@@ -113,3 +113,24 @@ private val LogoChip = Color.White
 private const val CORNER = 0.25f
 private const val LOGO_INSET = 0.1f
 private const val LETTER = 0.5f
+
+/**
+ * Several services named in one sentence (a consent dialog that says "TMDB, TVmaze and AniList"):
+ * each as a [ServiceBadge] with its name, wrapping onto a second line at a large font or a narrow
+ * width instead of running off the edge.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun ServiceBadgeRow(
+    services: List<Service>,
+    modifier: Modifier = Modifier,
+    size: Dp = ServiceBadgeSize.Line,
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) {
+        services.forEach { ServiceBadge(it, size = size, showName = true) }
+    }
+}

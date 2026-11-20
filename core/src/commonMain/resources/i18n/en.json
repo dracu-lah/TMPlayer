@@ -34,6 +34,7 @@
     "reminder3_text_b": "This is the final reminder. If you would like to chip in you can, and Settings keeps the link. If not, nothing changes.",
     "reminder3_title_a": "One last note",
     "reminder3_title_b": "We will not ask again",
+    "sentry_detail": "Receives a crash report, only if this build has them and you allow it",
     "show_qr": "Show as a QR code",
     "show_qr_detail": "Scan it with your phone to support from there",
     "source_code": "Source code",

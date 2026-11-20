@@ -443,7 +443,15 @@ fun TrailerQr(trailer: MetaTrailer, modifier: Modifier = Modifier, text: String?
         ) {
             bitmap?.let { Image(it, contentDescription = s.metadataTrailerQr, modifier = Modifier.fillMaxSize().padding(8.dp)) }
         }
-        Text(text ?: s.metadataTrailerScan, style = MaterialTheme.typography.bodyMedium, color = Tone.text, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Where the trailer plays: YouTube's tile and name (HX93), drawn only.
+            com.tmplayer.ui.components.ServiceBadge(
+                com.tmplayer.ui.components.Service.YouTube,
+                size = com.tmplayer.ui.components.ServiceBadgeSize.Line,
+                showName = true,
+            )
+            Text(text ?: s.metadataTrailerScan, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+        }
     }
 }
 
@@ -469,7 +477,8 @@ fun TrailerPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val ink = if (focused) Tone.onFocusFill else Tone.text
-        Icon(TrailerIcon, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
+        // The trailer plays from YouTube: its tile leads the pill (HX93), drawn only, never a stop of its own.
+        com.tmplayer.ui.components.ServiceBadge(com.tmplayer.ui.components.Service.YouTube, size = com.tmplayer.ui.components.ServiceBadgeSize.Line)
         Text(s.metadataTrailer, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1)
     }
 }

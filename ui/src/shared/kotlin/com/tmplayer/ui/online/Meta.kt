@@ -51,6 +51,8 @@ import com.tmplayer.online.MetaQuery
 import com.tmplayer.online.MetaResult
 import com.tmplayer.online.MetaWords
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.online.MetaProvider
+import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -463,12 +465,23 @@ private const val ONLINE_ART_WIDTH = 480
 /** "From TMDB" (or TVmaze, with its licence) under the words it credits. */
 @Composable
 fun MetaCredit(info: MetaInfo, modifier: Modifier = Modifier) {
-    Text(
-        MetaWords.credit(info.provider),
-        style = MaterialTheme.typography.labelSmall,
-        color = Tone.muted,
-        modifier = modifier,
-    )
+    // The source's logo beside the words (HX93). The tile is decoration, so the credit is read once.
+    androidx.compose.foundation.layout.Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        com.tmplayer.ui.components.ServiceBadge(
+            when (info.provider) {
+                MetaProvider.Tmdb -> com.tmplayer.ui.components.Service.Tmdb
+                MetaProvider.TvMaze -> com.tmplayer.ui.components.Service.TvMaze
+                MetaProvider.AniList -> com.tmplayer.ui.components.Service.AniList
+            },
+            modifier = Modifier.padding(end = 8.dp),
+            size = com.tmplayer.ui.components.ServiceBadgeSize.Line,
+        )
+        Text(
+            MetaWords.credit(info.provider),
+            style = MaterialTheme.typography.labelSmall,
+            color = Tone.muted,
+        )
+    }
 }
 
 /**
