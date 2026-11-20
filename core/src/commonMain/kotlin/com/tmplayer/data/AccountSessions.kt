@@ -144,9 +144,32 @@ object AccountSessions {
         }
     }
 
-    /** Signs [id] out. Null on success, else what went wrong. */
+    /**
+     * The devices an "End all" question names: the first few by name, then how many more, so the
+     * viewer reads what is about to be signed out before agreeing.
+     */
+    fun devicesLine(sessions: List<AccountSession>, s: Messages, shown: Int = 3): String {
+        val names = sessions.map { title(it, s) }
+        val head = names.take(shown).joinToString(", ")
+        return if (names.size > shown) head + ", " + s.sessionsEndAllMore((names.size - shown).toString()) else head
+    }
+
+    /** Whether ending [id] would sign this very device out, which this page never does. */
+    internal fun endsThisDevice(sessions: Array<out dev.g000sha256.tdl.dto.Session>, id: Long): Boolean =
+        sessions.any { it.id == id && it.isCurrent }
+
+    /**
+     * Signs [id] out. Null on success, else what went wrong. This device's own session is refused
+     * here as well as left out of the page (Sign out in Settings is what ends it), and so is any
+     * case where the list cannot be read to tell.
+     */
     suspend fun end(id: Long): String? {
         val td = runCatching { Td.awaitAuthorizedSession().client }.getOrElse { return L.errorsNotConnected }
+        val listed = when (val read = td.getActiveSessions()) {
+            is TdlResult.Success -> read.result.sessions.orEmpty()
+            is TdlResult.Failure -> return Failures.humanise(read.message)
+        }
+        if (endsThisDevice(listed, id)) return L.sessionsEndThisDevice
         val result = td.terminateSession(id)
         return (result as? TdlResult.Failure)?.let { Failures.humanise(it.message) }
     }
