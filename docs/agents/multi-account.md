@@ -255,9 +255,10 @@ frame rate matching).
 
 File walkers, trimmers and cleaners (audited, HX88), each over the open profile's own folders:
 
-- The watch cache (`WatchCacheRules`, Android's `WatchCache`): its folder is the open profile's
-  (`Td.paths.filesDir`), never the adopted one's for everyone; a sweep and Clear cache take the
-  profile when they start and stop before the walk and before each delete once another is open.
+- The watch cache (`WatchCacheRules`, Android's `WatchCache`): every walk and delete is over the
+  folder of the profile the work is for, resolved from that profile's own folder name
+  (`WatchCache.rootOf`, never `Td.paths`); a claim, an eviction, a sweep and Clear cache take that
+  profile when they start and check `OwnedSessions.mayAct` before each delete.
 - TDLib's own trims (`Td.trimStorage`, `clearPicturesAndPreviews`): on the live client, which is
   the open profile's and sees only its own database and files.
 - The downloads: written to and listed in the open profile's folder (`profileDownloadsDir`); a
