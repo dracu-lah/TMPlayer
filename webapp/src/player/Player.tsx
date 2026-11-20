@@ -31,6 +31,7 @@ import { watchStutter, type StutterWatch } from './stutter-watch'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
+import { beforeSwitch } from '../accounts'
 import type { PieceSet, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
 
 /** What plays: the posted file, or one of Telegram's lighter copies of it. */
@@ -828,6 +829,14 @@ export function Player(props: {
     }
     /** Closed while the saved place was still being read: nothing may start after that. */
     let closed = false
+    // A profile switch (HX88) asks first while this plays; then the place is kept and the video stops.
+    onCleanup(
+        beforeSwitch(() => {
+            if (closed) return
+            savePosition(video.currentTime)
+            video.pause()
+        }),
+    )
     onMount(async () => {
         clearFlood()
         setSubDelay(0)

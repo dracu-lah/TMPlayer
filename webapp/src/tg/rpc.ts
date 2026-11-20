@@ -7,6 +7,7 @@ import { failure } from '../errors'
 import { showCrashCard } from '../crash'
 import { createFloodClock, floodSeconds } from './flood'
 import { noteNames } from '../logs'
+import { names, picker } from '../accounts'
 
 type Out =
     | { id: number; value: unknown }
@@ -29,7 +30,8 @@ let started!: (w: Worker) => void
 const ready = new Promise<Worker>((r) => (started = r))
 
 function start() {
-    const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: 'telegram' })
+    // Its name tells the worker whose storage to open (HX88): `telegram` is the adopted profile's.
+    const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: names.worker })
     w.onmessage = async (ev: MessageEvent<Out>) => {
         const msg = ev.data
         // The line to Telegram as mtcute reports it: offline, connecting, updating or connected.
@@ -61,7 +63,7 @@ function start() {
     w.onerror = (ev) => {
         ev.preventDefault()
         console.error('[rpc] the Telegram worker failed', ev.message)
-        if (worker !== w) return
+        if (worker !== w || stopped) return
         w.terminate()
         worker = null
         setLink(null)
@@ -112,10 +114,21 @@ const RESTART_WINDOW_MS = 5 * 60_000
 const [sessionHere, setSessionHere] = createSignal<'waiting' | 'here' | 'elsewhere'>('waiting')
 export { sessionHere }
 
-const LOCK = 'tmplayer-telegram'
+/** One lock per profile (HX88): two tabs never run one profile's client, two profiles may run in two tabs. */
+const LOCK = names.lock
 const STEAL = 'tmplayer-use-here'
 
-function claim() {
+let claimed = false
+/** Set once the page let its client go (a sign out of this profile): nothing starts it again. */
+let stopped = false
+
+/**
+ * Starts this tab's Telegram client for its profile. At once when there is nothing to choose; after
+ * the picker when the tab starts on it, so a profile nobody chose never opens a client.
+ */
+export function openSession() {
+    if (claimed || stopped) return
+    claimed = true
     const locks = navigator.locks
     if (!locks) {
         start()
@@ -152,7 +165,20 @@ function claim() {
             locks.request(LOCK, () => (location.reload(), new Promise<void>(() => {})))
         })
 }
-claim()
+if (!picker()) openSession()
+
+/**
+ * Stops this tab's client for good (the page is about to leave its profile): the worker goes, so
+ * its storage can be deleted, and calls still waiting fail.
+ */
+export function stopSession() {
+    stopped = true
+    worker?.terminate()
+    worker = null
+    setLink(null)
+    for (const [, p] of pending) p.reject(new DOMException('session closed', 'AbortError'))
+    pending.clear()
+}
 
 /** "Use it here": this tab takes the session from the other one, which stops. */
 export function useHere() {
