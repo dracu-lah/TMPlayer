@@ -671,3 +671,86 @@ test('Remove all refuses, before wiping anything, while a profile is open in ano
     expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main', 'abc123'])
     await other.close()
 })
+
+// ---- Fourth review ----
+
+test('locked under a playing video: no key plays, opens or skips it, and nothing of it plays on', async ({ page }) => {
+    // The Media Session as the OS's player sees it: every handler the page sets is noted.
+    await page.addInitScript(() => {
+        const handlers: Record<string, unknown> = {}
+        ;(window as unknown as { __media: Record<string, unknown> }).__media = handlers
+        const session = navigator.mediaSession
+        if (!session) return
+        const set = session.setActionHandler.bind(session)
+        session.setActionHandler = (action, handler) => {
+            handlers[action] = handler
+            set(action, handler)
+        }
+    })
+    await danaUnlocked(page)
+    await page.clock.install()
+    await openClips(page)
+    await openCard(page, 'Native Clip')
+    await playsPast(page, 1)
+    expect(await page.evaluate(() => Object.values((window as unknown as { __media: Record<string, unknown> }).__media).some((h) => typeof h === 'function'))).toBe(true)
+    await showTab(page, 'hidden')
+    await page.clock.fastForward(61_000)
+    await showTab(page, 'visible')
+    await expect(picker(page)).toBeVisible()
+    // The player closed after keeping its place; its media and the Media Session are empty.
+    await expect(page).not.toHaveURL(/\/watch\//)
+    const state = () =>
+        page.evaluate(() => ({
+            playing: [...document.querySelectorAll('video, audio')].some((m) => !(m as HTMLMediaElement).paused),
+            pip: !!document.pictureInPictureElement,
+            fullscreen: !!document.fullscreenElement,
+            metadata: navigator.mediaSession?.metadata ?? null,
+            playback: navigator.mediaSession?.playbackState ?? 'none',
+            handlers: Object.entries((window as unknown as { __media: Record<string, unknown> }).__media).filter(([, h]) => h !== null).map(([a]) => a),
+            path: location.pathname,
+            dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.className),
+        }))
+    const locked = { playing: false, pip: false, fullscreen: false, metadata: null, playback: 'none', handlers: [], path: '/', dialogs: ['profiles'] }
+    expect(await state()).toEqual(locked)
+    // The player's keys, the page's keys: nothing changes.
+    for (const key of ['k', 'p', 'Control+p', 'Shift+N', ' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '/', 'Escape', 'Control+k']) await page.keyboard.press(key)
+    await page.clock.fastForward(2_000)
+    expect(await state()).toEqual(locked)
+    await expect(picker(page)).toBeVisible()
+    // The page behind is inert and hidden from screen readers.
+    expect(await page.locator('main.page').evaluate((m) => m.hasAttribute('inert'))).toBe(true)
+    // A dialog that opens late (an answer coming back after the lock) does not open.
+    expect(
+        await page.evaluate(() => {
+            const d = document.body.appendChild(document.createElement('dialog'))
+            d.textContent = 'late answer'
+            d.showModal()
+            return d.open
+        }),
+    ).toBe(false)
+    // The PIN opens it again, at Home; the place was kept for Continue watching.
+    await tile(page, /^Dana Test/).click()
+    await page.keyboard.type('1111')
+    await expect(picker(page)).toHaveCount(0)
+    expect(await page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('tmplayer-last-position')))).toBe(true)
+})
+
+test('Remove all checks again right before wiping: a tab opened while its question was up stops it', async ({ page, context }) => {
+    await twoProfiles(page)
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('main.page')).toBeVisible()
+    await openSettings(page)
+    await page.getByRole('button', { name: 'Remove all accounts' }).click()
+    const ask = page.getByRole('dialog', { name: 'Remove all accounts?' })
+    await expect(ask).toBeVisible()
+    const other = await context.newPage()
+    await other.goto('/')
+    await reloads(other, () => tile(other, /^Robin Test/).click())
+    await expect(other.locator('main.page')).toBeVisible()
+    await ask.getByRole('button', { name: 'Remove all' }).click()
+    await expect(page.getByText('A profile is open in another tab. Close it there first: nothing was removed')).toBeVisible()
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main', 'abc123'])
+    expect(await storedKeys(page)).toContain('@abc123:addedMode')
+    await other.close()
+})
