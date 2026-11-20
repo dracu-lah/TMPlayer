@@ -197,6 +197,90 @@ export const setActive = (book: Book, id: string): Book => (find(book, id) ? { .
 /** Whether a tab that has not chosen yet starts on the picker: two or more profiles, or one with a PIN. */
 export const pickerAtLaunch = (book: Book) => book.profiles.length >= 2 || book.profiles.some((p) => p.pin)
 
+// ---- Unlocking: which profile a tab may open ------------------------------------------------
+//
+// A profile with a PIN opens only in a tab that entered its PIN. That unlock lives in the tab alone
+// (sessionStorage, never localStorage), holds the open profile only, and goes on a switch away, a
+// sign out, a remove, an add, the tab closing, or the tab hidden for more than a minute.
+
+/** A tab hidden longer than this locks its PIN profile again. */
+export const RELOCK_HIDDEN_MS = 60_000
+
+/** Work a reload carries on in a profile's page without opening its screens: signing it out, or Remove all. */
+export interface Pending {
+    kind: 'signout' | 'removeAll'
+    id: string
+}
+
+export interface BootPlan {
+    /** The profile the page runs. */
+    id: string
+    /** 'launch' when the tab must choose (or unlock) before anything opens. */
+    picker: 'launch' | null
+    /** Work to finish in that profile with no screen shown. */
+    pending: Pending | null
+}
+
+/** Whether `id` may open in a tab whose unlocked profile is `unlocked`: a profile with no PIN always may. */
+export function mayOpen(book: Book, id: string, unlocked: string | null): boolean {
+    const p = find(book, id)
+    return !!p && (!p.pin || unlocked === id)
+}
+
+/**
+ * What a page starts on. Pending work runs in its profile with no picker and no screens; otherwise the
+ * tab's own choice (or the profile last open), and the picker when the tab has not chosen and there is
+ * something to choose, or when the profile it would open has a PIN this tab has not entered.
+ */
+export function bootPlan(book: Book, tabChoice: string | null, unlocked: string | null, pending: Pending | null): BootPlan {
+    if (pending && find(book, pending.id)) return { id: pending.id, picker: null, pending }
+    const chosen = find(book, tabChoice)
+    const id = chosen?.id ?? book.active
+    const ask = (!chosen && pickerAtLaunch(book)) || !mayOpen(book, id, unlocked)
+    return { id, picker: ask ? 'launch' : null, pending: null }
+}
+
+/** The profile Cancel (or a refused sign in) goes back to: only one this tab had open and that needs no PIN again; else the picker. */
+export function backTarget(book: Book, from: string | null): string | null {
+    const p = find(book, from)
+    return p && !p.pin ? p.id : null
+}
+
+/** The profile Add account remembers to go back to: the open one, only when this tab had chosen it and (with a PIN) unlocked it. */
+export function addingFromFor(book: Book, activeId: string, chosen: boolean, unlocked: string | null): string | null {
+    return chosen && mayOpen(book, activeId, unlocked) ? activeId : null
+}
+
+/** A hidden tab locks its open PIN profile again once it was away for longer than RELOCK_HIDDEN_MS. */
+export function relockDue(book: Book, activeId: string, hiddenAt: number | null, now: number): boolean {
+    return hiddenAt !== null && now - hiddenAt > RELOCK_HIDDEN_MS && !!find(book, activeId)?.pin
+}
+
+/**
+ * Whether signing `id` out (or removing it) needs its PIN first: a PIN profile always does, unless it
+ * is the profile open and unlocked in this tab, or its PIN was entered for this just now (`verified`).
+ */
+export function needsPinFor(book: Book, id: string, activeId: string, unlocked: string | null, verified: ReadonlySet<string>): boolean {
+    const p = find(book, id)
+    if (!p?.pin) return false
+    if (id === activeId && unlocked === id) return false
+    return !verified.has(id)
+}
+
+/** The profiles whose PIN Remove all asks before anything is wiped (all of them right, or nothing goes). */
+export const pinsForRemoveAll = (book: Book, activeId: string, unlocked: string | null): Profile[] =>
+    book.profiles.filter((p) => p.pin && !(p.id === activeId && unlocked === p.id))
+
+/** A pending step as stored in the tab, or null when it does not hold up or its profile is gone. */
+export function readPending(text: string | null | undefined, book: Book): Pending | null {
+    if (!text || text.length > 200) return null
+    try {
+        const v = JSON.parse(text) as { kind?: unknown; id?: unknown }
+        if ((v.kind === 'signout' || v.kind === 'removeAll') && typeof v.id === 'string' && find(book, v.id)) return { kind: v.kind, id: v.id }
+    } catch {}
+    return null
+}
+
 // ---- Storage names -----------------------------------------------------------------------
 
 export interface Names {

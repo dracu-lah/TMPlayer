@@ -4,12 +4,15 @@
 // arrows move along the row (the TV's remote through tv/focus.ts, which treats the picker as a
 // screen of its own), Enter or OK opens, Escape or Back closes it when it was opened from the menu.
 // A long press, a right click or the context menu key opens a profile's options (rename, PIN, sign
-// out); Manage profiles does the same for a touch screen that has no long press.
+// out); Manage profiles does the same for a touch screen that has no long press. A PIN profile asks
+// its PIN every time it is opened here, and before its options; 'lock' (a minute hidden) cannot be
+// closed without choosing.
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
+import { render } from 'solid-js/web'
 import { Add01Icon, Cancel01Icon, LockKeyholeIcon, Logout05Icon, UserGroupIcon, UserSwitchIcon } from '@hugeicons/core-free-icons'
 import * as B from './accountBook'
 import { activeId, book, closePicker, many, openPicker, photoOf, photosVersion, picker } from '../accounts'
-import { addAccount, changePin, pinsWork, removeAll, removeProfile, renameProfile, signInAgain, signOutProfile, switchTo, tryPin } from '../accountFlows'
+import { addAccount, changePin, forgetVerified, pinOpened, pinsWork, pinVerified, removeAll, removeAllNeeds, removeProfile, renameProfile, signInAgain, signOutProfile, switchTo, tryPin } from '../accountFlows'
 import { me } from '../session'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -41,9 +44,17 @@ export function Profiles() {
     let row!: HTMLUListElement
     const from = document.activeElement as HTMLElement | null
     const tiles = () => [...row.querySelectorAll<HTMLButtonElement>('.profile-tile')]
-    onMount(() => queueMicrotask(() => tiles()[0]?.focus({ preventScroll: true })))
-    // Back where the viewer was when it closes.
+    let root!: HTMLDivElement
+    // Nothing behind it takes the keyboard or the screen reader (the bar, a notice): a focus group of its own.
+    const held: Element[] = []
+    onMount(() => {
+        for (const el of root.parentElement?.children ?? []) if (el !== root && !el.hasAttribute('inert')) (el.setAttribute('inert', ''), held.push(el))
+        queueMicrotask(() => tiles()[0]?.focus({ preventScroll: true }))
+    })
+    onCleanup(() => held.forEach((el) => el.removeAttribute('inert')))
+    // Back where the viewer was when it closes; a PIN entered for options counts no longer.
     onCleanup(() => {
+        forgetVerified()
         try {
             if (from?.isConnected) from.focus({ preventScroll: true })
         } catch {}
@@ -58,8 +69,8 @@ export function Profiles() {
 
     const open = (p: B.Profile) => {
         if (editing() || p.state === 'attention') return options(p)
-        // The profile already in use, from the menu: nothing to ask.
-        if (p.pin && !(p.id === activeId && picker() === 'menu')) return setSheet({ kind: 'open', id: p.id })
+        // A PIN profile always asks, the one in use too.
+        if (p.pin) return setSheet({ kind: 'open', id: p.id })
         void switchTo(p.id)
     }
     const options = (p: B.Profile) => setSheet(p.pin ? { kind: 'unlock', id: p.id } : { kind: 'options', id: p.id })
@@ -89,7 +100,7 @@ export function Profiles() {
     }
 
     return (
-        <div class="profiles" role="dialog" aria-modal="true" aria-labelledby="profiles-title" onKeyDown={onKey}>
+        <div class="profiles" ref={root} role="dialog" aria-modal="true" aria-labelledby="profiles-title" onKeyDown={onKey}>
             <Show when={picker() === 'menu'}>
                 <button class="round-button profiles-close" type="button" data-picker-close aria-label={t('accounts.close_picker')} title={t('accounts.close_picker')} onClick={closePicker}>
                     <Icon icon={Cancel01Icon} size={22} />
@@ -139,13 +150,18 @@ export function Profiles() {
                                     if ('locked' in answer) return { locked: answer.locked }
                                     if (!answer.ok) return { error: t('accounts.pin_wrong', { left: answer.left }) }
                                     if (s.kind === 'open') {
+                                        // This tab may open it now, and only it.
+                                        pinOpened(p.id)
                                         close()
                                         void switchTo(p.id)
-                                    } else setSheet({ kind: 'options', id: p.id })
+                                    } else {
+                                        // Its options (rename, PIN, sign out) for as long as the picker is up.
+                                        pinVerified(p.id)
+                                        setSheet({ kind: 'options', id: p.id })
+                                    }
                                     return null
                                 }}
                                 lockedUntil={B.lockLeft(p, Date.now()) > 0 ? Date.now() + B.lockLeft(p, Date.now()) : 0}
-                                forgot={p.state === 'ok' ? () => (close(), void askSignOut(p, nameOf(p))) : undefined}
                                 onClose={close}
                             />
                         )
@@ -173,7 +189,7 @@ function ProfileTile(props: { profile: B.Profile; name: string; editing: boolean
     const label = () =>
         [
             props.name,
-            p().id === activeId && picker() === 'menu' ? t('accounts.in_use') : '',
+            p().id === activeId && picker() !== 'launch' ? t('accounts.in_use') : '',
             p().state === 'attention' ? t('accounts.needs_attention') : p().state === 'adding' ? t('accounts.adding') : '',
             p().pin ? t('accounts.locked_with_pin') : '',
             props.editing ? t('accounts.options_hint') : '',
@@ -187,7 +203,7 @@ function ProfileTile(props: { profile: B.Profile; name: string; editing: boolean
             type="button"
             data-profile={p().id}
             aria-label={label()}
-            aria-current={p().id === activeId && picker() === 'menu' ? 'true' : undefined}
+            aria-current={p().id === activeId && picker() !== 'launch' ? 'true' : undefined}
             onClick={props.onOpen}
             onContextMenu={(e) => {
                 e.preventDefault()
@@ -358,7 +374,7 @@ function RenameDialog(props: { name: string; onClose: () => void; onSave: (name:
 type PinReply = { error: string } | { locked: number } | null
 
 /** Four digits by the pad, the keyboard or the remote's number keys; the dots say how many, never which. */
-function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinReply>; lockedUntil: number; forgot?: () => void; onClose: () => void; note?: string }) {
+function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinReply>; lockedUntil: number; onClose: () => void; note?: string }) {
     const d = useDialog(props.onClose)
     const [digits, setDigits] = createSignal('')
     const [error, setError] = createSignal<string | null>(null)
@@ -413,11 +429,6 @@ function PinDialog(props: { title: string; onPin: (pin: string) => Promise<PinRe
             </div>
             <p class="muted small" id="pin-honest">{t('accounts.pin_honest')}</p>
             <div class="confirm-buttons">
-                <Show when={props.forgot}>
-                    <button class="link" type="button" onClick={() => props.forgot!()}>
-                        {t('accounts.forgot_pin')}
-                    </button>
-                </Show>
                 <button class="link" type="button" onClick={() => d.close()}>
                     {t('common.cancel')}
                 </button>
@@ -468,11 +479,49 @@ export function ProfileMenuButton() {
     )
 }
 
-/** Remove all accounts: only where there is more than one. */
+/** Asks one profile's PIN on a pad of its own over the page; true once it was right, false for Cancel. */
+function askPin(p: B.Profile, name: string): Promise<boolean> {
+    return new Promise((resolve) => {
+        let dispose = () => {}
+        let answered = false
+        // A host of its own: disposing a root empties the element it was drawn into.
+        const host = document.body.appendChild(document.createElement('div'))
+        const done = (yes: boolean) => {
+            if (answered) return
+            answered = true
+            queueMicrotask(() => (dispose(), host.remove()))
+            resolve(yes)
+        }
+        dispose = render(
+            () => (
+                <PinDialog
+                    title={t('accounts.pin_enter', { name })}
+                    lockedUntil={B.lockLeft(p, Date.now()) > 0 ? Date.now() + B.lockLeft(p, Date.now()) : 0}
+                    onClose={() => done(false)}
+                    onPin={async (pin) => {
+                        const answer = await tryPin(p.id, pin)
+                        if ('locked' in answer) return { locked: answer.locked }
+                        if (!answer.ok) return { error: t('accounts.pin_wrong', { left: answer.left }) }
+                        pinVerified(p.id)
+                        done(true)
+                        return null
+                    }}
+                />
+            ),
+            host,
+        )
+    })
+}
+
+/** Remove all accounts: only where there is more than one. Every locked profile's PIN first: one left out and nothing is wiped. */
 export function RemoveAllButton() {
+    const start = async () => {
+        for (const p of removeAllNeeds()) if (!(await askPin(p, p.name || t('accounts.unnamed', { number: book().profiles.indexOf(p) + 1 })))) return
+        await removeAll()
+    }
     return (
         <Show when={many()}>
-            <button class="danger-button set-signout set-remove-all" type="button" onClick={() => void removeAll()}>
+            <button class="danger-button set-signout set-remove-all" type="button" onClick={() => void start()}>
                 <Icon icon={Logout05Icon} size={20} />
                 <span class="set-text">
                     <span>{t('accounts.remove_all')}</span>

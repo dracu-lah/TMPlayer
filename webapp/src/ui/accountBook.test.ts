@@ -5,7 +5,10 @@ import {
     ADDING_STALE_MS,
     ADOPTED,
     addProfile,
+    addingFromFor,
     attach,
+    backTarget,
+    bootPlan,
     checkPin,
     cleanName,
     cleanPhoto,
@@ -17,12 +20,18 @@ import {
     makePin,
     markAttention,
     MAX_PROFILES,
+    mayOpen,
     namesOf,
+    needsPinFor,
     newFolder,
     ownsKey,
     PIN_LOCK_MS,
     pickerAtLaunch,
+    pinsForRemoveAll,
     readBook,
+    readPending,
+    RELOCK_HIDDEN_MS,
+    relockDue,
     removeProfile,
     rename,
     sameBytes,
@@ -280,4 +289,85 @@ test('bytes are compared whole', () => {
 test('a cached photo is a small picture address or nothing', () => {
     assert.equal(cleanPhoto('data:image/jpeg;base64,AAAA'), 'data:image/jpeg;base64,AAAA')
     for (const bad of [null, '', 'javascript:alert(1)', 'data:text/html;base64,AAAA', 'data:image/jpeg;base64,<script>', `data:image/jpeg;base64,${'A'.repeat(100_000)}`]) assert.equal(cleanPhoto(bad), null)
+})
+
+// ---- Unlocking (security review: a PIN profile never opens, nor is signed out, without its PIN) ----
+
+async function lockedPair(): Promise<{ book: Book; locked: string }> {
+    const two = added(defaultBook())
+    const locked = two.profiles[1].id
+    const r = attach(two, locked, { id: 2, name: 'Robin' })
+    assert.ok('book' in r)
+    return { book: setPin(r.book, locked, await makePin('4821', crypto, 2000)), locked }
+}
+
+test('a PIN profile the tab has not unlocked starts on the picker, even when the tab chose it', async () => {
+    const { book, locked } = await lockedPair()
+    assert.ok(!mayOpen(book, locked, null))
+    assert.ok(mayOpen(book, locked, locked))
+    assert.ok(mayOpen(book, ADOPTED, null))
+    assert.deepEqual(bootPlan(book, locked, null, null), { id: locked, picker: 'launch', pending: null })
+    // Unlocked in this tab: it opens straight away.
+    assert.deepEqual(bootPlan(book, locked, locked, null), { id: locked, picker: null, pending: null })
+    // An unlock of another profile opens nothing.
+    assert.equal(bootPlan(book, locked, ADOPTED, null).picker, 'launch')
+    // A new tab asks; a tab that chose the profile without a PIN does not.
+    assert.equal(bootPlan(book, null, null, null).picker, 'launch')
+    assert.equal(bootPlan(book, ADOPTED, null, null).picker, null)
+    // The profile last open in another tab, with a PIN, is never opened by a tab that has not chosen.
+    assert.equal(bootPlan({ ...book, active: locked }, null, null, null).picker, 'launch')
+})
+
+test('a sign out pending in a profile runs there with no picker and never counts as chosen', async () => {
+    const { book, locked } = await lockedPair()
+    const pending = readPending(JSON.stringify({ kind: 'signout', id: locked }), book)
+    assert.deepEqual(pending, { kind: 'signout', id: locked })
+    assert.deepEqual(bootPlan(book, ADOPTED, null, pending), { id: locked, picker: null, pending })
+    // Garbage, or a profile gone, is no pending work: the tab boots as it chose.
+    for (const bad of [null, '', '{', '{"kind":"signout"}', '{"kind":"x","id":"main"}', JSON.stringify({ kind: 'signout', id: 'gone00' }), 'x'.repeat(500)])
+        assert.equal(readPending(bad, book), null, String(bad))
+    assert.deepEqual(bootPlan(book, ADOPTED, null, null), { id: ADOPTED, picker: null, pending: null })
+})
+
+test('signing out or removing a PIN profile asks its PIN, unless it is open and unlocked here', async () => {
+    const { book, locked } = await lockedPair()
+    const none = new Set<string>()
+    assert.ok(needsPinFor(book, locked, ADOPTED, null, none))
+    // Unlocked for another profile, or open but not unlocked: still asks.
+    assert.ok(needsPinFor(book, locked, ADOPTED, ADOPTED, none))
+    assert.ok(needsPinFor(book, locked, locked, null, none))
+    assert.ok(!needsPinFor(book, locked, locked, locked, none))
+    assert.ok(!needsPinFor(book, locked, ADOPTED, null, new Set([locked])))
+    // No PIN, nothing to ask.
+    assert.ok(!needsPinFor(book, ADOPTED, locked, null, none))
+})
+
+test('Remove all asks every locked profile PIN but the one open and unlocked here', async () => {
+    const { book, locked } = await lockedPair()
+    const both = setPin(book, ADOPTED, await makePin('1111', crypto, 2000))
+    assert.deepEqual(pinsForRemoveAll(both, ADOPTED, null).map((p) => p.id), [ADOPTED, locked])
+    assert.deepEqual(pinsForRemoveAll(both, ADOPTED, ADOPTED).map((p) => p.id), [locked])
+    assert.deepEqual(pinsForRemoveAll(defaultBook(), ADOPTED, null), [])
+})
+
+test('Cancel on a new account goes back only to a profile that needs no PIN again', async () => {
+    const { book, locked } = await lockedPair()
+    assert.equal(backTarget(book, ADOPTED), ADOPTED)
+    assert.equal(backTarget(book, locked), null)
+    assert.equal(backTarget(book, null), null)
+    assert.equal(backTarget(book, 'gone00'), null)
+    // Add account remembers the profile only when the tab had chosen and unlocked it.
+    assert.equal(addingFromFor(book, ADOPTED, true, null), ADOPTED)
+    assert.equal(addingFromFor(book, ADOPTED, false, null), null)
+    assert.equal(addingFromFor(book, locked, true, null), null)
+    assert.equal(addingFromFor(book, locked, true, locked), locked)
+})
+
+test('a tab hidden for more than a minute locks its PIN profile again', async () => {
+    const { book, locked } = await lockedPair()
+    assert.ok(!relockDue(book, locked, null, 1_000_000))
+    assert.ok(!relockDue(book, locked, 1_000_000, 1_000_000 + RELOCK_HIDDEN_MS))
+    assert.ok(relockDue(book, locked, 1_000_000, 1_000_000 + RELOCK_HIDDEN_MS + 1))
+    // A profile with no PIN has nothing to lock.
+    assert.ok(!relockDue(book, ADOPTED, 0, 10 * RELOCK_HIDDEN_MS))
 })

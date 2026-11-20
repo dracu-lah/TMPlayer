@@ -77,7 +77,6 @@
     "add_cancelled": "The new account was not added",
     "adding": "Not signed in yet",
     "close_picker": "Close profiles",
-    "forgot_pin": "Forgot the PIN? Sign out of this profile",
     "in_use": "In use",
     "limit": "Up to {count} accounts on this browser. Remove one to add another",
     "limit_line": "That is the most: up to {count} accounts on this browser",

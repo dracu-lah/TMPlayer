@@ -1,16 +1,23 @@
 // Which profile this tab runs (HX88 phase B3). The book of profiles lives in localStorage, which every
-// tab shares; the profile a tab chose lives in its sessionStorage, so a reload stays on it and a new
-// tab starts on the picker. The profile is fixed for the page's life: a switch reloads the page into
-// the next one, so nothing of one profile (the Telegram worker, the lists in memory, the caches) can
-// outlive it. The rules are ui/accountBook.ts; what a switch, an add or a sign out does is accountFlows.ts.
+// tab shares; the profile a tab chose, the PIN profile it unlocked and the work it carries over a
+// reload live in its sessionStorage, so a reload stays on its profile, a new tab starts on the picker,
+// and an unlock never outlives the tab. The profile is fixed for the page's life: a switch reloads the
+// page into the next one, so nothing of one profile (the Telegram worker, the lists in memory, the
+// caches) can outlive it. The rules are ui/accountBook.ts; what the buttons do is accountFlows.ts.
 import { createSignal, untrack } from 'solid-js'
 import * as B from './ui/accountBook'
 
 const BOOK_KEY = 'tmplayer-accounts'
 /** sessionStorage: the profile this tab chose (or switched to). */
 const TAB_KEY = 'tmplayer-tab-profile'
-/** sessionStorage: what a reload carries on with (a sign out to finish, Remove all, a line to show). */
+/** sessionStorage: a line or a step a reload carries on with. */
 const INTENT_KEY = 'tmplayer-accounts-intent'
+/** sessionStorage: the PIN profile this tab entered the PIN of (only ever the open one; never in localStorage). */
+const UNLOCK_KEY = 'tmplayer-tab-unlocked'
+/** sessionStorage: work this tab carries on in a profile's page with no screen shown (a sign out of it, Remove all). */
+const PENDING_KEY = 'tmplayer-accounts-pending'
+/** sessionStorage: when the tab was hidden, for the relock after a minute away. */
+const HIDDEN_KEY = 'tmplayer-tab-hidden-at'
 
 const testMode = import.meta.env.DEV && import.meta.env.VITE_TG_TEST === '1'
 
@@ -36,14 +43,32 @@ function setSession(key: string, value: string | null) {
     } catch {}
 }
 
+function hiddenAt(): number | null {
+    const text = session(HIDDEN_KEY)
+    const n = Number(text)
+    return text !== null && Number.isFinite(n) && n > 0 ? n : null
+}
+
 const first = readStored()
-const chosen = B.find(first, session(TAB_KEY))
+const tabChoice = session(TAB_KEY)
+// A reload after a minute hidden starts locked, as the tab would have been.
+if (B.relockDue(first, B.find(first, tabChoice)?.id ?? first.active, hiddenAt(), Date.now())) setSession(UNLOCK_KEY, null)
+setSession(HIDDEN_KEY, null)
+// The unlock holds the tab's own profile only.
+if (session(UNLOCK_KEY) !== null && session(UNLOCK_KEY) !== tabChoice) setSession(UNLOCK_KEY, null)
+
+const plan = B.bootPlan(first, tabChoice, session(UNLOCK_KEY), B.readPending(session(PENDING_KEY), first))
+if (!plan.pending) setSession(PENDING_KEY, null)
 
 /** The profile this page runs, for its whole life. */
-export const activeId = chosen?.id ?? first.active
+export const activeId = plan.id
 /** Its storage names. */
 export const names = B.namesOf(activeId, testMode)
 export const namesFor = (id: string) => B.namesOf(id, testMode)
+/** Work this page does in its profile with no screen: a sign out of it, or a step of Remove all. */
+export const pendingWork: B.Pending | null = plan.pending
+/** Whether the tab had chosen (and could open) the profile it runs when this page started. */
+export const chosenAtStart = !plan.pending && plan.picker === null && !!B.find(first, tabChoice)
 
 const [book, setBookSignal] = createSignal(first)
 export { book }
@@ -77,28 +102,43 @@ export function closeWrites() {
     gen++
 }
 
+// ---- Unlocking ----
+
+/** The PIN profile this tab may open now, or null. */
+export const unlockedId = () => session(UNLOCK_KEY)
+/** The PIN was entered for `id` in this tab, which is about to open it: the one unlock the tab holds. */
+export const unlock = (id: string) => setSession(UNLOCK_KEY, id)
+/** Locks again: a switch away, a sign out, a remove, an add, a minute hidden. */
+export const relock = () => setSession(UNLOCK_KEY, null)
+
 // ---- The picker ----
 
-/** 'launch' while the tab has not chosen (it runs no Telegram client yet), 'menu' when opened from the profile menu. */
-const [picker, setPicker] = createSignal<'launch' | 'menu' | null>(!chosen && B.pickerAtLaunch(first) ? 'launch' : null)
+/**
+ * 'launch' while the tab has not chosen or unlocked (it runs no Telegram client yet), 'lock' when its
+ * open PIN profile locked again while running (it must be chosen again, with the PIN), 'menu' when
+ * opened from the profile menu.
+ */
+const [picker, setPicker] = createSignal<'launch' | 'lock' | 'menu' | null>(plan.picker)
 export { picker }
 export const openPicker = () => setPicker((p) => p ?? 'menu')
 export const closePicker = () => setPicker(null)
 
 /** Records the tab's choice: a reload stays on it, a new tab asks again. */
 export const chooseInTab = (id: string | null) => setSession(TAB_KEY, id)
-/** This tab has chosen its profile (it was asked, or there was nothing to ask). */
+/** This tab has chosen its profile (it was asked, or there was nothing to ask); never a PIN profile it has not unlocked. */
 export function markChosen() {
-    setSession(TAB_KEY, activeId)
+    if (!pendingWork && B.mayOpen(untrack(book), activeId, unlockedId())) setSession(TAB_KEY, activeId)
 }
+
+/** Whether this tab has chosen the profile it runs. */
+export const tabChose = () => session(TAB_KEY) === activeId
+
+/** Leaves work for the next page, which runs in that profile without screens; null clears it. */
+export const setPending = (next: B.Pending | null) => setSession(PENDING_KEY, next ? JSON.stringify(next) : null)
 
 // ---- Intents carried over a reload ----
 
-export type Intent =
-    | { kind: 'signout' }
-    | { kind: 'removeAll' }
-    | { kind: 'signinAgain' }
-    | { kind: 'notice'; text: 'same' | 'removed' | 'cancelled' }
+export type Intent = { kind: 'signinAgain' } | { kind: 'notice'; text: 'same' | 'removed' | 'cancelled' }
 
 export function takeIntent(): Intent | null {
     const text = session(INTENT_KEY)
@@ -106,14 +146,14 @@ export function takeIntent(): Intent | null {
     if (!text || text.length > 200) return null
     try {
         const v = JSON.parse(text) as { kind?: unknown; text?: unknown }
-        if (v.kind === 'signout' || v.kind === 'removeAll' || v.kind === 'signinAgain') return { kind: v.kind }
+        if (v.kind === 'signinAgain') return { kind: v.kind }
         if (v.kind === 'notice' && (v.text === 'same' || v.text === 'removed' || v.text === 'cancelled')) return { kind: 'notice', text: v.text }
     } catch {}
     return null
 }
 export const leaveIntent = (intent: Intent | null) => setSession(INTENT_KEY, intent ? JSON.stringify(intent) : null)
 
-/** The profile this tab was on before it began adding one: Cancel goes back to it. */
+/** The profile this tab was on before it began adding one: Cancel goes back to it (or to the picker, for a PIN profile). */
 const FROM_KEY = 'tmplayer-add-from'
 export const addingFrom = () => session(FROM_KEY)
 export const setAddingFrom = (id: string | null) => setSession(FROM_KEY, id)
@@ -121,7 +161,7 @@ export const setAddingFrom = (id: string | null) => setSession(FROM_KEY, id)
 // ---- Before a switch: the player keeps its place ----
 
 const before = new Set<() => void>()
-/** Runs before the page leaves its profile (the player saves where it was). */
+/** Runs before the page leaves its profile (the player saves where it was), and when it locks again. */
 export function beforeSwitch(fn: () => void): () => void {
     before.add(fn)
     return () => void before.delete(fn)
@@ -137,6 +177,20 @@ export function runBeforeSwitch() {
 }
 /** True while a video plays in this page: a switch asks first. */
 export const playing = () => before.size > 0
+
+// ---- A minute hidden locks the open PIN profile again ----
+
+if (typeof document !== 'undefined')
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') return setSession(HIDDEN_KEY, String(Date.now()))
+        const away = hiddenAt()
+        setSession(HIDDEN_KEY, null)
+        if (pendingWork || !B.relockDue(untrack(book), activeId, away, Date.now())) return
+        relock()
+        // What plays keeps its place and stops under the picker.
+        runBeforeSwitch()
+        setPicker('lock')
+    })
 
 // ---- Photos ----
 
