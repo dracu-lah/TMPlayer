@@ -25,9 +25,9 @@ class AccountSwitcherTest {
     /** Two more signed in profiles beside the adopted one, the adopted one open again. */
     private suspend fun three(): List<Profile> {
         val a = (switcher.add() as AddResult.Added).profile
-        switcher.noteSignedIn(SignedInAs(21L, "A", null))
+        switcher.noteSignedIn(host.me(book, 21L, "A"))
         val b = (switcher.add() as AddResult.Added).profile
-        switcher.noteSignedIn(SignedInAs(22L, "B", null))
+        switcher.noteSignedIn(host.me(book, 22L, "B"))
         switcher.switchTo(AccountRules.ADOPTED_ID)
         host.opened.clear()
         return listOf(a, b)
@@ -49,7 +49,7 @@ class AccountSwitcherTest {
         assertEquals(AccountRules.ADOPTED_ID, book.list.value.activeId)
         assertEquals("tdlib", host.openOn)
         assertEquals(listOf("tdlib-${a.folder}", "tdlib"), host.opened.toList())
-        assertNull(book.list.value.switchingFrom)
+        assertNull(book.list.value.switchingTo)
         assertFalse("the one in between never opened", host.opened.contains("tdlib-${b.folder}"))
     }
 
@@ -60,12 +60,13 @@ class AccountSwitcherTest {
         val switching = async { switcher.switchTo(a.id) }
         withTimeout(2_000) { switcher.state.first { it is SwitchState.ClosingSlowly } }
         assertEquals("still the old client", "tdlib", host.openOn)
-        assertEquals("the switch is recorded so a kill reopens the profile left", AccountRules.ADOPTED_ID, book.list.value.switchingFrom)
+        assertEquals("only where it goes is recorded", a.id, book.list.value.switchingTo)
+        assertEquals("the open profile moves only once the old client has closed", AccountRules.ADOPTED_ID, book.list.value.activeId)
         assertEquals(SwitchResult.Switched, switching.await())
         assertEquals("tdlib-${a.folder}", host.openOn)
         assertEquals(0, host.overlaps)
         assertEquals(SwitchState.Idle, switcher.state.value)
-        assertNull(book.list.value.switchingFrom)
+        assertNull(book.list.value.switchingTo)
     }
 
     @Test
@@ -78,7 +79,7 @@ class AccountSwitcherTest {
         // The process dies here: what is on the disk is all the next start has.
         val restarted = testBook(dir).list.value
         assertEquals(AccountRules.ADOPTED_ID, restarted.activeId)
-        assertNull(restarted.switchingFrom)
+        assertNull(restarted.switchingTo)
         assertTrue("a signed in profile is kept", restarted.byId(a.id) != null)
     }
 
@@ -92,9 +93,9 @@ class AccountSwitcherTest {
     @Test
     fun `signing out of one profile wipes only it and opens another, the last one goes to the sign in`() = runBlocking {
         val a = (switcher.add() as AddResult.Added).profile
-        switcher.noteSignedIn(SignedInAs(11L, "A", null))
+        switcher.noteSignedIn(host.me(book, 11L, "A"))
         switcher.switchTo(AccountRules.ADOPTED_ID)
-        switcher.noteSignedIn(SignedInAs(10L, "Main", null))
+        switcher.noteSignedIn(host.me(book, 10L, "Main"))
         val wiped = mutableListOf<Pair<String, Boolean>>()
         val out = switcher.signOutProfile(a.id) { profile, last -> wiped += profile.id to last }
         assertEquals(listOf(a.id to false), wiped)
@@ -112,8 +113,8 @@ class AccountSwitcherTest {
 
     @Test
     fun `remove all accounts ends with one empty profile on the platform's own folders`() = runBlocking {
-        (switcher.add() as AddResult.Added).profile.also { switcher.noteSignedIn(SignedInAs(1L, "One", null)) }
-        (switcher.add() as AddResult.Added).profile.also { switcher.noteSignedIn(SignedInAs(2L, "Two", null)) }
+        (switcher.add() as AddResult.Added).profile.also { switcher.noteSignedIn(host.me(book, 1L, "One")) }
+        (switcher.add() as AddResult.Added).profile.also { switcher.noteSignedIn(host.me(book, 2L, "Two")) }
         val wiped = mutableListOf<String>()
         switcher.removeAll { profile, _ -> wiped += profile.id }
         assertEquals(3, wiped.size)

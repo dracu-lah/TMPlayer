@@ -80,14 +80,45 @@ between never open a client.
 
 `accounts.json` is written atomically (a temporary file, then a rename) before and after each step:
 
-1. `pending` is set to the profile being opened, then the client is reopened.
-2. Once it is open, `active` becomes that profile and `pending` is cleared.
+1. `switchingTo` is set to the profile being opened, then the live client is closed.
+2. Once it has said Closed and before the next client exists (Td's client loop runs the switch's
+   hook there, under the lock it makes the client with), `active` becomes that profile and
+   `switchingTo` is cleared. Only then do the stores' views, `Accounts.stamp` and the caches move.
 
-On the next start [Accounts.open] finds a `pending` left behind and reopens `active`, the last
-profile that was really open. A profile still being added (`adding`, never signed in) that is not
+On the next start [Accounts.open] finds a `switchingTo` left behind and drops it: `active` is
+still the last profile that was really open. A profile still being added (`adding`, never signed in) that is not
 the only one is removed with its folders: a half made folder never lingers. A file that cannot be
 read starts again with the adopted profile alone (the platform's folders), which is the state of
 the version before.
+
+## Work that outlives a switch
+
+Nothing of one profile may land in another's file or memory, so nothing resolves "the open
+profile" at the moment it writes:
+
+- `Accounts.stamp` (an `AccountStamp`: the folder and a switch counter) is what data is tagged
+  with when it is made. Home's snapshot carries the stamp its view model was built under, and
+  `PageQueries` the stamp its cache was filled under; `HomeCache.save` and `ChatGridDisk.save`
+  drop a stamp that is no longer current, checked under the lock the write holds, and write to
+  the file of the stamp, never of the moment.
+- `QueryCache.clear()` starts a new epoch, and an answer asked for in an older one is not kept
+  (`putIf`), so a fetch on its way during a switch or a sign out lands nowhere.
+- `Accounts.profileScope` is cancelled on every switch and carries an `AccountOwner`; a write to
+  an account store from a coroutine whose owner is no longer open is dropped. Work without an
+  owner writes for the profile open when it asks, as before; phase B moves the profile's own
+  background work (sync, alerts, the download runner) onto that scope.
+- On a switch: `OfflineDownloads` forgets its rows (file ids are per database), `GoneVideos` and
+  `ChatVideoCount` forget what they knew, the chat subtitle finder keys its answers by the switch
+  counter, and `Td` clears the chats it had open as each client ends.
+- A removed profile's keys are purged from every store with its folders (`AccountBook.sweep`),
+  so a profile added later, or the adopted folders opened afresh by Remove all accounts, start
+  empty.
+- Who signed in is tagged with the profile and the client generation it came from, and dropped
+  when either has changed: a slow read never refuses or logs out the wrong profile.
+- The code never wipes an existing profile: only the viewer's Sign in again and a new profile
+  pass `signInAgain`. A profile's folders are deleted only once another client is live.
+- The platform's wipe runs under the switcher's lock: a call to the switcher from inside it is
+  refused (logged) rather than waiting for itself.
 
 ## Adding, signing out, removing
 

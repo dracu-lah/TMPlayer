@@ -19,7 +19,9 @@ class AccountStoreTest {
     private val base = TempPaths()
     private val file = File(dir, Accounts.FILE_NAME)
 
-    private fun switcher(book: AccountBook, host: FakeHost = FakeHost()) =
+    private val host = FakeHost()
+
+    private fun switcher(book: AccountBook, host: FakeHost = this.host) =
         AccountSwitcher(book, host, base = { base }, clock = { 5_000L }, closeTimeoutMs = 2_000L)
 
     @Test
@@ -98,15 +100,14 @@ class AccountStoreTest {
 
     @Test
     fun `the same Telegram account on a second profile is refused and the first opens again`() = runBlocking {
-        val host = FakeHost()
         val book = testBook(dir)
         val s = switcher(book, host)
-        s.noteSignedIn(SignedInAs(42L, "Asha", null))
+        s.noteSignedIn(host.me(book, 42L, "Asha", null))
         assertEquals(42L, book.list.value.active?.telegramId)
         val added = (s.add() as AddResult.Added).profile
         val events = mutableListOf<AccountEvent>()
         val listen = launchCollect(s, events)
-        s.noteSignedIn(SignedInAs(42L, "Asha", null))
+        s.noteSignedIn(host.me(book, 42L, "Asha", null))
         assertEquals(1, host.logOuts)
         assertNull("the duplicate is gone", book.list.value.byId(added.id))
         assertEquals(AccountRules.ADOPTED_ID, book.list.value.activeId)
@@ -122,7 +123,7 @@ class AccountStoreTest {
         val book = testBook(dir)
         val s = switcher(book)
         val added = (s.add() as AddResult.Added).profile
-        s.noteSignedIn(SignedInAs(7L, "Ravi", byteArrayOf(1, 2, 3)))
+        s.noteSignedIn(host.me(book, 7L, "Ravi", byteArrayOf(1, 2, 3)))
         val now = book.list.value.byId(added.id)!!
         assertEquals(7L, now.telegramId)
         assertEquals("Ravi", now.name)
@@ -166,7 +167,7 @@ class AccountStoreTest {
         val book = testBook(dir)
         val s = switcher(book)
         val added = (s.add() as AddResult.Added).profile
-        s.noteSignedIn(SignedInAs(5L, "Gone", null))
+        s.noteSignedIn(host.me(book, 5L, "Gone", null))
         s.switchTo(AccountRules.ADOPTED_ID)
         val paths = AccountDirs.pathsFor(base, added)
         paths.databaseDir.deleteRecursively()
@@ -208,16 +209,16 @@ class AccountStoreTest {
     }
 
     @Test
-    fun `killed part way through adding, the half made profile and its folder go and the last one reopens`() {
+    fun `killed part way through adding, the half made profile and its folder go and the last one reopens`() = runBlocking {
         val book = testBook(dir)
         val half = Profile("pabc123", "pabc123", adding = true)
         AccountDirs.make(AccountDirs.pathsFor(base, half))
-        book.update { it.copy(profiles = it.profiles + half, activeId = half.id, switchingFrom = AccountRules.ADOPTED_ID) }
+        book.update { it.copy(profiles = it.profiles + half, switchingTo = half.id) }
 
         val restarted = testBook(dir)
         val list = restarted.list.value
         assertEquals(AccountRules.ADOPTED_ID, list.activeId)
-        assertNull(list.switchingFrom)
+        assertNull(list.switchingTo)
         assertNull(list.byId(half.id))
         assertEquals(listOf("pabc123"), list.trash)
         restarted.sweep(base)

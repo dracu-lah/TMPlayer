@@ -20,6 +20,11 @@ class TempPaths(val root: File = Files.createTempDirectory("accounts").toFile())
     override val filesDir: File get() = File(root, "cache")
     override val downloadsDir: File get() = File(root, "downloads")
 
+    init {
+        // The login already on the device: TDLib's folder is there.
+        databaseDir.mkdirs()
+    }
+
     @Volatile
     var free: Long = 50L * 1024 * 1024 * 1024
     override fun disk(): DiskInfo = DiskInfo(free, 100L * 1024 * 1024 * 1024)
@@ -42,17 +47,32 @@ class FakeHost(@Volatile var closeMs: Long = 0L) : ClientHost {
 
     @Volatile
     var logOuts = 0
+
+    /** The live client's generation: a new one for each client opened, and after each log out. */
+    @Volatile
+    var generation = 1L
+
+    /** Whether the old client is still between its close and the next client. */
+    @Volatile
+    var closing = false
     private var last: Deferred<Unit>? = null
     val signIns = MutableSharedFlow<SignedInAs>(extraBufferCapacity = 8)
 
-    override suspend fun reopen(paths: Paths, timeoutMs: Long): Boolean {
+    override suspend fun reopen(paths: Paths, timeoutMs: Long, onClosed: () -> Unit): Boolean {
         val folder = paths.databaseDir.name
         val job = synchronized(this) {
             if (last?.isCompleted == false) overlaps++
+            closing = true
             val wait = closeMs
             scope.async {
                 delay(wait)
+                // As Td's client loop: the old client has let go, the stores move, then the next client.
+                onClosed()
+                // TDLib makes its database folder as it opens.
+                paths.databaseDir.mkdirs()
                 synchronized(this@FakeHost) {
+                    closing = false
+                    generation++
                     openOn = folder
                     opened += folder
                 }
@@ -67,8 +87,15 @@ class FakeHost(@Volatile var closeMs: Long = 0L) : ClientHost {
 
     override suspend fun endSession(timeoutMs: Long): Boolean {
         logOuts++
+        generation++
         return true
     }
+
+    override fun sessionNow(): Long? = generation
+
+    /** Who signed in, as the live client would say it of the profile open now. */
+    fun me(book: AccountBook, telegramId: Long, name: String, photo: ByteArray? = null) =
+        SignedInAs(book.list.value.activeId, generation, telegramId, name, photo)
 
     override val signedIn: Flow<SignedInAs> = signIns
 }
