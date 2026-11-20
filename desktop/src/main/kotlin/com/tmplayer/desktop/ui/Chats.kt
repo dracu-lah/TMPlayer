@@ -111,6 +111,8 @@ fun ChatsPage(
     val s = LocalStrings.current
     val ui by model.state.collectAsState()
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
+    // "All chats" on (HX86): the row menu offers turning it off where Remove would be.
+    val addedChoice by com.tmplayer.data.AddedChats.choice.collectAsState()
     var query by rememberSaveable(favouritesOnly) { mutableStateOf("") }
     val toast = rememberToast()
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
@@ -188,8 +190,8 @@ fun ChatsPage(
             LaunchedEffect(data.chats) { state.noteChatTitles(data.chats) }
             val filter = state.chatFilter
             val sort = state.chatSort
-            val visible = remember(data.chats, section, favourites, query, filter, sort) {
-                filterChats(data.chats, section, favourites, query, filter, sort)
+            val visible = remember(data, section, favourites, query, filter, sort) {
+                filterChats(data.chatsFor(section), section, favourites, query, filter, sort)
             }
             if (visible.isEmpty()) {
                 val next = com.tmplayer.ui.browse.emptyTabNext(section, query, filter)
@@ -240,6 +242,14 @@ fun ChatsPage(
                     onOpen = state::openChat,
                     onStar = { chat -> scope.launch { state.settings.toggleFavorite(chat.id) } },
                     actions = ChatRowActions(
+                        allChatsOn = !com.tmplayer.data.AddedChats.removable(addedChoice),
+                        onTurnOffAll = {
+                            val whole = !model.paging.value.more && !model.paging.value.partial
+                            scope.launch {
+                                runCatching { state.settings.turnOffAllChats(model.everything.value, whole) }
+                                    .onFailure { System.err.println("Chats: turning off All chats failed: $it") }
+                            }
+                        },
                         onHide = { chat ->
                             // "Remove from TMPlayer": unticked in Add chats, the one list of which
                             // chats show (AddedChats.removing). Gone from the list is the answer; no
@@ -337,6 +347,13 @@ internal fun ChoiceChips(choices: List<Choice>, inset: androidx.compose.ui.unit.
 internal class ChatRowActions(
     /** "Remove from TMPlayer": unticks the chat in Add chats ([com.tmplayer.data.AddedChats.removing]); null leaves the entry out. */
     val onHide: ((ChatSummary) -> Unit)? = null,
+    /**
+     * "Turn off All chats", which takes Remove's place while that switch is on (HX86): every chat is
+     * shown by choice, so none is carved out of it. Null leaves the entry out.
+     */
+    val onTurnOffAll: (() -> Unit)? = null,
+    /** "All chats" is on: H and the menu turn it off ([onTurnOffAll]) instead of removing ([onHide]). */
+    val allChatsOn: Boolean = false,
 )
 
 /**
@@ -516,7 +533,7 @@ internal fun ChatRow(
                 }
                 when (event.key) {
                     Key.S -> onStar()
-                    Key.H -> actions.onHide?.invoke(chat) ?: return@onPreviewKeyEvent false
+                    Key.H -> (if (actions.allChatsOn) actions.onTurnOffAll?.invoke() else actions.onHide?.invoke(chat)) ?: return@onPreviewKeyEvent false
                     else -> return@onPreviewKeyEvent false
                 }
                 true
@@ -588,7 +605,11 @@ private fun ChatRowMenu(
             onStar,
         )
         // Private to this computer too: the chat leaves TMPlayer's lists, never Telegram.
-        actions.onHide?.let { hide -> entry(s.browseRemoveChat, "H", TmIcons.VisibilityOff) { hide(chat) } }
+        if (!actions.allChatsOn) {
+            actions.onHide?.let { hide -> entry(s.browseRemoveChat, "H", TmIcons.VisibilityOff) { hide(chat) } }
+        } else {
+            actions.onTurnOffAll?.let { off -> entry(s.browseTurnOffAllChats, "H", TmIcons.VisibilityOff) { off() } }
+        }
     }
 }
 

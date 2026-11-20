@@ -52,11 +52,24 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
-/** The chat list plus who is signed in; both are needed before the browser can draw. */
+/**
+ * The chat list plus who is signed in; both are needed before the browser can draw.
+ *
+ * @param chats the chats the viewer added (or every chat under "All chats"), after the kids lock:
+ *   what Chats lists.
+ * @param withStarred [chats] and the starred chats the viewer did not add, in the same order, after
+ *   the kids lock (HX86): a star is the viewer's own act, so Favourites and Home's starred rows
+ *   show it whether or not the chat is ticked. Chats never lists the extras.
+ */
 data class BrowseData(
     val chats: List<ChatSummary>,
     val account: Account? = null,
-)
+    val withStarred: List<ChatSummary> = chats,
+) {
+    /** The chats [section] draws from: Favourites also takes the starred chats the viewer did not add. */
+    fun chatsFor(section: BrowseSection): List<ChatSummary> =
+        if (section == BrowseSection.of(BrowseTab.Favorites)) withStarred else chats
+}
 
 /** Whether a folder's members are known: an empty folder may only say "nothing here" when [Loaded]. */
 enum class FolderRead { Loading, NotLoaded, Loaded }
@@ -120,7 +133,22 @@ class ChatListViewModel(
         viewModelScope.launch {
             ChatGate.browsing.collect { publish() }
         }
+        // The stars, because a starred chat the viewer did not add still belongs on Favourites
+        // (HX86): a star added or taken off changes who is in [BrowseData.withStarred].
+        val store = settings ?: return
+        viewModelScope.launch {
+            runCatching {
+                store.favorites.collect { stars ->
+                    if (stars == starred) return@collect
+                    starred = stars
+                    publish()
+                }
+            }
+        }
     }
+
+    /** The starred chats, as the store holds them: [publish] lets the ones the viewer did not add through to Favourites. */
+    private var starred: Set<Long> = emptySet()
 
     /**
      * Draws yesterday's list now, so the screen is not empty while TDLib opens its database.
@@ -781,8 +809,9 @@ class ChatListViewModel(
         _everything.value = everything
         val allowed = ChatGate.browsing.value
         val loaded = KidsLock.chats(everything, allowed)
+        val withStarred = mergeStarred(everything, loaded, starred, ChatGate.allowed.value)
         _state.value = when {
-            loaded.isNotEmpty() -> UiState.Content(BrowseData(loaded, account))
+            loaded.isNotEmpty() || withStarred.isNotEmpty() -> UiState.Content(BrowseData(loaded, account, withStarred))
             // Nothing added yet (HX27), which is a choice to make rather than a fault: a first run
             // that skipped the picker, or every added chat since left. Asked before the kids lock,
             // since a locked app with nothing added should still say what to do about it.
@@ -795,6 +824,19 @@ class ChatListViewModel(
             else -> UiState.Empty(L.browseNoChats, StateAction.Refresh, icon = TmIcons.ChatsMany)
         }
     }
+}
+
+/**
+ * [loaded] and the starred chats of [everything] the viewer did not add, in [everything]'s order, the
+ * kids lock ([kids]) still applied (HX86). [loaded] itself when no star reaches past it, so the
+ * common case allocates nothing and compares equal.
+ */
+fun mergeStarred(everything: List<ChatSummary>, loaded: List<ChatSummary>, stars: Set<Long>, kids: Set<Long>?): List<ChatSummary> {
+    if (stars.isEmpty()) return loaded
+    val have = loaded.mapTo(HashSet()) { it.id }
+    if (stars.none { it !in have }) return loaded
+    val merged = everything.filter { (it.id in have || it.id in stars) && KidsLock.allows(kids, it.id) }
+    return if (merged.size == loaded.size) loaded else merged
 }
 
 /**

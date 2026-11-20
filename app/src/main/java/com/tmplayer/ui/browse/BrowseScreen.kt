@@ -241,6 +241,8 @@ internal fun BrowseScreen(
     onToggleFavorite: (ChatSummary) -> Unit = {},
     /** "Remove from TMPlayer" in a chat's menu: unticks it in the added chats ([com.tmplayer.data.AddedChats.removing]). */
     onRemoveChat: (ChatSummary) -> Unit = {},
+    /** "Turn off All chats" in a chat's menu, which takes Remove's place while that switch is on (HX86). */
+    onTurnOffAllChats: () -> Unit = {},
     onRestartMedia: (ResumeRecord) -> Unit = {},
     onForgetMedia: (ResumeRecord) -> Unit = {},
     /** Empties Continue watching in one go, rather than one held-OK menu per video. */
@@ -649,15 +651,15 @@ internal fun BrowseScreen(
             // "No chats added" offers Choose chats: the picker, not a reload that finds the same empty list.
             onAction = { action -> action.runOnChatsList(onRetry) },
         ) { data ->
-            val visible = remember(data.chats, tab, favorites, query, chatFilter, chatSort) {
-                filterChats(data.chats, tab, favorites, query, chatFilter, chatSort)
+            val visible = remember(data, tab, favorites, query, chatFilter, chatSort) {
+                filterChats(data.chatsFor(tab), tab, favorites, query, chatFilter, chatSort)
             }
 
             // The signed in account, for the picture in the heading's top right corner.
             val headerAccount = data.account ?: account
             Column(Modifier.fillMaxSize()) {
                     if (tab.isHome) {
-                        val titles = remember(data.chats) { data.chats.associate { it.id to it.title } }
+                        val titles = remember(data.withStarred) { data.withStarred.associate { it.id to it.title } }
                         // A show card held on Home opens its menu (HX20), drawn below with the other menus.
                         androidx.compose.runtime.CompositionLocalProvider(LocalSeriesHold provides { show -> heldShow = show to titles[show.cover.chatId].orEmpty() }) {
                         Box(Modifier.fillMaxSize()) {
@@ -691,7 +693,7 @@ internal fun BrowseScreen(
                                     onPickTab(BrowseSection.of(BrowseTab.History))
                                     query = ""
                                 },
-                                onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
+                                onOpenChat = { id -> data.withStarred.firstOrNull { it.id == id }?.let(onOpenChat) },
                                 // Starred chats get a row each under Recently added (2026-10-23), so
                                 // with none the hint says how to add them; only once the rows are
                                 // built, since it flashed up while they were still coming in.
@@ -972,7 +974,7 @@ internal fun BrowseScreen(
             account = (state as? UiState.Content)?.value?.account ?: account,
             pane = pane,
             countOf = { section ->
-                val chats = (state as? UiState.Content)?.value?.chats
+                val chats = (state as? UiState.Content)?.value?.chatsFor(section)
                 when {
                     section.isHome -> 0
                     section.listsVideos -> when (historyTab) {
@@ -1221,15 +1223,21 @@ internal fun BrowseScreen(
                 // Also private to this device: the chat is unticked in Add chats, the one list of
                 // which chats TMPlayer shows, so it leaves the lists at once, which is the answer;
                 // no toast (user, 2026-10-22). Never Telegram.
+                // While "All chats" is on nothing is carved out of it (HX86): the entry says so and
+                // offers the switch instead. Remove is back once the viewer's own picks are.
                 add(
-                    MenuAction(
-                        label = s.browseRemoveChat,
-                        icon = TmIcons.VisibilityOff,
-                        detail = s.browseRemoveChatDetailChosen,
-                    ) {
-                        chatMenu = null
-                        onRemoveChat(chat)
-                    },
+                    chatRemoveAction(
+                        s,
+                        com.tmplayer.data.AddedChats.choice.value,
+                        onRemove = {
+                            chatMenu = null
+                            onRemoveChat(chat)
+                        },
+                        onTurnOffAllChats = {
+                            chatMenu = null
+                            onTurnOffAllChats()
+                        },
+                    ),
                 )
             },
         )

@@ -1111,7 +1111,8 @@ fun rememberHomeRows(
     // A chat removed from its menu ("Remove from TMPlayer") takes what was read from it off Home at
     // once, without waiting for the next refresh. Continue watching and Watch later keep its
     // cards: they are the viewer's own record ([com.tmplayer.data.AddedChats]).
-    val loaded = remember(loadedAll, added) { added?.let { ids -> loadedAll.filterKeys { it in ids } } ?: loadedAll }
+    // A starred chat keeps its row whether or not it was added (HX86): a star is the viewer's own act.
+    val loaded = remember(loadedAll, added, favourites) { added?.let { ids -> loadedAll.filterKeys { it in ids || it in favourites } } ?: loadedAll }
     val recent = remember(recentAll, added) { recentAll?.let { all -> com.tmplayer.data.AddedChats.filter(all, added) { it.chatId } } }
     val partial by model.partial.collectAsState()
     val fresh by model.newEpisodes.collectAsState()
@@ -1221,6 +1222,7 @@ fun rememberHomeRows(
 private fun rememberHomeChatList(model: HomeViewModel, chats: List<ChatSummary>, favourites: Set<Long>, recent: List<MediaItem>?): List<ChatSummary> {
     val own by model.ownChats.collectAsState()
     val allowed by com.tmplayer.data.ChatGate.browsing.collectAsState()
+    val kids by com.tmplayer.data.ChatGate.allowed.collectAsState()
     val listMissing = chats.isEmpty()
     LaunchedEffect(listMissing, favourites, recent) {
         if (!listMissing) return@LaunchedEffect
@@ -1228,7 +1230,11 @@ private fun rememberHomeChatList(model: HomeViewModel, chats: List<ChatSummary>,
         model.learnChats(favourites + found)
     }
     if (!listMissing) return chats
-    return remember(own, allowed) { com.tmplayer.data.KidsLock.chats(own, allowed) }
+    // The starred chats the viewer did not add stay (HX86), the kids lock still applies.
+    return remember(own, allowed, kids, favourites) {
+        if (allowed == kids) com.tmplayer.data.KidsLock.chats(own, allowed)
+        else com.tmplayer.data.KidsLock.chats(own, kids).filter { com.tmplayer.data.AddedChats.shows(allowed, it.id) || it.id in favourites }
+    }
 }
 
 /** Home's chats as last picked and what the rows were built from, so a change that alters neither builds nothing. */
