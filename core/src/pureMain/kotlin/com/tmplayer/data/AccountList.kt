@@ -229,7 +229,10 @@ object ProfilePin {
         val stored = profile.pin ?: return profile to PinCheck.NoPin
         val served = if (now >= profile.pinWaitStamp) now - profile.pinWaitStamp else 0L
         val left = (profile.pinWaitLeftMs.coerceIn(0L, WAIT_MS) - served).coerceAtLeast(0L)
-        if (left > 0) return profile to PinCheck.Waiting(left)
+        // Stamped again with what is left, as PinAttempts.restored does: after a reboot the clock
+        // starts below the old stamp, and the wait then runs out from now instead of lasting until
+        // the uptime passes the stamp again. It is never longer than WAIT_MS either way.
+        if (left > 0) return profile.copy(pinWaitLeftMs = left, pinWaitStamp = now) to PinCheck.Waiting(left)
         if (PinHash.verify(pin, stored)) {
             return profile.copy(pinFailures = 0, pinWaitLeftMs = 0L, pinWaitStamp = 0L) to PinCheck.Right
         }

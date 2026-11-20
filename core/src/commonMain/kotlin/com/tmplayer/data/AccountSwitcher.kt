@@ -7,7 +7,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,9 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -112,8 +117,12 @@ sealed interface AddResult {
 }
 
 sealed interface SignOutResult {
-    /** Signed out; [next] is the profile now open, or null when the sign in shows. */
-    data class SignedOut(val next: Profile?) : SignOutResult
+    /**
+     * Signed out; [next] is the profile now open, or null when the sign in shows. [partialWipe]:
+     * the platform's own clearing failed or was cut short (its backup, its downloads); the keys and
+     * folders went anyway.
+     */
+    data class SignedOut(val next: Profile?, val partialWipe: Boolean = false) : SignOutResult
     data object Unknown : SignOutResult
     data object NotStarted : SignOutResult
 }
@@ -226,9 +235,15 @@ class AccountSwitcher(
                 _state.value = SwitchState.ClosingSlowly(id)
                 host.awaitOpen()
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "the client could not be reopened for another profile", e)
+            if (book.list.value.activeId != id) return SwitchResult.Failed
         } finally {
-            // A host that never said so (an error part way) still leaves the list whole.
-            if (book.list.value.switchingTo == id) flip()
+            // A host that never ran the hook (an error part way) moved nothing: only where it was
+            // going is forgotten, and the stores stay with the profile still open.
+            if (book.list.value.switchingTo == id) book.update { it.copy(switchingTo = null) }
             _state.value = SwitchState.Idle
         }
         measureSleeping(base)
@@ -270,13 +285,19 @@ class AccountSwitcher(
      * holds the account opens again ([AccountEvent.SameAccount]).
      */
     suspend fun noteSignedIn(who: SignedInAs) {
-        if (who.telegramId == 0L || reentered()) return
+        if (reentered()) return
         withContext(NonCancellable) {
             mutex.withLock {
                 val list = book.list.value
                 val active = list.active ?: return@withLock
                 if (who.profileId != active.id || list.switchingTo != null || who.session != host.sessionNow()) {
                     Logger.i(TAG, "who signed in arrived after a switch; dropped")
+                    return@withLock
+                }
+                // Signed in, who as yet unknown (the read failed or is still on its way): a real
+                // profile now, kept at the next start; the identity follows when it is read.
+                if (who.telegramId == 0L) {
+                    if (active.adding) book.update { l -> l.byId(active.id)?.let { l.replace(it.copy(adding = false)) } ?: l }
                     return@withLock
                 }
                 val existing = AccountRules.sameTelegram(list, who.telegramId, active.id)
@@ -353,11 +374,17 @@ class AccountSwitcher(
             }
         }
         val others = book.list.value.profiles.filter { it.id != id }
+        // Under NonCancellable, so a cancellation here is the wipe's own (a timeout inside it), never
+        // the caller's: the sign out goes on, and says the wipe was cut short.
+        var partial = false
         try {
             withContext(InsideSwitcher()) { wipe(target, others.isEmpty()) }
         } catch (e: CancellationException) {
-            throw e
+            if (!currentCoroutineContext().isActive) throw e
+            partial = true
+            Logger.w(TAG, "the sign out's own clearing was cut short; the rest of the sign out goes on", e)
         } catch (e: Exception) {
+            partial = true
             Logger.w(TAG, "the sign out's own clearing failed; the sweep clears the profile's keys", e)
         }
         if (!host.endSession(LOG_OUT_TIMEOUT_MS)) Logger.w(TAG, "TDLib was slow to finish logging out")
@@ -372,13 +399,13 @@ class AccountSwitcher(
                 } ?: l
             }
             target.photo?.let { runCatching { File(it).delete() } }
-            return SignOutResult.SignedOut(null)
+            return SignOutResult.SignedOut(null, partial)
         }
         // Only now that another client holds the live folders does this profile's go.
         book.update { AccountRules.removed(it, target, next.id) }
         book.sweep(base)
         measureSleeping(base)
-        return SignOutResult.SignedOut(book.list.value.byId(next.id))
+        return SignOutResult.SignedOut(book.list.value.byId(next.id), partial)
     }
 
     /** Forgets a sleeping profile without reaching Telegram: one whose folders are broken, or one never signed in. */
@@ -430,7 +457,7 @@ class AccountSwitcher(
                         book.update { l -> AccountList(listOf(fresh), fresh.id, trash = (l.trash + l.profiles.filter { !it.adopted }.map { it.folder ?: "" }).distinct()) }
                     }
                     if (!host.reopen(base, closeTimeoutMs, onClosed = { flip() })) host.awaitOpen()
-                    if (book.list.value.switchingTo != null) flip()
+                    if (book.list.value.switchingTo != null) book.update { it.copy(switchingTo = null) }
                     book.sweep(base)
                 }
                 onSleepingBytes(0L)
@@ -515,35 +542,91 @@ class AccountSwitcher(
     }
 }
 
+/** A client that reached Ready: the profile open then and the client's generation. */
+data class ReadySession(val profileId: String, val generation: Long)
+
+/** How the live client's sign ins become [SignedInAs]: apart from Td, so a test can drive it. */
+internal object SignedInFlow {
+    /**
+     * For each Ready client, once: first a marker with no identity (the profile is a signed in one
+     * now, whatever the read does), then who it is, read again after [gapMs] up to [tries] times
+     * when the read fails. Keyed on the client's generation, and a newer one cancels the read of an
+     * older one, so no Ready is swallowed by a slow read and no answer outlives its client.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun of(
+        ready: Flow<ReadySession>,
+        read: suspend (ReadySession) -> SignedInAs?,
+        tries: Int = 4,
+        gapMs: Long = 20_000L,
+    ): Flow<SignedInAs> = ready.distinctUntilChanged().transformLatest { r ->
+        emit(SignedInAs(r.profileId, r.generation, 0L, "", null))
+        repeat(tries) {
+            val who = try {
+                read(r)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (who != null && who.telegramId != 0L) {
+                emit(who)
+                return@transformLatest
+            }
+            delay(gapMs)
+        }
+    }
+}
+
 /** [ClientHost] over the process's [Td]. */
 object TdClientHost : ClientHost {
     @Volatile
-    private var before: Long? = null
+    private var opened: CompletableDeferred<Long>? = null
 
+    /**
+     * Waits for the client made after the switch's hook ran. The hook records the generation count
+     * as it runs, under Td's client lock, so a client made before it (one about to close) never
+     * counts, whether or not a client was live when the switch began.
+     */
     override suspend fun reopen(paths: Paths, timeoutMs: Long, onClosed: () -> Unit): Boolean {
         val carried = runCatching { Td.proxies() }.getOrDefault(emptyList())
-        before = Td.sessionGeneration
-        Td.reopenFor(paths, onClosed)
-        val opened = withTimeoutOrNull(timeoutMs) { Td.awaitSessionAfter(before) } != null
-        if (opened) carryProxies(carried)
-        return opened
+        val ran = CompletableDeferred<Long>()
+        opened = ran
+        Td.reopenFor(paths) {
+            try {
+                onClosed()
+            } finally {
+                ran.complete(Td.generationsMade)
+            }
+        }
+        val done = withTimeoutOrNull(timeoutMs) { awaitAfter(ran) } != null
+        if (done) carryProxies(carried)
+        return done
     }
 
-    override suspend fun awaitOpen() = Td.awaitSessionAfter(before)
+    private suspend fun awaitAfter(ran: CompletableDeferred<Long>) {
+        val made = ran.await()
+        Td.sessions.first { it != null && it.generation > made }
+    }
+
+    override suspend fun awaitOpen() {
+        opened?.let { awaitAfter(it) }
+    }
 
     override suspend fun endSession(timeoutMs: Long): Boolean {
-        val was = Td.sessionGeneration
+        val was = Td.generationsMade
         Td.logOut()
-        return withTimeoutOrNull(timeoutMs) { Td.awaitSessionAfter(was) } != null
+        return withTimeoutOrNull(timeoutMs) { Td.sessions.first { it != null && it.generation > was } } != null
     }
 
     override fun sessionNow(): Long? = Td.sessionGeneration
 
-    override val signedIn: Flow<SignedInAs> = Td.auth
-        .map { it is AuthState.Ready }
-        .distinctUntilChanged()
-        .filter { it }
-        .mapNotNull { runCatching { readSignedIn() }.getOrNull() }
+    override val signedIn: Flow<SignedInAs> = SignedInFlow.of(
+        ready = combine(Td.auth, Td.sessions) { auth, session ->
+            session?.takeIf { auth is AuthState.Ready }?.let { ReadySession(Accounts.active.id, it.generation) }
+        }.filterNotNull(),
+        read = ::readSignedIn,
+    )
 
     /** The proxies are the device's (HX88): ones the next profile's database lacks are added to it. */
     private suspend fun carryProxies(from: List<ProxyEntry>) {
@@ -556,10 +639,10 @@ object TdClientHost : ClientHost {
         }
     }
 
-    /** Tagged with the profile open and the client generation as the session is taken, before anything slow. */
-    private suspend fun readSignedIn(): SignedInAs? {
+    /** Who [ready]'s client is signed in as; null when that client is gone or Telegram does not say. */
+    private suspend fun readSignedIn(ready: ReadySession): SignedInAs? {
         val session = withTimeoutOrNull(READ_TIMEOUT_MS) { Td.awaitAuthorizedSession() } ?: return null
-        val profileId = Accounts.active.id
+        if (session.generation != ready.generation) return null
         val me = Td.me(session) ?: return null
         val id = Td.myId().takeIf { it != 0L } ?: return null
         val photo = me.photoFileId.takeIf { it > 0 }?.let { fileId ->
@@ -568,7 +651,7 @@ object TdClientHost : ClientHost {
                 (session.client.readFilePart(fileId, 0, 0) as? TdlResult.Success)?.result?.data
             }
         } ?: me.miniThumbnail
-        return SignedInAs(profileId, session.generation, id, me.name, photo)
+        return SignedInAs(ready.profileId, ready.generation, id, me.name, photo)
     }
 
     private const val READ_TIMEOUT_MS = 15_000L

@@ -462,6 +462,12 @@ object Td {
     /** The live client's generation, or null between two clients. For [AccountSwitcher]'s host. */
     internal val sessionGeneration: Long? get() = _session.value?.generation
 
+    /** How many clients have been made so far: the next one's generation is one more. */
+    internal val generationsMade: Long get() = generation.get()
+
+    /** The live client, or null between two. */
+    internal val sessions: StateFlow<TdSession?> get() = _session
+
     /** Waits for a client of a generation other than [before]. */
     internal suspend fun awaitSessionAfter(before: Long?) {
         _session.first { it != null && it.generation != before }
