@@ -67,6 +67,12 @@ object PageQueries {
 
     init {
         followUpdates()
+        // Another profile opened (HX88): its chats are not these, and its own listings are read in.
+        Accounts.onSwitch {
+            cache.clear()
+            topics.value = emptyMap()
+            Background.scope.launch { runCatching { preload() } }
+        }
     }
 
     /** Reads the listings kept on the disk into the cache. Blocks on the disk: off the main thread. */

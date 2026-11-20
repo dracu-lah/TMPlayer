@@ -27,9 +27,24 @@ import java.util.Base64
  */
 object HomeCache {
 
-    /** Where it lives; null (a test, a build that never set it) keeps nothing. Set once at start. */
+    /**
+     * Where it lives; null (a test, a build that never set it) keeps nothing. Set once at start.
+     * Each profile keeps its own copy beside it ([Accounts.scopedFile], HX88).
+     */
     @Volatile
     var file: File? = null
+
+    private val target: File? get() = file?.let(Accounts::scopedFile)
+
+    init {
+        // Another profile opened: its own snapshot is read on the next load.
+        Accounts.onSwitch {
+            synchronized(this) {
+                memory = null
+                read = false
+            }
+        }
+    }
 
     /** What Home had, ready to draw. */
     data class Snapshot(
@@ -62,7 +77,7 @@ object HomeCache {
         if (read) return memory
         synchronized(this) {
             if (read) return memory
-            memory = runCatching { file?.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull()
+            memory = runCatching { target?.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull()
             read = true
             return memory
         }
@@ -75,7 +90,7 @@ object HomeCache {
 
     /** Writes [snapshot] over the last one. Skipped when nothing changed. */
     fun save(snapshot: Snapshot) {
-        val target = file ?: return
+        val target = target ?: return
         val before = memory
         if (before != null && before.loaded == snapshot.loaded && before.recent == snapshot.recent &&
             before.partial == snapshot.partial && before.art == snapshot.art && before.chats == snapshot.chats
@@ -102,7 +117,7 @@ object HomeCache {
         synchronized(this) {
             memory = null
             read = true
-            runCatching { file?.delete() }
+            runCatching { target?.delete() }
         }
     }
 

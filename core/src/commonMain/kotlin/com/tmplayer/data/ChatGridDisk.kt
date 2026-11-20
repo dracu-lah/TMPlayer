@@ -10,20 +10,24 @@ import java.io.File
  *
  * Kept in [HomeCache]'s spelling: one JSON file written whole through a temporary file, the videos
  * as Telegram gave them (before the size limits), TDLib's file ids as they are. Forgotten on sign
- * out ([clear]). The JVM only: the browser keeps its listings in memory.
+ * out ([clear]). The JVM only: the browser keeps its listings in memory. Each profile keeps its own
+ * copy beside [base] ([Accounts.scopedFile], HX88).
  */
-class ChatGridDisk(private val file: File) : GridStore {
+class ChatGridDisk(private val base: File) : GridStore {
 
-    /** What was last written, so a save of the same listings is skipped. */
+    /** What was last written and where, so a save of the same listings is skipped. */
     @Volatile
-    private var written: String? = null
+    private var written: Pair<File, String>? = null
+
+    private val file: File get() = Accounts.scopedFile(base)
 
     override fun load(): List<SavedGrid> =
         runCatching { file.takeIf { it.isFile }?.readText()?.let(::decode) }.getOrNull().orEmpty()
 
     override fun save(grids: List<SavedGrid>) {
         val text = encode(grids)
-        if (text == written) return
+        val file = file
+        if (written == (file to text)) return
         synchronized(this) {
             runCatching {
                 file.parentFile?.mkdirs()
@@ -33,7 +37,7 @@ class ChatGridDisk(private val file: File) : GridStore {
                     file.delete()
                     temp.renameTo(file)
                 }
-                written = text
+                written = file to text
             }
         }
     }

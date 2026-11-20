@@ -636,6 +636,28 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /**
+     * Signing out of one profile while others stay on the device (HX88): only the account's keys
+     * go ([AccountKeys]), so the theme, the player, the app lock and the kids lock switch stay as
+     * every profile has them. With [keepDownloads] the records of downloads in the Downloads
+     * folder stay, as [clearEverything] keeps them. [clearEverything] is still the sign out of the
+     * last profile.
+     */
+    suspend fun clearAccountData(keepDownloads: Boolean = false) {
+        prefs.edit { prefs ->
+            for ((key, value) in prefs.asMap().entries.toList()) {
+                val name = key.name
+                if (!AccountKeys.isAccount(name)) continue
+                if (keepDownloads) {
+                    if (name == DOWNLOADS_MIGRATED.name) continue
+                    val ids = name.removePrefixOrNull("dl_")
+                    if (ids != null && decodeDownload(prefs, ids, value as? String)?.localPath != null) continue
+                }
+                prefs.remove(key)
+            }
+        }
+    }
+
+    /**
      * Unstars every chat at once, which is the only way back from a tab full of them. Under the
      * kids lock ([allowed] not null) only the favourites it shows go; the hidden ones stay.
      */
@@ -3565,8 +3587,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         /** Whether the Tips card may show on Home: the tour was never taken or turned down. */
         fun tipsDue(state: TourState): Boolean = state == TourState.Never
 
-        /** Opens the store at [file]. Call once per process and share the result. */
-        fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)
+        /**
+         * Opens the store at [file]. Call once per process and share the result. The account's
+         * keys are the open profile's ([AccountScopedDataStore], HX88).
+         */
+        fun openDataStore(file: File): DataStore<Preferences> = AccountScopedDataStore(openSafeDataStore(file))
 
         /** Whether launch should skip the chat list, given what is remembered and the setting. */
         fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =

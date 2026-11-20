@@ -126,6 +126,8 @@ fun main(args: Array<String>) {
         // the first of the process, about a tenth of a second of class loading and disk that the
         // database no longer waits behind. A failure in it is caught and shown at sign in, and
         // [DesktopCrashReports.watch] above already writes down anything uncaught.
+        // The profile list (HX88) first: TDLib and every store open the open profile's folders and keys.
+        com.tmplayer.data.Accounts.open(java.io.File(DesktopPaths.dataDir, "accounts"))
         Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
         DesktopPaths.unusableRoot?.let {
             com.tmplayer.platform.Logger.w("Main", "storage location ${it.path} cannot be used now; this run uses the default folders")

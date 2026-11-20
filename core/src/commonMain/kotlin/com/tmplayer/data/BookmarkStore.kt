@@ -249,7 +249,8 @@ class BookmarkStore(private val store: DataStore<Preferences>) {
             BookmarkCodec.decode(chatId, messageId, encoded)
 
         /** Opens the store at [file]. Call once per process and share the result. */
-        fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)
+        fun openDataStore(file: File): DataStore<Preferences> =
+            AccountScopedDataStore(openSafeDataStore(file), isAccount = AccountScopedDataStore.ALL_ACCOUNT)
     }
 }
 
