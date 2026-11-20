@@ -4,7 +4,7 @@
 // normal sign in; two tabs never run one profile; a lost session is "Needs attention".
 import { mkdirSync } from 'node:fs'
 import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
-import { fakeCase, isPhoneProject } from './helpers'
+import { fakeCase, isPhoneProject, openCard, openClips, playsPast } from './helpers'
 import { makePin, type Pin } from '../src/ui/accountBook'
 
 const BOOK = 'tmplayer-accounts'
@@ -446,4 +446,118 @@ test('a minute hidden locks a PIN profile again', async ({ page }) => {
     await page.keyboard.type('1111')
     await expect(picker(page)).toHaveCount(0)
     await expect(page.locator('main.page')).toBeVisible()
+})
+
+// ---- Second review ----
+
+/** The tab shown or hidden, as the browser says it. */
+const showTab = (page: Page, state: 'hidden' | 'visible') =>
+    page.evaluate((s) => {
+        Object.defineProperty(document, 'visibilityState', { value: s, configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+    }, state)
+
+/** Dana with a PIN, already unlocked in this tab (as after entering it): the page opens with no picker. */
+async function danaUnlocked(page: Page) {
+    const dana = await makePin('1111', globalThis.crypto, 2000)
+    await twoProfiles(page, { pins: { main: dana } })
+    await page.evaluate(() => {
+        sessionStorage.setItem('tmplayer-tab-profile', 'main')
+        sessionStorage.setItem('tmplayer-tab-unlocked', JSON.stringify({ id: 'main', at: Date.now() }))
+    })
+}
+
+test('on the picker at launch, signing out the profile the page would run wipes it', async ({ page }) => {
+    await twoProfiles(page)
+    await page.goto('/')
+    await expect(picker(page)).toBeVisible()
+    await picker(page).getByRole('button', { name: 'Manage profiles' }).click()
+    await tile(page, /^Dana Test/).click()
+    await page.getByRole('dialog', { name: 'Dana Test' }).getByRole('button', { name: 'Sign out of this profile' }).click()
+    await reloads(page, () => page.getByRole('dialog', { name: 'Sign out of Dana Test?' }).getByRole('button', { name: 'Sign out', exact: true }).click())
+    await expect(page.getByText('Signed out of that profile')).toBeVisible({ timeout: 15_000 })
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['abc123'])
+    const keys = await storedKeys(page)
+    expect(keys.filter((k) => !k.startsWith('@') && k !== 'addedMode' && k !== 'settings')).toEqual([])
+    expect(keys).toContain('@abc123:addedMode')
+    await openSettings(page)
+    await expect(page.locator('.set-account').getByText('Robin Test')).toBeVisible()
+})
+
+test('a place saved as the page closes after a sign out of it lands nowhere', async ({ page }) => {
+    await danaUnlocked(page)
+    await page.clock.install()
+    await openClips(page)
+    await openCard(page, 'Native Clip')
+    await playsPast(page, 1)
+    // Locked under the player, then signed out from the picker: the player's save on the way out must not bring its place back.
+    await showTab(page, 'hidden')
+    await page.clock.fastForward(61_000)
+    await showTab(page, 'visible')
+    await expect(picker(page)).toBeVisible()
+    await picker(page).getByRole('button', { name: 'Manage profiles' }).click()
+    await tile(page, /^Dana Test/).click()
+    await page.keyboard.type('1111')
+    await page.getByRole('dialog', { name: 'Dana Test' }).getByRole('button', { name: 'Sign out of this profile' }).click()
+    await reloads(page, () => page.getByRole('dialog', { name: 'Sign out of Dana Test?' }).getByRole('button', { name: 'Sign out', exact: true }).click())
+    await expect(page.getByText('Signed out of that profile')).toBeVisible({ timeout: 15_000 })
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('tmplayer-last-position')))).toEqual([])
+})
+
+test('a PIN entered for a Remove all that was cancelled is asked again', async ({ page }) => {
+    const robin = await makePin('4821', globalThis.crypto, 2000)
+    await twoProfiles(page, { pins: { abc123: robin } })
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('main.page')).toBeVisible()
+    await openSettings(page)
+    const pin = page.locator('dialog.pin-dialog')
+    await page.getByRole('button', { name: 'Remove all accounts' }).click()
+    await expect(pin.getByText("Forgot the PIN? It can only be cleared by clearing this site's data in the browser's settings, and that removes every profile on this browser.")).toBeVisible()
+    await page.keyboard.type('4821')
+    await page.getByRole('dialog', { name: 'Remove all accounts?' }).getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Remove all accounts' }).click()
+    await expect(pin.getByRole('heading', { name: 'Enter the PIN for Robin Test' })).toBeVisible()
+    await pin.getByRole('button', { name: 'Cancel' }).click()
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main', 'abc123'])
+})
+
+test('a copied unlock (a duplicated tab, a session restored later) has run out; a reload keeps a fresh one', async ({ page }) => {
+    await danaUnlocked(page)
+    await page.goto('/')
+    await expect(page.locator('main.page')).toBeVisible()
+    // A reload of the same tab: still open.
+    await page.reload()
+    await expect(page.locator('main.page')).toBeVisible()
+    await expect(picker(page)).toHaveCount(0)
+    // The same unlock, two minutes old, as a restored session carries it: the picker and the PIN.
+    await page.evaluate(() => sessionStorage.setItem('tmplayer-tab-unlocked', JSON.stringify({ id: 'main', at: Date.now() - 120_000 })))
+    await page.reload()
+    await expect(picker(page)).toBeVisible()
+    await expect(page.locator('main.page')).toHaveCount(0)
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('dialog.pin-dialog')).toBeVisible()
+})
+
+test('locking again with the picker unable to load covers everything, with Try again', async ({ page }) => {
+    await danaUnlocked(page)
+    // Offline for the picker's code: never fetched, so the lock has nothing but its cover.
+    await page.route('**/src/ui/Profiles.tsx*', (route) => route.abort())
+    await page.clock.install()
+    await page.goto('/')
+    await expect(page.locator('main.page')).toBeVisible()
+    await showTab(page, 'hidden')
+    await page.clock.fastForward(61_000)
+    await showTab(page, 'visible')
+    const cover = page.locator('.lock-cover')
+    await expect(cover.getByText('The profiles could not load. Check the connection and try again.')).toBeVisible()
+    // Nothing of the profile under it: the page is inert and the cover is opaque over all of it.
+    await expect(page.locator('main.page')).toHaveAttribute('inert', /.*/)
+    const box = await cover.boundingBox()
+    expect(box).toEqual({ x: 0, y: 0, width: page.viewportSize()!.width, height: page.viewportSize()!.height })
+    expect(await cover.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+    await page.unroute('**/src/ui/Profiles.tsx*')
+    await reloads(page, () => cover.getByRole('button', { name: 'Try again' }).click())
+    await expect(picker(page)).toBeVisible()
+    await expect(page.locator('main.page')).toHaveCount(0)
 })
