@@ -83,6 +83,18 @@ class DownloadService : Service() {
     /** The stamp [id] was queued under, recorded now when it has none. Call under [lock]. */
     private fun stampOf(id: Int): com.tmplayer.data.AccountStamp = stamps.of(id)
 
+    /** What a job of [id] runs as: its profile, and the set of rows it was queued in. Call under [lock]. */
+    private fun ownerOf(id: Int) = com.tmplayer.data.AccountOwner(stamps.of(id)) + OfflineDownloads.Rows(stamps.rowsOf(id))
+
+    /**
+     * A row update of a job: dropped when the rows it was queued in are gone (a switch, a sign
+     * out, an ended session), so a late one never lands in the next database's rows (HX88).
+     */
+    private suspend inline fun ownRows(crossinline update: () -> Unit) {
+        val rows = kotlinx.coroutines.currentCoroutineContext()[OfflineDownloads.Rows]?.generation
+        OfflineDownloads.ifRows(rows) { update() }
+    }
+
     /** Counts requests in, so a row keeps the place in the list it was given when it was asked for. */
     private var arrivals = 0L
 
@@ -156,6 +168,11 @@ class DownloadService : Service() {
     private fun followProfiles() {
         scope.launch {
             com.tmplayer.data.Accounts.activeFolder.drop(1).collect { stopForSwitch() }
+        }
+        // A new database of the same profile (a sign out, an ended session): its jobs' file ids
+        // are the old database's, so they stop too.
+        scope.launch {
+            OfflineDownloads.databaseChanges.collect { stopForSwitch() }
         }
         // The shade follows the open profile's lock through ProfileNotifications; each row is
         // drawn again, not only those whose line changed, when the profile hides or shows.
@@ -552,7 +569,7 @@ class DownloadService : Service() {
                     return@synchronized null
                 }
                 // As the work of the profile it was asked under (HX88): its writes never land in another.
-                val job = scope.launch(com.tmplayer.data.AccountOwner(stamp)) { fetch(request) }
+                val job = scope.launch(ownerOf(id)) { fetch(request) }
                 running[id] = job
                 // Registered before the job can finish, so a fetch that fails immediately still
                 // finds its own entry to clear and still pumps whatever is behind it.
@@ -590,7 +607,7 @@ class DownloadService : Service() {
         if (LocalDownloads.videoFor(SettingsStore(applicationContext), request.chatId, request.messageId) != null) {
             withContext(NonCancellable) {
                 synchronized(lock) { requests.remove(request.fileId) }
-                OfflineDownloads.forget(request.fileId)
+                ownRows { OfflineDownloads.forget(request.fileId) }
                 persistNow()
             }
             return@coroutineScope
@@ -615,14 +632,14 @@ class DownloadService : Service() {
                 Log.w(TAG, "No room for ${request.title}: ${StreamStats.formatBytes(short)} short")
                 val row = OfflineDownloads.active.value[request.fileId]
                 if (row != null) {
-                    OfflineDownloads.note(
+                    ownRows { OfflineDownloads.note(
                         row.copy(
                             downloadedBytes = landedAlready,
                             stage = OfflineDownloads.Stage.Failed,
                             failure = L.downloadsNotEnoughSpace(short = Translator.messages.formatter.bytes(short)),
                             bytesPerSecond = 0,
                         ),
-                    )
+                    ) }
                     settled(request, ok = false, reason = L.downloadsNotEnoughSpace(short = Translator.messages.formatter.bytes(short)))
                 }
                 persistNow()
@@ -641,7 +658,7 @@ class DownloadService : Service() {
                 Log.w(TAG, "No connection to Telegram for ${request.title}")
                 val waitingInstead = holdReason
                 if (waitingInstead != null) {
-                    OfflineDownloads.stage(request.fileId, waitingInstead)
+                    ownRows { OfflineDownloads.stage(request.fileId, waitingInstead) }
                 } else {
                     writeFailure(request, Td.localDownloadedBytes(request.fileId), Failures.OFFLINE)
                 }
@@ -665,7 +682,7 @@ class DownloadService : Service() {
             while (isActive) {
                 delay(PROGRESS_INTERVAL_MS)
                 val done = Td.localDownloadedBytes(request.fileId)
-                OfflineDownloads.sample(request.fileId, done)
+                ownRows { OfflineDownloads.sample(request.fileId, done) }
                 refresh()
             }
         }
@@ -735,7 +752,7 @@ class DownloadService : Service() {
                     // back with an error, or the connectivity callback. It waits, like every other
                     // held row, and the watcher above puts it back.
                     val waitingInstead = holdReason
-                    OfflineDownloads.note(
+                    ownRows { OfflineDownloads.note(
                         row.copy(
                             downloadedBytes = landed,
                             stage = waitingInstead ?: OfflineDownloads.Stage.Failed,
@@ -748,7 +765,7 @@ class DownloadService : Service() {
                             },
                             bytesPerSecond = 0,
                         ),
-                    )
+                    ) }
                     if (waitingInstead == null) {
                         settled(request, ok = false, reason = error?.let(Failures::humanise))
                     }
@@ -776,10 +793,10 @@ class DownloadService : Service() {
             withContext(NonCancellable) { finishNow(request) }
             return
         }
-        OfflineDownloads.moving(id, heldByPlayer = true)
+        ownRows { OfflineDownloads.moving(id, heldByPlayer = true) }
         synchronized(lock) {
             if (heldMoves.containsKey(id)) return
-            heldMoves[id] = scope.launch(com.tmplayer.data.AccountOwner(stampOf(id))) {
+            heldMoves[id] = scope.launch(ownerOf(id)) {
                 try {
                     // Cancellable while it only waits: Pause and Cancel reach it here.
                     while (WatchCache.isPlaying(id)) delay(DownloadFinisher.POLL_MS)
@@ -824,7 +841,7 @@ class DownloadService : Service() {
                     requests.remove(id)
                     stamps.forget(id)
                 }
-                OfflineDownloads.forget(id)
+                ownRows { OfflineDownloads.forget(id) }
                 lines.remove(id)
                 runCatching { notifier().cancel(id.notificationId()) }
                 // A new notification, not the progress one updated: it pops even for a viewer
@@ -834,9 +851,9 @@ class DownloadService : Service() {
             is DownloadFinisher.Outcome.Failed -> {
                 Log.w(TAG, "Could not move ${request.title} into Downloads: ${outcome.reason}")
                 OfflineDownloads.active.value[id]?.let { row ->
-                    OfflineDownloads.note(
+                    ownRows { OfflineDownloads.note(
                         row.copy(stage = OfflineDownloads.Stage.Failed, failure = outcome.reason, heldByPlayer = false),
-                    )
+                    ) }
                 }
                 settled(request, ok = false, reason = outcome.reason)
             }
@@ -870,7 +887,7 @@ class DownloadService : Service() {
             sizeBytes = fresh.sizeBytes.takeIf { it > 0 } ?: request.sizeBytes,
         )
         synchronized(lock) { requests.remove(request.fileId) }
-        OfflineDownloads.forget(request.fileId)
+        ownRows { OfflineDownloads.forget(request.fileId) }
         lines.remove(request.fileId)
         runCatching { notifier().cancel(request.fileId.notificationId()) }
         enqueue(moved)
@@ -879,17 +896,17 @@ class DownloadService : Service() {
     }
 
     /** The one way a row is written down as failed: only when this fetch still owns it. */
-    private fun writeFailure(request: DownloadRequest, landed: Long, text: String) {
+    private suspend fun writeFailure(request: DownloadRequest, landed: Long, text: String) {
         val row = OfflineDownloads.active.value[request.fileId] ?: return
         if (row.stage != OfflineDownloads.Stage.Running) return
-        OfflineDownloads.note(
+        ownRows { OfflineDownloads.note(
             row.copy(
                 downloadedBytes = landed,
                 stage = OfflineDownloads.Stage.Failed,
                 failure = text,
                 bytesPerSecond = 0,
             ),
-        )
+        ) }
         settled(request, ok = false, reason = text)
     }
 
@@ -953,8 +970,12 @@ class DownloadService : Service() {
      * the coalesced writer above, since the snapshot and the write are one operation under it.
      */
     private suspend fun persistNow() = persistLock.withLock {
-        val queued = OfflineDownloads.ordered.map { it.request }
-        runCatching { SettingsStore(applicationContext).saveDownloadQueue(queued) }
+        // The rows and the profile they belong to, read together (HX88): a persist that lands
+        // after a switch is dropped for its owner, never written into the next profile's queue.
+        // No owner: the rows were dropped and nothing is in them yet, and an empty write then would
+        // wipe the next profile's queue before its restore.
+        val (owner, queued) = OfflineDownloads.persistSnapshot()
+        if (owner != null) runCatching { SettingsStore(applicationContext).saveDownloadQueue(queued, owner = owner) }
         Unit
     }
 

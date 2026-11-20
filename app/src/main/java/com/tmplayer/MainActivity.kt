@@ -931,8 +931,9 @@ private fun Root() {
     LaunchedEffect(auth) {
         if (auth is AuthState.Ready) {
             OfflineDownloads.restore(context)
-            // What a switch away from this profile paused goes on now it is open again (HX88).
-            runCatching { com.tmplayer.ui.profiles.AndroidProfilePlatform(context.applicationContext).resumeLeftPaused() }
+            // A switch away left this profile's downloads paused, as a restart does (HX88): the
+            // viewer resumes them. What earlier builds kept to resume by itself goes.
+            com.tmplayer.ui.profiles.PausedForSwitch.clearOldCopy(context)
         }
     }
 
@@ -1065,8 +1066,6 @@ private fun Root() {
         // cache and cold start snapshot go ([forgetSession]).
         com.tmplayer.ui.connect.handleSessionEnd(auth, settings) {
             com.tmplayer.ui.settings.forgetSession(settings)
-            // The session's database is gone: what a switch paused in it is other videos now.
-            runCatching { com.tmplayer.ui.profiles.PausedForSwitch.take(context, com.tmplayer.data.Accounts.stamp.folder) }
         }
         if (Setup.isSignInStep(auth)) {
             // The setup is for a new start: after an ended session the preferences are still there.
