@@ -9,12 +9,16 @@ import { watchCrashes } from './crash'
 import { takeMsoneParam } from './msoneFlag'
 import { blockBrowserMenu } from './ui/CardMenu'
 import { languageFailedToast, startLanguage } from './i18n'
+import { names } from './accounts'
+import { usePicksDatabase } from './player/subpicks-db'
 import './styles.css'
 
 const START_WAIT_MS = 1200
 
 // Before anything else runs, so a failure in what follows still gets its card (HX10).
 watchCrashes()
+// The remembered online subtitles of the profile this tab runs (HX88).
+usePicksDatabase(names.subpicks)
 
 if (location.hostname === 'localhost') void import('./survey')
 

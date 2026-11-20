@@ -7,6 +7,11 @@ import { createStore, delMany, get, keys as storeKeys, set, type UseStore } from
 import type { KeepStore } from './msone.ts'
 
 export const PICKS_DB = 'tmplayer-subpicks'
+/** The database of the profile this page runs (HX88): the adopted profile's is PICKS_DB, set once at start (main.tsx). */
+let picksDb = PICKS_DB
+export function usePicksDatabase(name: string) {
+    picksDb = name
+}
 export const STATE = 'state'
 export const COPY = 'copy|'
 /** A store that does not answer (some private windows) is given up on rather than waited for. */
@@ -17,7 +22,7 @@ const LOCK = 'tmplayer-subpicks'
 
 function idbStore(): KeepStore {
     let db: UseStore | null = null
-    const store = () => (db ??= createStore(PICKS_DB, 'kv'))
+    const store = () => (db ??= createStore(picksDb, 'kv'))
     return {
         get: (key) => get(key, store()),
         set: (key, value) => set(key, value, store()),

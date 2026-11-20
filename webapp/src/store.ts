@@ -3,7 +3,7 @@
 // browser refuses storage (private mode, quota full) everything still works for the session from
 // memory. Sign out clears all of it.
 import { createSignal } from 'solid-js'
-import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
+import { clear, createStore, del, delMany, entries, get, set, type UseStore } from 'idb-keyval'
 import type { Sort, VideoItem } from './tg/types'
 import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 import { cleanHomeChats, cleanResume, cleanSettings, parseJournal, parseLast, readAddedMode, type HomeChatRow, type Note } from './ui/stored'
@@ -15,6 +15,8 @@ import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes
 import { tdlibMessageId } from './sync/format'
 import { forgetLinks } from './ui/tgLinks'
 import { clearLogs } from './logs'
+import { names, writesOpen } from './accounts'
+import { ownsKey, scopedKey, viewKey } from './ui/accountBook'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -85,6 +87,13 @@ try {
 /** The session's copy of everything, so a browser without storage still works until it closes. */
 const memory = new Map<string, unknown>()
 
+// Profiles (HX88): one database for all of them. The adopted profile's keys keep their names, another
+// profile's own keys are `@<folder>:<key>`, and the device's keys (ui/accountBook.ts) are shared. The
+// page runs one profile, so `memory` and every caller use the plain names; only the database sees the
+// stored ones. A write made after the page began leaving its profile lands nowhere.
+const PREFIX = names.keyPrefix
+const stor = (key: string) => scopedKey(PREFIX, key)
+
 /** False once the browser refused to keep something (a private window, a full disk): Settings says so. */
 const [storageWorks, setStorageWorks] = createSignal(db !== null)
 export { storageWorks }
@@ -142,7 +151,7 @@ async function read<T>(key: string): Promise<T | undefined> {
     if (memory.has(key)) return memory.get(key) as T
     if (!db) return undefined
     try {
-        const v = await stored((s) => get<T>(key, s))
+        const v = await stored((s) => get<T>(stor(key), s))
         if (v !== undefined) memory.set(key, v)
         return v
     } catch {
@@ -173,14 +182,16 @@ export function onListsChanged(fn: () => void) {
 const SYNCED = /^(resume|watched|later|star|fix|title):/
 
 function write(key: string, value: unknown) {
+    if (!writesOpen()) return
     // A line put (back) is newer than any removal of it: an Undo must not be taken off again by a sync.
     const tomb = tombOf(key)
     if (tomb) removeRaw(tomb)
     if (listsChanged && SYNCED.test(key)) queueMicrotask(listsChanged)
     memory.set(key, value)
-    const done = db ? note(key, { v: value }) : () => {}
+    const at = stor(key)
+    const done = db ? note(at, { v: value }) : () => {}
     if (db)
-        stored((s) => set(key, value, s)).then(done, (e) => {
+        stored((s) => set(at, value, s)).then(done, (e) => {
             console.warn('[store] not saved', key, e)
             setStorageWorks(false)
         })
@@ -194,9 +205,11 @@ function remove(key: string, quiet = false) {
 }
 
 function removeRaw(key: string) {
+    if (!writesOpen()) return
     memory.delete(key)
-    const done = db ? note(key, { d: 1 }) : () => {}
-    if (db) stored((s) => del(key, s)).then(done, () => {})
+    const at = stor(key)
+    const done = db ? note(at, { d: 1 }) : () => {}
+    if (db) stored((s) => del(at, s)).then(done, () => {})
 }
 
 /** The player's own notes (bookmarks, its switches) go through the same storage, so signing out clears them too. */
@@ -241,7 +254,10 @@ async function allEntries<T>(prefix: string): Promise<Map<string, T>> {
     const out = new Map<string, T>()
     if (db) {
         try {
-            for (const [k, v] of await stored((s) => entries<string, T>(s))) if (String(k).startsWith(prefix)) out.set(String(k), v)
+            for (const [k, v] of await stored((s) => entries<string, T>(s))) {
+                const mine = viewKey(PREFIX, String(k))
+                if (mine?.startsWith(prefix)) out.set(mine, v)
+            }
         } catch {}
     }
     for (const [k, v] of memory) if (k.startsWith(prefix)) out.set(k, v as T)
@@ -334,7 +350,7 @@ export function saveResume(r: Omit<Resume, 'time'>) {
 // The latest save is also kept in localStorage, which writes at once: a save made as the page
 // closes (Back off the site, a closed tab) may never reach IndexedDB. It is folded back in when
 // the app next starts.
-const LAST_KEY = 'tmplayer-last-position'
+const LAST_KEY = names.lastPosition
 type Last = { key: string; resume?: Resume; watched?: number }
 
 function keepLast(last: Last) {
@@ -912,7 +928,8 @@ export const POSTERS = POSTER_CACHE
 
 /** A thumbnail's JPEG from the Cache API, or from `fetch` (and then kept there). */
 export async function cachedThumb(key: string, fetch: () => Promise<ArrayBuffer>): Promise<Blob> {
-    const url = `/thumb/${encodeURIComponent(key)}`
+    // Another profile's thumbnails are its own (a private chat's message ids are per account), in the same capped cache.
+    const url = `/thumb/${encodeURIComponent(PREFIX + key)}`
     const cache = await globalThis.caches?.open(THUMBS).catch(() => undefined)
     const hit = await cache?.match(url).catch(() => undefined)
     if (hit) {
@@ -1172,4 +1189,37 @@ export async function clearAll() {
     setAddedIdsSignal(new Set<number>())
     setAddedModeSignal('unanswered')
     applyTheme(DEFAULTS.theme)
+}
+
+/**
+ * Signing one profile out while others stay (HX88): its own keys go from the database and from the
+ * journal, the device's settings and every other profile's keys stay. `prefix` is that profile's
+ * (names.keyPrefix); the page reloads after, so what it holds in memory goes with it.
+ */
+export async function clearProfileData(prefix: string) {
+    if (prefix === PREFIX) {
+        for (const k of [...memory.keys()]) if (ownsKey(PREFIX, stor(k))) memory.delete(k)
+        seqs.clear()
+    }
+    noted((notes) => {
+        for (const k of Object.keys(notes)) if (ownsKey(prefix, k)) delete notes[k]
+    })
+    if (!db) return
+    try {
+        const keys = (await raw((s) => entries<string, unknown>(s))).map(([k]) => String(k)).filter((k) => ownsKey(prefix, k))
+        for (let i = 0; i < keys.length; i += 500) {
+            const part = keys.slice(i, i + 500)
+            await raw((s) => delMany(part, s))
+        }
+    } catch (e) {
+        console.warn('[store] profile data not cleared', e)
+    }
+}
+
+/** Waits for the writes in flight, so a switch right after a save keeps it. */
+export async function flushWrites() {
+    await replayed
+    if (!db) return
+    // idb-keyval queues every call on one transaction at a time: a read now ends after the writes before it.
+    await raw((s) => get('settings', s)).catch(() => {})
 }
