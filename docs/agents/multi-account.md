@@ -190,10 +190,27 @@ Phase B, per platform:
 
 ## Phase B1: the shared screens and Android
 
-Still to tag the same way (they resolve the open profile when they write, phase A's list): the
-sync file (`ResumeSync`, `SyncScheduler`), SubMaker's translation polls, history edits from the
-players. Each runs for the open profile and is cancelled or dropped by `Accounts.profileScope` and
-the scoped stores on a switch, but a write in flight is not yet tied to its owner.
+Work that writes for its owner, not for whoever is open when it writes (each takes
+`Accounts.stamp` when it starts and runs as `AccountOwner`, so a write after a switch is dropped):
+
+- The sync file (`ResumeSync.sync`, every entry: the scheduler's runs, Sync now, the pull before a
+  video, `changeDestination`, `turnOffAndDelete`): its owner is taken before it waits for the
+  lock; a run asked for a profile no longer open does nothing; the sync channel's resolve and
+  writes and the confirm (`resume_sync_account`) run inside it; a `BeforeSwitch` hook cancels and
+  waits for a run (20 s at most, then the switch goes on and the run's late writes are dropped).
+  The scheduler's "last wrote at" is written inside the owned run.
+- SubMaker's translations: each job's track file is written only while its owner is open; the
+  player closing (which a switch does) ends its jobs.
+- Save to folder and the move of downloads (below). A moved file's record is written with
+  `AccountAddress(owner)`, the one write addressed to a profile on purpose, so a record never
+  points at an original that is gone, even when a switch could not wait for that file.
+- Folder grants for downloads are the device's: one is kept while any profile's downloads are in
+  it (`SettingsStore.downloadPathsOfEveryProfileNow`).
+
+Still resolving the open profile when they write, and why that is safe: the players' history
+edits, watched marks and bookmarks, and every screen's own edits run on the activity's
+`lifecycleScope` or a view model of the shell keyed on the open profile; a switch closes the
+player and rebuilds the shell before the old client closes, so they end with their profile.
 
 Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
 
