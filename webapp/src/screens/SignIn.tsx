@@ -1,15 +1,18 @@
-import { batch, createMemo, createSignal, For, lazy, Match, onCleanup, onMount, Show, Suspense, Switch } from 'solid-js'
+import { batch, createMemo, createSignal, lazy, Match, onCleanup, onMount, Show, Suspense, Switch } from 'solid-js'
 import { renderSVG } from 'uqr'
-import { ArrowDown01Icon, Cancel01Icon, RefreshIcon, Tick02Icon, ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { sessionEnded, signedIn } from '../session'
-import { iosBrowser } from '../install'
 import { form } from '../form'
 import { clock, t } from '../i18n'
 import { failure } from '../errors'
 import { Icon } from '../ui/Icon'
 import * as phoneRules from './phone'
 import { canResend, dialChip } from './phone'
+import { CountryPicker } from './signin/CountryPicker'
+import { PasswordField, Problem, SignInFooter, StepHead, StepLinks } from './signin/Parts'
+import { QrStep, type QrView } from './signin/QrStep'
+import { codeBlurb, resendLabel, typedAsDigits } from './signin/words'
 import type { Country, Me, QrEvent, SentCode } from '../tg/types'
 
 type Step =
@@ -23,9 +26,6 @@ type Step =
 
 /** The TV's number pad (session 21): fetched with the TV layout only. */
 const Keypad = lazy(() => import('../tv/Keypad'))
-
-/** Codes typed as a row of digits; a word or a phrase sent by text is typed as it is. */
-const typedAsDigits = (type: string) => type !== 'sms_word' && type !== 'sms_phrase'
 
 /**
  * Sign in, as the app does it: on a phone the number first (the QR code needs a second device),
@@ -397,7 +397,6 @@ export function SignIn() {
 
     // ---- Two-step password ----
     const [password, setPassword] = createSignal('')
-    const [showPassword, setShowPassword] = createSignal(false)
     const sendPassword = async (e: Event) => {
         e.preventDefault()
         if (!password() || busy()) return
@@ -420,44 +419,8 @@ export function SignIn() {
     }
 
     // ---- Words ----
-    const codeBlurb = (s: SentCode) => {
-        const number = `+${dial()} ${shownNat()}`
-        switch (s.type) {
-            case 'app': return t('login.delivery_app')
-            case 'sms': return t('login.delivery_sms', { number })
-            case 'call': return t('login.delivery_call', { number })
-            case 'missed_call': return t('login.delivery_missed_call')
-            case 'flash_call': return t('login.delivery_flash_call', { number })
-            case 'fragment': return t('login.delivery_fragment')
-            case 'sms_word': return t('login.delivery_word')
-            case 'sms_phrase': return t('login.delivery_phrase')
-            case 'firebase': return t('login.delivery_firebase', { number })
-            case 'email':
-            case 'email_setup': return t('login.email_code_body', { email: s.email ?? '' })
-            default: return t('login.delivery_unknown', { number })
-        }
-    }
-
-    /** Named after what pressing it will do, which is not always "the same again". */
-    const resendLabel = (s: SentCode) => {
-        if (s.type === 'email' || s.type === 'email_setup') return t('login.email_resend')
-        switch (s.next) {
-            case 'sms': case 'sms_word': case 'sms_phrase': return t('login.resend_sms')
-            case 'call': case 'missed_call': case 'flash_call': return t('login.resend_call')
-            case 'fragment': return t('login.resend_fragment')
-            default: return t('login.resend_again')
-        }
-    }
-
     /** A send button's words: busy, held by a flood wait, or ready. */
     const sendWords = (ready: string, working: string) => (busy() ? working : waitLeft() ? t('login.try_again_in', { time: clock(waitLeft()) }) : ready)
-
-    /** The last thing that went wrong, under the form it belongs to. */
-    const Problem = () => (
-        <Show when={error()}>
-            <p class="error" role="alert">{error()}</p>
-        </Show>
-    )
 
     const countryLine = () => {
         if (guessing() && !touched) return t('login.finding_country')
@@ -465,6 +428,17 @@ export function SignIn() {
         if (c) return `${phoneRules.flag(c.iso)}  ${c.name}`
         return dial() && countries().length ? t('login.invalid_country_code') : t('login.choose_country')
     }
+
+    const qrView: QrView = {
+        get svg() { return qr() },
+        get scanned() { return scanned() },
+        get expired() { return qrExpired() },
+        get soon() { return qrSoon() },
+        get left() { return qrLeft() },
+        get fraction() { return qrFraction() },
+        get refreshing() { return refreshing() },
+    }
+    const useQr = () => (go({ kind: 'qr' }), startQr())
 
     return (
         <main class="signin" classList={{ "is-qr": step().kind === 'qr' }}>
@@ -479,55 +453,13 @@ export function SignIn() {
             </Show>
             <Switch>
                 <Match when={step().kind === 'qr'}>
-                    <h1>{t('login.qr_title')}</h1>
-                    <p class="muted">{t('login.qr_blurb')}</p>
-                    <div class="qr-layout">
-                        <div class="qr-side">
-                            <div class="qr" aria-live="polite">
-                                <Show when={qr()} fallback={<div class="loader on-white" role="progressbar" aria-label={t('login.qr_renewing')} />}>
-                                    <div class="qr-code" role="img" aria-label={t('login.qr_description')} innerHTML={qr()!} />
-                                </Show>
-                                <div class="qr-veil" classList={{ on: scanned() }} aria-hidden={!scanned()} inert={!scanned()}>
-                                    <span class="qr-tick"><Icon icon={Tick02Icon} size={32} /></span>
-                                    <b>{t('login.qr_scanned')}</b>
-                                </div>
-                                <div class="qr-veil" classList={{ on: qrExpired() && !scanned() }} aria-hidden={!(qrExpired() && !scanned())} inert={!(qrExpired() && !scanned())}>
-                                    <b>{t('login.qr_expired')}</b>
-                                    <button type="button" class="qr-refresh on-white" onClick={refreshQr}>
-                                        <Icon icon={RefreshIcon} size={20} />
-                                        {t('login.qr_refresh')}
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="qr-life" classList={{ gone: scanned() }}>
-                                <div class="qr-bar"><i classList={{ soon: qrSoon() }} style={{ width: `${(qrSoon() && qrLeft() <= 0 ? 1 : qrFraction()) * 100}%` }} /></div>
-                                <p class="muted small" aria-live="polite">
-                                    {qrExpired() ? t('login.qr_renewing') : qrSoon() ? (qrLeft() <= 0 ? t('login.qr_renewing') : t('login.qr_expires_soon')) : '\u00a0'}
-                                </p>
-                            </div>
-                        </div>
-                        <div class="qr-text">
-                            <ol class="steps numbered">
-                                <li>{t('login.qr_step_open')}</li>
-                                <li>{t('login.qr_step_devices')}</li>
-                                <li>{t('login.qr_step_link')}</li>
-                            </ol>
-                            <p class="muted small">{t('login.qr_note')}</p>
-                            <div class="qr-actions">
-                                <button type="button" class="link" onClick={() => (stopQr(), go({ kind: 'phone' }))}>{t('login.use_phone')}</button>
-                                <button type="button" class="qr-refresh" onClick={refreshQr} disabled={refreshing()}>
-                                    <Show when={refreshing()} fallback={<Icon icon={RefreshIcon} size={20} />}><span class="loader tiny" /></Show>
-                                    {t('login.qr_refresh')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <Problem />
+                    <StepHead title={t('login.qr_title')} blurb={t('login.qr_blurb')} />
+                    <QrStep qr={qrView} onRefresh={refreshQr} onUsePhone={() => (stopQr(), go({ kind: 'phone' }))} />
+                    <Problem error={error()} />
                 </Match>
 
                 <Match when={step().kind === 'phone'}>
-                    <h1>{t('login.phone_title')}</h1>
-                    <p class="muted">{t('login.phone_blurb')}</p>
+                    <StepHead title={t('login.phone_title')} blurb={t('login.phone_blurb')} />
                     <form onSubmit={sendCode}>
                         <button type="button" class="country-row" classList={{ invalid: !knownCode() && !!dial() }} onClick={() => pickerDialog?.showModal()}>
                             <span>{countryLine()}</span>
@@ -568,15 +500,14 @@ export function SignIn() {
                         </Show>
                         <button class="primary" disabled={!ready() || busy() || !!waitLeft()}>{sendWords(t('login.send_code'), t('login.sending_code'))}</button>
                     </form>
-                    <Problem />
-                    <button class="link alt" onClick={() => (go({ kind: 'qr' }), startQr())}>{t('login.use_qr')}</button>
+                    <Problem error={error()} />
+                    <button class="link alt" onClick={useQr}>{t('login.use_qr')}</button>
                 </Match>
 
                 <Match when={step().kind === 'code' && (step() as { sent: SentCode }).sent}>
                     {(sent) => (
                         <>
-                            <h1>{sent().type.startsWith('email') ? t('login.email_code_title') : t('login.code_title')}</h1>
-                            <p class="muted">{codeBlurb(sent())}</p>
+                            <StepHead title={sent().type.startsWith('email') ? t('login.email_code_title') : t('login.code_title')} blurb={codeBlurb(sent(), `+${dial()} ${shownNat()}`)} />
                             <form onSubmit={sendSignIn}>
                                 <input
                                     ref={codeInput}
@@ -598,7 +529,7 @@ export function SignIn() {
                                 </Show>
                                 <button class="primary" disabled={busy() || !codeText().trim() || !!waitLeft()}>{sendWords(t('login.sign_in'), t('login.signing_in'))}</button>
                             </form>
-                            <Problem />
+                            <Problem error={error()} />
                             <Show
                                 when={canResend(sent())}
                                 fallback={<p class="muted small resend-none" role="status">{t('login.resend_none')}</p>}
@@ -607,17 +538,13 @@ export function SignIn() {
                                     {resendLeft() ? t('login.resend_in', { time: clock(resendLeft()) }) : resendLabel(sent())}
                                 </button>
                             </Show>
-                            <div class="signin-links">
-                                <button class="link" onClick={changeNumber}>{t('login.wrong_number')}</button>
-                                <button class="link" onClick={startOver}>{t('login.start_over')}</button>
-                            </div>
+                            <StepLinks onChangeNumber={changeNumber} onStartOver={startOver} />
                         </>
                     )}
                 </Match>
 
                 <Match when={step().kind === 'email'}>
-                    <h1>{t('login.email_address_title')}</h1>
-                    <p class="muted">{t('login.email_address_body')}</p>
+                    <StepHead title={t('login.email_address_title')} blurb={t('login.email_address_body')} />
                     <form onSubmit={sendEmail}>
                         <input
                             type="email"
@@ -630,105 +557,31 @@ export function SignIn() {
                         />
                         <button class="primary" disabled={busy() || !email().includes('@') || !!waitLeft()}>{sendWords(t('login.email_send'), t('login.sending_code'))}</button>
                     </form>
-                    <Problem />
-                    <div class="signin-links">
-                        <button class="link" onClick={changeNumber}>{t('login.wrong_number')}</button>
-                        <button class="link" onClick={startOver}>{t('login.start_over')}</button>
-                    </div>
+                    <Problem error={error()} />
+                    <StepLinks onChangeNumber={changeNumber} onStartOver={startOver} />
                 </Match>
 
                 <Match when={step().kind === 'password' && (step() as { hint: string | null })}>
                     {(s) => (
                         <>
-                            <h1>{t('login.telegram_password_title')}</h1>
-                            <p class="muted">{t('login.password_blurb')}</p>
+                            <StepHead title={t('login.telegram_password_title')} blurb={t('login.password_blurb')} />
                             <form onSubmit={sendPassword}>
-                                <div class="password-field">
-                                    <input
-                                        type={showPassword() ? 'text' : 'password'}
-                                        aria-label={t('login.password')}
-                                        placeholder={t('login.password')}
-                                        autocomplete="current-password"
-                                        value={password()}
-                                        onInput={(e) => (setPassword(e.currentTarget.value), setError(null))}
-                                        autofocus
-                                    />
-                                    <button
-                                        type="button"
-                                        class="icon-button"
-                                        aria-label={showPassword() ? t('login.hide_password') : t('login.show_password')}
-                                        onClick={() => setShowPassword(!showPassword())}
-                                    >
-                                        <Icon icon={showPassword() ? ViewOffSlashIcon : ViewIcon} size={20} />
-                                    </button>
-                                </div>
+                                <PasswordField value={password()} onInput={(v) => (setPassword(v), setError(null))} />
                                 <Show when={s().hint}>
                                     <p class="muted">{t('login.password_hint', { hint: s().hint! })}</p>
                                 </Show>
                                 <button class="primary" disabled={busy() || !password() || !!waitLeft()}>{sendWords(t('login.sign_in'), t('login.signing_in'))}</button>
                             </form>
-                            <Problem />
+                            <Problem error={error()} />
                             <button class="link" onClick={startOver}>{t('login.start_over')}</button>
                         </>
                     )}
                 </Match>
             </Switch>
 
-            <footer class="signin-foot small muted">
-                {/* Safari and a Home Screen app keep separate data: adding it first saves signing in twice. */}
-                <Show when={iosBrowser}>
-                    <details class="signin-install">
-                        <summary>{t('web.install_ios_short')}</summary>
-                        <p>{t('web.install_ios_before_sign_in')}</p>
-                        <ol class="install-steps">
-                            <li>{t('web.install_ios_step_share')}</li>
-                            <li>{t('web.install_ios_step_add')}</li>
-                        </ol>
-                    </details>
-                </Show>
-                <p>{t('auth.unofficial')}</p>
-                <a class="link" href="https://tmplayer.org/legal" target="_blank" rel="noopener">{t('login.legal')}</a>
-            </footer>
+            <SignInFooter />
 
             <CountryPicker ref={(d) => (pickerDialog = d)} countries={countries()} onPick={pick} />
         </main>
-    )
-}
-
-/** Telegram's countries, searched by name or code, as the app's CountryPicker. */
-function CountryPicker(props: { ref: (d: HTMLDialogElement) => void; countries: Country[]; onPick: (c: Country) => void }) {
-    const [query, setQuery] = createSignal('')
-    const shown = createMemo(() => props.countries.filter((c) => phoneRules.matches(c, query())))
-    let dialog!: HTMLDialogElement
-    return (
-        <dialog
-            class="countries"
-            ref={(d) => {
-                dialog = d
-                props.ref(d)
-            }}
-            onClose={() => setQuery('')}
-            aria-label={t('login.choose_country')}
-        >
-            <div class="countries-head">
-                <input type="search" aria-label={t('login.country_search')} placeholder={t('login.country_search')} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} autofocus />
-                <button type="button" class="icon-button" aria-label={t('login.close_country_list')} onClick={() => dialog.close()}>
-                    <Icon icon={Cancel01Icon} size={20} />
-                </button>
-            </div>
-            <ul>
-                <For each={shown()} fallback={<li class="muted countries-none">{t('login.country_no_match')}</li>}>
-                    {(c) => (
-                        <li>
-                            <button type="button" onClick={() => props.onPick(c)}>
-                                <span class="flag" aria-hidden="true">{phoneRules.flag(c.iso)}</span>
-                                <span class="name">{c.name}</span>
-                                <span class="muted">+{c.codes[0].code}</span>
-                            </button>
-                        </li>
-                    )}
-                </For>
-            </ul>
-        </dialog>
     )
 }
