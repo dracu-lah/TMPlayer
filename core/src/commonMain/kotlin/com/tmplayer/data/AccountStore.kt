@@ -101,6 +101,9 @@ object AccountDirs {
         listOf(paths.databaseDir, paths.filesDir).all { dir ->
             if (dir.exists() && !dir.isDirectory) dir.delete()
             dir.isDirectory || dir.mkdirs()
+        }.also { made ->
+            // Marked as it is made: an empty folder is a new database, never one from before markers.
+            if (made) DatabaseMarker.ensure(paths.databaseDir)
         }
     }.getOrDefault(false)
 

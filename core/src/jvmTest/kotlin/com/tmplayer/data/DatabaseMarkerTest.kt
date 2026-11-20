@@ -64,16 +64,52 @@ class DatabaseMarkerTest {
     fun `a queue from before markers is kept once and then carries the marker`() = runBlocking {
         settings.saveDownloadQueue(listOf(request), database = null)
         assertNull(settings.downloadQueueDatabaseNow())
-        OfflineDownloads.restore(settings, database = "upgraded1234")
+        OfflineDownloads.restore(settings, database = "upgraded1234", beforeMarkers = true)
         assertEquals("a single profile user keeps the paused download", setOf(41), OfflineDownloads.active.value.keys)
         assertEquals("upgraded1234", settings.downloadQueueDatabaseNow())
     }
 
     @Test
-    fun `stored markers match only the same database, and one from before markers`() {
-        assertTrue(DatabaseMarker.matches("a1b2c3d4", "a1b2c3d4"))
-        assertTrue(!DatabaseMarker.matches("a1b2c3d4", "z9y8x7w6"))
-        assertTrue(DatabaseMarker.matches(null, "z9y8x7w6"))
+    fun `an unmarked queue is taken only by a database from before markers, never a renewed or remade one`() {
+        // TDLib's files there, no marker: a database from before markers.
+        File(db, "td.binlog").writeText("x")
+        val first = DatabaseMarker.ensure(db)!!
+        assertTrue(DatabaseMarker.fromBeforeMarkers(db, first))
+        assertTrue(DatabaseMarker.matches(null, first, beforeMarkers = true))
+        // A sign out or an ended session: a new database in the same folder.
+        val renewed = DatabaseMarker.renew(db)!!
+        assertTrue("renewed: an unmarked queue is another database's", !DatabaseMarker.fromBeforeMarkers(db, renewed))
+        // Sign in again: the folder wiped and made again, marked as it is made.
+        AccountDirs.wipe(TempLayout(dir))
+        AccountDirs.make(TempLayout(dir))
+        File(db, "td.binlog").writeText("x")
+        val remade = DatabaseMarker.ensure(db)!!
+        assertTrue("remade: never from before markers", !DatabaseMarker.fromBeforeMarkers(db, remade))
+    }
+
+    @Test
+    fun `a write whose marker cannot be read keeps the tag there was`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "taggedqueue1")
+        settings.saveDownloadQueue(listOf(request, request.copy(fileId = 42)), database = null)
+        assertEquals("never downgraded to a queue from before markers", "taggedqueue1", settings.downloadQueueDatabaseNow())
+    }
+
+    @Test
+    fun `the marker read is the one on the disk, the same from every thread`() {
+        val seen = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val threads = (1..8).map { Thread { DatabaseMarker.ensure(File(dir, "racing").apply { mkdirs() })?.let(seen::add) } }
+        threads.forEach(Thread::start)
+        threads.forEach(Thread::join)
+        assertEquals("one marker for one database", 1, seen.size)
+        assertEquals(seen.single(), File(File(dir, "racing"), DatabaseMarker.FILE_NAME).readText().trim())
+    }
+
+    @Test
+    fun `stored markers match only the same database, and none on a database from before markers`() {
+        assertTrue(DatabaseMarker.matches("a1b2c3d4", "a1b2c3d4", beforeMarkers = false))
+        assertTrue(!DatabaseMarker.matches("a1b2c3d4", "z9y8x7w6", beforeMarkers = true))
+        assertTrue(DatabaseMarker.matches(null, "z9y8x7w6", beforeMarkers = true))
+        assertTrue("unmarked on a database made with markers", !DatabaseMarker.matches(null, "z9y8x7w6", beforeMarkers = false))
     }
 
     /** The platform's folders under [root], as TempPaths lays them out. */

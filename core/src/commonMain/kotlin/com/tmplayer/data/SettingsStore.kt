@@ -288,6 +288,9 @@ private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 /** The TDLib database the stored queue's file ids belong to ([DatabaseMarker], HX88). */
 private val DOWNLOAD_QUEUE_DB = stringPreferencesKey("download_queue_db")
 
+/** [SettingsStore.saveDownloadQueue]'s default: the marker of the store's own profile's database. */
+const val DATABASE_OF_STORE = "@store"
+
 /** Set once the downloads recorded before they had a folder of their own have been moved into it. */
 private val DOWNLOADS_MIGRATED = booleanPreferencesKey("downloads_migrated")
 
@@ -3308,15 +3311,25 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * many bytes are actually on disk rather than trusting a number the crash may have caught mid
      * write.
      */
-    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null, database: String? = Td.databaseMarker()) = owned(owner) {
+    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null, database: String? = DATABASE_OF_STORE) = owned(owner) {
+        // The database of the profile this store writes for (its owner, else the open one), read
+        // from that profile's own folder (HX88): never from the folder a switch points at first.
+        val marker = if (database == DATABASE_OF_STORE) {
+            val folder = (owner ?: kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp)?.folder ?: Accounts.activeFolder.value
+            Td.databaseMarkerFor(folder)
+        } else {
+            database
+        }
         prefs.edit { prefs ->
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
                 prefs.remove(DOWNLOAD_QUEUE_DB)
             } else {
                 prefs[DOWNLOAD_QUEUE] = DownloadRequest.encodeAll(requests)
-                // Its file ids are this database's: a queue of another one is never resumed (HX88).
-                if (database != null) prefs[DOWNLOAD_QUEUE_DB] = database else prefs.remove(DOWNLOAD_QUEUE_DB)
+                // Its file ids are this database's: a queue of another one is never resumed. A
+                // marker that could not be read keeps the tag there was: a tagged queue is never
+                // taken for one from before markers.
+                if (marker != null) prefs[DOWNLOAD_QUEUE_DB] = marker
             }
         }
     }

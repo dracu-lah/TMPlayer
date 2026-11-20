@@ -330,14 +330,37 @@ object Td {
     /** The directories the running client was given (the open profile's), or null before [start]. */
     val paths: Paths? get() = currentPaths
 
-    /** The open database's marker ([DatabaseMarker]), made when it has none; null before [start]. */
-    fun databaseMarker(): String? = currentPaths?.databaseDir?.let(DatabaseMarker::ensure)
+    /**
+     * The marker ([DatabaseMarker]) of the database of the profile on [folder] (null: the adopted
+     * one), from that profile's own folder, never from the folder a switch points at first; null
+     * before [start].
+     */
+    fun databaseMarkerFor(folder: String?): String? = databaseDirOf(folder)?.let(DatabaseMarker::ensure)
 
-    /** A new marker for the open database: it is a new one now (a sign out, an ended session). */
-    fun renewDatabaseMarker(): String? = currentPaths?.databaseDir?.let(DatabaseMarker::renew)
+    /** Whether the database of the profile on [folder] is one from before markers, marked [marker] ([DatabaseMarker.fromBeforeMarkers]). */
+    fun databaseFromBeforeMarkers(folder: String?, marker: String): Boolean =
+        databaseDirOf(folder)?.let { DatabaseMarker.fromBeforeMarkers(it, marker) } == true
+
+    /**
+     * The open profile's database is a new one now (a sign out, an ended session): a new marker,
+     * and the download rows of the old one dropped.
+     */
+    fun renewDatabaseMarker(): String? {
+        val marker = databaseDirOf(Accounts.active.folder)?.let(DatabaseMarker::renew)
+        OfflineDownloads.newDatabase()
+        return marker
+    }
+
+    private fun databaseDirOf(folder: String?): java.io.File? =
+        basePaths?.let { AccountDirs.pathsFor(it, Profile(id = "db", folder = folder)).databaseDir }
 
     /** The platform's own folders, which every profile's are found beside, or null before [start]. */
     val platformPaths: Paths? get() = basePaths
+
+    /** For tests: the platform's folders without a client, so the database markers can be read. */
+    internal fun platformPathsForTest(paths: Paths?) {
+        basePaths = paths
+    }
 
     /**
      * Starts the client once per process; later calls are ignored. Each app supplies where TDLib
