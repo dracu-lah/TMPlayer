@@ -56,12 +56,14 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
      * this profile's downloads pause, their queue written while its stores are still the open
      * ones. The service is told on the main thread and given a moment to stop what moves.
      */
-    /** The downloads this switch paused, to resume if the viewer cancels it. */
+    /** The downloads this switch paused, to resume if the viewer cancels it, and the profile they are. */
     @Volatile private var pausedForSwitch: List<Int> = emptyList()
+    @Volatile private var pausedFor: com.tmplayer.data.AccountStamp? = null
 
     override suspend fun beforeSwitch(onWaiting: (List<String>) -> Unit) {
         // The downloads pause alongside the other work, under the same deadline.
         pausedForSwitch = OfflineDownloads.active.value.values.filter { it.busy }.map { it.fileId }
+        pausedFor = com.tmplayer.data.Accounts.stamp
         if (downloading()) withContext(Dispatchers.Main) { runCatching { OfflineDownloads.pauseAll(app) } }
         val pausing = downloading()
         BeforeSwitch.runAll(onWaiting = { what -> onWaiting(if (pausing && downloading()) what + com.tmplayer.i18n.L.profilesWaitingDownloads else what) })
@@ -72,8 +74,11 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
 
     override suspend fun switchCancelled() {
         val ids = pausedForSwitch
+        val owner = pausedFor
         pausedForSwitch = emptyList()
-        if (ids.isEmpty()) return
+        pausedFor = null
+        // Only into the profile they belong to, while it is still the open one.
+        if (ids.isEmpty() || owner != com.tmplayer.data.Accounts.stamp) return
         val runner = com.tmplayer.data.AndroidDownloadRunner(app)
         withContext(Dispatchers.Main) { for (id in ids) runCatching { OfflineDownloads.resume(runner, id) } }
     }

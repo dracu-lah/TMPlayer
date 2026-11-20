@@ -179,15 +179,20 @@ class ProfileFlow(
 
     /** Cancel while a switch waits ([waitCancellable]): nothing is switched, the open profile stays. */
     fun cancelWaiting() {
-        if (!waitCancellable) return
+        // Exactly one wins: a Cancel that comes after the wait is over does nothing, so the switch
+        // never goes ahead with the downloads it paused running again.
+        if (!wait.cancel()) return
         running?.cancel()
         // The profile stays: what was paused for the switch goes on again.
         scope.launch { runCatching { platform.switchCancelled() } }
     }
 
+    private val wait = com.tmplayer.data.SwitchWait()
+
     /** The open profile's work stops first, the line saying what it waits for, with a Cancel. */
     private suspend fun stopFirst() {
         val line = status
+        wait.begin()
         waitCancellable = true
         try {
             platform.beforeSwitch { what -> status = if (what.isEmpty()) line else L.profilesWaiting(what = what.joinToString(", ")) }
@@ -199,6 +204,8 @@ class ProfileFlow(
             waitCancellable = false
             status = line
         }
+        // A Cancel that won: the switch does not go on, even if it was not cancelled in time to stop the wait.
+        if (!wait.commit()) throw CancellationException("the viewer cancelled the switch")
     }
 
     /** The app lock as last read; meaningful once [appLockKnown]. */

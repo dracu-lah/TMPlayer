@@ -165,3 +165,29 @@ object BeforeSwitch {
     /** How many players are open now (a long job's hook is not one). */
     val playerCount: Int get() = players.get()
 }
+
+/**
+ * A switch waiting for the open profile's work to stop, and the viewer's Cancel (HX88): exactly
+ * one of them wins. [cancel] true means the switch will not go on (and what it paused may go on
+ * again); [commit] true means the switch goes on and a later Cancel does nothing.
+ */
+class SwitchWait {
+    private val phase = java.util.concurrent.atomic.AtomicInteger(IDLE)
+
+    fun begin() = phase.set(WAITING)
+
+    /** The viewer's Cancel: true when it came in time and the switch is called off. */
+    fun cancel(): Boolean = phase.compareAndSet(WAITING, CANCELLED)
+
+    /** The wait is over: true when the switch may go on, false when a Cancel came first. */
+    fun commit(): Boolean = phase.compareAndSet(WAITING, COMMITTED)
+
+    val waiting: Boolean get() = phase.get() == WAITING
+
+    private companion object {
+        const val IDLE = 0
+        const val WAITING = 1
+        const val CANCELLED = 2
+        const val COMMITTED = 3
+    }
+}
