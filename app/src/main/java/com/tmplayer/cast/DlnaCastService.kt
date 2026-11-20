@@ -76,11 +76,8 @@ class DlnaCastService : Service() {
         PlaybackService.ensureChannel(this)
         runCatching {
             val first = notification(true)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-            } else {
-                startForeground(NOTIFICATION_ID, first)
-            }
+            // Through the one choke point (HX88): neutral while the open profile is hidden.
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         }.onFailure { Log.w(TAG, "Not allowed into the foreground", it) }
         holdLocks()
         ensureSession()
@@ -109,7 +106,9 @@ class DlnaCastService : Service() {
                     .setState(state, media.media?.positionMs ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN, if (isPlaying) 1f else 0f)
                     .build(),
             )
-            s.setMetadata(
+            com.tmplayer.data.ProfileMedia.setMetadata(
+                this,
+                s,
                 MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, title)
                     .putString(MediaMetadata.METADATA_KEY_ARTIST, L.castCastingTo(device))
@@ -117,7 +116,7 @@ class DlnaCastService : Service() {
                     .build(),
             )
         }
-        runCatching { getSystemService(NOTIFICATION_SERVICE).let { (it as android.app.NotificationManager).notify(NOTIFICATION_ID, notification(isPlaying)) } }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(this, NOTIFICATION_ID, notification(isPlaying), com.tmplayer.data.ProfileNotifications.Kind.Ongoing) }
     }
 
     private fun ensureSession() {

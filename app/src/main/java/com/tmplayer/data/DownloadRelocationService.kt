@@ -41,11 +41,7 @@ class DownloadRelocationService : Service() {
         AndroidTransferNotifier.ensureChannel(this)
         runCatching {
             val first = notification(DownloadRelocation.moving.value)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, first)
-            }
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         }
         scope.launch {
             DownloadRelocation.moving.collect { moving ->
@@ -53,7 +49,7 @@ class DownloadRelocationService : Service() {
                     stopSelf()
                     return@collect
                 }
-                runCatching { notifier().notify(NOTIFICATION_ID, notification(moving)) }
+                runCatching { com.tmplayer.data.ProfileNotifications.post(this@DownloadRelocationService, NOTIFICATION_ID, notification(moving), com.tmplayer.data.ProfileNotifications.Kind.Ongoing) }
             }
         }
         return START_NOT_STICKY

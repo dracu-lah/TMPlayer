@@ -240,6 +240,8 @@ class App : Application() {
         // A profile's PIN (HX88): locked again on a switch, the app lock and a long absence, and
         // then its cards come off the TV's home screen, so nothing of it shows outside the app.
         com.tmplayer.data.ProfileUnlock.install()
+        // Every notification and the cast's media session follow the open profile's lock (HX88).
+        com.tmplayer.data.ProfileNotifications.follow(this, backgroundScope)
         // Its first value too: a cold start with the profile already locked (the process was
         // killed) clears what an earlier run left on the launcher.
         if (com.tmplayer.data.FormFactor.isTv(this)) {

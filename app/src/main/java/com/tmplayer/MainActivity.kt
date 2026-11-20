@@ -385,6 +385,10 @@ class MainActivity : ComponentActivity() {
                     // Where each tap lands, for a page it opens to grow out of (see PageMotion).
                     // On a TV, banners and lines with buttons are reached from the screen's edge (HX22).
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().noteTouchOrigin().tvReachRoot()) {
+                        // What sits over the gate shows only while the open profile's shell does (HX88).
+                        val shellShown = com.tmplayer.ui.lock.profileShellShown(
+                            androidx.compose.runtime.remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(this@MainActivity) },
+                        )
                         // The last runs crashed as they started: the question alone, then the shell.
                         val holding by CrashReports.holdShell.collectAsStateWithLifecycle()
                         // On a remote, a list keeps still while the focused item is in full view.
@@ -397,23 +401,28 @@ class MainActivity : ComponentActivity() {
                             // nothing of one profile is drawn over the PIN pad or the next profile.
                             if (holding) StartupCrashQuestion() else ProfilesRoot {
                                 com.tmplayer.ui.trailer.TrailerPlayerRoot {
-                                    com.tmplayer.ui.browse.OfflineDownloadsHost {
-                                        Root()
-                                        com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
-                                    }
+                                    com.tmplayer.ui.browse.OfflineDownloadsHost { Root() }
                                 }
                             }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
                         }
                         // Messages at the top, clear of the floating bar and the buttons at the foot.
-                        TopMessageHost()
+                        TopMessageHost(suppressed = !shellShown)
                         // The layout nudge (HX78), over every screen: a box shown the touch layout
                         // meets it on the sign in screen already.
                         LayoutNudgeHost()
                         // "Wrong title?" and the question after a rename (N1): one place, over every
                         // screen, so it outlives the page whose rename asked it.
-                        // "Wrong title?" is drawn inside the profiles above (HX88).
+                        // Over everything as before, but only while the open profile's shell is
+                        // what shows (HX88): never over its PIN or the picker, and keyed on the open
+                        // profile, so a report never carries over a switch. One profile: as before.
+                        if (shellShown) {
+                            val openFolder by com.tmplayer.data.Accounts.activeFolder.collectAsStateWithLifecycle()
+                            androidx.compose.runtime.key(openFolder) {
+                                com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
+                            }
+                        }
                     }
                 }
             }

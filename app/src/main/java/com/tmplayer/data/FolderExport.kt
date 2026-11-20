@@ -530,11 +530,7 @@ class FolderExportService : Service() {
         AndroidTransferNotifier.ensureChannel(this)
         val foreground = runCatching {
             val first = notification(FolderExport.state.value.progress)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, first)
-            }
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, first, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         }.onFailure { Log.w(TAG, "Android would not let Save to folder run in the foreground", it) }.isSuccess
         if (started) return START_NOT_STICKY
         started = true
@@ -546,7 +542,7 @@ class FolderExportService : Service() {
                 val step = (progress.overall * 1000).toInt()
                 if (foreground && step / 5 != lastShown / 5) {
                     lastShown = step
-                    runCatching { notifier().notify(NOTIFICATION_ID, notification(progress)) }
+                    runCatching { com.tmplayer.data.ProfileNotifications.post(this@FolderExportService, NOTIFICATION_ID, notification(progress), com.tmplayer.data.ProfileNotifications.Kind.Ongoing) }
                 }
             }
             runCatching { stopForegroundRemoving() }
@@ -554,13 +550,15 @@ class FolderExportService : Service() {
             // page, which has no dialog for it: it is said in the shade as well.
             if (detached || FolderExport.watchers.get() == 0) {
                 runCatching {
-                    notifier().notify(
+                    com.tmplayer.data.ProfileNotifications.post(
+                        this@FolderExportService,
                         DONE_ID,
                         builder().setContentTitle(outcome.headline)
                             .setContentText(outcome.lines.firstOrNull())
                             .setStyle(Notification.BigTextStyle().bigText(outcome.lines.joinToString("\n")))
                             .setAutoCancel(true)
                             .build(),
+                        com.tmplayer.data.ProfileNotifications.Kind.Result,
                     )
                 }
             }

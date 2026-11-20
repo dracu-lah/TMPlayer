@@ -151,11 +151,7 @@ class ExternalStreamService : Service() {
         PlaybackService.ensureChannel(this)
         val foreground = runCatching {
             val note = notification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-            } else {
-                startForeground(NOTIFICATION_ID, note)
-            }
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, note, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         }.onFailure { Log.w(TAG, "Not allowed into the foreground", it) }.isSuccess
         if (!foreground) {
             // startForegroundService() promised a foreground within seconds; leaving instead of

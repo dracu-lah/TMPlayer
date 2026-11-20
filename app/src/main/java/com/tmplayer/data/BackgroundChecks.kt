@@ -288,7 +288,7 @@ class BackgroundChecks : JobService() {
             builder.addAction(
                 AppNotices.action(context, R.drawable.ic_notify_cancel, L.notifyActionNotNow, NoticeActions.dismiss(context, NOTIFY_SPONSOR)),
             )
-            runCatching { manager(context).notify(NOTIFY_SPONSOR, builder.build()) }
+            runCatching { com.tmplayer.data.ProfileNotifications.post(context, NOTIFY_SPONSOR, builder.build(), com.tmplayer.data.ProfileNotifications.Kind.Device) }
         }
 
         private fun postNewVideos(context: Context, alert: NewVideoAlerts.Alert) {
@@ -308,7 +308,7 @@ class BackgroundChecks : JobService() {
                 .setContentIntent(AppNotices.open(context, NOTIFY_NEW_VIDEOS) { it.putExtra(EXTRA_OPEN_CHAT, alert.chatId ?: 0L) })
                 .setAutoCancel(true)
             alert.body?.let { builder.setContentText(it).setStyle(Notification.BigTextStyle().bigText(it)) }
-            runCatching { manager(context).notify(NOTIFY_NEW_VIDEOS, builder.build()) }
+            runCatching { com.tmplayer.data.ProfileNotifications.post(context, NOTIFY_NEW_VIDEOS, builder.build(), com.tmplayer.data.ProfileNotifications.Kind.Result) }
         }
 
         /** "TMPlayer news", quiet, "New videos", which may make a sound, and the CP76 channels. */

@@ -157,15 +157,15 @@ class DownloadService : Service() {
         scope.launch {
             com.tmplayer.data.Accounts.activeFolder.drop(1).collect { stopForSwitch() }
         }
-        // The shade's titles follow the open profile's lock: the app's name while it is hidden.
+        // The shade follows the open profile's lock through ProfileNotifications; each row is
+        // drawn again, not only those whose line changed, when the profile hides or shows.
         scope.launch {
-            ProfileUnlock.hidden().drop(1).collect { refresh() }
+            ProfileUnlock.hidden().drop(1).collect {
+                lines.clear()
+                refresh()
+            }
         }
     }
-
-    /** [title], or only the app's name while the open profile is hidden behind its PIN (HX88). */
-    private fun shownTitle(title: String): String =
-        if (ProfileUnlock.hiddenNow()) applicationInfo.loadLabel(packageManager).toString() else title
 
     private fun stopForSwitch() {
         val jobs = synchronized(lock) {
@@ -1013,11 +1013,7 @@ class DownloadService : Service() {
      * left to press.
      */
     private fun goToForeground(notification: Notification): Boolean = runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(SUMMARY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(SUMMARY_ID, notification)
-        }
+        com.tmplayer.data.ProfileNotifications.foreground(this, SUMMARY_ID, notification, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }.onFailure { Log.w(TAG, "Android would not let the download service run", it) }.isSuccess
 
     /**
@@ -1058,7 +1054,7 @@ class DownloadService : Service() {
         // are a different matter: "downloaded" and "did not finish" are posted as the queue empties
         // and are meant to outlive the service.
         runCatching {
-            if (!stopping) notifier().notify(SUMMARY_ID, ongoing())
+            if (!stopping) com.tmplayer.data.ProfileNotifications.post(this, SUMMARY_ID, ongoing(), com.tmplayer.data.ProfileNotifications.Kind.Ongoing)
             perVideoNotifications()
         }
     }
@@ -1110,7 +1106,7 @@ class DownloadService : Service() {
             }
             if (lines[row.fileId] == line) continue
             lines[row.fileId] = line
-            notifier().notify(row.fileId.notificationId(), videoNotification(row, line))
+            com.tmplayer.data.ProfileNotifications.post(this, row.fileId.notificationId(), videoNotification(row, line), com.tmplayer.data.ProfileNotifications.Kind.Ongoing)
         }
 
         // Anything that has left the list takes its notification with it: a finished video's row
@@ -1126,7 +1122,7 @@ class DownloadService : Service() {
         val running = row.stage == OfflineDownloads.Stage.Running
         val fraction = row.fraction
         return builder()
-            .setContentTitle(shownTitle(row.title))
+            .setContentTitle(row.title)
             .setContentText(line)
             .setGroup(GROUP)
             .setOngoing(row.busy)
@@ -1272,7 +1268,7 @@ class DownloadService : Service() {
         ).joinToString(DOT)
 
         return builder
-            .setContentTitle(shownTitle(current.title))
+            .setContentTitle(current.title)
             .setContentText(line)
             .setSubText(Translator.messages.formatter.eta(current.remainingSeconds).ifEmpty { null })
             .setProgress(100, ((fraction ?: 0f) * 100).toInt(), fraction == null)
