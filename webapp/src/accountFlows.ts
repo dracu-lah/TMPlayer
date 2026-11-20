@@ -14,6 +14,8 @@ import {
     addingFrom,
     book,
     chooseInTab,
+    closeTopLayer,
+    handOff,
     closePicker,
     closeWrites,
     freshBook,
@@ -55,21 +57,27 @@ import type { Me } from './tg/types'
  * of one account (a chat, a video) means nothing to another. Leaving the unlocked profile locks it.
  */
 const reloadInto = (id: string | null) => {
+    // The next page of this tab takes the unlock over only when it is that profile's.
+    handOff(id)
     if (unlockedId() !== id) relock()
+    closeTopLayer(null, false)
     chooseInTab(id)
     location.replace('/')
 }
 
-/** Back to the picker, which asks every PIN again: where pending work could not finish. */
+/** Back to the picker, which asks every PIN again: where pending work could not finish (and says why). */
 function toPicker() {
     setPending(null)
     relock()
+    leaveIntent({ kind: 'notice', text: 'failed' })
     chooseInTab(null)
     location.replace('/')
 }
 
 /** The page lets go of its profile: the player keeps its place, the writes in flight land, nothing after does. */
 async function leave() {
+    // A menu, a sheet or a question of this profile goes with it (a busy question stays until its work ends).
+    closeTopLayer(null, false)
     runBeforeSwitch()
     await flushWrites().catch(() => {})
     closeWrites()
@@ -272,7 +280,22 @@ export async function removeProfile(id: string): Promise<boolean> {
         await signOutThisProfile()
         return true
     }
-    if (id === activeId) return pendingSignOut(id)
+    // The profile this page would run, its client never opened (the picker at launch; its session may
+    // not even be readable): removed here, from this browser only, and said so.
+    if (id === activeId) {
+        if (await heldElsewhere(id, true)) {
+            showToast({ text: t('accounts.open_elsewhere') })
+            return false
+        }
+        closeWrites()
+        await wipeLocal(id)
+        const next = B.removeProfile(freshBook(), id)
+        saveBook(next)
+        leaveIntent({ kind: 'notice', text: 'deleted' })
+        relock()
+        reloadInto(next.profiles.length === 1 && !next.profiles[0].pin ? next.profiles[0].id : null)
+        return true
+    }
     if (await heldElsewhere(id)) {
         showToast({ text: t('accounts.open_elsewhere') })
         return false
@@ -287,13 +310,22 @@ export async function removeProfile(id: string): Promise<boolean> {
 export async function signInAgain(id: string) {
     if (needsPin(id)) return
     verified.delete(id)
+    if (id === activeId && sessionOpen()) {
+        closePicker()
+        return
+    }
+    if (await heldElsewhere(id, true)) return showToast({ text: t('accounts.open_elsewhere') })
+    if (B.find(freshBook(), id)?.pin) unlock(id)
     if (id === activeId) {
+        // Not opened yet (the picker at launch): its session alone goes (it may be unreadable), its lists
+        // stay, and the client opens on the normal sign in.
+        await deleteDatabase(names.mtcute)
+        leaveIntent({ kind: 'signinAgain' })
+        markChosen()
         closePicker()
         openSession()
         return
     }
-    if (await heldElsewhere(id)) return showToast({ text: t('accounts.open_elsewhere') })
-    if (B.find(freshBook(), id)?.pin) unlock(id)
     await deleteDatabase(namesFor(id).mtcute)
     leaveIntent({ kind: 'signinAgain' })
     await switchTo(id)
@@ -306,6 +338,13 @@ export const removeAllNeeds = (): B.Profile[] => B.pinsForRemoveAll(freshBook(),
 export async function removeAll(): Promise<boolean> {
     // Every locked profile's PIN first: one missing and nothing goes.
     if (removeAllNeeds().length) return false
+    // A profile open in another tab would stop it half way: none may be, before anything is wiped.
+    for (const p of freshBook().profiles) {
+        if (p.id !== activeId && (await heldElsewhere(p.id))) {
+            showToast({ text: t('accounts.remove_all_elsewhere') })
+            return false
+        }
+    }
     const ok = await askConfirm({
         title: t('accounts.remove_all_title'),
         message: t('accounts.remove_all_message'),
@@ -356,7 +395,7 @@ export function showCarriedNotice() {
     const intent = peekIntent()
     if (intent?.kind !== 'notice') return
     takeIntent()
-    const text = { same: t('accounts.same_account'), removed: t('accounts.signed_out_toast'), cancelled: t('accounts.add_cancelled') }[intent.text]
+    const text = { same: t('accounts.same_account'), removed: t('accounts.signed_out_toast'), cancelled: t('accounts.add_cancelled'), failed: t('accounts.signout_failed'), deleted: t('accounts.removed_toast') }[intent.text]
     showToast({ text })
 }
 

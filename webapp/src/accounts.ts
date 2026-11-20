@@ -54,10 +54,33 @@ const tabChoice = session(TAB_KEY)
 // A reload after a minute hidden starts locked, as the tab would have been.
 if (B.relockDue(first, B.find(first, tabChoice)?.id ?? first.active, hiddenAt(), Date.now())) setSession(UNLOCK_KEY, null)
 setSession(HIDDEN_KEY, null)
-// The unlock holds the tab's own profile only.
-if (session(UNLOCK_KEY) !== null && B.readUnlock(session(UNLOCK_KEY), Date.now()) !== tabChoice) setSession(UNLOCK_KEY, null)
+/** sessionStorage: the unlock's token, left by a page of this tab that starts the next one on its unlocked profile. */
+const HANDOFF_KEY = 'tmplayer-unlock-handoff'
 
-const plan = B.bootPlan(first, tabChoice, B.readUnlock(session(UNLOCK_KEY), Date.now()), B.readPending(session(PENDING_KEY), first))
+function navigationType(): string | null {
+    try {
+        return (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type ?? null
+    } catch {
+        return null
+    }
+}
+
+/**
+ * The unlock is bound to the page instance that holds it: a token in memory, and a Web Lock of that
+ * name for as long as the page lives. A reload of the tab, or a page the tab itself started on that
+ * profile, takes it over; a duplicated tab or a restored session (whose sessionStorage is a copy)
+ * does not, and asks the PIN.
+ */
+let token: string | null = null
+{
+    const taken = B.acceptUnlock(session(UNLOCK_KEY), Date.now(), navigationType(), session(HANDOFF_KEY))
+    setSession(HANDOFF_KEY, null)
+    // The unlock holds the tab's own profile only.
+    if (taken && taken.id === tabChoice) token = taken.token
+    else setSession(UNLOCK_KEY, null)
+}
+
+const plan = B.bootPlan(first, tabChoice, token ? tabChoice : null, B.readPending(session(PENDING_KEY), first))
 if (!plan.pending) setSession(PENDING_KEY, null)
 
 /** The profile this page runs, for its whole life. */
@@ -104,15 +127,51 @@ export function closeWrites() {
 
 // ---- Unlocking ----
 
-/** The PIN profile this tab may open now, or null. */
-export const unlockedId = () => B.readUnlock(session(UNLOCK_KEY), Date.now())
+/** The PIN profile this tab may open now, or null: only the unlock this very page holds the token of. */
+export function unlockedId(): string | null {
+    if (!token) return null
+    const text = session(UNLOCK_KEY)
+    const id = B.readUnlock(text, Date.now())
+    try {
+        return id && (JSON.parse(text!) as { token?: unknown }).token === token ? id : null
+    } catch {
+        return null
+    }
+}
+const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => (b % 36).toString(36)).join('')
+
+/** Holds the token's Web Lock while this page lives; a page that finds it already held is a copy and locks. */
+let releaseHold: (() => void) | null = null
+function holdToken(t: string, onCopy: () => void) {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+    if (!locks) return
+    releaseHold?.()
+    locks
+        .request(`tmplayer-unlock:${t}`, { ifAvailable: true }, (lock) => {
+            if (!lock) return onCopy()
+            return new Promise<void>((resolve) => (releaseHold = resolve))
+        })
+        .catch(() => {})
+}
+
 /** The PIN was entered for `id` in this tab, which is about to open it: the one unlock the tab holds. */
 export function unlock(id: string) {
-    setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now()))
+    token = newToken()
+    setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now(), token))
+    holdToken(token, () => {})
     freshening ??= setInterval(freshenUnlock, 20_000)
 }
 /** Locks again: a switch away, a sign out, a remove, an add, a minute hidden. */
-export const relock = () => setSession(UNLOCK_KEY, null)
+export function relock() {
+    token = null
+    releaseHold?.()
+    releaseHold = null
+    setSession(UNLOCK_KEY, null)
+}
+/** This page starts the next one of the tab on `id`: it takes the unlock over when it is `id`'s. */
+export function handOff(id: string | null) {
+    if (token && id !== null && unlockedId() === id) setSession(HANDOFF_KEY, token)
+}
 
 /**
  * The unlock is stamped with a time and runs out after RELOCK_HIDDEN_MS unless the tab, shown, keeps
@@ -127,15 +186,46 @@ function freshenUnlock() {
         freshening = undefined
         return
     }
-    if (id === activeId && document.visibilityState === 'visible') setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now()))
+    if (id === activeId && document.visibilityState === 'visible') setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now(), token!))
 }
 if (typeof window !== 'undefined') {
-    if (unlockedId()) freshening = setInterval(freshenUnlock, 20_000)
+    if (unlockedId()) {
+        freshening = setInterval(freshenUnlock, 20_000)
+        // Another live page still holds this token: this page is a copy of it (a duplicated tab), and locks.
+        holdToken(token!, () => {
+            relock()
+            runBeforeSwitch()
+            closeTopLayer()
+            setPicker((p) => p ?? 'lock')
+        })
+    }
     // A reload (or a closing tab) stamps it now: the next page of this tab finds it fresh, a copy restored later does not.
     window.addEventListener('pagehide', () => {
         const id = unlockedId()
-        if (id === activeId) setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now()))
+        if (id === activeId) setSession(UNLOCK_KEY, B.writeUnlock(id, Date.now(), token!))
     })
+}
+
+/**
+ * Closes everything in the browser's top layer (modal dialogs, popovers: a card's menu, a question,
+ * a sheet), which would stand above the picker and still show the profile. A dialog held open by
+ * work in progress is hidden instead. `keep` is the picker's own.
+ */
+export function closeTopLayer(keep?: Element | null, hideHeld = true) {
+    if (typeof document === 'undefined') return
+    for (const d of document.querySelectorAll<HTMLDialogElement>('dialog[open]')) {
+        if (d === keep || d.matches('.profiles, .lock-cover')) continue
+        try {
+            d.close()
+        } catch {}
+        if (hideHeld && d.hasAttribute('open')) {
+            d.style.visibility = 'hidden'
+            d.setAttribute('inert', '')
+        }
+    }
+    try {
+        for (const p of document.querySelectorAll<HTMLElement>(':popover-open')) if (p !== keep) p.hidePopover()
+    } catch {}
 }
 
 // ---- The picker ----
@@ -165,7 +255,7 @@ export const setPending = (next: B.Pending | null) => setSession(PENDING_KEY, ne
 
 // ---- Intents carried over a reload ----
 
-export type Intent = { kind: 'signinAgain' } | { kind: 'notice'; text: 'same' | 'removed' | 'cancelled' }
+export type Intent = { kind: 'signinAgain' } | { kind: 'notice'; text: 'same' | 'removed' | 'cancelled' | 'failed' | 'deleted' }
 
 export function takeIntent(): Intent | null {
     const text = session(INTENT_KEY)
@@ -174,7 +264,7 @@ export function takeIntent(): Intent | null {
     try {
         const v = JSON.parse(text) as { kind?: unknown; text?: unknown }
         if (v.kind === 'signinAgain') return { kind: v.kind }
-        if (v.kind === 'notice' && (v.text === 'same' || v.text === 'removed' || v.text === 'cancelled')) return { kind: 'notice', text: v.text }
+        if (v.kind === 'notice' && (v.text === 'same' || v.text === 'removed' || v.text === 'cancelled' || v.text === 'failed' || v.text === 'deleted')) return { kind: 'notice', text: v.text }
     } catch {}
     return null
 }
@@ -216,6 +306,8 @@ if (typeof document !== 'undefined')
         relock()
         // What plays keeps its place and stops under the picker.
         runBeforeSwitch()
+        // Nothing of the profile may stand above the picker: the top layer is closed first.
+        closeTopLayer()
         setPicker('lock')
     })
 

@@ -11,6 +11,8 @@ import {
     bootPlan,
     checkPin,
     checkPinIn,
+    acceptUnlock,
+    profileNumber,
     readUnlock,
     writeUnlock,
     cleanName,
@@ -409,6 +411,28 @@ test('an unlock runs out: a copy restored later, or one stamped ahead, opens not
     assert.equal(readUnlock(text, at - 1), null)
     // An unlock without a time (an older build's, a hand edit) is none.
     for (const bad of [null, '', 'abc123', '{"id":"abc123"}', '{"id":"../x","at":5000000}', '{"id":"abc123","at":"5"}', 'x'.repeat(300)]) assert.equal(readUnlock(bad, at), null, String(bad))
+})
+
+test('only a reload of the tab, or a page it started itself, takes its unlock over', () => {
+    const at = 9_000_000
+    const text = writeUnlock('abc123', at, 'tok0123456789')
+    assert.deepEqual(acceptUnlock(text, at + 1000, 'reload', null), { id: 'abc123', token: 'tok0123456789' })
+    assert.deepEqual(acceptUnlock(text, at + 1000, 'navigate', 'tok0123456789'), { id: 'abc123', token: 'tok0123456789' })
+    // A duplicated tab or a restored session: a copy of sessionStorage, but no reload of this tab and no handoff.
+    for (const nav of ['navigate', 'back_forward', 'prerender', null]) assert.equal(acceptUnlock(text, at + 1000, nav, null), null, String(nav))
+    assert.equal(acceptUnlock(text, at + 1000, 'navigate', 'other0123456'), null)
+    // Run out, or without a token (an older build's): asks again.
+    assert.equal(acceptUnlock(text, at + RELOCK_HIDDEN_MS + 1, 'reload', null), null)
+    assert.equal(acceptUnlock(writeUnlock('abc123', at), at, 'reload', null), null)
+    assert.equal(acceptUnlock(JSON.stringify({ id: 'abc123', at, token: '<script>' }), at, 'reload', null), null)
+})
+
+test('an unnamed profile is numbered by its place, found by id even in a copy of the book', () => {
+    const book = added(added(defaultBook()))
+    const copy = readBook(writeBook(book))
+    assert.equal(profileNumber(book, copy.profiles[2].id), 3)
+    assert.equal(profileNumber(book, ADOPTED), 1)
+    assert.equal(profileNumber(book, 'gone00'), 0)
 })
 
 test('a tab hidden for more than a minute locks its PIN profile again', async () => {

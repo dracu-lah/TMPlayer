@@ -123,6 +123,9 @@ export function cleanName(name: string): string {
 
 export const find = (book: Book, id: string | null | undefined): Profile | undefined => (id ? book.profiles.find((p) => p.id === id) : undefined)
 
+/** A profile's place in the book, from 1, found by its id (a copy read from storage is another object); 0 when it is gone. */
+export const profileNumber = (book: Book, id: string): number => book.profiles.findIndex((p) => p.id === id) + 1
+
 const patch = (book: Book, id: string, change: Partial<Profile>): Book => ({
     ...book,
     profiles: book.profiles.map((p) => (p.id === id ? { ...p, ...change } : p)),
@@ -458,9 +461,35 @@ export async function checkPinIn(read: () => Book, write: (book: Book) => void, 
     return answer
 }
 
-/** An unlock as the tab keeps it: the profile and when it was last confirmed (refreshed while the tab is shown). */
-export function writeUnlock(id: string, at: number): string {
-    return JSON.stringify({ id, at })
+/** An unlock as the tab keeps it: the profile, when it was last confirmed (refreshed while the tab is shown), and the page instance's token. */
+export function writeUnlock(id: string, at: number, token = ''): string {
+    return JSON.stringify({ id, at, token })
+}
+
+export interface Accepted {
+    id: string
+    token: string
+}
+
+/**
+ * Whether a page may take over the unlock its sessionStorage holds. sessionStorage is copied by a
+ * duplicated tab and by a session restore, so the unlock alone proves nothing: it is taken only by a
+ * reload of the same tab (`navigation` 'reload') or a page this tab itself started on that profile
+ * (`handoff` equal to the unlock's token), only while it is fresh, and only when no other live page
+ * still holds its token (`heldElsewhere`, checked by the caller through Web Locks). Anything else asks
+ * the PIN again.
+ */
+export function acceptUnlock(text: string | null | undefined, now: number, navigation: string | null, handoff: string | null): Accepted | null {
+    const id = readUnlock(text, now)
+    if (!id) return null
+    let token = ''
+    try {
+        const v = JSON.parse(text!) as { token?: unknown }
+        token = typeof v.token === 'string' && /^[a-z0-9]{8,40}$/.test(v.token) ? v.token : ''
+    } catch {}
+    if (!token) return null
+    if (navigation === 'reload' || (handoff !== null && handoff === token)) return { id, token }
+    return null
 }
 
 /**
