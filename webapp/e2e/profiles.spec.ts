@@ -2,10 +2,18 @@
 // storage name; `qr:N` signs the QR code in as account N). One profile changes nothing; Add account
 // signs a second in beside it; the picker switches, asks a PIN, signs one out; Remove all leaves the
 // normal sign in; two tabs never run one profile; a lost session is "Needs attention".
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { mkdirSync } from 'node:fs'
+import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
 import { fakeCase, isPhoneProject } from './helpers'
+import { makePin, type Pin } from '../src/ui/accountBook'
 
 const BOOK = 'tmplayer-accounts'
+/** The picker in each form, for a look by eye (design/web-profiles). */
+const SHOTS = `${process.cwd()}/../design/web-profiles`
+async function shot(page: Page, info: TestInfo, name: string) {
+    mkdirSync(SHOTS, { recursive: true })
+    await page.screenshot({ path: `${SHOTS}/${name}-${info.project.name}.png` })
+}
 const PICKER = "Who's watching?"
 
 interface StoredBook {
@@ -29,7 +37,7 @@ const storedKeys = (page: Page) =>
     )
 
 /** Two profiles already on this browser: the adopted one (account 1) and `abc123` (account 2), each with its chats answered. */
-async function twoProfiles(page: Page, extra: { layout?: string; attention?: boolean } = {}) {
+async function twoProfiles(page: Page, extra: { layout?: string; attention?: boolean; pins?: { main?: Pin; abc123?: Pin } } = {}) {
     await page.goto('/__e2e/sizes')
     await page.evaluate(
         ({ book, layout, attention }) =>
@@ -61,8 +69,8 @@ async function twoProfiles(page: Page, extra: { layout?: string; attention?: boo
             book: {
                 v: 1,
                 profiles: [
-                    { id: 'main', name: 'Dana Test', userId: 1, state: 'ok', pin: null, fails: 0, lockedUntil: 0, added: 1 },
-                    { id: 'abc123', name: 'Robin Test', userId: 2, state: 'ok', pin: null, fails: 0, lockedUntil: 0, added: 2 },
+                    { id: 'main', name: 'Dana Test', userId: 1, state: 'ok', pin: extra.pins?.main ?? null, fails: 0, lockedUntil: 0, added: 1 },
+                    { id: 'abc123', name: 'Robin Test', userId: 2, state: 'ok', pin: extra.pins?.abc123 ?? null, fails: 0, lockedUntil: 0, added: 2 },
                 ],
                 active: 'main',
             },
@@ -164,10 +172,11 @@ test('add a second account, switch between them, and sign one out', async ({ pag
     await expect(page.getByRole('button', { name: 'Add account' })).toBeVisible()
 })
 
-test('the picker at launch, a PIN, and five wrong tries wait 30 s across a reload', async ({ page }) => {
+test('the picker at launch, a PIN, and five wrong tries wait 30 s across a reload', async ({ page }, info) => {
     await twoProfiles(page)
     await page.goto('/')
     await expect(picker(page)).toBeVisible()
+    await shot(page, info, 'picker-launch')
     // At launch there is nothing to close: a profile must be chosen.
     await expect(page.getByRole('button', { name: 'Close profiles' })).toHaveCount(0)
     await tile(page, /^Dana Test/).click()
@@ -181,6 +190,7 @@ test('the picker at launch, a PIN, and five wrong tries wait 30 s across a reloa
     await options.getByRole('button', { name: 'Set a PIN' }).click()
     const pin = page.locator('dialog.pin-dialog')
     await expect(pin.getByText('The PIN only locks this profile on this browser. It does not encrypt what is stored here.')).toBeVisible()
+    await shot(page, info, 'pin')
     await page.keyboard.type('4821')
     await expect(pin.getByRole('heading', { name: 'Enter the same PIN again' })).toBeVisible()
     await page.keyboard.type('4821')
@@ -262,12 +272,13 @@ test('cancel on the sign in of a new account goes back', async ({ page }) => {
     expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main'])
 })
 
-test('a profile whose session is gone needs attention, and Remove takes it away', async ({ page }) => {
+test('a profile whose session is gone needs attention, and Remove takes it away', async ({ page }, info) => {
     await twoProfiles(page, { attention: true })
     await page.goto('/')
     await tile(page, /^Robin Test/).click()
     // Its session is missing: the picker says so, nothing crashes.
     await expect(tile(page, /^Robin Test, In use, Needs attention/)).toBeVisible({ timeout: 15_000 })
+    await shot(page, info, 'needs-attention')
     await tile(page, /^Robin Test/).click()
     const options = page.getByRole('dialog', { name: 'Robin Test' })
     await expect(options.getByRole('button', { name: 'Sign in again' })).toBeVisible()
@@ -301,6 +312,7 @@ test('the TV: the picker is a focus group for the remote', async ({ page }, info
     await twoProfiles(page, { layout: 'tv' })
     await page.goto('/')
     await expect(picker(page)).toBeVisible()
+    await shot(page, info, 'picker-tv')
     await expect(tile(page, /^Dana Test/)).toBeFocused()
     await page.keyboard.press('ArrowRight')
     await expect(tile(page, /^Robin Test/)).toBeFocused()
@@ -315,4 +327,123 @@ test('the TV: the picker is a focus group for the remote', async ({ page }, info
     await expect(tile(page, /^Dana Test, In use/)).toBeFocused()
     await page.keyboard.press('Backspace')
     await expect(picker(page)).toHaveCount(0)
+})
+
+// ---- Security review: a PIN profile never opens without its PIN ----
+
+/** Notes in the tab whether a screen of the app ever showed while a sign out was pending (it must not). */
+async function watchPendingScreens(page: Page) {
+    await page.addInitScript(() => {
+        // Only a page that starts with the sign out pending is the signed out profile's own.
+        if (!sessionStorage.getItem('tmplayer-accounts-pending')) return
+        const check = () => {
+            if (document.querySelector('main.page, .profiles')) sessionStorage.setItem('e2e-pending-screen', '1')
+        }
+        new MutationObserver(check).observe(document, { childList: true, subtree: true })
+    })
+}
+
+test('signing out a locked profile asks its PIN, and none of its screens ever opens', async ({ page }) => {
+    const robin = await makePin('4821', globalThis.crypto, 2000)
+    await twoProfiles(page, { pins: { abc123: robin } })
+    await watchPendingScreens(page)
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('main.page')).toBeVisible()
+    await openSettings(page)
+    await page.getByRole('button', { name: 'Switch profile' }).click()
+    await picker(page).getByRole('button', { name: 'Manage profiles' }).click()
+    await tile(page, /^Robin Test/).click()
+    // Its options are behind its PIN.
+    const pin = page.locator('dialog.pin-dialog')
+    await expect(pin).toBeVisible()
+    await page.keyboard.type('4821')
+    await page.getByRole('dialog', { name: 'Robin Test' }).getByRole('button', { name: 'Sign out of this profile' }).click()
+    await reloads(page, () => page.getByRole('dialog', { name: 'Sign out of Robin Test?' }).getByRole('button', { name: 'Sign out', exact: true }).click())
+    await expect(page.getByText('Signed out of that profile')).toBeVisible({ timeout: 15_000 })
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main'])
+    expect(await page.evaluate(() => [sessionStorage.getItem('e2e-pending-screen'), sessionStorage.getItem('tmplayer-tab-profile'), sessionStorage.getItem('tmplayer-accounts-pending')])).toEqual([null, 'main', null])
+})
+
+test('cancel on a new account goes back to the picker when the profile it came from has a PIN', async ({ page }) => {
+    const dana = await makePin('1111', globalThis.crypto, 2000)
+    await twoProfiles(page, { pins: { main: dana } })
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    // The profile the page already runs: it opens in place.
+    await page.keyboard.type('1111')
+    await expect(page.locator('main.page')).toBeVisible()
+    await openSettings(page)
+    await expect(page.locator('.set-account').getByText('Dana Test')).toBeVisible()
+    await page.getByRole('button', { name: 'Switch profile' }).click()
+    await reloads(page, () => picker(page).getByRole('button', { name: 'Add account' }).click())
+    await reloads(page, () => page.getByRole('button', { name: 'Cancel, go back' }).click())
+    // Not straight back into Dana: the picker, and her PIN again.
+    await expect(picker(page)).toBeVisible()
+    await expect(page.locator('main.page')).toHaveCount(0)
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('dialog.pin-dialog')).toBeVisible()
+    // A reload does not get past it either.
+    await page.reload()
+    await expect(picker(page)).toBeVisible()
+    await expect(page.locator('main.page')).toHaveCount(0)
+})
+
+test('Remove all asks every locked PIN first, and a cancelled one wipes nothing', async ({ page }) => {
+    const robin = await makePin('4821', globalThis.crypto, 2000)
+    await twoProfiles(page, { pins: { abc123: robin } })
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    await expect(page.locator('main.page')).toBeVisible()
+    await openSettings(page)
+    await page.getByRole('button', { name: 'Remove all accounts' }).click()
+    const pin = page.locator('dialog.pin-dialog')
+    await expect(pin.getByRole('heading', { name: 'Enter the PIN for Robin Test' })).toBeVisible()
+    await pin.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByRole('dialog', { name: 'Remove all accounts?' })).toHaveCount(0)
+    expect((await readBook(page))!.profiles.map((p) => p.id)).toEqual(['main', 'abc123'])
+    // A wrong one does not get past either.
+    await page.getByRole('button', { name: 'Remove all accounts' }).click()
+    await page.keyboard.type('0000')
+    await expect(pin.getByText('Wrong PIN. 4 tries left')).toBeVisible()
+    await page.keyboard.type('4821')
+    // The browser's own storage, deleted with Dana's profile, starts signed out (the fake's default is signed in).
+    await fakeCase(page.context(), 'signedout')
+    await page.getByRole('dialog', { name: 'Remove all accounts?' }).getByRole('button', { name: 'Remove all' }).click()
+    await expect(page).toHaveURL(/\/signin/, { timeout: 20_000 })
+    expect((await readBook(page))!.profiles.map((p) => [p.id, p.userId])).toEqual([['main', null]])
+})
+
+test('a minute hidden locks a PIN profile again', async ({ page }) => {
+    const dana = await makePin('1111', globalThis.crypto, 2000)
+    await twoProfiles(page, { pins: { main: dana } })
+    await page.clock.install()
+    await page.goto('/')
+    await tile(page, /^Dana Test/).click()
+    // The profile the page already runs: it opens in place.
+    await page.keyboard.type('1111')
+    await expect(page.locator('main.page')).toBeVisible()
+    const show = (state: 'hidden' | 'visible') =>
+        page.evaluate((s) => {
+            Object.defineProperty(document, 'visibilityState', { value: s, configurable: true })
+            document.dispatchEvent(new Event('visibilitychange'))
+        }, state)
+    // Under a minute away: still open.
+    await show('hidden')
+    await page.clock.fastForward(30_000)
+    await show('visible')
+    await expect(picker(page)).toHaveCount(0)
+    // Over a minute: locked, and the picker cannot be closed without the PIN.
+    await show('hidden')
+    await page.clock.fastForward(61_000)
+    await show('visible')
+    await expect(picker(page)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Close profiles' })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(picker(page)).toBeVisible()
+    expect(await page.evaluate(() => sessionStorage.getItem('tmplayer-tab-unlocked'))).toBeNull()
+    await tile(page, /^Dana Test/).click()
+    await page.keyboard.type('1111')
+    await expect(picker(page)).toHaveCount(0)
+    await expect(page.locator('main.page')).toBeVisible()
 })
