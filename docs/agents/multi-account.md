@@ -205,7 +205,7 @@ Phase B, per platform:
    start delete nothing.
 6. A PIN profile's content never shows outside the app while it is hidden: every notification
    goes through `ProfileNotifications`, the launcher through `OutsideWrites`, both policed by tests.
-7. A sign out discards what belongs to the session it ends (paused downloads, results in the
+7. A sign out discards what belongs to the session it ends (download rows, results in the
    shade); nothing of an old TDLib database is resumed on a new one: whatever keeps file ids for
    later keeps the database marker with them and is dropped when it differs (`DatabaseMarker`).
 
@@ -271,14 +271,38 @@ File walkers, trimmers and cleaners (audited, HX88), each over the open profile'
 - The picture, TMDB and online subtitle caches: the device's, shared by every profile (one budget),
   nothing of an account in them; the TDLib cache budget is shared too (`Td.cacheCeilingBytes`).
 
-The downloads a switch paused are kept per profile on the device (`PausedForSwitch`, merged,
-never overwritten by a retry): they go on again when that profile is open next, after a Cancel,
-a switch, Add account, sign out or Remove all accounts that failed or did not happen, a switch
-back, or a process that died while the switch waited. A sign out and a session Telegram ended
-drop them. Every stored set and the stored download queue carry the TDLib database's marker
-(`DatabaseMarker`, a random id kept in the profile's database folder, made anew when the folder
-is wiped, renewed on a sign out and an ended session); one of another database is dropped, never
-resumed. A queue from before markers is taken as the current database's once and then marked.
+The downloads a switch's wait paused are kept in memory only (`SwitchPause`), for one thing: a
+Cancel of that switch (or an Add account, sign out or Remove all accounts that failed or did not
+happen) resumes them, while the same profile and the same set of rows are open. A switch that goes
+ahead leaves them paused, as a restart does: the profile's queue comes back as paused rows when it
+is open next and the viewer resumes them. Nothing resumes by itself across a switch, a sign out,
+an ended session or a restart (simplified in round 15: the per-profile set kept on the device,
+`PausedForSwitch`, needed more special cases than it was worth; earlier builds' copy is cleared).
+
+The download rows (`OfflineDownloads`) belong to one profile and one database:
+
+- The rows are dropped on every switch and every new database (`Td.renewDatabaseMarker`, called by
+  a sign out and an ended session), which also stops the runner's jobs (`databaseChanges`).
+- Each drop counts (`rowsGeneration`): a job carries the count it was queued in
+  (`OfflineDownloads.Rows`), its late updates are dropped (`ifRows`), and an id queued before the
+  drop never starts (`DownloadStamps.startable`).
+- The rows' owner (`rowsOwner`) is set by `restore` only, after it read that profile's stored
+  queue; a persist writes for that owner, never before it is set, so a download asked early never
+  replaces the stored queue, and a late persist never lands in the next profile. `restore` merges
+  with rows already there and can run twice.
+- The stored queue carries the TDLib database's marker (`DatabaseMarker`, a random id in the
+  profile's database folder, made with the folder by `AccountDirs.make`, renewed on a sign out and
+  an ended session, synchronized and read back from the disk). It is taken from the writing
+  profile's own folder (`Td.databaseMarkerFor`), never from `Td.paths`, which a switch moves early.
+  A queue of another database is dropped; a marker that cannot be read keeps the tag there was and
+  restores nothing.
+- A queue from before markers (no tag) is taken only by a database that was there before markers,
+  noted as such when it got its marker (`DatabaseMarker.fromBeforeMarkers`), once; after a renew or
+  a remade folder it is another database's.
+
+`DownloadQueueModelTest` (core) runs thousands of seeded random sequences of these events on the
+real rows, stamps, markers and scoped store, checks the invariants after every step and prints the
+failing seed with its steps shrunk.
 
 The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
 background scope as the profile open when they were asked (`AccountOwner`), so one that lands
