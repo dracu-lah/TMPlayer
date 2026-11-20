@@ -34,6 +34,11 @@ object WatchCache {
                 settings = SettingsStore(app),
                 // The open profile's own TDLib folder (HX88), never the adopted one's for everyone.
                 filesRoot = { Td.paths?.filesDir ?: AndroidPaths.cacheDir(app) },
+                // A sweep's folder from its own profile, never the one a switch points at first.
+                rootFor = { owner ->
+                    val base = Td.platformPaths ?: AndroidPaths(app)
+                    AccountDirs.pathsFor(base, Profile(id = "sweep", folder = owner.folder)).filesDir
+                },
                 playing = ::playingNow,
                 rule = { CacheRule.OneVideo },
                 sparePlaying = false,

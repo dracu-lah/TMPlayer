@@ -46,7 +46,11 @@ object ProfileJobs {
     }
 
     /** Whether a job made for [owner] may still write now. */
-    fun mayWrite(owner: AccountStamp, current: AccountStamp = Accounts.stamp): Boolean = owner == current
+    fun mayWrite(
+        owner: AccountStamp,
+        current: AccountStamp = Accounts.stamp,
+        switching: Boolean = Accounts.book?.list?.value?.switchingTo != null,
+    ): Boolean = OwnedSessions.mayAct(owner, current, switching)
 
     /** Long enough for the file in hand to stop (a copy stops between buffers), never for ever. */
     const val JOIN_WAIT_MS = 60_000L

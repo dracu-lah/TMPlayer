@@ -82,4 +82,32 @@ class WatchCacheProfilesTest {
         rules(td).sweep()
         assertTrue("nothing of A's deleted once B opened mid sweep", ofA.exists())
     }
+
+    @Test
+    fun `in a switch's window the sweep keeps to the old profile's folder, though the current folder is already the next one's`() = runBlocking {
+        val ofA = stray(rootA, "a.mkv")
+        val ofB = stray(rootB, "b.mkv")
+        // The switch has pointed the current folder at B; the stamp is still A's until the flip.
+        open = a
+        var switching = false
+        val window = WatchCacheRules(
+            settings,
+            filesRoot = { rootB },
+            td = FakeTd(),
+            busy = { emptySet() },
+            stamp = { open },
+            rootFor = { owner -> if (owner == a) rootA else rootB },
+            mayAct = { owner -> owner == open && !switching },
+        )
+        window.sweep()
+        assertTrue("B's cached videos and paused downloads are never A's sweep's", ofB.exists())
+        assertFalse("A's own stray goes", ofA.exists())
+        // And while the switch is under way, nothing at all.
+        val ofA2 = stray(rootA, "a2.mkv")
+        switching = true
+        window.sweep()
+        window.clearAll()
+        assertTrue(ofA2.exists())
+        assertTrue(ofB.exists())
+    }
 }

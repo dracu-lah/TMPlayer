@@ -80,6 +80,14 @@ class WatchCacheRules(
      * before each delete, so it never walks one profile's folder against another's records.
      */
     private val stamp: () -> AccountStamp = { Accounts.stamp },
+    /**
+     * The TDLib folder of the profile a sweep works for, from that profile's own folder name,
+     * never from whatever folder is current (in a switch the next profile's is pointed at before
+     * the open one changes). Null: [filesRoot], as before (one profile, the desktop).
+     */
+    private val rootFor: ((AccountStamp) -> File)? = null,
+    /** Whether a sweep of [AccountStamp] may still act: its profile open and no switch under way. */
+    private val mayAct: (AccountStamp) -> Boolean = { owner -> owner == stamp() && OwnedSessions.mayAct(owner, current = owner) },
 ) {
     /**
      * Held for the whole of a claim, because stepping through a series overlaps two of them.
@@ -246,8 +254,10 @@ class WatchCacheRules(
      */
     suspend fun sweep(): Long = withContext(Dispatchers.IO) {
         val owner = stamp()
-        // The folder of the profile this sweep is for, taken now, with its records below.
-        val folder = filesRoot()
+        // Not while a switch is under way, and the folder of the profile this sweep is for,
+        // resolved from that profile, never the one a switch is opening.
+        if (!mayAct(owner)) return@withContext 0L
+        val folder = rootFor?.invoke(owner) ?: filesRoot()
         val capped = (rule() as? CacheRule.UnderCap)?.let { evictOverCap(it.capBytes) } ?: 0L
         // A download with a path is in the Downloads folder, not in TDLib's: TDLib was told to let
         // go of it, so it has no path to give, and asking would make the sweep give up every time.
@@ -270,9 +280,9 @@ class WatchCacheRules(
         var freed = capped
         // Another profile opened while the records were resolved: its folder and its records are
         // not this sweep's, and nothing is walked or deleted.
-        if (stamp() != owner) return@withContext capped
+        if (!mayAct(owner)) return@withContext capped
         for (stray in straysIn(folder, (accounted + open).toSet())) {
-            if (stamp() != owner) break
+            if (!mayAct(owner)) break
             if (stray.modifiedAt > settled) continue
             if (forget(stray)) freed += stray.bytes
         }
@@ -287,6 +297,7 @@ class WatchCacheRules(
      */
     suspend fun clearAll(): Long = withContext(Dispatchers.IO) {
         val owner = stamp()
+        if (!mayAct(owner)) return@withContext 0L
         val kept = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList())
         val keptIds = kept.map { it.fileId }.toSet()
         // On the message too, because one video can hold two file ids.
@@ -295,10 +306,10 @@ class WatchCacheRules(
         val playingNow = if (sparePlaying) playing() else emptySet()
         var freed = 0L
         for (record in runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())) {
-            if (stamp() != owner) return@withContext freed
+            if (!mayAct(owner)) return@withContext freed
             val fileId = resolve(record)
             // After the lookup, which suspends: never the next profile's file of that id.
-            if (stamp() != owner) return@withContext freed
+            if (!mayAct(owner)) return@withContext freed
             if (fileId in keptIds || record.fileId in keptIds || fileId in busyNow || fileId in playingNow) continue
             if ((record.chatId to record.messageId) in keptMessages) continue
             freed += deleteAndForget(record, fileId)

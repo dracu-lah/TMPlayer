@@ -56,6 +56,7 @@ class RemoveAfterWatching(
     /** The open profile's turn (HX88): a mark of another profile deletes nothing. */
     private val profile: () -> AccountStamp = { Accounts.stamp },
     private val marks: Flow<WatchedMark> = WatchedMarks.events,
+    private val mayAct: (AccountStamp) -> Boolean = { owner -> OwnedSessions.mayAct(owner, current = owner) },
     private val delete: suspend (ResumeRecord) -> Boolean,
 ) {
 
@@ -74,7 +75,8 @@ class RemoveAfterWatching(
             // stops the deletes, and the store writes of one under way are that profile's.
             kotlinx.coroutines.withContext(AccountOwner(stamp)) {
                 for (record in due(keys, runCatching { downloads() }.getOrDefault(emptyList()))) {
-                    if (profile() != stamp) break
+                    // Nor while a switch is under way: its folders are already the next profile's.
+                    if (profile() != stamp || !mayAct(stamp)) break
                     val gone = !busy(record) && runCatching { delete(record) }.getOrDefault(false)
                     if (!gone) failed += record.key
                 }
