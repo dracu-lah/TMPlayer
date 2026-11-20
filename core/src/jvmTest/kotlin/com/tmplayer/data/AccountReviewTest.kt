@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -177,5 +178,113 @@ class AccountReviewTest {
             switcher.signOutProfile(b.id) { _, _ -> inner = switcher.switchTo(AccountRules.ADOPTED_ID) }
         }
         assertEquals(SwitchResult.Failed, inner)
+    }
+
+    // ---- the second review ------------------------------------------------------------------
+
+    @Test
+    fun `a reboot during a PIN wait ends it within the wait, never later`() = runBlocking {
+        assertTrue(switcher.setPin(AccountRules.ADOPTED_ID, "1234"))
+        val before = 9_000_000_000L
+        repeat(ProfilePin.TRIES) { switcher.checkPin(AccountRules.ADOPTED_ID, "0000", before) }
+        // The monotonic clock starts again from nothing after the reboot.
+        val booted = 5_000L
+        val waiting = switcher.checkPin(AccountRules.ADOPTED_ID, "1234", booted) as PinCheck.Waiting
+        assertTrue("never longer than the wait", waiting.waitMs <= ProfilePin.WAIT_MS)
+        assertTrue(switcher.checkPin(AccountRules.ADOPTED_ID, "1234", booted + ProfilePin.WAIT_MS / 2) is PinCheck.Waiting)
+        assertEquals("over within the wait of the reboot", PinCheck.Right, switcher.checkPin(AccountRules.ADOPTED_ID, "1234", booted + ProfilePin.WAIT_MS))
+    }
+
+    @Test
+    fun `a new profile that reached Ready is kept at the next start even when who it is was never read`() = runBlocking {
+        val added = (switcher.add() as AddResult.Added).profile
+        switcher.noteSignedIn(SignedInAs(added.id, host.generation, 0L, "", null))
+        assertFalse(book.list.value.byId(added.id)!!.adding)
+        val restarted = AccountBook(AccountStore(File(dir, Accounts.FILE_NAME))).list.value
+        assertNotNull("not taken for a half made one", restarted.byId(added.id))
+    }
+
+    @Test
+    fun `each Ready client is heard, a newer one cancels a slow read, and a failed read is tried again`() = runBlocking {
+        val ready = kotlinx.coroutines.flow.MutableSharedFlow<ReadySession>(replay = 2)
+        val heard = java.util.Collections.synchronizedList(mutableListOf<SignedInAs>())
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val flow = SignedInFlow.of(ready, read = { r ->
+            if (r.generation == 1L) {
+                kotlinx.coroutines.delay(2_000)
+                SignedInAs(r.profileId, 1L, 11L, "Slow", null)
+            } else {
+                if (reads.incrementAndGet() == 1) null else SignedInAs(r.profileId, r.generation, 22L, "Second", null)
+            }
+        }, tries = 3, gapMs = 20L)
+        val job = launch(Dispatchers.Default) { flow.collect { heard += it } }
+        ready.emit(ReadySession("p1", 1L))
+        kotlinx.coroutines.delay(50)
+        ready.emit(ReadySession("p2", 2L))
+        withTimeout(2_000) { while (heard.none { it.telegramId == 22L }) kotlinx.coroutines.delay(10) }
+        job.cancel()
+        assertEquals(
+            listOf(0L to "p1", 0L to "p2", 22L to "p2"),
+            heard.map { it.telegramId to it.profileId },
+        )
+    }
+
+    @Test
+    fun `a host that never ran the switch's hook moves nothing`() = runBlocking {
+        val broken = object : ClientHost by host {
+            override suspend fun reopen(paths: com.tmplayer.platform.Paths, timeoutMs: Long, onClosed: () -> Unit): Boolean =
+                throw IllegalStateException("no client")
+        }
+        val b = signedInProfile(2L)
+        switcher.switchTo(AccountRules.ADOPTED_ID)
+        val stuck = AccountSwitcher(book, broken, base = { base })
+        assertEquals(SwitchResult.Failed, stuck.switchTo(b.id))
+        assertEquals(AccountRules.ADOPTED_ID, book.list.value.activeId)
+        assertNull(book.list.value.switchingTo)
+        assertNull(folder.value)
+    }
+
+    @Test
+    fun `a removed profile's Home and chat listing files go with it, never another's`() = runBlocking {
+        val homeBase = File(dir, "home-cache.json").apply { writeText("main") }
+        val gridBase = File(dir, "chat-grids.json").apply { writeText("main") }
+        val homeGone = File(dir, "home-cache-pgone1.json").apply { writeText("x") }
+        val gridGone = File(dir, "chat-grids-pgone1.json").apply { writeText("x") }
+        HomeCache.file = homeBase
+        ChatGridDisk(gridBase)
+        try {
+            Accounts.purge("pgone1")
+            assertFalse(homeGone.exists())
+            assertFalse(gridGone.exists())
+            assertTrue(homeBase.isFile)
+            assertTrue(gridBase.isFile)
+        } finally {
+            HomeCache.file = null
+        }
+    }
+
+    @Test
+    fun `a wipe cut short by its own timeout still finishes the sign out and says so`() = runBlocking {
+        switcher.noteSignedIn(host.me(book, 1L, "Main"))
+        val b = signedInProfile(2L)
+        settings.toggleFavorite(9L)
+        val out = switcher.signOutProfile(b.id) { _, _ -> withTimeout(20) { kotlinx.coroutines.delay(5_000) } }
+        assertEquals(SignOutResult.SignedOut(book.list.value.byId(AccountRules.ADOPTED_ID), partialWipe = true), out)
+        assertNull(book.list.value.byId(b.id))
+        assertFalse("its keys went with the sweep", rawNames().any { it.startsWith("@${b.folder}:") })
+    }
+
+    @Test
+    fun `a resume save made for a profile no longer open is dropped`() = runBlocking {
+        switcher.noteSignedIn(host.me(book, 1L, "Main"))
+        val playerOpenedFor = stamp
+        val b = signedInProfile(2L)
+        settings.saveResumePosition(7L, 7L, positionMs = 600_000L, durationMs = 3_600_000L, owner = playerOpenedFor)
+        settings.noteDownload(MediaItem(chatId = 7, messageId = 8, fileId = 1, title = "t", sizeBytes = 1, durationSec = 1, mimeType = "video/mp4", thumbnailFileId = 0, miniThumbnail = null, date = 1), "c", "/x", owner = playerOpenedFor)
+        assertEquals(0L, settings.resumePosition(7L, 7L))
+        assertTrue(settings.downloadsNow().isEmpty())
+        switcher.switchTo(AccountRules.ADOPTED_ID)
+        assertEquals("nor written to the old one after it closed", 0L, settings.resumePosition(7L, 7L))
+        assertNotNull(b)
     }
 }

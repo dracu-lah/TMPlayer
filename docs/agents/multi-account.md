@@ -107,6 +107,23 @@ profile" at the moment it writes:
   an account store from a coroutine whose owner is no longer open is dropped. Work without an
   owner writes for the profile open when it asks, as before; phase B moves the profile's own
   background work (sync, alerts, the download runner) onto that scope.
+- Writes tagged with the profile they were made for, today: both players' resume saves (the
+  stamp taken when the player opened, `owner` on `saveResumePosition` and `clearResumePosition`),
+  and every store write of a download's fetch and move jobs on Android and the desktop (launched
+  with the `AccountOwner` of the profile that asked). `noteDownload` and `saveDownloadQueue` take
+  an `owner` too. Not yet tagged, for phase B to move onto `profileScope` or tag the same way: the
+  external player's resume save (`ExternalPlayRouter`), `setDownloadPath` and `forgetDownload`
+  from the Downloads screen, watched marks and bookmarks from the players, the sync file
+  (`ResumeSync`, `SyncScheduler`), new video, episode and piece alerts, history edits, and every
+  screen's own edits (their view models are rebuilt per profile in phase B).
+- A file of one profile's cache (`home-cache-<folder>.json`, `chat-grids-<folder>.json`) is
+  deleted with the profile's folders and keys, through the same purge.
+- A sign in is recorded as soon as the client is Ready (`adding` cleared), and who it is follows
+  when it is read, read again on failure, once per client generation; a newer client cancels the
+  read of an older one.
+- The Td host waits for the client made after the switch's hook ran, so a client that was about
+  to close never counts as the next one; a host that never ran the hook moves nothing.
+- A PIN wait that a reboot interrupted runs out from the reboot, never later.
 - On a switch: `OfflineDownloads` forgets its rows (file ids are per database), `GoneVideos` and
   `ChatVideoCount` forget what they knew, the chat subtitle finder keys its answers by the switch
   counter, and `Td` clears the chats it had open as each client ends.
