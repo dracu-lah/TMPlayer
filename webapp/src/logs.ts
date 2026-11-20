@@ -46,6 +46,10 @@ const NAME_STOPS = new Set(['"', "'", '<', '>', '|', '=', '\n'])
 const URL_TAIL = /(https?:\/\/[^\s"'<>]*?)[?#][^\s"'<>]*/giu
 /** A query string anywhere (a relative address, a request line): `?key=value&...`. */
 const QUERY = /\?[\w%.~-]*=[^\s"'<>]*/gu
+/** A stremio:// address: an addon's install link, whose path holds the viewer's secret. */
+const STREMIO = /stremio:\/\/[^\s"'<>]*/giu
+/** An addon's address (its list, a translation, its manifest), with the host and secret path before it when they are there. */
+const ADDON = /(?:https?:\/\/[^\s"'<>]*)?\/(?:subtitles|translate)\/[^\s"'<>]*|(?:https?:\/\/[^\s"'<>]*)?\/manifest\.json[^\s"'<>]*/giu
 /** Any run this long of what tokens, keys and hashes are written in. */
 const TOKEN = /[A-Za-z0-9_-]{16,}/gu
 const DIGITS = /\d{6,}/gu
@@ -232,6 +236,44 @@ function takeOutEmails(s: string): string {
     return replaceSpans(s, spans, '[email]')
 }
 
+// The subtitles addon the viewer installed (player/submaker.ts): its address is a secret, so the address, the
+// token in its path and any address of the shapes an addon answers at never reach a log line, in any form.
+let addonSecrets: string[] = []
+
+/**
+ * Tells the scrubber the addon's base address (or null when there is none now), so that it, and the long
+ * segments of its path, are taken out of every line wherever they show up. Bounded to a handful of strings.
+ */
+export function hideAddon(base: string | null): void {
+    const found = new Set<string>()
+    if (typeof base === 'string' && base.length >= 8 && base.length <= 2000) {
+        found.add(base)
+        try {
+            const u = new URL(base)
+            for (const seg of u.pathname.split('/')) {
+                if (seg.length < 6) continue
+                found.add(seg)
+                try {
+                    found.add(decodeURIComponent(seg))
+                } catch {}
+            }
+        } catch {}
+    }
+    for (const f of [...found]) {
+        try {
+            found.add(encodeURIComponent(f))
+        } catch {}
+    }
+    addonSecrets = [...found].filter((f) => f.length >= 6).sort((a, b) => b.length - a.length).slice(0, 12)
+    version++
+}
+
+function takeOutAddon(line: string): string {
+    let out = line
+    for (const secret of addonSecrets) if (out.includes(secret)) out = out.split(secret).join('[addon]')
+    return out.replace(STREMIO, '[addon]').replace(ADDON, '[addon]')
+}
+
 /**
  * Takes what is personal out of one log line, keeping the tag, the words and the short numbers a bug
  * needs. [known] are the names the page has seen. In this order: names, a URL's query and fragment,
@@ -241,6 +283,7 @@ export function scrubLine(line: unknown, known: Known = NOBODY): string {
     let out = typeof line === 'string' ? line : String(line ?? '')
     if (out.length > MAX_LINE) out = `${out.slice(0, MAX_LINE)} [cut]`
     out = out.replace(CONTROL, ' ')
+    out = takeOutAddon(out)
     out = takeOutNames(out, known)
     out = out.replace(URL_TAIL, '$1[query]').replace(QUERY, '?[query]')
     out = takeOutEmails(out)

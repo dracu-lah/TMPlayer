@@ -6,6 +6,8 @@ import { t } from '../../i18n'
 import { msoneOn, stateLine } from '../../msoneFlag'
 import { health, knownHealth, type Health } from '../../player/msone'
 import { ActionRow, Choices, TvPanel } from '../../ui/SettingsParts'
+import { removeSubmaker, setSubmakerBase, submakerSet } from '../../submakerBase'
+import { showToast } from '../../ui/Toast'
 import { rowDomId } from '../SettingsFind'
 
 export function Playback() {
@@ -19,7 +21,59 @@ export function Playback() {
                     <MsoneRow />
                 </div>
             </Show>
+            <div class="set-card set-blocks">
+                <h3 class="set-card-title">{t('online.title')}</h3>
+                <SubmakerBlock />
+            </div>
         </>
+    )
+}
+
+/**
+ * SubMaker, the viewer's own subtitles addon: they paste its install link, which is a secret, so the page
+ * keeps only the cleaned address (submakerBase.ts) and says nothing of it but Set or Not set. The field is a
+ * password field and is emptied the moment the link is taken.
+ */
+function SubmakerBlock() {
+    const [text, setText] = createSignal('')
+    const [invalid, setInvalid] = createSignal(false)
+    const save = (e: Event) => {
+        e.preventDefault()
+        if (!text().trim()) return
+        if (setSubmakerBase(text())) {
+            setText('')
+            setInvalid(false)
+            showToast({ text: t('submaker.settings_saved') })
+        } else setInvalid(true)
+    }
+    return (
+        <form class="set-block" id={rowDomId('submaker')} onSubmit={save} autocomplete="off">
+            <h3 class="set-block-title" id="submaker-label">{t('submaker.settings_title')}</h3>
+            <p class="muted small">{t('submaker.settings_message')}</p>
+            <p class="set-sub" role="status">{submakerSet() ? t('submaker.settings_set') : t('submaker.settings_none')}</p>
+            <input
+                type="password"
+                name="submaker-install-link"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck={false}
+                inputmode="url"
+                aria-labelledby="submaker-label"
+                aria-invalid={invalid() || undefined}
+                placeholder="stremio://"
+                value={text()}
+                onInput={(e) => (setText(e.currentTarget.value), setInvalid(false))}
+            />
+            <Show when={invalid()}>
+                <p class="muted small" role="alert">{t('submaker.settings_invalid')}</p>
+            </Show>
+            <div style={{ display: 'flex', gap: '12px', 'flex-wrap': 'wrap' }}>
+                <button class="primary" type="submit" disabled={!text().trim()}>{t('common.done')}</button>
+                <Show when={submakerSet()}>
+                    <button class="outline-button" type="button" onClick={() => (removeSubmaker(), setText(''), setInvalid(false), showToast({ text: t('submaker.settings_removed') }))}>{t('submaker.settings_remove')}</button>
+                </Show>
+            </div>
+        </form>
     )
 }
 

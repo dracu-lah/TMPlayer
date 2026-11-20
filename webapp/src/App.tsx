@@ -3,6 +3,7 @@ import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online, unreachable, watchReach } from './net'
 import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
+import { loadSubmaker } from './submakerBase'
 import { chatsGated as gated, loadSettings, setChatsGateWaived } from './store'
 import { openSync, stopSync } from './sync'
 import { form, holdForm } from './form'
@@ -75,7 +76,7 @@ function Shell(props: ParentProps) {
 
     onMount(async () => {
         try {
-            const [user] = await Promise.all([api.me(), loadSettings()])
+            const [user] = await Promise.all([api.me(), loadSettings(), loadSubmaker()])
             setMe(user)
             // The saved session is used at once; Telegram's answer follows, and says when it was ended elsewhere.
             if (user) api.whoami().then((u) => void (u ? setMe(u) : sessionEndedElsewhere()), () => {})

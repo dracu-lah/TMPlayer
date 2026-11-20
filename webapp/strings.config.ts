@@ -11,6 +11,7 @@ export const PAGE_STRINGS = [
     'format',
     'login',
     'msone',
+    'submaker',
     'poster',
     'sponsored',
     // Resume on your other devices (the apps' ResumeSync): Home's question, shown once, and the switch under Settings.
@@ -268,6 +269,9 @@ export const PAGE_STRINGS = [
     'nav.you',
     'online.downloading',
     'online.hearing_impaired',
+    'online.notice_offline',
+    'online.notice_unreadable',
+    'online.title',
     'online.track_label',
     'picker.add_more',
     'picker.band_gone',
