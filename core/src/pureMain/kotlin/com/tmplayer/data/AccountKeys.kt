@@ -22,7 +22,7 @@ object AccountKeys {
         "keep_place_card_seen", "keep_place_wrote_at",
         "last_chat", "kids_chats", "chat_snapshot", "account_snapshot", "recent_searches",
         "new_video_seen", "new_video_offered", "episode_alert_seen", "episode_alert_told", "piece_gaps",
-        "cached_video_ids", "cached_video", "download_queue", "downloads_migrated", "signed_in",
+        "cached_video_ids", "cached_video", "download_queue", "download_queue_db", "downloads_migrated", "signed_in",
     )
 
     /**

@@ -285,6 +285,9 @@ private val CACHED_VIDEO = stringPreferencesKey("cached_video")
  */
 private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 
+/** The TDLib database the stored queue's file ids belong to ([DatabaseMarker], HX88). */
+private val DOWNLOAD_QUEUE_DB = stringPreferencesKey("download_queue_db")
+
 /** Set once the downloads recorded before they had a folder of their own have been moved into it. */
 private val DOWNLOADS_MIGRATED = booleanPreferencesKey("downloads_migrated")
 
@@ -3305,15 +3308,21 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * many bytes are actually on disk rather than trusting a number the crash may have caught mid
      * write.
      */
-    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null) = owned(owner) {
+    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null, database: String? = Td.databaseMarker()) = owned(owner) {
         prefs.edit { prefs ->
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
+                prefs.remove(DOWNLOAD_QUEUE_DB)
             } else {
                 prefs[DOWNLOAD_QUEUE] = DownloadRequest.encodeAll(requests)
+                // Its file ids are this database's: a queue of another one is never resumed (HX88).
+                if (database != null) prefs[DOWNLOAD_QUEUE_DB] = database else prefs.remove(DOWNLOAD_QUEUE_DB)
             }
         }
     }
+
+    /** The database the stored queue was written for, or null for one from before markers. */
+    suspend fun downloadQueueDatabaseNow(): String? = prefs.data.first()[DOWNLOAD_QUEUE_DB]
 
     /**
      * Remembers a video as one that has been fetched, so Downloads can name it later.

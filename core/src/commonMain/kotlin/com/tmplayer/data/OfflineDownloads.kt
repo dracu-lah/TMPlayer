@@ -268,10 +268,17 @@ object OfflineDownloads {
      * on. Restoring them as running would mean a process the system killed for using too much
      * silently starting to use it again, with the viewer nowhere near the phone.
      */
-    suspend fun restore(settings: SettingsStore) {
+    suspend fun restore(settings: SettingsStore, database: String? = Td.databaseMarker()) {
         if (_active.value.isNotEmpty()) return
         val stored = runCatching { settings.downloadQueueNow() }.getOrDefault(emptyList())
         if (stored.isEmpty()) return
+        // A queue of another TDLib database (Sign in again, a sign out and in, an ended session):
+        // its file ids are other files now. Dropped, never offered (HX88).
+        val storedFor = runCatching { settings.downloadQueueDatabaseNow() }.getOrNull()
+        if (!DatabaseMarker.matches(storedFor, database)) {
+            runCatching { settings.saveDownloadQueue(emptyList(), database = database) }
+            return
+        }
         var order = 0L
         val restored = stored.mapNotNull { request ->
             // A file the last run finished and recorded is not a download to offer resuming: the
@@ -293,7 +300,7 @@ object OfflineDownloads {
             )
         }.toMap()
         _active.value = restored
-        runCatching { settings.saveDownloadQueue(restored.values.map { it.request }) }
+        runCatching { settings.saveDownloadQueue(restored.values.map { it.request }, database = database) }
     }
 
     // ---- called by the runner ---------------------------------------------------------------

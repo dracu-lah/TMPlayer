@@ -74,4 +74,13 @@ class PausedForSwitchTest {
         assertEquals(java.io.File("/data/app/tdlib-files"), com.tmplayer.data.WatchCache.rootOf(base, com.tmplayer.data.AccountStamp(1L, null)))
         assertEquals(java.io.File("/data/app/tdlib-files-pbbbbb"), com.tmplayer.data.WatchCache.rootOf(base, com.tmplayer.data.AccountStamp(2L, "pbbbbb")))
     }
+
+    @Test
+    fun `a set paused in another TDLib database is never resumed (Sign in again, an ended session)`() {
+        PausedForSwitch.record(context, "pa", listOf(four), database = "olddatabase1")
+        assertTrue(PausedForSwitch.take(context, "pa", database = "newdatabase2").isEmpty())
+        PausedForSwitch.record(context, "pa", listOf(four), database = "olddatabase1")
+        PausedForSwitch.record(context, "pa", listOf(five), database = "newdatabase2")
+        assertEquals("only the new database's", listOf(five), PausedForSwitch.take(context, "pa", database = "newdatabase2"))
+    }
 }

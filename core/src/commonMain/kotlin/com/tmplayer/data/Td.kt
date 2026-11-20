@@ -330,6 +330,12 @@ object Td {
     /** The directories the running client was given (the open profile's), or null before [start]. */
     val paths: Paths? get() = currentPaths
 
+    /** The open database's marker ([DatabaseMarker]), made when it has none; null before [start]. */
+    fun databaseMarker(): String? = currentPaths?.databaseDir?.let(DatabaseMarker::ensure)
+
+    /** A new marker for the open database: it is a new one now (a sign out, an ended session). */
+    fun renewDatabaseMarker(): String? = currentPaths?.databaseDir?.let(DatabaseMarker::renew)
+
     /** The platform's own folders, which every profile's are found beside, or null before [start]. */
     val platformPaths: Paths? get() = basePaths
 

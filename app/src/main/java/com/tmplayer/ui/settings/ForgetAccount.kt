@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
  */
 suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStore: WatchedStore, deleteDownloads: Boolean) {
     runCatching { Td.clearMediaCache() }
+    // The next sign in is a new database: nothing stored with this one's file ids is resumed on it.
+    runCatching { Td.renewDatabaseMarker() }
     if (deleteDownloads) {
         withContext(Dispatchers.IO) { runCatching { LocalDownloads.deleteAll(settings) } }
     }
@@ -67,6 +69,7 @@ suspend fun forgetProfile(
         return
     }
     runCatching { Td.clearMediaCache() }
+    runCatching { Td.renewDatabaseMarker() }
     if (deleteDownloads) {
         withContext(Dispatchers.IO) { runCatching { LocalDownloads.deleteAll(settings) } }
     }
@@ -84,5 +87,7 @@ suspend fun forgetProfile(
  */
 suspend fun forgetSession(settings: SettingsStore) {
     runCatching { Td.clearMediaCache() }
+    // Telegram ended the session: the database it signs in to next is a new one (HX88).
+    runCatching { Td.renewDatabaseMarker() }
     runCatching { settings.clearColdStartSnapshots() }
 }

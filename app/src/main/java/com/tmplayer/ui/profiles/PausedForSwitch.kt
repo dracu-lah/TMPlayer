@@ -20,12 +20,19 @@ internal object PausedForSwitch {
      * Adds [paused] to what is kept for [folder]: never overwritten, so a retry's wait, which finds
      * nothing moving any more, does not lose what the first wait paused.
      */
-    fun record(context: Context, folder: String?, paused: List<Paused>) {
+    fun record(context: Context, folder: String?, paused: List<Paused>, database: String? = com.tmplayer.data.Td.databaseMarker()) {
         if (paused.isEmpty()) return
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val merged = (read(prefs, folder) + paused).distinctBy { it.fileId }
-        prefs.edit().putString(key(folder), merged.joinToString(";") { "${it.fileId},${it.chatId},${it.messageId}" }).apply()
+        // Merged only with a set of the same database; one of another database is dropped.
+        val kept = if (com.tmplayer.data.DatabaseMarker.matches(prefs.getString(dbKey(folder), null), database)) read(prefs, folder) else emptyList()
+        val merged = (kept + paused).distinctBy { it.fileId }
+        prefs.edit()
+            .putString(key(folder), merged.joinToString(";") { "${it.fileId},${it.chatId},${it.messageId}" })
+            .apply { if (database != null) putString(dbKey(folder), database) else remove(dbKey(folder)) }
+            .apply()
     }
+
+    private fun dbKey(folder: String?) = "db_" + (folder ?: "")
 
     private fun read(prefs: android.content.SharedPreferences, folder: String?): List<Paused> =
         prefs.getString(key(folder), null)?.split(';')?.mapNotNull { entry ->
@@ -36,11 +43,15 @@ internal object PausedForSwitch {
             Paused(id, chat, message)
         }.orEmpty()
 
-    /** What was paused for [folder]'s switch, taken: asked again, there is nothing. */
-    fun take(context: Context, folder: String?): List<Paused> {
+    /**
+     * What was paused for [folder]'s switch, taken: asked again, there is nothing. Nothing when it
+     * was paused in another database than [database] (its ids are other files now).
+     */
+    fun take(context: Context, folder: String?, database: String? = com.tmplayer.data.Td.databaseMarker()): List<Paused> {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val paused = read(prefs, folder)
-        prefs.edit().remove(key(folder)).apply()
+        val same = com.tmplayer.data.DatabaseMarker.matches(prefs.getString(dbKey(folder), null), database)
+        val paused = if (same) read(prefs, folder) else emptyList()
+        prefs.edit().remove(key(folder)).remove(dbKey(folder)).apply()
         return paused
     }
 
