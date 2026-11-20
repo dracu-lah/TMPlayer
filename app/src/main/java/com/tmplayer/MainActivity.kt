@@ -391,7 +391,9 @@ class MainActivity : ComponentActivity() {
                             // The profiles (HX88): Who's watching? at launch with two or more, the
                             // shell keyed on the open profile. One profile: Root as it always was.
                             if (holding) StartupCrashQuestion() else com.tmplayer.ui.trailer.TrailerPlayerRoot {
-                                com.tmplayer.ui.browse.OfflineDownloadsHost { ProfilesRoot { Root() } }
+                                // Inside the profiles, so it is keyed on the open profile like
+                                // the shell: a switch while offline never shows the last one's downloads.
+                                ProfilesRoot { com.tmplayer.ui.browse.OfflineDownloadsHost { Root() } }
                             }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
@@ -403,7 +405,12 @@ class MainActivity : ComponentActivity() {
                         LayoutNudgeHost()
                         // "Wrong title?" and the question after a rename (N1): one place, over every
                         // screen, so it outlives the page whose rename asked it.
-                        com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
+                        // Keyed on the open profile (HX88): a report asked for one profile's video
+                        // never stays up over the next profile.
+                        val openFolder by com.tmplayer.data.Accounts.activeFolder.collectAsStateWithLifecycle()
+                        androidx.compose.runtime.key(openFolder) {
+                            com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
+                        }
                     }
                 }
             }

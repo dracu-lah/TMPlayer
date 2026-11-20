@@ -18,6 +18,7 @@ import com.tmplayer.ui.lock.ProfilePlatform
 import com.tmplayer.ui.settings.forgetProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -74,11 +75,17 @@ internal class AndroidProfilePlatform(private val app: Context) : ProfilePlatfor
 
     override fun appLockChecker(): com.tmplayer.ui.lock.PinChecker = com.tmplayer.ui.lock.SettingsPinChecker(SettingsStore(app))
 
+    /** Read once, when the process's flow is made; a slow store answers null and everything asks (fail closed). */
+    override fun appLockNow(): com.tmplayer.data.AppLockSettings? = runCatching {
+        kotlinx.coroutines.runBlocking { withTimeoutOrNull(APP_LOCK_READ_MS) { SettingsStore(app).appLock.first() } }
+    }.getOrNull()
+
     override fun say(text: String) {
         Handler(Looper.getMainLooper()).post { runCatching { Toast.makeText(app, text, Toast.LENGTH_SHORT).show() } }
     }
 
     private companion object {
         const val PAUSE_WAIT_MS = 3_000L
+        const val APP_LOCK_READ_MS = 300L
     }
 }

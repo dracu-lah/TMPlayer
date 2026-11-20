@@ -1953,10 +1953,9 @@ fun SettingsScreen(
                                 title = s.profilesAdd,
                                 subtitle = s.profilesAddDetail(count = com.tmplayer.data.AccountRules.MAX),
                                 icon = TmIcons.PersonAdd,
-                                onClick = {
-                                    profileFlow?.ask()
-                                    profileFlow?.add()
-                                },
+                                // The flow draws whatever it asks (the app lock's PIN, the question
+                                // while a video plays) over Settings, with one profile too.
+                                onClick = { profileFlow?.add() },
                             )
                         }
                     }

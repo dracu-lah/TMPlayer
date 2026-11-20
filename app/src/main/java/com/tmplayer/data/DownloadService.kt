@@ -78,10 +78,10 @@ class DownloadService : Service() {
      * when the queue reaches it: a request asked before a switch never starts in the next profile,
      * whose database knows nothing of its file id. Guarded by [lock].
      */
-    private val stamps = HashMap<Int, com.tmplayer.data.AccountStamp>()
+    private val stamps = DownloadStamps()
 
     /** The stamp [id] was queued under, recorded now when it has none. Call under [lock]. */
-    private fun stampOf(id: Int): com.tmplayer.data.AccountStamp = stamps.getOrPut(id) { com.tmplayer.data.Accounts.stamp }
+    private fun stampOf(id: Int): com.tmplayer.data.AccountStamp = stamps.of(id)
 
     /** Counts requests in, so a row keeps the place in the list it was given when it was asked for. */
     private var arrivals = 0L
@@ -384,7 +384,7 @@ class DownloadService : Service() {
         val position = synchronized(lock) {
             if (running.containsKey(request.fileId) || waiting.contains(request.fileId)) return
             requests[request.fileId] = request
-            stamps[request.fileId] = com.tmplayer.data.Accounts.stamp
+            stamps.queued(request.fileId)
             if (held == null) waiting.addLast(request.fileId)
             known?.order ?: arrivals++
         }
@@ -537,10 +537,10 @@ class DownloadService : Service() {
                 // Asked under another profile than the open one: its file id means nothing to this
                 // database, so it never starts here. It is that profile's paused row again there.
                 val stamp = stampOf(id)
-                if (request == null || stamp != com.tmplayer.data.Accounts.stamp) {
+                if (request == null || !stamps.startable(id)) {
                     stale = id
                     requests.remove(id)
-                    stamps.remove(id)
+                    stamps.forget(id)
                     return@synchronized null
                 }
                 // As the work of the profile it was asked under (HX88): its writes never land in another.
@@ -813,7 +813,7 @@ class DownloadService : Service() {
             is DownloadFinisher.Outcome.Moved, is DownloadFinisher.Outcome.MovedToTree -> {
                 synchronized(lock) {
                     requests.remove(id)
-                    stamps.remove(id)
+                    stamps.forget(id)
                 }
                 OfflineDownloads.forget(id)
                 lines.remove(id)

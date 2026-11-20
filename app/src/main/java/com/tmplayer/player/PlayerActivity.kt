@@ -10505,6 +10505,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     override fun onStart() {
         super.onStart()
+        // Back after more than a minute away, or restored into a process that never had the PIN
+        // (HX88): a PIN profile's video does not show again until its PIN is given. The player
+        // closes, its place kept, and the shell behind it asks for the PIN.
+        if (com.tmplayer.data.ProfileUnlock.lockedNow()) {
+            Log.i("TMPlayer", "the open profile is locked again; closing the player for its PIN")
+            finish()
+            return
+        }
         if (openingFilm) watchOpening()
         // Back in front: the session comes home from the notification, the sound never stopped,
         // and the picture comes back on (turned off only while nobody could see it).
