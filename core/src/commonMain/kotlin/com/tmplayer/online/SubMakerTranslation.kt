@@ -213,7 +213,11 @@ class SubMakerJobs(
         var lastApplied = 0L
         // The newest text a throttled update left unapplied: laid when the job ends without a final one.
         var held: String? = null
-        running[key] = scope.launch {
+        // The profile the translation was asked for (HX88): its track file is written only while
+        // that profile is open, and a switch ends the job (the video is that profile's).
+        val owner = com.tmplayer.data.Accounts.stamp
+        fun mine(): Boolean = owner == com.tmplayer.data.Accounts.stamp
+        running[key] = scope.launch(com.tmplayer.data.AccountOwner(owner)) {
             try {
                 translator.run(
                     url = url,
@@ -221,13 +225,14 @@ class SubMakerJobs(
                     foreground = foreground,
                     onState = { next ->
                         val rest = held
-                        if (!next.active && rest != null) {
+                        if (!next.active && rest != null && mine()) {
                             held = null
                             write(rest, false)?.let { onTrack(it, false) }
                         }
                         set(key, next)
                     },
-                    onTrack = { srt, _, final ->
+                    onTrack = track@{ srt, _, final ->
+                        if (!mine()) return@track
                         val t = now()
                         if (final || lastApplied == 0L || t - lastApplied >= applyEveryMs) {
                             val file = write(srt, final)

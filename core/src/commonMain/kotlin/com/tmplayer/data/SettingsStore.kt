@@ -285,6 +285,12 @@ private val CACHED_VIDEO = stringPreferencesKey("cached_video")
  */
 private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 
+/** The TDLib database the stored queue's file ids belong to ([DatabaseMarker], HX88). */
+private val DOWNLOAD_QUEUE_DB = stringPreferencesKey("download_queue_db")
+
+/** [SettingsStore.saveDownloadQueue]'s default: the marker of the store's own profile's database. */
+const val DATABASE_OF_STORE = "@store"
+
 /** Set once the downloads recorded before they had a folder of their own have been moved into it. */
 private val DOWNLOADS_MIGRATED = booleanPreferencesKey("downloads_migrated")
 
@@ -3263,6 +3269,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[DOWNLOADS_MIGRATED] = true }
     }
 
+    /**
+     * Where every profile's downloads are (HX88), not only the open one's: a folder grant is the
+     * device's, and one profile's change must not let go of a folder another profile's downloads
+     * are in.
+     */
+    suspend fun downloadPathsOfEveryProfileNow(): List<String> {
+        val views = (prefs as? AccountScopedDataStore)?.everyProfileNow()?.values ?: listOf(prefs.data.first())
+        return views.flatMap { view -> decodeDownloads(view).mapNotNull { it.localPath } }
+    }
+
     private fun decodeDownloads(prefs: Preferences): List<ResumeRecord> = buildList {
         for ((key, value) in prefs.asMap()) {
             val ids = key.name.removePrefixOrNull("dl_") ?: continue
@@ -3295,15 +3311,31 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * many bytes are actually on disk rather than trusting a number the crash may have caught mid
      * write.
      */
-    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null) = owned(owner) {
+    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null, database: String? = DATABASE_OF_STORE) = owned(owner) {
+        // The database of the profile this store writes for (its owner, else the open one), read
+        // from that profile's own folder (HX88): never from the folder a switch points at first.
+        val marker = if (database == DATABASE_OF_STORE) {
+            val folder = (owner ?: kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp)?.folder ?: Accounts.activeFolder.value
+            Td.databaseMarkerFor(folder)
+        } else {
+            database
+        }
         prefs.edit { prefs ->
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
+                prefs.remove(DOWNLOAD_QUEUE_DB)
             } else {
                 prefs[DOWNLOAD_QUEUE] = DownloadRequest.encodeAll(requests)
+                // Its file ids are this database's: a queue of another one is never resumed. A
+                // marker that could not be read keeps the tag there was: a tagged queue is never
+                // taken for one from before markers.
+                if (marker != null) prefs[DOWNLOAD_QUEUE_DB] = marker
             }
         }
     }
+
+    /** The database the stored queue was written for, or null for one from before markers. */
+    suspend fun downloadQueueDatabaseNow(): String? = prefs.data.first()[DOWNLOAD_QUEUE_DB]
 
     /**
      * Remembers a video as one that has been fetched, so Downloads can name it later.

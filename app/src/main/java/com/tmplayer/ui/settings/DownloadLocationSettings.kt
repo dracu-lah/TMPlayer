@@ -390,7 +390,7 @@ private suspend fun planLocationChange(context: Context, settings: SettingsStore
         }
         val candidate = AndroidStorage.inspect(context, root)
         val currentRoot = DownloadRelocation.currentRoot()
-        val currentDownloadsDir = AndroidStorage.downloadsDir(context)
+        val currentDownloadsDir = AndroidStorage.profileDownloadsDir(context)
         when (
             val verdict = StorageRelocationPlan.validate(
                 candidate = candidate,

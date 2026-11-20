@@ -93,7 +93,7 @@ object AppNotices {
         if (words.retry.isNotEmpty()) {
             builder.addAction(action(context, R.drawable.ic_notify_resume, L.commonTryAgain, retryIntent(context, words.retry, id)))
         }
-        runCatching { manager(context).notify(id, builder.build()) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(context, id, builder.build(), com.tmplayer.data.ProfileNotifications.Kind.Result) }
     }
 
     /** Asks the download service for [requests] again, as Try again on their rows does. */
@@ -131,7 +131,7 @@ object AppNotices {
         alert.play?.let { item ->
             builder.addAction(action(context, R.drawable.ic_notify_resume, L.commonPlay, playIntent(context, item, alert.chatTitle, ID_EPISODES)))
         }
-        runCatching { manager(context).notify(ID_EPISODES, builder.build()) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(context, ID_EPISODES, builder.build(), com.tmplayer.data.ProfileNotifications.Kind.Result) }
     }
 
     fun postPieces(context: Context, alert: PieceAlerts.Alert, index: Int) {
@@ -153,7 +153,7 @@ object AppNotices {
         alert.play?.let { item ->
             builder.addAction(action(context, R.drawable.ic_notify_resume, L.commonPlay, playIntent(context, item, alert.chatTitle, id)))
         }
-        runCatching { manager(context).notify(id, builder.build()) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(context, id, builder.build(), com.tmplayer.data.ProfileNotifications.Kind.Result) }
     }
 
     // ---- low storage, update ready -------------------------------------------------------------
@@ -171,7 +171,7 @@ object AppNotices {
             .addAction(action(context, R.drawable.ic_notify_cancel, L.downloadsFreeUpSpace, freeUp))
             .setAutoCancel(true)
             .build()
-        runCatching { manager(context).notify(ID_LOW_STORAGE, notification) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(context, ID_LOW_STORAGE, notification, com.tmplayer.data.ProfileNotifications.Kind.Device) }
     }
 
     /** An update, whose press opens the app, where the launch check shows the update window. */
@@ -185,7 +185,7 @@ object AppNotices {
             .setContentIntent(open(context, ID_UPDATE) {})
             .setAutoCancel(true)
             .build()
-        runCatching { manager(context).notify(ID_UPDATE, notification) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(context, ID_UPDATE, notification, com.tmplayer.data.ProfileNotifications.Kind.Device) }
     }
 
     /**
@@ -202,7 +202,7 @@ object AppNotices {
             .setContentIntent(open(context, ID_UPDATED) {})
             .setAutoCancel(true)
             .build()
-        runCatching { manager(context).notify(ID_UPDATED, notification) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(context, ID_UPDATED, notification, com.tmplayer.data.ProfileNotifications.Kind.Device) }
     }
 
     /** Takes [postUpdated]'s notification down once the app is open again. */

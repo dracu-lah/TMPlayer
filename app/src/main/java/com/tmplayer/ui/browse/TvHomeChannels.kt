@@ -2,6 +2,7 @@ package com.tmplayer.ui.browse
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -100,7 +101,7 @@ fun TvHomeChannels(
     // without asking, but a channel made again after a delete waits in the launcher's settings.
     LaunchedEffect(enabled) {
         if (enabled == false) written[0] = null
-        if (enabled == false) App.backgroundScope.launch { TvChannelsPublisher.clearPrograms(context) }
+        if (enabled == false) com.tmplayer.data.Accounts.profileScope.launch { TvChannelsPublisher.clearPrograms(context) }
     }
 
     // What the default channel is drawn from, asked for whether or not Home is on screen: the
@@ -122,14 +123,18 @@ fun TvHomeChannels(
     val locked = allowed != null
     LaunchedEffect(locked, enabled) {
         if (locked && enabled == true) written[0] = null
-        if (locked && enabled == true) App.backgroundScope.launch { TvChannelsPublisher.clearPrograms(context) }
+        if (locked && enabled == true) com.tmplayer.data.Accounts.profileScope.launch { TvChannelsPublisher.clearPrograms(context) }
     }
 
     // The plan is worked out off the main thread, and only once the rows have been still for
     // [SETTLE_MS]: worked out in composition it ran on every chat, picture and progress change,
     // all of them while Home was opening and its posters were being decoded.
-    LaunchedEffect(rows, settled, allowed, art, watchProgress, chats, enabled, signedIn) {
-        if (enabled != true || !signedIn || !settled) return@LaunchedEffect
+    // Hidden behind its PIN (HX88): the launcher was cleared, so the last plan written means
+    // nothing any more and the next one is written in full once the profile is open again.
+    val profileHidden by remember { com.tmplayer.data.ProfileUnlock.hidden() }.collectAsState(initial = com.tmplayer.data.ProfileUnlock.hiddenNow())
+    LaunchedEffect(profileHidden) { if (profileHidden) written[0] = null }
+    LaunchedEffect(rows, settled, allowed, art, watchProgress, chats, enabled, signedIn, profileHidden) {
+        if (enabled != true || !signedIn || !settled || profileHidden) return@LaunchedEffect
         // Rows arrive one after another as Home fills; the write waits for them to settle.
         delay(SETTLE_MS)
         // Never while a video plays: the write uploads every card's picture to the launcher, and
@@ -153,8 +158,16 @@ fun TvHomeChannels(
         } ?: return@LaunchedEffect
         if (plan == written[0]) return@LaunchedEffect
         written[0] = plan
-        App.backgroundScope.launch {
-            TvChannelsPublisher.publish(context, plan) { channel ->
+        // The open profile's work (HX88): a switch part way cancels it, so the launcher never gets
+        // one profile's cards once another is open; the next profile's Home writes its own.
+        val stamp = com.tmplayer.data.Accounts.stamp
+        com.tmplayer.data.Accounts.profileScope.launch {
+            // A profile locked again meanwhile (HX88) puts nothing on the launcher.
+            if (com.tmplayer.data.ProfileUnlock.hiddenNow()) {
+                written[0] = null
+                return@launch
+            }
+            TvChannelsPublisher.publish(context, plan, stamp = stamp) { channel ->
                 when (channel) {
                     TvChannels.Channel.Recent -> L.homeChannelRecent
                     TvChannels.Channel.WatchLater -> L.homeRowWatchLater

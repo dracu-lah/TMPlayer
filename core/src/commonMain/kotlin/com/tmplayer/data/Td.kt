@@ -330,8 +330,37 @@ object Td {
     /** The directories the running client was given (the open profile's), or null before [start]. */
     val paths: Paths? get() = currentPaths
 
+    /**
+     * The marker ([DatabaseMarker]) of the database of the profile on [folder] (null: the adopted
+     * one), from that profile's own folder, never from the folder a switch points at first; null
+     * before [start].
+     */
+    fun databaseMarkerFor(folder: String?): String? = databaseDirOf(folder)?.let(DatabaseMarker::ensure)
+
+    /** Whether the database of the profile on [folder] is one from before markers, marked [marker] ([DatabaseMarker.fromBeforeMarkers]). */
+    fun databaseFromBeforeMarkers(folder: String?, marker: String): Boolean =
+        databaseDirOf(folder)?.let { DatabaseMarker.fromBeforeMarkers(it, marker) } == true
+
+    /**
+     * The open profile's database is a new one now (a sign out, an ended session): a new marker,
+     * and the download rows of the old one dropped.
+     */
+    fun renewDatabaseMarker(): String? {
+        val marker = databaseDirOf(Accounts.active.folder)?.let(DatabaseMarker::renew)
+        OfflineDownloads.newDatabase()
+        return marker
+    }
+
+    private fun databaseDirOf(folder: String?): java.io.File? =
+        basePaths?.let { AccountDirs.pathsFor(it, Profile(id = "db", folder = folder)).databaseDir }
+
     /** The platform's own folders, which every profile's are found beside, or null before [start]. */
     val platformPaths: Paths? get() = basePaths
+
+    /** For tests: the platform's folders without a client, so the database markers can be read. */
+    internal fun platformPathsForTest(paths: Paths?) {
+        basePaths = paths
+    }
 
     /**
      * Starts the client once per process; later calls are ignored. Each app supplies where TDLib
@@ -346,7 +375,8 @@ object Td {
             this.currentPaths = AccountDirs.pathsFor(paths, Accounts.active)
         }
         // Folders of profiles removed or half made before the last stop: never the open one's.
-        Accounts.book?.let { book -> scope.launch { book.sweep(paths) } }
+        // Once the platform's stores and caches are registered, so their copies go too (LOW 1).
+        Accounts.book?.let { book -> scope.launch { Accounts.sweepOnceRegistered(book, paths) } }
         // Who each profile signed in as, for the picker and the same account refused twice.
         AccountSwitcher.current()?.attach(scope)
         scope.launch { keepClientRunning() }
@@ -483,22 +513,48 @@ object Td {
      * the stores may become the next profile's, with nothing of the old one still running.
      */
     internal suspend fun reopenFor(paths: Paths, onClosed: () -> Unit) {
-        if (currentPaths == null) return
+        val before = currentPaths ?: return
         val td = synchronized(nextClientLock) {
             currentPaths = paths
             beforeNextClient = onClosed
             current
         }
-        _sessionEnded.value = false
-        logOutAsked = false
-        databaseAtStart = null
-        methodAfterRestart = SignInMethod.Undecided
-        clientRetry?.let {
-            it.complete(Unit)
-            return
+        try {
+            _sessionEnded.value = false
+            logOutAsked = false
+            databaseAtStart = null
+            methodAfterRestart = SignInMethod.Undecided
+            clientRetry?.let {
+                it.complete(Unit)
+                return
+            }
+            val close = closeRequest()
+            if (td != null) gate.withLock { perform(td, close) }
+        } catch (e: Throwable) {
+            // The live client was never asked to close (HX88 review, LOW 4): the next client it
+            // makes one day, after a restart or a lost connection, must open the profile still
+            // open, and must not run the switch's hook, which would move the stores to the target.
+            undoReopen(before, onClosed)
+            throw e
         }
-        if (td != null) gate.withLock { perform(td, AuthReducer.close()) }
     }
+
+    /** What [reopenFor] sends to close the live client; a test makes it fail. */
+    @Volatile
+    internal var closeRequest: () -> AuthStep = { AuthReducer.close() }
+
+    /** Points the next client back at [before] and drops [hook], when the hook is still the one asked for. */
+    internal fun undoReopen(before: Paths, hook: () -> Unit) {
+        synchronized(nextClientLock) {
+            if (beforeNextClient === hook) {
+                beforeNextClient = null
+                currentPaths = before
+            }
+        }
+    }
+
+    /** For tests: the hook a switch left for the next client, or null. */
+    internal val pendingSwitchHook: (() -> Unit)? get() = synchronized(nextClientLock) { beforeNextClient }
 
     private val nextClientLock = Any()
 
@@ -1418,6 +1474,17 @@ object Td {
         withTimeoutOrNull(timeoutMs) { awaitConnectedSession() }
 
     /**
+     * The live client of [owner]'s account (HX88), connected, or null: null while a switch is
+     * under way, once another profile is open, and when the client that came up meanwhile is the
+     * next profile's. Every job that writes to Telegram takes its session here, never through
+     * [awaitConnectedSessionOrNull], so a run of one profile never sends into another's account.
+     */
+    suspend fun sessionFor(owner: AccountStamp, timeoutMs: Long = CONNECT_TIMEOUT_MS): TdSession? =
+        OwnedSessions.await(owner, mayAct = { OwnedSessions.mayAct(owner) }, ownerOf = { it.owner }, timeoutMs = timeoutMs) {
+            awaitConnectedSession()
+        }
+
+    /**
      * When Telegram's flood wait expires, as a wall-clock stamp, or zero when nothing is waiting.
      *
      * Recorded rather than only humanised, so a manual Refresh can decline to make things worse.
@@ -1746,7 +1813,11 @@ object Td {
 
     suspend fun myId(): Long {
         cachedMyId.takeIf { it != 0L }?.let { return it }
-        val id = client.getMe().valueOrNull?.id ?: return 0L
+        val session = _session.value ?: return 0L
+        val id = session.client.getMe().valueOrNull?.id ?: return 0L
+        // Kept only while that client is still the live one (HX88): an answer of the client that
+        // was closing for a switch never becomes the next profile's id.
+        if (!session.isCurrent()) return 0L
         cachedMyId = id
         return id
     }
@@ -1854,6 +1925,8 @@ object Td {
 class TdSession internal constructor(
     val client: TdlClient,
     val generation: Long,
+    /** The profile open when this client was made (HX88): the one whose account it is. */
+    val owner: AccountStamp = Accounts.stamp,
 ) {
     fun isCurrent(): Boolean = Td.isCurrent(this)
 }

@@ -112,6 +112,54 @@ fun PinPad(
     /** The app's mark and name over the lock: the pad that stands in for the whole app at its opening. */
     brand: Boolean = false,
 ) {
+    val checker = remember(settings) { SettingsPinChecker(settings) }
+    PinPad(checker, purpose, title, onDone, onCancel, modifier, showForgot, brand)
+}
+
+/**
+ * Where a [PinPad] checks a PIN: the app lock's ([SettingsPinChecker]) or a profile's
+ * ([ProfilePinChecker], HX88). Each keeps its own count of wrong PINs and its own wait.
+ */
+interface PinChecker {
+    /** The [PinClock] time until which wrong PINs from before the pad opened still make it wait, 0 for none. */
+    suspend fun waitUntil(): Long
+
+    suspend fun check(pin: String): PinCheck
+
+    /** How many more wrong PINs are free before a wait, after [attempts]. */
+    fun freeLeft(attempts: PinAttempts): Int
+
+    /** The line on the only way back from a forgotten PIN, or null for the app lock's own. */
+    val forgot: String? get() = null
+}
+
+/** The app lock's PIN in [SettingsStore], with its back-off. */
+class SettingsPinChecker(private val settings: SettingsStore) : PinChecker {
+    override suspend fun waitUntil(): Long {
+        val attempts = runCatching { settings.pinAttemptsNow() }.getOrDefault(PinAttempts())
+        return if (attempts.waitMs(PinClock.now()) > 0) attempts.waitUntil else 0L
+    }
+
+    override suspend fun check(pin: String): PinCheck = settings.checkPin(pin)
+
+    override fun freeLeft(attempts: PinAttempts): Int = attempts.freeLeft
+}
+
+/**
+ * [PinPad] over any [checker]; with [PinPurpose.Choose] the checker is never asked and may be
+ * null. Everything else is as the app lock's pad.
+ */
+@Composable
+fun PinPad(
+    checker: PinChecker?,
+    purpose: PinPurpose,
+    title: String,
+    onDone: (pin: String) -> Unit,
+    onCancel: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    showForgot: Boolean = purpose == PinPurpose.Check,
+    brand: Boolean = false,
+) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     var entered by remember { mutableStateOf("") }
@@ -126,10 +174,10 @@ fun PinPad(
     val haptic = com.tmplayer.ui.components.rememberHaptics()
 
     // A wait earned before this pad opened is still a wait.
-    LaunchedEffect(purpose) {
-        if (purpose != PinPurpose.Check) return@LaunchedEffect
-        val attempts = runCatching { settings.pinAttemptsNow() }.getOrDefault(PinAttempts())
-        if (attempts.waitMs(PinClock.now()) > 0) waitUntil = attempts.waitUntil
+    LaunchedEffect(purpose, checker) {
+        if (purpose != PinPurpose.Check || checker == null) return@LaunchedEffect
+        val until = runCatching { checker.waitUntil() }.getOrDefault(0L)
+        if (until > PinClock.now()) waitUntil = until
     }
     // The countdown, a second at a time, and the keys back once it runs out.
     LaunchedEffect(waitUntil) {
@@ -167,7 +215,10 @@ fun PinPad(
                 busy = true
                 scope.launch {
                     // The hash is deliberately slow; off the thread drawing the keys.
-                    val verdict = withContext(Dispatchers.Default) { settings.checkPin(pin) }
+                    val verdict = withContext(Dispatchers.Default) {
+                        // No checker where a PIN is asked: refused (fail closed), never let through.
+                        runCatching { (checker ?: RefusingChecker).check(pin) }.getOrElse { PinCheck.Wrong(PinAttempts()) }
+                    }
                     busy = false
                     entered = ""
                     when (verdict) {
@@ -182,7 +233,7 @@ fun PinPad(
                                 waitUntil = verdict.attempts.waitUntil
                                 message = null
                             } else {
-                                message = s.lockWrong(left = verdict.attempts.freeLeft)
+                                message = s.lockWrong(left = checker?.freeLeft(verdict.attempts) ?: verdict.attempts.freeLeft)
                             }
                         }
                         is PinCheck.Waiting -> {
@@ -331,7 +382,7 @@ fun PinPad(
         val forgot: @Composable () -> Unit = {
             if (showForgot) {
                 Text(
-                    s.lockForgot,
+                    checker?.forgot ?: s.lockForgot,
                     style = MaterialTheme.typography.bodySmall,
                     color = Tone.muted,
                     textAlign = TextAlign.Center,

@@ -70,7 +70,7 @@ object WatchNextPublisher {
     internal var mediaLookup: suspend (chatId: Long, messageId: Long) -> com.tmplayer.data.MediaItem? =
         { chat, message -> TdHomeSource.mediaItem(chat, message) }
 
-    suspend fun apply(context: Context, changes: List<WatchNext.Change>) {
+    suspend fun apply(context: Context, changes: List<WatchNext.Change>, stamp: com.tmplayer.data.AccountStamp? = null) {
         // The Play next row is Android 8's TV provider; an older television has none to fill.
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         if (changes.isEmpty()) return
@@ -78,6 +78,10 @@ object WatchNextPublisher {
             lock.withLock {
                 val existing = ownRows(context)
                 for (change in changes) {
+                    // The one choke point (HX88): nothing of a profile hidden behind its PIN, or of
+                    // a profile no longer open ([stamp]), goes on the launcher; removing always may.
+                    // Asked under the lock, per change, so a write queued before the clear never lands after it.
+                    if (!com.tmplayer.data.OutsideWrites.mayWriteNow(stamp, removing = change is WatchNext.Change.Remove)) continue
                     runCatching {
                         when (change) {
                             is WatchNext.Change.Remove -> existing[change.internalId]?.let { delete(context, it.id) }
@@ -118,6 +122,7 @@ object WatchNextPublisher {
                         val (chat, message) = idsOf(internalId) ?: return@runCatching
                         val poster = posterFor(context, chat, message, fallback = false) ?: return@runCatching
                         val values = ContentValues().apply { putPoster(this, poster) }
+                        // profile-notifications: under apply's OutsideWrites.mayWriteNow, or a removal
                         context.contentResolver.update(ContentUris.withAppendedId(TvContract.WatchNextPrograms.CONTENT_URI, row.id), values, null, null)
                         Log.i(TAG, "Play next: picture added to row ${row.id}")
                     }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it else Log.w(TAG, "Play next picture not added", it) }
@@ -211,9 +216,11 @@ object WatchNextPublisher {
         if (row == null) {
             // The only trace the row leaves on this side: the provider shows each app its own
             // entries alone, so neither adb nor the launcher's settings can say whether one went in.
+            // profile-notifications: under apply's OutsideWrites.mayWriteNow, or a removal
             val uri = context.contentResolver.insert(TvContract.WatchNextPrograms.CONTENT_URI, values)
             Log.i(TAG, "Play next ${entry.kind}: ${uri ?: "refused"}")
         } else {
+            // profile-notifications: under apply's OutsideWrites.mayWriteNow, or a removal
             val updated = context.contentResolver.update(
                 ContentUris.withAppendedId(TvContract.WatchNextPrograms.CONTENT_URI, row.id),
                 values,
@@ -226,6 +233,7 @@ object WatchNextPublisher {
 
     @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
     private fun delete(context: Context, id: Long) {
+        // profile-notifications: under apply's OutsideWrites.mayWriteNow, or a removal
         context.contentResolver.delete(ContentUris.withAppendedId(TvContract.WatchNextPrograms.CONTENT_URI, id), null, null)
     }
 

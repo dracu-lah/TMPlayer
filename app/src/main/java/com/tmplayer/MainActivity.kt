@@ -351,6 +351,8 @@ class MainActivity : ComponentActivity() {
             com.tmplayer.ui.browse.DebugFakeChats.on = intent.getBooleanExtra("fakechats", false)
         }
         Td.start(this)
+        // A PIN profile stays out of the recents screen (HX88).
+        com.tmplayer.ui.profiles.SecureWindow.follow(this)
         // A debug or promo build can force the support card on, to check it by eye:
         // `adb shell am start -n com.tmplayer/.MainActivity --ez support_reminder true`.
         if (BuildConfig.DEBUG && intent?.getBooleanExtra(EXTRA_SUPPORT_REMINDER, false) == true) {
@@ -383,23 +385,44 @@ class MainActivity : ComponentActivity() {
                     // Where each tap lands, for a page it opens to grow out of (see PageMotion).
                     // On a TV, banners and lines with buttons are reached from the screen's edge (HX22).
                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().noteTouchOrigin().tvReachRoot()) {
+                        // What sits over the gate shows only while the open profile's shell does (HX88).
+                        val shellShown = com.tmplayer.ui.lock.profileShellShown(
+                            androidx.compose.runtime.remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(this@MainActivity) },
+                        )
                         // The last runs crashed as they started: the question alone, then the shell.
                         val holding by CrashReports.holdShell.collectAsStateWithLifecycle()
                         // On a remote, a list keeps still while the focused item is in full view.
                         com.tmplayer.ui.components.StillWhenVisible(enabled = !com.tmplayer.ui.components.isTouch()) {
                             // Trailers play in the app's own full screen player (TRAILERS-PLAN T3), from every detail page.
-                            if (holding) StartupCrashQuestion() else com.tmplayer.ui.trailer.TrailerPlayerRoot { com.tmplayer.ui.browse.OfflineDownloadsHost { Root() } }
+                            // The profiles (HX88): Who's watching? at launch with two or more, the
+                            // shell keyed on the open profile. One profile: Root as it always was.
+                            // Trailers, offline downloads and title reports inside the profiles, keyed
+                            // on the open profile like the shell: a switch or a lock closes them, and
+                            // nothing of one profile is drawn over the PIN pad or the next profile.
+                            if (holding) StartupCrashQuestion() else ProfilesRoot {
+                                com.tmplayer.ui.trailer.TrailerPlayerRoot {
+                                    com.tmplayer.ui.browse.OfflineDownloadsHost { Root() }
+                                }
+                            }
                             // Once per safe start, over the shell, after any crash question is answered.
                             if (!holding) SafeModeNotice()
                         }
                         // Messages at the top, clear of the floating bar and the buttons at the foot.
-                        TopMessageHost()
+                        TopMessageHost(suppressed = !shellShown)
                         // The layout nudge (HX78), over every screen: a box shown the touch layout
                         // meets it on the sign in screen already.
                         LayoutNudgeHost()
                         // "Wrong title?" and the question after a rename (N1): one place, over every
                         // screen, so it outlives the page whose rename asked it.
-                        com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
+                        // Over everything as before, but only while the open profile's shell is
+                        // what shows (HX88): never over its PIN or the picker, and keyed on the open
+                        // profile, so a report never carries over a switch. One profile: as before.
+                        if (shellShown) {
+                            val openFolder by com.tmplayer.data.Accounts.activeFolder.collectAsStateWithLifecycle()
+                            androidx.compose.runtime.key(openFolder) {
+                                com.tmplayer.ui.components.TitleReportHost(tvPanel = { st, actions -> com.tmplayer.ui.components.TitleReportTvPanel(st, actions) })
+                            }
+                        }
                     }
                 }
             }
@@ -518,6 +541,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (SearchKeyGuard.swallows(keyCode)) return true
+        // The remote's Menu key, when no screen took it (a tile's actions do): the profiles, with
+        // two or more on this device (HX88). One profile: the key does what it always did.
+        if (keyCode == android.view.KeyEvent.KEYCODE_MENU) {
+            val flow = com.tmplayer.ui.profiles.AndroidProfiles.flow(this)
+            if (flow != null && com.tmplayer.data.ProfilePicker.atLaunch(flow.switcher.profiles.value) && flow.entered && !flow.asked) {
+                flow.ask()
+                return true
+            }
+        }
         if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && !FormFactor.isTv(this)) {
             if (event.isTracking && !event.isCanceled) onBackPressedDispatcher.onBackPressed()
             return true
@@ -634,7 +666,36 @@ class MainActivity : ComponentActivity() {
  * tip. A sign out still empties them, through the auth effect in [Root].
  */
 private object ShellViewModels : ViewModelStoreOwner {
-    override val viewModelStore = ViewModelStore()
+    private var profile: String? = null
+    private var store = ViewModelStore()
+
+    /**
+     * The open profile's (HX88): a switch clears the last profile's view models, so the chat list
+     * and Home are built again for the profile the shell is now keyed on, never shown from the
+     * last one's memory.
+     */
+    override val viewModelStore: ViewModelStore
+        get() = synchronized(this) {
+            val now = com.tmplayer.data.Accounts.active.id
+            if (profile != null && profile != now) {
+                store.clear()
+                store = ViewModelStore()
+            }
+            profile = now
+            store
+        }
+}
+
+/**
+ * [content] behind the profiles (HX88, [com.tmplayer.ui.lock.ProfilesGate]): the picker at launch
+ * with two profiles or more, and the shell keyed on the open profile. With one, nothing changes.
+ */
+@Composable
+private fun ProfilesRoot(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val flow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
+    val auth by Td.auth.collectAsStateWithLifecycle()
+    com.tmplayer.ui.lock.ProfilesGate(flow, signInStep = Setup.isSignInStep(auth), content = content)
 }
 
 @Composable
@@ -868,7 +929,12 @@ private fun Root() {
     // as paused rows. Waits for TDLib, because restoring asks it how much of each file is actually
     // on disk, and a queue restored against a closed database would claim every video was at zero.
     LaunchedEffect(auth) {
-        if (auth is AuthState.Ready) OfflineDownloads.restore(context)
+        if (auth is AuthState.Ready) {
+            OfflineDownloads.restore(context)
+            // A switch away left this profile's downloads paused, as a restart does (HX88): the
+            // viewer resumes them. What earlier builds kept to resume by itself goes.
+            com.tmplayer.ui.profiles.PausedForSwitch.clearOldCopy(context)
+        }
     }
 
     // Downloads from before they had a folder, moved into it once, after sign in: it asks TDLib
@@ -881,7 +947,7 @@ private fun Root() {
             runCatching {
                 LegacyDownloads(
                     settings = settings,
-                    downloadsDir = { AndroidPaths(context).downloadsDir },
+                    downloadsDir = { com.tmplayer.data.AndroidStorage.profileDownloadsDir(context) },
                     notifier = CoalescingTransferNotifier(AndroidTransferNotifier(context)),
                 ).migrateOnce()
             }.getOrNull()
@@ -986,6 +1052,12 @@ private fun Root() {
         }
     }
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
+    // The profiles (HX88): Switch profile in the account's menu with two or more.
+    val profileFlow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
+    val profileList by remember(profileFlow) {
+        profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+    }.collectAsStateWithLifecycle()
+    val severalProfiles = profileList?.let { com.tmplayer.data.ProfilePicker.atLaunch(it) } == true
 
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
@@ -1000,8 +1072,10 @@ private fun Root() {
             if (!com.tmplayer.data.Td.sessionEnded.value) runCatching { settings.armSetup() }
             // A sign in screen means the account is gone, however it went: signed out here, or
             // from Telegram's Devices list, which is the way back from a forgotten PIN. The lock
-            // was that account's.
-            runCatching { settings.clearAppLock() }
+            // was that account's. Unless other profiles share the device (HX88): the lock is the
+            // device's, and a new profile's sign in, or one profile's ended login, is not theirs.
+            val others = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.profiles?.size ?: 1
+            if (others <= 1) runCatching { settings.clearAppLock() }
         }
     }
 
@@ -1952,6 +2026,7 @@ private fun Root() {
                 browseTo(BrowseSection.of(BrowseTab.History))
             },
             onUpdate = { showUpdate = true },
+            onSwitchProfile = profileFlow?.takeIf { severalProfiles }?.let { flow -> { flow.ask() } },
         )
 
         // The television's top bar over Downloads, as it is over the browser's pages. Settings has

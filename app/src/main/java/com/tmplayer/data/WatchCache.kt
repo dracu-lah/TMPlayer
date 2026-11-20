@@ -28,11 +28,18 @@ object WatchCache {
     @Volatile
     private var rules: WatchCacheRules? = null
 
+    /** [owner]'s own TDLib files folder over the platform's [base]: the adopted profile's is [base]'s. */
+    internal fun rootOf(base: com.tmplayer.platform.Paths, owner: AccountStamp): java.io.File =
+        AccountDirs.pathsFor(base, Profile(id = "sweep", folder = owner.folder)).filesDir
+
     private fun rules(context: Context): WatchCacheRules = rules ?: synchronized(this) {
         rules ?: context.applicationContext.let { app ->
             WatchCacheRules(
                 settings = SettingsStore(app),
-                filesRoot = { AndroidPaths.cacheDir(app) },
+                // The open profile's own TDLib folder (HX88), never the adopted one's for everyone.
+                filesRoot = { Td.paths?.filesDir ?: AndroidPaths.cacheDir(app) },
+                // A sweep's folder from its own profile, never the one a switch points at first.
+                rootFor = { owner -> rootOf(Td.platformPaths ?: AndroidPaths(app), owner) },
                 playing = ::playingNow,
                 rule = { CacheRule.OneVideo },
                 sparePlaying = false,

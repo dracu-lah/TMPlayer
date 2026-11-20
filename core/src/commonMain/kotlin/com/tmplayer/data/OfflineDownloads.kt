@@ -27,9 +27,61 @@ object OfflineDownloads {
     init {
         // Another profile opened (HX88): file ids are its own database's, so the last one's rows
         // mean nothing there. Its downloads were paused before the switch; the next profile's
-        // queue comes back through [restore].
-        Accounts.onSwitch { _active.value = emptyMap() }
+        // queue comes back through [restore], paused.
+        Accounts.onSwitch { dropRows() }
     }
+
+    /**
+     * The profile the rows in memory belong to (HX88): set by [restore], which reads that
+     * profile's stored queue first; null after they were dropped and before it ran. A persist
+     * writes the rows for this profile only, so a late one never writes them into the next
+     * profile's queue, and none writes before the stored queue was read.
+     */
+    @Volatile var rowsOwner: AccountStamp? = null
+        private set
+
+    /** Counts every drop of the rows ([dropRows]): an id taken before a drop is another file after it. */
+    @Volatile var rowsGeneration: Long = 0L
+        private set
+
+    private val _databaseChanges = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+
+    /** Each time the open profile's database became a new one: the download runner stops what it has. */
+    val databaseChanges: kotlinx.coroutines.flow.SharedFlow<Unit> = _databaseChanges
+
+    /** For tests: the rows of a process that just started (none, no owner), without telling the runner. */
+    internal fun resetForTest() = dropRows()
+
+    private fun dropRows() {
+        synchronized(this) {
+            _active.value = emptyMap()
+            rowsOwner = null
+            rowsGeneration++
+        }
+    }
+
+    /**
+     * The open profile's TDLib database is a new one (a sign out, a session Telegram ended): the
+     * rows in memory are the old database's file ids, so they go, and the runner stops their jobs.
+     * The stored queue goes on restore (its marker is the old database's).
+     */
+    fun newDatabase() {
+        dropRows()
+        _databaseChanges.tryEmit(Unit)
+    }
+
+    /** The set of rows a runner job was queued in ([rowsGeneration]); its row updates carry it. */
+    class Rows(val generation: Long) : kotlin.coroutines.AbstractCoroutineContextElement(Key) {
+        companion object Key : kotlin.coroutines.CoroutineContext.Key<Rows>
+    }
+
+    /** Runs [update] only while the rows are still the set [generation] (null: no set, always runs). */
+    fun <T> ifRows(generation: Long?, update: () -> T): T? = synchronized(this) {
+        if (generation != null && generation != rowsGeneration) null else update()
+    }
+
+    /** The rows to persist and the profile they are for, read together. */
+    fun persistSnapshot(): Pair<AccountStamp?, List<DownloadRequest>> = synchronized(this) { rowsOwner to ordered.map { it.request } }
 
     /** Where a video has got to, which is the only thing a row needs to know to draw itself. */
     enum class Stage {
@@ -267,13 +319,29 @@ object OfflineDownloads {
      * whatever bytes TDLib still has on disk, and it is the Downloads screen that offers to carry
      * on. Restoring them as running would mean a process the system killed for using too much
      * silently starting to use it again, with the viewer nowhere near the phone.
+     *
+     * Called again after each switch and sign in (HX88), and safe to call twice: rows already in
+     * memory (a download asked before this ran) stay as they are and the stored ones join them,
+     * never written over. Until it has run for the open profile ([rowsOwner] null) nothing writes
+     * the queue, so a download asked early never replaces the stored queue it has not read.
      */
-    suspend fun restore(settings: SettingsStore) {
-        if (_active.value.isNotEmpty()) return
+    suspend fun restore(settings: SettingsStore, database: String? = DATABASE_OF_STORE, beforeMarkers: Boolean? = null) {
+        val owner = Accounts.stamp
+        val generation = rowsGeneration
+        // The database of the profile the rows will be, from its own folder (HX88).
+        val marker = if (database == DATABASE_OF_STORE) Td.databaseMarkerFor(owner.folder) else database
+        // The database could not be told: the stored queue stays as it is, unrestored and not
+        // written over (the rows are nobody's, so nothing persists them), for a later start.
+        if (marker == null) return
         val stored = runCatching { settings.downloadQueueNow() }.getOrDefault(emptyList())
-        if (stored.isEmpty()) return
-        var order = 0L
-        val restored = stored.mapNotNull { request ->
+        // A queue of another TDLib database (Sign in again, a sign out and in, an ended session):
+        // its file ids are other files now. Dropped, never offered (HX88).
+        val storedFor = runCatching { settings.downloadQueueDatabaseNow() }.getOrNull()
+        val old = beforeMarkers ?: (database == DATABASE_OF_STORE && Td.databaseFromBeforeMarkers(owner.folder, marker))
+        val usable = if (stored.isEmpty() || DatabaseMarker.matches(storedFor, marker, old)) stored else emptyList()
+        val live = _active.value
+        var order = -usable.size.toLong()
+        val restored = usable.filter { it.fileId !in live }.mapNotNull { request ->
             // A file the last run finished and recorded is not a download to offer resuming: the
             // queue is written before the work, so it outlives its own entries. One that finished
             // without a record is different: it was fetched and never moved into Downloads, and
@@ -292,8 +360,15 @@ object OfflineDownloads {
                 order = order++,
             )
         }.toMap()
-        _active.value = restored
-        runCatching { settings.saveDownloadQueue(restored.values.map { it.request }) }
+        val merged = synchronized(this) {
+            // Another profile or database opened while this read: its rows are not these.
+            if (Accounts.stamp != owner || rowsGeneration != generation) return@synchronized null
+            // What is in memory now wins over what was stored under the same id.
+            _active.value = restored + _active.value
+            rowsOwner = owner
+            ordered.map { it.request }
+        } ?: return
+        runCatching { settings.saveDownloadQueue(merged, owner = owner, database = marker) }
     }
 
     // ---- called by the runner ---------------------------------------------------------------
@@ -312,7 +387,9 @@ object OfflineDownloads {
      * read-modify-write inside one `update` block rather than reading first and calling [note].
      */
     fun note(progress: Progress) {
-        _active.update { it + (progress.fileId to progress) }
+        synchronized(this) {
+            _active.update { it + (progress.fileId to progress) }
+        }
     }
 
     /** Moves one entry to another stage, leaving its figures alone. Absent ids are ignored. */

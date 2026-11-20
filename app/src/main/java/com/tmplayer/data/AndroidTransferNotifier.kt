@@ -31,6 +31,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 class AndroidTransferNotifier(context: Context) : TransferNotifier {
 
     private val app = context.applicationContext
+
+    /** The profile the transfers it tells of belong to (HX88): taken when it is made, with the job. */
+    private val owner = Accounts.stamp
     private val titles = java.util.concurrent.ConcurrentHashMap<Long, String>()
     private val kinds = java.util.concurrent.ConcurrentHashMap<Long, TransferNotifier.Kind>()
 
@@ -68,13 +71,13 @@ class AndroidTransferNotifier(context: Context) : TransferNotifier {
 
     override fun complete(id: Long, title: String, body: String, open: TransferNotifier.OpenTarget?) {
         drop(id)
-        post(id.doneId(), builder().setContentTitle(title).setContentText(body).setAutoCancel(true).build())
+        post(id.doneId(), builder().setContentTitle(title).setContentText(body).setAutoCancel(true).build(), com.tmplayer.data.ProfileNotifications.Kind.Result)
         _completions.tryEmit(title)
     }
 
     override fun fail(id: Long, title: String, reason: String, retryable: Boolean) {
         drop(id)
-        post(id.doneId(), builder().setContentTitle(title).setContentText(reason).setAutoCancel(true).build())
+        post(id.doneId(), builder().setContentTitle(title).setContentText(reason).setAutoCancel(true).build(), com.tmplayer.data.ProfileNotifications.Kind.Result)
     }
 
     override fun cancel(id: Long) = drop(id)
@@ -85,10 +88,10 @@ class AndroidTransferNotifier(context: Context) : TransferNotifier {
         runCatching { manager().cancel(id.progressId()) }
     }
 
-    private fun post(id: Int, notification: Notification) {
+    private fun post(id: Int, notification: Notification, kind: com.tmplayer.data.ProfileNotifications.Kind = com.tmplayer.data.ProfileNotifications.Kind.Ongoing) {
         ensureChannel(app)
         // A refused permission is not a failure of the transfer: it simply goes unseen.
-        runCatching { manager().notify(id, notification) }
+        runCatching { com.tmplayer.data.ProfileNotifications.post(app, id, notification, kind, owner) }
     }
 
     private fun builder(): Notification.Builder =

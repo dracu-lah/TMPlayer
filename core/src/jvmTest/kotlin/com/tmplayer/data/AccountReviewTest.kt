@@ -238,7 +238,7 @@ class AccountReviewTest {
         val b = signedInProfile(2L)
         switcher.switchTo(AccountRules.ADOPTED_ID)
         val stuck = AccountSwitcher(book, broken, base = { base })
-        assertEquals(SwitchResult.Failed, stuck.switchTo(b.id))
+        assertEquals(SwitchResult.ReopenFailed, stuck.switchTo(b.id))
         assertEquals(AccountRules.ADOPTED_ID, book.list.value.activeId)
         assertNull(book.list.value.switchingTo)
         assertNull(folder.value)

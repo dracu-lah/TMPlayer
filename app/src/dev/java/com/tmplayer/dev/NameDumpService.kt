@@ -25,6 +25,7 @@ class NameDumpService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // profile-notifications: the dev build's name dump, no profile's titles in it
         val inFront = runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type()) }
         inFront.exceptionOrNull()?.let {
             Log.w(NameDumpReceiver.TAG, "could not go to the foreground (${it.javaClass.simpleName}); keep the app open")
@@ -49,10 +50,13 @@ class NameDumpService : Service() {
         val builder = if (Build.VERSION.SDK_INT >= 26) {
             getSystemService(NotificationManager::class.java)
                 ?.createNotificationChannel(NotificationChannel(CHANNEL, "Names dump", NotificationManager.IMPORTANCE_LOW))
+            // profile-notifications: the dev build's name dump, no profile's titles in it
             Notification.Builder(this, CHANNEL)
         } else {
+            // profile-notifications: as above
             Notification.Builder(this)
         }
+        // profile-notifications: a fixed title, nothing of a profile
         return builder.setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("Dumping video names").setOngoing(true).build()
     }
 

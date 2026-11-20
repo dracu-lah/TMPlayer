@@ -2029,6 +2029,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // An update that installs while this is open (picture in picture, the sound playing on)
         // ends the process: the place is written first (HX5).
         com.tmplayer.data.SelfInstaller.addBeforeInstall(saveBeforeInstall)
+        // A profile switch (HX88) saves the place here, for this profile, and closes the player.
+        com.tmplayer.data.BeforeSwitch.addPlayer(stopBeforeSwitch) { com.tmplayer.i18n.L.profilesWaitingPlayer }
+        // A PIN profile's video stays out of the recents screen (HX88).
+        com.tmplayer.ui.profiles.SecureWindow.follow(this)
         // Before the first layout pass, on purpose: a window that turns after it has drawn is a
         // lurch the viewer sees. Almost every video is landscape, so landscape is what the loader
         // opens in, and a portrait clip turns once, later.
@@ -2213,8 +2217,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // phone up, and a title on the lock screen would tell them what was on.
         lifecycleScope.launch {
             runCatching {
-                settings.appLock.collect { lock ->
-                    val private = lock.pinSet && lock.onOpen
+                // And while the open profile is hidden behind its PIN (HX88): away from the app,
+                // or locked again, the controls name only the app.
+                kotlinx.coroutines.flow.combine(settings.appLock, com.tmplayer.data.ProfileUnlock.hidden()) { lock, hidden -> lock to hidden }.collect { (lock, hidden) ->
+                    val private = (lock.pinSet && lock.onOpen) || hidden
                     if (private == sessionPrivate) return@collect
                     sessionPrivate = private
                     refreshSessionMetadata()
@@ -2870,6 +2876,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             val (vlc, source) = built
             vlcEngine = vlc
+            // profile-notifications: sessionMetadata(), private while the profile is hidden
             vlc.mediaItem = androidx.media3.common.MediaItem.Builder().setMediaMetadata(sessionMetadata()).build()
             vlc.player.addListener(playerListener)
             // Asked before it opens, so libVLC is not paused as it starts ([VlcEngine.prepare]).
@@ -4880,6 +4887,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             session.release()
         }
         mediaSession = runCatching {
+            // profile-notifications: its metadata is sessionMetadata(), private while the profile is hidden
             MediaSession.Builder(this, EpisodeStepping(exo))
                 // Distinct per activity instance: stepping to the next episode builds a second
                 // activity before the first has been destroyed, and two sessions sharing an id
@@ -4909,6 +4917,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 .setAlbumTitle("")
                 .setSubtitle("")
                 .setDescription("")
+                // The app's own icon, so Media3 never fills the artwork from the file's own cover.
+                .setArtworkUri(android.net.Uri.parse("android.resource://$packageName/${applicationInfo.icon}"))
+                // And the bytes, which Media3 reads first: never the file's own embedded cover.
+                .apply { neutralArtwork()?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
                 .build()
         }
         val here = currentItem()
@@ -4952,8 +4964,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val metadata = sessionMetadata()
         if (metadata == subtitleFiles.metadata) return
         subtitleFiles.metadata = metadata
+        // libVLC's player takes no change of its item: its item is written and the session told.
+        vlcEngine?.let { vlc ->
+            // profile-notifications: sessionMetadata() above
+            vlc.mediaItem = vlc.mediaItem.buildUpon().setMediaMetadata(metadata).build()
+            vlc.metadataChanged()
+        }
         val exo = playing ?: return
         val playing = exo.currentMediaItem ?: return
+        // profile-notifications: sessionMetadata() above
         runCatching { exo.replaceMediaItem(exo.currentMediaItemIndex, playing.buildUpon().setMediaMetadata(metadata).build()) }
     }
 
@@ -9262,7 +9281,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (item.chatId == 0L || item.messageId == 0L) return
         val store = watchedStore
         val title = chatTitle
-        App.backgroundScope.launch {
+        track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) {
             runCatching {
                 if (store.isWatched(item.chatId, item.messageId)) {
                     store.markUnwatched(item.chatId, item.messageId)
@@ -9271,7 +9290,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     settings.clearResumePosition(item.chatId, item.messageId, item)
                 }
             }
-        }
+        })
     }
 
     /** The list's autoplay switch: the same setting Settings shows. */
@@ -10503,6 +10522,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     override fun onStart() {
         super.onStart()
+        // Back after more than a minute away, or restored into a process that never had the PIN
+        // (HX88): a PIN profile's video does not show again until its PIN is given. The player
+        // closes, its place kept, and the shell behind it asks for the PIN.
+        if (com.tmplayer.data.ProfileUnlock.lockedNow()) {
+            Log.i("TMPlayer", "the open profile is locked again; closing the player for its PIN")
+            finish()
+            return
+        }
         if (openingFilm) watchOpening()
         // Back in front: the session comes home from the notification, the sound never stopped,
         // and the picture comes back on (turned off only while nobody could see it).
@@ -10558,6 +10585,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         endTranslations()
         crashNote.ended()
         com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
+        com.tmplayer.data.BeforeSwitch.removePlayer(stopBeforeSwitch)
         loopHandler.removeCallbacks(watchTick)
         remedies.stop()
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
@@ -10670,6 +10698,37 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         withContext(Dispatchers.Main) { saveResumePosition() }?.join()
     }
 
+    /**
+     * Before a profile switch (HX88): the place is written while this profile's stores are still
+     * the open ones, waited for, and the player closes, since its video belongs to the profile
+     * that is closing.
+     */
+    private val stopBeforeSwitch: suspend () -> Unit = {
+        withContext(Dispatchers.Main) { saveResumePosition(leaving = true) }?.join()
+        // And every watched mark of this player still under way: written for this profile first.
+        for (job in markJobs.toList()) job.join()
+        withContext(Dispatchers.Main) {
+            // Written already: the close must not write again, for the next profile.
+            savedForHandOver = true
+            if (!isFinishing) finish()
+        }
+    }
+
+    /** The app's icon as PNG bytes, made once, for the private media metadata (HX88). */
+    private val neutralIcon: ByteArray? by lazy {
+        runCatching {
+            val drawable = packageManager.getApplicationIcon(applicationInfo)
+            val size = 192
+            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        }.getOrNull()
+    }
+
+    private fun neutralArtwork(): ByteArray? = neutralIcon
+
     /** Writes the place; returns the write, for a caller that must wait for it ([saveBeforeInstall]). */
     private fun saveResumePosition(leaving: Boolean = false): Job? {
         if (savedForHandOver) return null
@@ -10742,7 +10801,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     supported = true,
                     otherCopies = otherCopies,
                 )
-                WatchNextPublisher.apply(context, changes)
+                // Its profile's turn, and only while that profile may show outside the app.
+                WatchNextPublisher.apply(context, changes, stamp = accountOwner)
             }
         }
     }
@@ -10773,7 +10833,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         onWatchedList = true
         val record = watchedRecord(manual = false)
         val store = watchedStore
-        App.backgroundScope.launch { runCatching { store.markWatched(record) } }
+        // As the profile this player opened under (HX88): a late mark never lands in the next
+        // profile's list, and a switch waits for it ([stopBeforeSwitch]).
+        track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) { runCatching { store.markWatched(record) } })
+    }
+
+    /** The watched writes of this player still under way, which a switch waits for. */
+    private val markJobs = java.util.concurrent.CopyOnWriteArrayList<kotlinx.coroutines.Job>()
+
+    private fun track(job: kotlinx.coroutines.Job) {
+        markJobs += job
+        job.invokeOnCompletion { markJobs -= job }
     }
 
     /** The menus' "Mark as watched" and "Mark as unwatched". */
@@ -10785,18 +10855,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (onWatchedList) {
             onWatchedList = false
             markedWatchedHere = false
-            App.backgroundScope.launch { runCatching { store.markUnwatched(chat, message) } }
+            track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) { runCatching { store.markUnwatched(chat, message) } })
             showGestureFeedback(L.playerMarkedUnwatched)
         } else {
             onWatchedList = true
             markedWatchedHere = true
             val record = watchedRecord(manual = true)
-            App.backgroundScope.launch {
+            val item = currentItem()
+            track(App.backgroundScope.launch(com.tmplayer.data.AccountOwner(accountOwner)) {
                 runCatching {
                     store.markWatched(record)
-                    settings.clearResumePosition(chat, message, currentItem())
+                    settings.clearResumePosition(chat, message, item)
                 }
-            }
+            })
             showGestureFeedback(L.playerMarkedWatched)
         }
     }

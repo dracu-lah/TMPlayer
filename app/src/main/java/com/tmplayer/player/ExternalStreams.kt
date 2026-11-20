@@ -129,6 +129,17 @@ object ExternalStreams {
  */
 class ExternalStreamService : Service() {
 
+    /** The profile whose video streams (HX88); a switch closes the stream, its notification with it. */
+    private val owner = com.tmplayer.data.Accounts.stamp
+    private val switches = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+
+    init {
+        com.tmplayer.data.ProfileJobs.stopOnSwitch(switches, owner) {
+            ExternalStreams.close(this)
+            stopSelf()
+        }
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private val check = object : Runnable {
         override fun run() {
@@ -151,11 +162,7 @@ class ExternalStreamService : Service() {
         PlaybackService.ensureChannel(this)
         val foreground = runCatching {
             val note = notification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-            } else {
-                startForeground(NOTIFICATION_ID, note)
-            }
+            com.tmplayer.data.ProfileNotifications.foreground(this, NOTIFICATION_ID, note, com.tmplayer.data.ProfileNotifications.Kind.Ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK, owner)
         }.onFailure { Log.w(TAG, "Not allowed into the foreground", it) }.isSuccess
         if (!foreground) {
             // startForegroundService() promised a foreground within seconds; leaving instead of
@@ -191,6 +198,7 @@ class ExternalStreamService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(check)
+        switches.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         stopForegroundRemoving()
         super.onDestroy()
     }

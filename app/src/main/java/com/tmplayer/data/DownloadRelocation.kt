@@ -194,7 +194,10 @@ object DownloadRelocation {
     ): Boolean {
         if (activeJob != null) return false
         val app = context.applicationContext
-        val job = scope.launch {
+        // The profile whose downloads move (HX88): every record written is its own, and a switch
+        // stops the move between two files and waits for it ([BeforeSwitch]).
+        val owner = Accounts.stamp
+        val job = scope.launch(AccountOwner(owner)) {
             lock.withLock {
                 val outcome = try {
                     run(app, settings, destination, label)
@@ -204,7 +207,10 @@ object DownloadRelocation {
                 withContext(Dispatchers.Main) { onOutcome(outcome) }
             }
         }
+        val hook = ProfileJobs.beforeSwitch(cancel = { job.cancel() }, join = { job.join() })
+        BeforeSwitch.add(hook) { com.tmplayer.i18n.L.profilesWaitingMoving }
         job.invokeOnCompletion { cause ->
+            BeforeSwitch.remove(hook)
             activeJob = null
             if (cause is CancellationException) Handler(Looper.getMainLooper()).post(onCancelled)
         }
@@ -254,8 +260,9 @@ object DownloadRelocation {
 
     /** The folder on the disk a destination writes into; null for a picked folder, which is written through the system. */
     private fun dirOf(context: Context, destination: Destination): File? = when (destination) {
-        Destination.Internal -> File(context.filesDir, AndroidPaths.DOWNLOADS)
-        is Destination.Volume -> AndroidStorage.downloadsDirOf(destination.root)
+        // The open profile's own folder on the destination (HX88): only its downloads move.
+        Destination.Internal -> AndroidStorage.forProfile(File(context.filesDir, AndroidPaths.DOWNLOADS))
+        is Destination.Volume -> AndroidStorage.forProfile(AndroidStorage.downloadsDirOf(destination.root))
         is Destination.Tree -> null
     }
 
@@ -280,7 +287,7 @@ object DownloadRelocation {
     private suspend fun run(context: Context, settings: SettingsStore, destination: Destination, label: String): Outcome {
         OfflineDownloads.pauseAll(context)
         awaitNothingMoving()
-        val oldDownloadsDir = AndroidStorage.downloadsDir(context)
+        val oldDownloadsDir = AndroidStorage.profileDownloadsDir(context)
         val pending = StorageRelocationPlan.Pending(root = destination.key, oldCache = "", oldDownloads = oldDownloadsDir.path)
         settings.setDownloadRootPending(pending.encode())
         settings.setDownloadRoot(destination.key)
@@ -346,14 +353,21 @@ object DownloadRelocation {
         if (files.isNotEmpty()) _moving.value = Moving(0, total)
         try {
             var done = 0L
+            val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
             for ((record, src) in files) {
+                // Another profile open (a switch the hook could not wait out): stop, the rest stays where it is.
+                if (!ProfileJobs.mayWrite(owner)) break
                 val before = done
                 val size = (src.length() ?: 0L).coerceAtLeast(0)
                 try {
                     val newPath = transfer(context, src, destination, to) { landed, _ ->
                         _moving.value = Moving(before + landed, total)
                     }
-                    settings.setDownloadPath(record.chatId, record.messageId, newPath)
+                    // The file is whole at its new place and the original gone: its record follows
+                    // at once, never cut off by a cancel in between (a switch waits for this).
+                    // Addressed to the owner's own record (HX88): even if a switch could not wait for
+                    // this file, its record follows it in the profile it belongs to.
+                    withContext(NonCancellable + AccountAddress(owner.folder)) { settings.setDownloadPath(record.chatId, record.messageId, newPath) }
                     movedCount++
                 } catch (e: Exception) {
                     // A cancel is not a failure: it stops the move here, between files.

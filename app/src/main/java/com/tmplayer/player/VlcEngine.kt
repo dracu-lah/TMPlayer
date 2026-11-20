@@ -285,6 +285,9 @@ class VlcEngine(
         adapter.refresh()
     }
 
+    /** The session reads [mediaItem] again: its metadata changed (HX88, the private one while hidden). */
+    internal fun metadataChanged() = changed()
+
     private fun active(on: Boolean) {
         runCatching { onActive(on) }
     }

@@ -23,7 +23,7 @@ class BackupCoverageTest {
     private val leftBehind = setOf(
         // The account and cold start snapshots, and the device's own bookkeeping.
         "account_snapshot", "chat_snapshot", "last_chat", "last_seen_version", "language_announced",
-        "downloads_migrated", "download_queue", "developer_options",
+        "downloads_migrated", "download_queue", "download_queue_db", "developer_options",
         // Keep my place on all my devices: the Home question was shown, and when this device last synced.
         "keep_place_card_seen", "keep_place_wrote_at",
         // Locks: a PIN's hash has no place in a mailed file, and a restore never undoes a lock.

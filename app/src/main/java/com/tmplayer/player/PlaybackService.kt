@@ -219,7 +219,7 @@ class PlaybackService : MediaSessionService() {
                 .setAutoCancel(true)
                 .apply { launchIntent(context)?.let(::setContentIntent) }
                 .build()
-            runCatching { manager(context).notify(STOPPED_ID, notification) }
+            runCatching { com.tmplayer.data.ProfileNotifications.post(context, STOPPED_ID, notification, com.tmplayer.data.ProfileNotifications.Kind.Result) }
         }
 
         /** Takes [notifyStopped]'s notice down: the player is back, or playing unseen again. */

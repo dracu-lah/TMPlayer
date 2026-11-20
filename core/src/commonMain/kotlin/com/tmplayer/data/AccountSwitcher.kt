@@ -102,6 +102,12 @@ sealed interface SwitchResult {
 
     /** The folders could not be made. */
     data object Failed : SwitchResult
+
+    /**
+     * Closing the live client or pointing TDLib at the profile failed part way: the profile is
+     * kept as it is and the one open before stays open. Never a reason to remove anything.
+     */
+    data object ReopenFailed : SwitchResult
 }
 
 sealed interface AddResult {
@@ -125,6 +131,9 @@ sealed interface SignOutResult {
     data class SignedOut(val next: Profile?, val partialWipe: Boolean = false) : SignOutResult
     data object Unknown : SignOutResult
     data object NotStarted : SignOutResult
+
+    /** The profile could not be opened to sign it out (TDLib failed part way): it is kept, nothing was wiped. */
+    data object Failed : SignOutResult
 }
 
 sealed interface RemoveResult {
@@ -239,7 +248,7 @@ class AccountSwitcher(
             throw e
         } catch (e: Exception) {
             Logger.w(TAG, "the client could not be reopened for another profile", e)
-            if (book.list.value.activeId != id) return SwitchResult.Failed
+            if (book.list.value.activeId != id) return SwitchResult.ReopenFailed
         } finally {
             // A host that never ran the hook (an error part way) moved nothing: only where it was
             // going is forgotten, and the stores stay with the profile still open.
@@ -364,6 +373,9 @@ class AccountSwitcher(
         if (before.activeId != id) {
             when (switchLocked(id, signInAgain = false)) {
                 SwitchResult.Switched, SwitchResult.Already -> Unit
+                // TDLib failed part way, or the folders could not be made (a full disk): the
+                // profile's session may well be alive, so it stays, with nothing wiped, and says so.
+                SwitchResult.ReopenFailed, SwitchResult.Failed -> return SignOutResult.Failed
                 // Folders that cannot be opened have no session to end: the profile just goes, and
                 // the live client, another profile's, never held them.
                 else -> {
@@ -436,7 +448,16 @@ class AccountSwitcher(
                 val base = base() ?: return@withLock SignOutResult.NotStarted
                 val start = book.list.value
                 val order = start.profiles.filter { it.id != start.activeId } + listOfNotNull(start.active)
-                for (profile in order) if (book.list.value.byId(profile.id) != null) signOutLocked(profile.id, wipe)
+                // Whether any profile's own clearing was cut short, said once for the lot.
+                var partial = false
+                for (profile in order) {
+                    if (book.list.value.byId(profile.id) == null) continue
+                    val result = signOutLocked(profile.id, wipe)
+                    // One that could not be opened is kept as it is: its session may be alive, and
+                    // the fresh start below would forget it. What was signed out stays signed out.
+                    if (result is SignOutResult.Failed) return@withLock SignOutResult.Failed
+                    if (result is SignOutResult.SignedOut && result.partialWipe) partial = true
+                }
                 val left = book.list.value
                 val adoptedLeft = left.profiles.singleOrNull()?.adopted == true
                 if (!adoptedLeft) {
@@ -461,9 +482,24 @@ class AccountSwitcher(
                     book.sweep(base)
                 }
                 onSleepingBytes(0L)
-                SignOutResult.SignedOut(null)
+                SignOutResult.SignedOut(null, partial)
             }
         }
+    }
+
+    /**
+     * Gives a profile a name of its own on this device ([Profile.label]), or Telegram's again for
+     * null or blank. False when the profile is gone. Who it signs in as is never changed by it.
+     */
+    suspend fun rename(id: String, label: String?): Boolean = withContext(Dispatchers.Default) {
+        val clean = label?.let(AccountRules::cleanLabel)
+        var done = false
+        book.update { l ->
+            val now = l.byId(id) ?: return@update l
+            done = true
+            l.replace(now.copy(label = clean))
+        }
+        done
     }
 
     /** Sets or clears ([pin] null) a profile's PIN. False when it is not 4 digits or the profile is gone. */

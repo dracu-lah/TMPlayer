@@ -28,9 +28,14 @@ data class Profile(
     /** The wait left after wrong PINs, and the [PinClock] time it was written at. */
     val pinWaitLeftMs: Long = 0L,
     val pinWaitStamp: Long = 0L,
+    /** The name the viewer gave the profile on this device (Rename), or null for Telegram's [name]. */
+    val label: String? = null,
 ) {
     val adopted: Boolean get() = folder == null
     val signedIn: Boolean get() = telegramId != 0L
+
+    /** The name the picker shows: the viewer's own, else Telegram's, else "" (the picker numbers it). */
+    val shownName: String get() = label?.takeIf { it.isNotBlank() } ?: name
 }
 
 /**
@@ -80,6 +85,13 @@ object AccountRules {
     fun validName(name: String): Boolean = NAME.matches(name)
 
     fun canAdd(list: AccountList): Boolean = list.profiles.size < MAX
+
+    /** The most a profile's own name (Rename) keeps. */
+    const val LABEL_MAX = 32
+
+    /** A name the viewer typed, trimmed, without control characters, at most [LABEL_MAX]; null when nothing is left. */
+    fun cleanLabel(raw: String): String? =
+        raw.filter { !it.isISOControl() }.trim().take(LABEL_MAX).trim().takeIf { it.isNotEmpty() }
 
     /** A folder name no profile and no folder still in the trash has. */
     fun newFolder(list: AccountList, random: Random = Random.Default): String {
@@ -160,6 +172,7 @@ object AccountCodec {
                 .put("pinFailures", p.pinFailures)
                 .put("pinWaitLeftMs", p.pinWaitLeftMs)
                 .put("pinWaitStamp", p.pinWaitStamp)
+                .put("label", p.label ?: JSONObject.NULL)
         }))
         .toString()
 
@@ -202,6 +215,7 @@ object AccountCodec {
             pinFailures = p.optInt("pinFailures", 0).coerceIn(0, 10_000),
             pinWaitLeftMs = p.optLong("pinWaitLeftMs", 0L).coerceIn(0L, ProfilePin.WAIT_MS),
             pinWaitStamp = p.optLong("pinWaitStamp", 0L),
+            label = text(p, "label")?.let(AccountRules::cleanLabel),
         )
     }
 
@@ -223,6 +237,16 @@ object ProfilePin {
         if (!PinHash.isValid(pin)) return null
         return profile.copy(pin = PinHash.hash(pin), pinFailures = 0, pinWaitLeftMs = 0L, pinWaitStamp = 0L)
     }
+
+    /** The wait left at [now] ([PinClock] time) from wrong PINs before, 0 when a PIN may be tried. */
+    fun waitLeft(profile: Profile, now: Long): Long {
+        if (profile.pin == null) return 0L
+        val served = if (now >= profile.pinWaitStamp) now - profile.pinWaitStamp else 0L
+        return (profile.pinWaitLeftMs.coerceIn(0L, WAIT_MS) - served).coerceAtLeast(0L)
+    }
+
+    /** How many wrong PINs are left before the next wait, after [failures] in a row. */
+    fun triesLeft(failures: Int): Int = TRIES - (failures.coerceAtLeast(0) % TRIES)
 
     /** What the pad hears back for [pin] at [now] ([PinClock] time), and the profile to store. */
     fun check(profile: Profile, pin: String, now: Long): Pair<Profile, PinCheck> {

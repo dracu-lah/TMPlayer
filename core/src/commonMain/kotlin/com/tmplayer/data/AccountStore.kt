@@ -3,6 +3,7 @@ package com.tmplayer.data
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.Paths
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -10,6 +11,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
@@ -99,6 +101,9 @@ object AccountDirs {
         listOf(paths.databaseDir, paths.filesDir).all { dir ->
             if (dir.exists() && !dir.isDirectory) dir.delete()
             dir.isDirectory || dir.mkdirs()
+        }.also { made ->
+            // Marked as it is made: an empty folder is a new database, never one from before markers.
+            if (made) DatabaseMarker.ensure(paths.databaseDir)
         }
     }.getOrDefault(false)
 
@@ -305,6 +310,32 @@ object Accounts {
         synchronized(purgers) { purgers += block }
     }
 
+    @Volatile
+    private var registered = CompletableDeferred<Unit>()
+
+    /**
+     * Each platform calls this once what keeps account data outside the stores is in place
+     * (`HomeCache.file`, `PageQueries.store`) and the preference stores are open, so their purgers
+     * are registered ([onPurge]). The first sweep of a start waits for it ([sweepOnceRegistered]):
+     * a sweep before it took a removed profile's folders and forgot it, leaving its cache files
+     * and keys behind (HX88 review, LOW 1).
+     */
+    fun storesRegistered() {
+        registered.complete(Unit)
+    }
+
+    /**
+     * The first sweep of a start: once [storesRegistered] was called, or after [waitMs] for a
+     * platform that never calls it (the sweep is then as late as it can safely be, never skipped).
+     */
+    suspend fun sweepOnceRegistered(book: AccountBook, paths: Paths, waitMs: Long = REGISTER_WAIT_MS) {
+        withTimeoutOrNull(waitMs) { registered.await() }
+        book.sweep(paths)
+    }
+
+    /** How long the first sweep waits for [storesRegistered]. */
+    const val REGISTER_WAIT_MS = 10_000L
+
     /** Every purger ([onPurge]) for the profile on [folder]; the book's sweep calls it. */
     internal suspend fun purge(folder: String) {
         for (each in synchronized(purgers) { purgers.toList() }) each(folder)
@@ -330,7 +361,10 @@ object Accounts {
 
     /** For tests: point the process at [book]'s open profile, as a switch would. */
     internal fun resetForTest(book: AccountBook? = null) {
-        synchronized(this) { this.book = book }
+        synchronized(this) {
+            this.book = book
+            registered = CompletableDeferred()
+        }
         publish(book?.list?.value ?: AccountRules.adopted(0L))
     }
 }

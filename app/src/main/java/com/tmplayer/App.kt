@@ -231,6 +231,25 @@ class App : Application() {
         // And the chats opened most recently, so a cold start opens one of them at once (PageQueries).
         com.tmplayer.data.PageQueries.store = com.tmplayer.data.ChatGridDisk(java.io.File(filesDir, "home/chat-grids.json"))
         if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.PageQueries.preload() } }
+        // Every store that keeps a profile's data is open now (HX88, review LOW 1): the first sweep
+        // of a removed profile's folders may clear its keys and cache files from all of them.
+        SettingsStore(this)
+        com.tmplayer.data.WatchedStore(this)
+        com.tmplayer.data.BookmarkStore(this)
+        com.tmplayer.data.Accounts.storesRegistered()
+        // A profile's PIN (HX88): locked again on a switch, the app lock and a long absence, and
+        // then its cards come off the TV's home screen, so nothing of it shows outside the app.
+        com.tmplayer.data.ProfileUnlock.install()
+        // Every notification and the cast's media session follow the open profile's lock (HX88).
+        com.tmplayer.data.ProfileNotifications.follow(this, backgroundScope)
+        // Its first value too: a cold start with the profile already locked (the process was
+        // killed) clears what an earlier run left on the launcher.
+        if (com.tmplayer.data.FormFactor.isTv(this)) {
+            com.tmplayer.data.OutsideSurfaces.follow(backgroundScope) {
+                runCatching { com.tmplayer.data.TvChannelsPublisher.clearPrograms(this@App) }
+                runCatching { com.tmplayer.data.WatchNextPublisher.clearAll(this@App) }
+            }
+        }
         OnlineMetadata.current = OnlineMetadata(
             buildKey = BuildConfig.TMDB_API_KEY,
             store = MetadataStore(java.io.File(filesDir, "online/metadata.properties")),
@@ -306,6 +325,8 @@ class App : Application() {
         private var started = 0
 
         override fun onActivityStarted(activity: android.app.Activity) {
+            // Back after more than a minute away: the open profile's PIN is asked again (HX88).
+            if (started == 0) com.tmplayer.data.ProfileUnlock.onForeground()
             started++
             inFront = true
             // The automatic update's wait for an idle app is called off (HX5).
@@ -321,6 +342,7 @@ class App : Application() {
             inFront = started > 0
             // A rotation stops and starts the same activity; it is not the app being left.
             if (started == 0 && !activity.isChangingConfigurations) {
+                com.tmplayer.data.ProfileUnlock.onBackground()
                 AppLockSession.lock()
                 Td.onForegroundChanged(false)
                 com.tmplayer.data.ResumeSync.setForeground(false)

@@ -445,7 +445,11 @@ object SyncDestinations {
                 val made = waitingOutFlood(
                     3, 60,
                     { r: TdlResult<*> -> (r as? TdlResult.Failure)?.let { Failures.floodWaitSeconds(it.message) } },
-                ) { td.createNewSupergroupChat(name, false, true, description, null, 0, false) }
+                ) {
+                    // Only for the profile that asked (HX88): stops if it is no longer open.
+                    OwnedSessions.ensure()
+                    td.createNewSupergroupChat(name, false, true, description, null, 0, false)
+                }
                 if (made !is TdlResult.Success) return@withLock ChooseResult.Failed(createFailure(made.errorMessage))
                 val chat = made.result
                 // The count of a channel made a moment ago can lag for a second: asked again once.

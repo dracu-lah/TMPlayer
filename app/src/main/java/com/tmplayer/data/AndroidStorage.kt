@@ -152,6 +152,17 @@ object AndroidStorage {
         return File(context.applicationContext.filesDir, AndroidPaths.DOWNLOADS)
     }
 
+    /**
+     * The open profile's downloads folder (HX88): [downloadsDir] itself for the profile adopted in
+     * place, its `downloads-<folder>` sibling for another, on the same volume. Every download is
+     * written and listed here, so one profile never finds another's files.
+     */
+    fun profileDownloadsDir(context: Context): File = forProfile(downloadsDir(context))
+
+    /** [dir] as the open profile keeps it: unchanged for the adopted profile. */
+    fun forProfile(dir: File): File =
+        com.tmplayer.data.Accounts.active.folder?.let { com.tmplayer.data.AccountDirs.beside(dir, it) } ?: dir
+
     /** Whether the chosen volume (if any) is reachable right now, for Settings' own warning line. */
     fun chosenIsReachable(): Boolean {
         if (usesTree) {

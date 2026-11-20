@@ -94,6 +94,7 @@ class SubtitleFiles(
     fun item(video: Uri): Media3Item = Media3Item.Builder()
         .setUri(video)
         .setSubtitleConfigurations(loaded.toList())
+        // profile-notifications: the player's sessionMetadata(), private while the profile is hidden
         .setMediaMetadata(metadata)
         .build()
 

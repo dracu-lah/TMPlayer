@@ -115,10 +115,13 @@ object TvChannelsPublisher {
      * Makes the channels hold [programs]: missing channels created, cards inserted, rewritten or
      * removed as [TvChannels.diff] says. [names] gives each channel its title in the UI language.
      */
-    suspend fun publish(context: Context, programs: List<TvChannels.Program>, names: (Channel) -> String) {
+    suspend fun publish(context: Context, programs: List<TvChannels.Program>, stamp: com.tmplayer.data.AccountStamp? = null, names: (Channel) -> String) {
         if (!supported(context)) return
         withContext(Dispatchers.IO) {
             lock.withLock {
+                // The one choke point (HX88): asked under the lock, so a publish that waited behind
+                // a clear for a hidden or no longer open profile never puts its cards back.
+                if (!com.tmplayer.data.OutsideWrites.mayWriteNow(stamp)) return@withLock
                 runCatching { publishLocked(context, programs, names) }.onFailure { Log.w(TAG, "channels not written", it) }
             }
         }
@@ -135,6 +138,7 @@ object TvChannelsPublisher {
             lock.withLock {
                 runCatching {
                     ownChannels(context).values.forEach { channel ->
+                        // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
                         context.contentResolver.delete(TvContract.buildPreviewProgramsUriForChannel(channel.id), null, null)
                     }
                     pruneArt(context, emptySet())
@@ -169,6 +173,7 @@ object TvChannelsPublisher {
         if (existing != null) {
             if (existing.name != name) {
                 runCatching {
+                    // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
                     context.contentResolver.update(
                         TvContract.buildChannelUri(existing.id),
                         ContentValues().apply { put(TvContract.Channels.COLUMN_DISPLAY_NAME, name) },
@@ -189,6 +194,7 @@ object TvChannelsPublisher {
                 Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN).toUri(Intent.URI_INTENT_SCHEME),
             )
         }
+        // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
         val uri = context.contentResolver.insert(TvContract.Channels.CONTENT_URI, values) ?: return null
         val id = ContentUris.parseId(uri)
         Log.i(TAG, "channel ${channel.key}: $uri")
@@ -196,6 +202,7 @@ object TvChannelsPublisher {
         // The default channel goes on the home screen without asking: Android lets an app's first
         // channel through. The others wait in the launcher's channel list for the viewer to add.
         if (channel == Channel.Recent) {
+            // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
             runCatching { TvContract.requestChannelBrowsable(context, id) }.onFailure { Log.w(TAG, "channel not made browsable", it) }
         }
         return id
@@ -268,6 +275,7 @@ object TvChannelsPublisher {
             val existing = ownPrograms(context, channelId)
             val diff = TvChannels.diff(existing.mapValues { it.value.existing }, wanted)
             diff.delete.forEach { id ->
+                // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
                 runCatching { context.contentResolver.delete(TvContract.buildPreviewProgramUri(id), null, null) }
             }
             val deleted = diff.delete.toHashSet()
@@ -275,15 +283,18 @@ object TvChannelsPublisher {
             for (program in diff.insert) {
                 // A card without a real picture is left out, and asked for again on the next run.
                 val values = values(context, channelId, program, keptArt, budget) ?: continue
+                // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
                 runCatching { context.contentResolver.insert(TvContract.PreviewPrograms.CONTENT_URI, values) }
                     .onFailure { Log.w(TAG, "card not added", it) }
             }
             for ((id, program) in diff.update) {
                 val values = values(context, channelId, program, keptArt, budget)
                 if (values == null) {
+                    // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
                     runCatching { context.contentResolver.delete(TvContract.buildPreviewProgramUri(id), null, null) }
                     continue
                 }
+                // profile-notifications: under publish's OutsideWrites.mayWriteNow, or a clear
                 runCatching { context.contentResolver.update(TvContract.buildPreviewProgramUri(id), values, null, null) }
                     .onFailure { Log.w(TAG, "card not updated", it) }
             }

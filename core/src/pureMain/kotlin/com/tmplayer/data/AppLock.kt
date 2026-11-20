@@ -4,6 +4,7 @@ import com.tmplayer.platform.Background
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -178,7 +179,20 @@ object AppLockSession {
     }
 
     fun lock() {
+        val was = state.value
         state.value = false
+        if (was) for (each in listeners.value) runCatching(each)
+    }
+
+    // Pure Kotlin (no JDK here): the list is replaced whole, atomically.
+    private val listeners = MutableStateFlow<List<() -> Unit>>(emptyList())
+
+    /**
+     * Runs [block] each time an unlocked app is locked again (HX88: the open profile's PIN is
+     * asked again with the app's), wherever the lock happens, with or without a screen up.
+     */
+    fun onLock(block: () -> Unit) {
+        listeners.update { it + block }
     }
 }
 

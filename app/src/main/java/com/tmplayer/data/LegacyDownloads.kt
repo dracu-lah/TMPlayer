@@ -73,7 +73,8 @@ class LegacyDownloads(
                 )
                 settings.setDownloadPath(record.chatId, record.messageId, target.absolutePath)
                 runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
-                runCatching { td.deleteFile(fileId) }
+                // Only for the profile whose file it is (HX88).
+                if (runCatching { OwnedSessions.ensure() }.isSuccess) runCatching { td.deleteFile(fileId) }
                 moved++
             } catch (_: IOException) {
                 failed++

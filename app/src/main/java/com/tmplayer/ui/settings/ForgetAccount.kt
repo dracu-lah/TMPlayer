@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
  */
 suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStore: WatchedStore, deleteDownloads: Boolean) {
     runCatching { Td.clearMediaCache() }
+    // The next sign in is a new database: nothing stored with this one's file ids is resumed on it.
+    runCatching { Td.renewDatabaseMarker() }
     if (deleteDownloads) {
         withContext(Dispatchers.IO) { runCatching { LocalDownloads.deleteAll(settings) } }
     }
@@ -47,11 +49,45 @@ suspend fun forgetAccount(context: Context, settings: SettingsStore, watchedStor
 }
 
 /**
+ * Signing out of one profile (HX88), run by `AccountSwitcher.signOutProfile` with that profile
+ * open, so every store below is its own. The last profile goes as [forgetAccount] always did
+ * (the device's crash report consent, logs and online subtitle picks too). With others left only
+ * the account's own data goes: its keys ([SettingsStore.clearAccountData]: the theme, the player,
+ * the app lock and the kids lock stay, as they are the device's), its watched list, Watch later,
+ * bookmarks, TDLib's media cache, and its downloads when [deleteDownloads]. TDLib's database goes
+ * with the profile's folders after the log out.
+ */
+suspend fun forgetProfile(
+    context: Context,
+    settings: SettingsStore,
+    watchedStore: WatchedStore,
+    deleteDownloads: Boolean,
+    last: Boolean,
+) {
+    if (last) {
+        forgetAccount(context, settings, watchedStore, deleteDownloads)
+        return
+    }
+    runCatching { Td.clearMediaCache() }
+    runCatching { Td.renewDatabaseMarker() }
+    if (deleteDownloads) {
+        withContext(Dispatchers.IO) { runCatching { LocalDownloads.deleteAll(settings) } }
+    }
+    runCatching { settings.clearAccountData(keepDownloads = !deleteDownloads) }
+    runCatching { watchedStore.clear() }
+    runCatching { watchedStore.watchLater.clear() }
+    runCatching { BookmarkStore(context).clear() }
+    runCatching { com.tmplayer.data.SavedMessagesBackup.forgetFiles() }
+}
+
+/**
  * A session Telegram ended (HX23): the viewer chose nothing, so their watched list, Watch later,
  * bookmarks and preferences stay for when they sign in again (user, 2026-10-28). Only what was
  * the old session's own goes: TDLib's media cache, and the cold start snapshot of its chats.
  */
 suspend fun forgetSession(settings: SettingsStore) {
     runCatching { Td.clearMediaCache() }
+    // Telegram ended the session: the database it signs in to next is a new one (HX88).
+    runCatching { Td.renewDatabaseMarker() }
     runCatching { settings.clearColdStartSnapshots() }
 }

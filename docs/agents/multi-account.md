@@ -208,3 +208,214 @@ into the next profile.
   screen and the Media Session end, the media is unloaded and the player closes after saving its place.
 - Stream reads carry the profile (`p=`); a page answers only its own, and an untagged one only while
   there is a single profile. The Service Worker never hands a read to another profile's tab.
+
+## Invariants (every platform, B2 included)
+
+1. One profile with no PIN behaves exactly as the version before: no picker, no wait, no extra
+   question, the same folders, keys, notifications and downloads. Every change is tested for it.
+2. Work takes its owner (`Accounts.stamp`) when it starts and keeps it: every store write runs as
+   `AccountOwner(owner)`, every Telegram call takes its client through `Td.sessionFor(owner)`.
+3. Before every write, delete, Telegram call and file removal of a job, the owner is checked
+   again (`OwnedSessions.mayAct`, false while a switch is under way too), also after any lookup
+   that suspends.
+4. Folders come from the owner's own folder name (`AccountDirs.pathsFor(base, owner)`), never
+   from `Td.paths` or whatever folder is current: in a switch the next profile's folder is pointed
+   at before the open profile changes.
+5. Nothing deletes because two snapshots of a profile's data differ: deletes follow events made
+   for that profile (`WatchedMarks`), and a switch, a sign out, a sync import, a restore and a
+   start delete nothing.
+6. A PIN profile's content never shows outside the app while it is hidden: every notification
+   goes through `ProfileNotifications`, the launcher through `OutsideWrites`, both policed by tests.
+7. A sign out discards what belongs to the session it ends (download rows, results in the
+   shade); nothing of an old TDLib database is resumed on a new one: whatever keeps file ids for
+   later keeps the database marker with them and is dropped when it differs (`DatabaseMarker`).
+
+## Phase B1: the shared screens and Android
+
+Work that writes for its owner, not for whoever is open when it writes (each takes
+`Accounts.stamp` when it starts and runs as `AccountOwner`, so a write after a switch is dropped):
+
+- The sync file (`ResumeSync.sync`, every entry: the scheduler's runs, Sync now, the pull before a
+  video, `changeDestination`, `turnOffAndDelete`): its owner is taken before it waits for the
+  lock; a run asked for a profile no longer open does nothing; the sync channel's resolve and
+  writes and the confirm (`resume_sync_account`) run inside it; a `BeforeSwitch` hook cancels and
+  waits for a run (20 s at most, then the switch goes on and the run's late writes are dropped).
+  The scheduler's "last wrote at" is written inside the owned run.
+- SubMaker's translations: each job's track file is written only while its owner is open; the
+  player closing (which a switch does) ends its jobs.
+- Save to folder and the move of downloads (below). A moved file's record is written with
+  `AccountAddress(owner)`, the one write addressed to a profile on purpose, so a record never
+  points at an original that is gone, even when a switch could not wait for that file.
+- Folder grants for downloads are the device's: one is kept while any profile's downloads are in
+  it (`SettingsStore.downloadPathsOfEveryProfileNow`).
+
+Telegram sessions are bound too: a job that writes to Telegram, or outlives a screen, takes
+its client through `Td.sessionFor(owner)`, null while a switch is under way, once another
+profile is open, or when the client that came up meanwhile is the next profile's (each
+`TdSession` knows the profile it was made for). The sync, the sign out's backup, the sync
+channel's page and its "Create it for me", the Devices page's sign outs, downloads and the new
+video alerts take theirs there, and check `OwnedSessions.ensure()` again before each Telegram
+write. `TdSessionPolicyTest` lists every other wait and why it is safe (a read for the screen on
+screen, or the player, which closes before a switch).
+
+App-wide collectors over a profile's flows (audited, HX88): a switch must never read as a
+change of that profile's data. "Remove after watching" (`RemoveAfterWatching`, both apps) is
+driven by marks as they are made (`WatchedMarks`, raised only by `WatchedStore.markWatched` and
+`markAllWatched`, for the profile the mark was written for), never by comparing two watched
+lists: a switch, a sign out, the app starting, a restore from a backup and a sync import delete
+nothing. A sync import marking videos watched on another device does not delete their downloads
+here (the conservative answer, user to confirm): only the viewer finishing or marking a video on
+this device does, the first time it is marked (a replay of a video already watched keeps its
+download), and only while that profile is open. The players' marks are written as the profile
+the player opened under, and a switch waits for them. The others only mirror the open
+profile's state and act on no difference: the kids lock and the chats added (`ChatGate.follow`,
+`AddedChats.follow`), the viewer's corrections (`VideoCorrections.follow`), the widget's tile, the
+TV's channels (cleared on every switch), the notifications (taken down on every switch), and gone
+videos (`GoneVideos`, which forgets on a switch). The rest of App.kt's collectors read device
+settings (language, low storage, mobile data, pictures, motion, haptics, the downloads folder,
+frame rate matching).
+
+File walkers, trimmers and cleaners (audited, HX88), each over the open profile's own folders:
+
+- The watch cache (`WatchCacheRules`, Android's `WatchCache`): every walk and delete is over the
+  folder of the profile the work is for, resolved from that profile's own folder name
+  (`WatchCache.rootOf`, never `Td.paths`); a claim, an eviction, a sweep and Clear cache take that
+  profile when they start and check `OwnedSessions.mayAct` before each delete.
+- TDLib's own trims (`Td.trimStorage`, `clearPicturesAndPreviews`): on the live client, which is
+  the open profile's and sees only its own database and files.
+- The downloads: written to and listed in the open profile's folder (`profileDownloadsDir`); a
+  moved file's delete (`DownloadFinisher`), the old downloads' one-time move (`LegacyDownloads`)
+  and Remove after watching's legacy delete check their owner before deleting.
+- Moving downloads (`DownloadRelocation`): the open profile's own folder only, as its owner.
+- Free up space and the storage figures (`RoomOnDisk`, `StorageSplit`): the open profile's, on
+  its screen.
+- The picture, TMDB and online subtitle caches: the device's, shared by every profile (one budget),
+  nothing of an account in them; the TDLib cache budget is shared too (`Td.cacheCeilingBytes`).
+
+The downloads a switch's wait paused are kept in memory only (`SwitchPause`), for one thing: a
+Cancel of that switch (or an Add account, sign out or Remove all accounts that failed or did not
+happen) resumes them, while the same profile and the same set of rows are open. A switch that goes
+ahead leaves them paused, as a restart does: the profile's queue comes back as paused rows when it
+is open next and the viewer resumes them. Nothing resumes by itself across a switch, a sign out,
+an ended session or a restart (simplified in round 15: the per-profile set kept on the device,
+`PausedForSwitch`, needed more special cases than it was worth; earlier builds' copy is cleared).
+
+The download rows (`OfflineDownloads`) belong to one profile and one database:
+
+- The rows are dropped on every switch and every new database (`Td.renewDatabaseMarker`, called by
+  a sign out and an ended session), which also stops the runner's jobs (`databaseChanges`).
+- Each drop counts (`rowsGeneration`): a job carries the count it was queued in
+  (`OfflineDownloads.Rows`), its late updates are dropped (`ifRows`), and an id queued before the
+  drop never starts (`DownloadStamps.startable`).
+- The rows' owner (`rowsOwner`) is set by `restore` only, after it read that profile's stored
+  queue; a persist writes for that owner, never before it is set, so a download asked early never
+  replaces the stored queue, and a late persist never lands in the next profile. `restore` merges
+  with rows already there and can run twice.
+- The stored queue carries the TDLib database's marker (`DatabaseMarker`, a random id in the
+  profile's database folder, made with the folder by `AccountDirs.make`, renewed on a sign out and
+  an ended session, synchronized and read back from the disk). It is taken from the writing
+  profile's own folder (`Td.databaseMarkerFor`), never from `Td.paths`, which a switch moves early.
+  A queue of another database is dropped; a marker that cannot be read keeps the tag there was and
+  restores nothing.
+- A queue from before markers (no tag) is taken only by a database that was there before markers,
+  noted as such when it got its marker (`DatabaseMarker.fromBeforeMarkers`), once; after a renew or
+  a remade folder it is another database's.
+
+`DownloadQueueModelTest` (core) runs thousands of seeded random sequences of these events on the
+real rows, stamps, markers and scoped store, checks the invariants after every step and prints the
+failing seed with its steps shrunk.
+
+The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
+background scope as the profile open when they were asked (`AccountOwner`), so one that lands
+after a switch is dropped.
+
+Still resolving the open profile when they write, and why that is safe: the players' history
+edits, watched marks and bookmarks carry the player's owner (taken when it opened) or run on its
+`lifecycleScope`, and the player closes before a switch; every other screen's edit runs on the
+screen's own scope, which a switch ends when it rebuilds the shell, right after the flip and before
+the next profile's first frame.
+
+The hooks before a switch run together under one deadline of 30 s (`BeforeSwitch.runAll`); the
+picker says what it is still waiting for ("Finishing first: a sync, moving downloads") with a
+Cancel that stays on the open profile. Work that has not stopped by the deadline is left to end
+on its own: its writes carry their owner and are dropped.
+
+Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
+
+- `WhoIsWatching` draws the row; `ProfileFlow` (one per process, held by the platform) is every
+  press, PIN, panel and switch; `ProfilesGate` goes round the platform's shell: the picker at
+  launch with two profiles or more, the open profile's PIN when it was not given, then the shell
+  keyed on the open profile. With one profile and no PIN the gate draws the shell and nothing else.
+- A platform implements `ProfilePlatform` (playing, downloading, `beforeSwitch`, its `wipe`, `say`,
+  its app lock) and calls, at start: `Accounts.open`, `Td.start`, then `Accounts.storesRegistered()`
+  once `HomeCache.file`, `PageQueries.store` and the stores are made, and `ProfileUnlock.install()`;
+  `ProfileUnlock.onBackground()` when its last window leaves the screen and `onForeground()` when
+  one is back; `BeforeSwitch.add` from its player (save the place, close). Strings: the `profiles`
+  section of en.json.
+
+### The PIN rules
+
+- `ProfileUnlock` holds the one unlocked profile, in memory only: the open one, once its PIN was
+  given. A switch, sign out, remove or add locks it, so opening any profile with a PIN asks every
+  time; the app lock locking the app locks it; more than 60 s in the background locks it (a
+  rotation or a glance at another app does not); a process that died asks again.
+- Sign out of a profile with a PIN that is not the open, unlocked one asks its PIN, then the app
+  lock's when it has one. Remove asks the app lock's PIN and the profile's own (unless its folder
+  is gone). Add account asks the app lock's PIN. Remove all accounts asks the app lock's PIN and
+  then every profile's PIN in turn, before anything is wiped: a wrong PIN, a wait or Cancel wipes
+  nothing. The app lock's "ask when the app opens" comes before the picker.
+- Forgetting a profile's PIN has no way out in the app (only clearing TMPlayer's storage removes
+  every profile): the user's call, see the B1 report.
+
+### What shows a profile outside the app, and its lock rule
+
+Two readings in `ProfileUnlock`. Inside the app, `lockedNow()`: the open profile has a PIN that
+was not given in this process, or the app was away more than 60 s (or the clock went backwards),
+counted when read, before any timer ran. Outside the app, `hidden()` and `hiddenNow()`: a PIN
+profile is hidden whenever it is locked AND whenever no window of the app is on screen, from the
+moment it leaves (a frozen or killed process leaves nothing behind); it shows again once the app
+is open and the profile unlocked. `onBackground` also schedules the `lock()` itself, so listeners
+hear it while the app is away.
+
+Two choke points, one rule each:
+
+- The launcher (Play next, TV channels) writes through `OutsideWrites.mayWriteNow(stamp)`, asked
+  under the publisher's lock: nothing while hidden or for a profile no longer open; removing
+  always may.
+- Every notification and the cast's framework media session go through `ProfileNotifications`
+  (`post`, `foreground`, `cancel`) and `ProfileMedia.setMetadata`, which read `hiddenNow()`: while
+  hidden the shade gets a neutral notification (the app's name, the same channel, icon and tap,
+  nothing of the profile); on every flip of `hidden()` what is still up is posted again (ongoing
+  ones neutral or real, the profile's results taken down). Each post says its kind: `Ongoing`,
+  `Result` or `Device` (the device's, never changed). Each is tagged with the profile it was
+  posted for: a switch takes down every profile notification of the profile left, a sign out
+  all of its own, and a cold start with the open profile hidden takes down every notification an earlier
+  process left but the device's (marked `DEVICE_EXTRA`, or on the updates, low storage or news
+  channel); an unmarked one is taken for a profile's. The first run after the upgrade clears the
+  shade once (a versioned flag), since older versions marked nothing. The neutral copy keeps the tap, auto cancel and the swipe's delete intent.
+- `ProfileNotificationsPolicyTest` scans every source set under app/src but the tests (main,
+  cast, nocast, vlc, novlc, dev, debug, preview, promo, fdroid) for posts, media sessions and
+  their metadata, cast items, widgets and shortcuts; each hit routes through the wrapper or
+  carries a `// profile-notifications: <its rule>` marker on its line or the two above.
+
+| Surface | Rule |
+| --- | --- |
+| Continue watching widget (phone) | the Locked tile while hidden (`ContinueWidget.lockedBy(lock, profileLocked)`), worked out again on every switch |
+| TV home channels (Android TV) | `TvChannelsPublisher.publish` refuses under its lock while hidden or for a stale stamp; cleared by `OutsideSurfaces` whenever `hidden()` is true (its first value included) and on every switch; Home forgets its last plan when hidden, so it is written in full again |
+| TV Play next row | `WatchNextPublisher.apply` refuses each upsert while hidden or for a stale stamp (the player passes the stamp it opened under); cleared with the channels |
+| Download progress and summary | `ProfileNotifications`, `Ongoing`: neutral while hidden, every row drawn again on a flip |
+| Download results, transfer results (`AndroidTransferNotifier`), Save to folder's result | `Result`: neutral while hidden, taken down when the profile hides |
+| Save to folder (`FolderExport`), moving downloads (`DownloadRelocationService`), transfer progress | `Ongoing` |
+| New video, episode and piece alerts | not even checked while hidden (`BackgroundChecks`, checked again before each post); posted as `Result` |
+| Playback stopped notice (`PlaybackService`) | `Result` |
+| Cast to a TV (`DlnaCastService`, both builds): notification and media session | `Ongoing`, and `ProfileMedia`: the app's name only while hidden |
+| Google Cast (regular build, app/src/cast `CastBuild`): the framework's own notification, lock screen and Bluetooth controls, and the TV's screen | with a PIN profile open the item is loaded with the app's name only (`OutsideWrites.castTitles`), from the load on: the framework cannot change a loaded item's titles, so a PIN profile's casts stay neutral even while unlocked (accepted, 2026-11-20; the profile's options say so: "a cast started from it shows only TMPlayer's name"); other profiles' casts name the video |
+| Long jobs of a profile (Save to folder, moving downloads, an external player's stream, a cast to a TV, Google Cast, transfers, downloads) | each takes its owner (`Accounts.stamp`) when it starts and runs as that owner (`AccountOwner`), so every store write is the owner's; before a switch, a sign out (Settings' too) or Remove all accounts the `BeforeSwitch` hooks stop Save to folder and the move of downloads between two files and wait for them (`ProfileJobs.beforeSwitch`, 60 s at most); TDLib calls and removals are skipped once the owner is not open (`ProfileJobs.mayWrite`); a moved file's record is written at once, never cut off by the cancel; a post whose owner is no longer open is dropped (a foreground one goes up neutral and is kept neutral, so no flip brings its titles back); the first switch also stops their services and ends a cast (`ProfileJobs.stopOnSwitch`, at once for a service started after the switch) |
+| The dev build's name dump (app/src/dev `NameDumpService`) | a fixed title, nothing of a profile |
+| External player stream (`ExternalStreams`) | `Ongoing` |
+| Updates, update installed, low storage, the sponsor card | `Device`: unchanged, nothing of a profile in them |
+| Player media session and controls (Media3, `PlayerActivity`) | its own private metadata (the app's name) while hidden or while the app lock asks on open; the player closes on start when `lockedNow()` and before a switch |
+| Recents thumbnail | while the open profile has a PIN: Android 13 and later `setRecentsScreenshotEnabled(false)`; below 13 `FLAG_SECURE`, which also blocks screenshots, screen recording and some casting of that window (MainActivity and PlayerActivity); off when the open profile has no PIN |
+| Trailers, offline downloads | drawn inside `ProfilesGate`, keyed on the open profile: a switch or a lock closes them |
+| "Wrong title?" and the toasts (`TopMessageHost`) | where they always were, over everything, but only while the open profile's shell shows (`profileShellShown`); "Wrong title?" keyed on the open profile |
+| Share targets, shortcuts | none exist today |

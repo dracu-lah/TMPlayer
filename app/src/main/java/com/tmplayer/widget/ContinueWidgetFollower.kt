@@ -110,14 +110,24 @@ object ContinueWidgetFollower {
     internal fun tiles(context: Context): Flow<Tile> {
         val store = settings(context)
         val account = auth().map { ContinueWidget.accountOf(it) }.distinctUntilChanged()
-        return combine(store.continueWatching, store.appLock, account) { records, lock, who ->
+        // The open profile's records (HX88): its store's view moves with a switch, and the tile is
+        // worked out again for the next profile even when its list reads the same.
+        // And locked while the open profile's PIN was not given in this process (HX88): a PIN
+        // locked profile's titles and posters never reach the home screen.
+        return combine(
+            store.continueWatching,
+            store.appLock,
+            account,
+            com.tmplayer.data.Accounts.activeFolder,
+            com.tmplayer.data.ProfileUnlock.hidden(),
+        ) { records, lock, who, _, profileLocked ->
             // A video this session learnt is gone is skipped unless the viewer downloaded it.
             val gone = records.filter { GoneVideos.reasonFor(it.chatId, it.messageId) != null }
                 .mapTo(HashSet()) { "${it.chatId}:${it.messageId}" }
             val downloaded = if (gone.isEmpty()) emptySet() else runCatching { LocalDownloads.presentIds(store) }.getOrDefault(emptySet())
             ContinueWidget.decide(
                 account = who,
-                locked = ContinueWidget.lockedBy(lock),
+                locked = ContinueWidget.lockedBy(lock, profileLocked),
                 records = records,
                 unavailable = { r ->
                     val id = "${r.chatId}:${r.messageId}"
@@ -175,6 +185,7 @@ object ContinueWidgetFollower {
                     options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0) ?: 0,
                     options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0) ?: 0,
                 )
+                // profile-notifications: the tile is Locked while the profile is hidden (ContinueWidget.lockedBy)
                 runCatching { manager.updateAppWidget(id, ContinueWidgetViews.build(context, tile, size, poster)) }
                     .onFailure { Logger.w(TAG, "widget $id not updated", it) }
             }

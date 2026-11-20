@@ -28,6 +28,8 @@ import com.google.android.gms.cast.framework.SessionProvider
 import com.google.android.gms.cast.framework.media.CastMediaOptions
 import com.google.android.gms.cast.framework.media.NotificationOptions
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,12 +59,14 @@ class CastOptionsProvider : OptionsProvider {
             .setSkipStepMs(SKIP_MS)
             .setTargetActivityClassName("com.tmplayer.MainActivity")
             .build()
+        // profile-notifications: the framework's notification shows the loaded item's titles, neutral for a PIN profile (castTitles)
         val media = CastMediaOptions.Builder()
             .setNotificationOptions(notification)
             .setMediaSessionEnabled(true)
             .build()
         return CastOptions.Builder()
             .setReceiverApplicationId(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
+            // profile-notifications: as above
             .setCastMediaOptions(media)
             .setStopReceiverApplicationWhenEndingSession(true)
             .build()
@@ -81,13 +85,21 @@ class CastOptionsProvider : OptionsProvider {
  * its status comes back as [RemoteStatus]. Everything here runs on the main thread, as the
  * framework requires.
  */
-private class GoogleCastSupport(context: Context) : CastSupport {
+private class GoogleCastSupport(private val context: Context) : CastSupport {
 
     private val main = Handler(Looper.getMainLooper())
     private val castContext: CastContext? = runCatching { CastContext.getSharedInstance(context) }
         .onFailure { Log.w(TAG, "No Cast framework here (no Google Play services?)", it) }
         .getOrNull()
     private val router: MediaRouter? = castContext?.let { runCatching { MediaRouter.getInstance(context) }.getOrNull() }
+
+    init {
+        // A switch, sign out or remove ends a cast (HX88): the video on the TV is the last
+        // profile's. On the main thread, as the Cast framework wants.
+        com.tmplayer.platform.Background.scope.launch {
+            com.tmplayer.data.Accounts.activeFolder.drop(1).collect { main.post { runCatching { endSession() } } }
+        }
+    }
     private val selector = MediaRouteSelector.Builder()
         .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
         .build()
@@ -401,9 +413,17 @@ private class GoogleCastSupport(context: Context) : CastSupport {
 
     override fun load(request: CastLoadRequest, onResult: (Boolean) -> Unit) {
         val c = client ?: return onResult(false)
+        // A PIN profile's cast names only the app (HX88): Google's own notification, lock screen
+        // and Bluetooth controls show these, and a loaded item's titles cannot be changed later.
+        val (title, subtitle) = com.tmplayer.data.OutsideWrites.castTitles(
+            request.title,
+            request.subtitle,
+            openHasPin = com.tmplayer.data.Accounts.active.pin != null,
+            appName = runCatching { context.applicationInfo.loadLabel(context.packageManager).toString() }.getOrDefault("TMPlayer"),
+        )
         val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE).apply {
-            putString(MediaMetadata.KEY_TITLE, request.title)
-            if (request.subtitle.isNotBlank()) putString(MediaMetadata.KEY_SUBTITLE, request.subtitle)
+            putString(MediaMetadata.KEY_TITLE, title)
+            if (subtitle.isNotBlank()) putString(MediaMetadata.KEY_SUBTITLE, subtitle)
         }
         val tracks = request.subtitles.map { s ->
             MediaTrack.Builder(s.id, MediaTrack.TYPE_TEXT)
@@ -414,10 +434,12 @@ private class GoogleCastSupport(context: Context) : CastSupport {
                 .apply { s.language?.let { setLanguage(it) } }
                 .build()
         }
+        // profile-notifications: its titles come from castTitles above (neutral for a PIN profile)
         val info = MediaInfo.Builder(request.url)
             .setContentUrl(request.url)
             .setContentType(request.mime)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+            // profile-notifications: castTitles above
             .setMetadata(metadata)
             .apply {
                 if (request.hls) {

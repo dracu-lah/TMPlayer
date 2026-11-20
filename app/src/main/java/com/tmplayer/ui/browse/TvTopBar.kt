@@ -282,6 +282,8 @@ internal fun TvTopBar(
                 add(MenuAction(s.browseTabWatchLater, TmIcons.Clock, onSelect = go { nav.onHistory(HistoryTab.WatchLater) }))
                 // Settings, with the account at its top and Sign out at its foot, as on the phone.
                 add(MenuAction(s.navSettings, TmIcons.Settings, onSelect = go(nav.onSettings)))
+                // Switch profile (HX88), with two profiles or more: the picker over the shell.
+                nav.onSwitchProfile?.let { switch -> add(MenuAction(s.profilesSwitchProfile, TmIcons.Person, onSelect = go(switch))) }
                 // Home and the chat list fetch again from here: Home also refreshes itself when
                 // the app comes back after a while (MainActivity).
                 if (onRefresh != null) add(MenuAction(s.commonRefresh, TmIcons.Refresh, onSelect = { profileOpen = false; onRefresh() }))
