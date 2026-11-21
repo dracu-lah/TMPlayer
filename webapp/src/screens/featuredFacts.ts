@@ -2,6 +2,7 @@
 // ("Film  ·  2026  ·  Drama, Thriller  ·  2h 02m", "Series  ·  2024  ·  Crime  ·  3 seasons"):
 // the kind, the year, up to two genres, and a film's length or a show's seasons. Pure, so it runs
 // under `node --test`; the words come in as functions so it holds no strings of its own.
+import { dot } from '../ui/dot.ts'
 
 export interface FactsInput {
     isShow: boolean
@@ -22,7 +23,7 @@ export interface FactsWords {
     seasons: (count: number) => string
 }
 
-export const FACTS_SEPARATOR = '  ·  '
+export const FACTS_SEPARATOR = dot
 
 export function featuredFactsLine(f: FactsInput, w: FactsWords): string {
     const genres = (f.genres ?? [])

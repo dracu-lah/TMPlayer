@@ -54,9 +54,6 @@ export const renameBookmark = (chatId: number, messageId: number, list: Bookmark
 
 export const deleteBookmark = (chatId: number, messageId: number, list: Bookmark[], id: number) => keep(chatId, messageId, list.filter((b) => b.id !== id))
 
-/** Puts one back where it was (the Undo after a delete). */
-export const restoreBookmark = (chatId: number, messageId: number, list: Bookmark[], b: Bookmark) => keep(chatId, messageId, [...list, b])
-
 // ---- the switches this device keeps ---------------------------------------------------------
 
 /** Autoplay the next episode: on unless turned off (Settings: "Play the next episode automatically"). */

@@ -18,6 +18,7 @@ import { cardMenu } from '../ui/CardMenu'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
+import { dot } from '../ui/dot'
 
 export function size(bytes: number): string {
     if (bytes >= 1e9) return t('format.size_gb', { size: formatNumber(bytes / 1e9, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
@@ -159,7 +160,6 @@ export interface CardData {
     show?: boolean
 }
 
-const dot = '  ·  '
 
 /** A video on its own: its chat (where cards come from several), size and length. */
 export function videoCard(v: VideoItem, showChat = true): CardData {

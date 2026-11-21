@@ -10,6 +10,7 @@ import { pickOf, setPick, settings } from '../store'
 import { sameTitle, type PickedAsk } from '../pick'
 import { answer, askOf, ChoicesError, loadChoices, loadFile, type Choice } from '../screens/posters'
 import type { VideoItem } from '../tg/types'
+import { dot } from './dot'
 
 interface Target {
     item: VideoItem
@@ -201,7 +202,7 @@ export function PosterPicker() {
                                                         <small>
                                                             {[isCurrent(c) ? t('poster.current') : '', c.year ? String(c.year) : '', c.kind === 'show' ? t('poster.show') : t('poster.film'), languageName(c.language)]
                                                                 .filter(Boolean)
-                                                                .join('  ·  ')}
+                                                                .join(dot)}
                                                         </small>
                                                         <Show when={c.overview}>
                                                             <small class="choice-story">{c.overview}</small>

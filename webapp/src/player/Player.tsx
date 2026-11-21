@@ -1,11 +1,11 @@
-import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js'
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
-import { Alert02Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { openFile, openJoined, streams, warmFile, workerAsked, type MediaFile } from '../stream/reader'
 import { mountZip, PiecesProblem, ZipProblem } from '../stream/joined'
 import { bridgeAsked, tvServiceUrl } from '../stream/tvservice'
-import { noteTvNative, TV_BROWSER } from './tvnative'
+import { noteTvNative } from './tvnative'
 import { codecName, keyFrames, nativeEngine, pictureForLibav, playableSound, probe, RemuxEngine, route, soundForLibav, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { MoviEngine, moviSupported } from './movi'
@@ -15,71 +15,26 @@ import { Chrome, variant } from './Chrome'
 import { OpeningLoader } from './loader'
 import { copyDetails, formatLine, type FormatFacts } from './formatline'
 import { readChapters, type Chapter } from './chapters'
-import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
+import { setLook, setSubDelay } from './cues'
 import { readLook } from './keep'
-import { loadThumb } from '../screens/thumbs'
-import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError, subtitleFromDrop } from './subtitles'
-import { choseOther, warmRestore } from './subpick-use'
+import { SUBTITLE_EXTENSIONS, subtitleFromDrop } from './subtitles'
+import { warmRestore } from './subpick-use'
 import { api, clearFlood, floodLeft, link } from '../tg/rpc'
 import { online } from '../net'
 import { StallWatch, stallWhy } from './openStall'
 import { t, waitPhrase } from '../i18n'
-import { routeCrashes } from '../crash'
-import { buildBundle, log, rememberNames, sizeText, suppliedParts, supply, type Bundle, type BundleFacts } from '../logs'
-import { deviceLines } from './stutter'
 import { watchStutter, type StutterWatch } from './stutter-watch'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
 import { activeId, beforeSwitch } from '../accounts'
-import type { PieceSet, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
-
-/** What plays: the posted file, or one of Telegram's lighter copies of it. */
-interface Source {
-    key: string
-    size: number
-    duration: number
-    /** A copy's picture height; 0 for the posted file. */
-    height: number
-    /** The posted file is a video cut into pieces: they play as one (stream/joined.ts). */
-    joined?: PieceSet
-    /** The posted file is a ZIP: the video stored inside it plays out of the archive. */
-    zip?: boolean
-}
-
-/** Seconds before the end at which the next episode is fetched ahead and its card comes up. */
-const NEXT_AHEAD = 30
-/** An LG or Samsung TV, whose own player may be given the file (tvnative.ts). */
-const onTv = TV_BROWSER.test(navigator.userAgent)
-/** How long the picture has to move on after a failure nobody caught, before the player says it broke. */
-const CRASH_GRACE_MS = 8_000
-
-/** Local testing only: start and seek times, in the console and in `window.playerTimes`. */
-const timing =
-    location.hostname === 'localhost'
-        ? (label: string, since: number) => {
-              const ms = Math.round(performance.now() - since)
-              console.debug('[player]', label, ms, 'ms')
-              ;((window as unknown as { playerTimes?: { label: string; ms: number }[] }).playerTimes ??= []).push({ label, ms })
-          }
-        : () => {}
-
-/** Only one tab plays at a time: a tab that starts playing tells the others, which pause. */
-const tabs = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('tmplayer-player') : null
-
-/** Telegram's copies this browser can play: H.264 always, AV1 where it decodes it. */
-function playableCopies(copies: VideoCopy[]): VideoCopy[] {
-    const av1 = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="av01.0.08M.08"')
-    return copies.filter((c) => c.codec !== 'av01' || av1)
-}
-
-/** A transparent pixel: a poster of nothing. */
-const BLANK_POSTER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-
-function speedText(bytesPerSecond: number): string {
-    const mb = bytesPerSecond / 1e6
-    return mb >= 1 ? t('format.speed_mb', { speed: mb.toFixed(1) }) : t('format.speed_kb', { speed: Math.round(bytesPerSecond / 1e3) })
-}
+import type { VideoItem, WatchInfo } from '../tg/types'
+import { BLANK_POSTER, codecSupport, isMediaFailure, NEXT_AHEAD, onTv, playableCopies, speedText, tabs, timing, whyText, type Source } from './playerParts'
+import { StatusSheet } from './StatusSheet'
+import { useCrashWatch } from './useCrashWatch'
+import { useMediaSession } from './useMediaSession'
+import { usePlayerLogs } from './usePlayerLogs'
+import { useSubtitleTracks } from './useSubtitleTracks'
 
 /**
  * The player: our own `<video>`, which the engines in engines.ts feed, inside Video.js 10's player
@@ -147,7 +102,6 @@ export function Player(props: {
     const [frames, setFrames] = createSignal<Frames | null>(null)
     /** The video's own frames for the seek bar's card, for a natively played file (see [FrameGrabber]). */
     const [grabber, setGrabber] = createSignal<FrameGrabber | null>(null)
-    const subtitleUrls: string[] = []
     const [chapters, setChapters] = createSignal<Chapter[]>([])
     /** How much of the file has arrived (0 to 1); null once all of it has. */
     const [loaded, setLoaded] = createSignal<number | null>(null)
@@ -175,7 +129,7 @@ export function Player(props: {
 
     const fail = (e: unknown) => {
         console.error('[player]', e)
-        setMediaFailed(e instanceof Unplayable || e instanceof DOMException || /could not take this part|MediaSource|SourceBuffer|decod|codec|hevc/i.test(String((e as Error)?.message ?? e)))
+        setMediaFailed(isMediaFailure(e))
         if (e instanceof Unplayable) setNeedsApp(e.why)
         // Offline: wait for the connection and carry on at the same second (onOnline).
         else if (!navigator.onLine) {
@@ -211,9 +165,14 @@ export function Player(props: {
         return e
     }
 
-    const unload = () => {
+    /** The seek bar's own frames end with the source they read. */
+    const dropGrabber = () => {
         grabber()?.destroy()
         setGrabber(null)
+    }
+    const playVideo = () => void video.play().catch(() => {})
+    const unload = () => {
+        dropGrabber()
         engine?.destroy()
         engine = null
         probed?.input.dispose()
@@ -270,49 +229,8 @@ export function Player(props: {
         stall()
         stutterWatch?.refresh()
     })
-    // What the log may take out as written, and what it says of this video: the engine and the format in plain words, never a name.
-    rememberNames([item.title, item.name, item.chat, item.fileName])
-    createEffect(() => rememberNames([props.info?.title, props.info?.episode?.show, props.info?.episode?.name]))
-    createEffect(() => {
-        const line = formatLine(facts())
-        if (line) log('I', 'player', `format ${line}`)
-    })
-    createEffect(() => {
-        const s = stall()
-        if (s) log('W', 'player', `stalled, ${s}`)
-    })
-    createEffect(() => {
-        if (error() || needsApp()) log('E', 'player', `blocked: ${needsApp() ? `needs the app, ${needsApp()!.kind}` : 'could not play'}`)
-    })
-    /**
-     * The logs this device holds, scrubbed, for Copy details: the facts, the marks and the page's own log. Built in one go
-     * with no wait, so a press can copy it inside the click (iPhone Safari refuses a copy that follows an await). Nothing leaves until the viewer presses it.
-     */
-    let factsHere: BundleFacts | null = null
-    let factsAsked = false
-    const logBundle = (): Bundle => {
-        // The browser's line comes from the feedback form's code, loaded once when the sheet first asks; until then a plain one.
-        if (!factsAsked) {
-            factsAsked = true
-            void Promise.all([import('../ui/feedback'), import('../install')]).then(
-                ([{ webFacts }, { installed }]) => void (factsHere = webFacts(navigator.userAgent, document.documentElement.lang || navigator.language || 'en', installed())),
-                () => {},
-            )
-        }
-        const line = formatLine(facts())
-        supply('device', () => [...deviceLines({ video }), ...(line ? [`Format: ${line}`] : []), ...(item.dc ? [`Datacenter: DC ${item.dc}`] : [])])
-        return buildBundle(factsHere ?? { version: 'web', platform: 'Web', device: 'a browser', language: document.documentElement.lang || 'en' }, suppliedParts())
-    }
-    const logsSize = () => sizeText(logBundle().bytes)
-    const logsText = () => logBundle().text
-    /** The text goes to the clipboard in the click itself; false when the browser refuses (the sheet then shows it selected). */
-    const copyLogs = (): Promise<boolean> => {
-        try {
-            return navigator.clipboard.writeText(logsText()).then(() => true, () => false)
-        } catch {
-            return Promise.resolve(false)
-        }
-    }
+    // What the log may take out as written, and what it says of this video; the scrubbed logs for Copy details.
+    const { logsSize, logsText, copyLogs } = usePlayerLogs(() => video, item, () => props.info, { facts, stall, error, needsApp })
 
     /** Opens `src` at `at` seconds; `play` starts it once it can. */
     const load = async (src: Source, at: number, play: boolean) => {
@@ -390,7 +308,7 @@ export function Player(props: {
             // Which HEVC name the TV took (hevcnames.ts), so a tester's screenshot says which step played it.
             const hevc = way === 'remux' && p.hevcAs ? (p.hevcTrusted ? `, ${p.videoCodec} sent to the TV decoder unasked (${p.tryNames.length} names to try)` : p.hevcAs.startsWith('av01.') ? `, AV1 as ${p.hevcAs}` : `, HEVC as ${p.hevcAs}`) : ''
             setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}${hevc}`)
-            if (play) video.play().catch(() => {})
+            if (play) playVideo()
             void findChapters(f, gen)
             // The storyboard as soon as the video is open, so it is in by the time the bar is touched.
             void addStoryboard()
@@ -496,15 +414,14 @@ export function Player(props: {
             throw err
         })
         if (gen !== generation) return e.destroy()
-        grabber()?.destroy()
-        setGrabber(null)
+        dropGrabber()
         engine = e
         setAudios(e.sounds)
         setAudio(e.sounds[0] ?? null)
         video.playbackRate = rate
         setSwitchable(e.sounds.length > 1)
         setDetails(e.detail)
-        if (play) video.play().catch(() => {})
+        if (play) playVideo()
         void findChapters(f, gen)
         void addStoryboard()
     }
@@ -515,7 +432,7 @@ export function Player(props: {
      */
     const remuxFailed = async (err: unknown) => {
         const f = file
-        const media = err instanceof Unplayable || err instanceof DOMException || /could not take this part|MediaSource|SourceBuffer|decod|codec|hevc/i.test(String((err as Error)?.message ?? err))
+        const media = isMediaFailure(err)
         if (!f || engine?.name !== 'remux' || !media) return fail(err)
         const gen = generation
         const at = video.currentTime || openingAt
@@ -544,8 +461,7 @@ export function Player(props: {
             noteTvNative(reached)
             if (!reached) console.warn('[player] the TV player did not go through the stream worker')
         }
-        grabber()?.destroy()
-        setGrabber(null)
+        dropGrabber()
         engine.destroy()
         engine = null
         try {
@@ -558,7 +474,7 @@ export function Player(props: {
             engine = await remux(p, at)
             setSwitchable(true)
             setDetails(`${p.container}. ${engine.detail} (the browser refused it as it is)`)
-            video.play().catch(() => {})
+            playVideo()
         } catch (e) {
             fail(e)
         }
@@ -586,7 +502,7 @@ export function Player(props: {
         video.playbackRate = rate
         setSwitchable(true)
         setDetails(`${container}. ${e.detail}`)
-        if (play) video.play().catch(() => {})
+        if (play) playVideo()
     }
 
     /** The file's chapter marks, read from its head or tail, which the opening has fetched already. */
@@ -605,19 +521,7 @@ export function Player(props: {
     /** Copy details: the line, what this browser says of the codecs, the datacenter and the browser; no title, chat or file name. */
     const copyFailure = async () => {
         const f = facts()
-        const source = globalThis.MediaSource ?? (globalThis as { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource
-        const ask = (kind: string, codec: string | null) => {
-            if (!codec) return null
-            const type = `${kind}/mp4; codecs="${codec}"`
-            let yes = false
-            try {
-                yes = !!source?.isTypeSupported(type)
-            } catch {
-                // a browser that throws on a string it does not know says no
-            }
-            return `${type} ${yes ? 'yes' : 'no'}`
-        }
-        const support = [ask('video', f?.videoParams ?? null), ask('audio', f?.audioParams ?? null)].filter((s): s is string => !!s)
+        const support = codecSupport(f)
         try {
             await navigator.clipboard.writeText(copyDetails(failedLine(), support, item.dc, navigator.userAgent))
             setDetailsCopied(true)
@@ -625,17 +529,6 @@ export function Player(props: {
             setDetailsCopied(false)
         }
     }
-
-    const whyText = (why: Why) =>
-        why.kind === 'format'
-            ? t('web.needs_app_format', { format: why.format === 'unknown' ? '?' : why.format })
-            : why.kind === 'picture'
-              ? t('web.needs_app_picture', { codec: why.codec })
-              : why.kind === 'no-mse'
-                ? t('web.needs_app_no_mse')
-                : why.kind === 'too-heavy'
-                  ? t('web.needs_app_too_heavy')
-                  : t('web.needs_app_codec')
 
     // Telegram's storyboard for the seek bar's preview card, fetched once the picture is up.
     let storyboardAsked = false
@@ -651,66 +544,7 @@ export function Player(props: {
         }
     }
 
-    /** A subtitle file laid over the video and shown at once; throws when it cannot be read (MSone's sheet says so itself). */
-    const addSubtitle = async (picked: File, as?: { label: string; language: string }, replacing?: TextTrack | null) => {
-        const sub = await readSubtitle(picked)
-        if (closed) return URL.revokeObjectURL(sub.url)
-        subtitleUrls.push(sub.url)
-        // A translation that grew (SubMaker): the track laid before is swapped for this one, and keeps the choice made of it.
-        const old = replacing ? Array.from(video.querySelectorAll('track')).find((el) => el.track === replacing) : undefined
-        const wasShowing = !old || replacing!.mode === 'showing'
-        const track = document.createElement('track')
-        track.kind = 'subtitles'
-        track.label = as?.label ?? sub.label
-        const language = as?.language ?? sub.language
-        if (language) track.srclang = language
-        track.src = sub.url
-        track.addEventListener('load', () => (placeCues(video, controlsUp), applyDelay(video)))
-        video.append(track)
-        if (old) {
-            const gone = old.src
-            old.remove()
-            URL.revokeObjectURL(gone)
-            const at = subtitleUrls.indexOf(gone)
-            if (at >= 0) subtitleUrls.splice(at, 1)
-        }
-        if (wasShowing) {
-            // Shown at once: the one just loaded is the one wanted.
-            for (const tt of Array.from(video.textTracks)) if (tt.kind === 'subtitles' || tt.kind === 'captions') tt.mode = tt === track.track ? 'showing' : 'disabled'
-        } else if (track.track) track.track.mode = 'disabled'
-        setNotice('')
-    }
-    const loadSubtitle = async (picked: File) => {
-        try {
-            await addSubtitle(picked)
-            // A file of their own is an explicit choice: the remembered online subtitle no longer stands (HX25).
-            choseOther(item)
-        } catch (e) {
-            setNotice(e instanceof SubtitleError && e.why === 'vobsub' ? t('web.needs_app_picture_subtitles') : t('player.subtitle_load_failed', { file: picked.name }))
-        }
-    }
-
-    // Subtitles move up while the controls are showing, so the seek bar never covers them; the look's position holds otherwise.
-    let controlsUp = true
-    const onControls = (up: boolean) => {
-        controlsUp = up
-        placeCues(video, up)
-    }
-    // The look: size, colour, edge and box as custom properties on the video, which its cues read.
-    let pictureHeight = 0
-    const paintLook = () => {
-        for (const [name, value] of Object.entries(lookVars(look(), pictureHeight || container.clientHeight || 720))) video.style.setProperty(name, value)
-        placeCues(video, controlsUp)
-    }
-    createEffect(() => (look(), ready() && paintLook()))
-    onMount(() => {
-        const watch = new ResizeObserver(() => {
-            const h = container.clientHeight
-            if (Math.abs(h - pictureHeight) > 8) (pictureHeight = h, paintLook())
-        })
-        watch.observe(container)
-        onCleanup(() => watch.disconnect())
-    })
+    const { addSubtitle, loadSubtitle, onControls } = useSubtitleTracks(() => video, () => container, ready, item, () => closed, setNotice)
 
     const pickAudio = async (index: number) => {
         const track = audios()[index]
@@ -862,17 +696,7 @@ export function Player(props: {
     onMount(() => setReady(true))
 
     // The lock screen and media keys: its name, the jumps, previous and next.
-    createEffect(() => {
-        if (!('mediaSession' in navigator)) return
-        const info = props.info
-        const ep = info?.episode
-        navigator.mediaSession.metadata = new MediaMetadata({ title: ep ? `${ep.code}${ep.name ? ` ${ep.name}` : ''}` : (info?.title ?? item.title), artist: ep?.show ?? item.chat })
-        navigator.mediaSession.setActionHandler('seekbackward', () => (video.currentTime = Math.max(0, video.currentTime - 10)))
-        navigator.mediaSession.setActionHandler('seekforward', () => (video.currentTime += 10))
-        navigator.mediaSession.setActionHandler('seekto', (d) => d.seekTime != null && (video.currentTime = d.seekTime))
-        navigator.mediaSession.setActionHandler('previoustrack', info?.previous ? () => play(info.previous) : null)
-        navigator.mediaSession.setActionHandler('nexttrack', info?.next ? () => play(info.next) : null)
-    })
+    useMediaSession(() => video, item, () => props.info, play)
 
     // Near the end: the next episode starts arriving (its card is the controls').
     let nextWarmed = false
@@ -886,34 +710,10 @@ export function Player(props: {
         }
     }
 
-    // A failure nobody caught while the video is open comes here, not to the page's card (HX19). On the
-    // Mi TV one came while a 3D video opened and the video then played on fine, so the player waits:
-    // if the picture moves on within a few seconds it was not the video's, and only the log keeps it;
-    // if not, the status sheet says so, with Reload (this video again, where it was) and Go back.
-    let crashCheck: ReturnType<typeof setTimeout> | undefined
-    const unroute = routeCrashes(() => {
-        if (crashCheck !== undefined || closed) return
-        // Moved on: the picture's clock ticked forward (a looping or seeking video can come back below
-        // where it was, so the ticks are counted rather than the times compared).
-        let last = video.currentTime
-        let moved = 0
-        const tick = () => {
-            if (video.currentTime !== last && !video.paused) moved++
-            last = video.currentTime
-        }
-        video.addEventListener('timeupdate', tick)
-        crashCheck = setTimeout(() => {
-            crashCheck = undefined
-            video.removeEventListener('timeupdate', tick)
-            // Paused by the viewer after it played: still is not stuck.
-            if (closed || error() || moved >= 2 || (video.paused && opening() === null)) return
-            setError(t('player.error_other'))
-        }, CRASH_GRACE_MS)
-    })
+    // A failure nobody caught while the video is open comes here, not to the page's card (HX19): useCrashWatch.
+    useCrashWatch(() => video, { closed: () => closed, error, opened: () => opening() === null }, () => setError(t('player.error_other')))
 
     onCleanup(() => {
-        unroute()
-        clearTimeout(crashCheck)
         closed = true
         savePosition(video.currentTime)
         clearInterval(saveTimer)
@@ -927,20 +727,15 @@ export function Player(props: {
         tabs?.removeEventListener('message', onOtherTab)
         generation++
         unload()
-        for (const u of subtitleUrls) URL.revokeObjectURL(u)
         const f = frames()
         if (f) URL.revokeObjectURL(f.url)
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-        if ('mediaSession' in navigator) {
-            navigator.mediaSession.metadata = null
-            for (const a of ['previoustrack', 'nexttrack', 'seekbackward', 'seekforward', 'seekto'] as const) navigator.mediaSession.setActionHandler(a, null)
-        }
+        if (document.fullscreenElement === container) document.exitFullscreen().catch(() => {})
     })
 
     const close = () => {
         // Saved before leaving: Back may leave the site, and then no cleanup runs.
         savePosition(video.currentTime)
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+        if (document.fullscreenElement === container) document.exitFullscreen().catch(() => {})
         props.onClose()
     }
 
@@ -1150,43 +945,5 @@ export function Player(props: {
                 />
             </media-container>
         </video-player>
-    )
-}
-
-/**
- * The player's loading and failure sheet (the app's status_sheet): the video's picture, its name,
- * what happened in a heading and a line, and the ways on as pills in a row that wraps. Stacked on
- * a phone held upright, the picture beside the words where the height is short.
- */
-function StatusSheet(props: { item: VideoItem; title: string; heading: string; body: string; note?: string; warning: boolean; format?: string; children: JSX.Element }) {
-    const [art, setArt] = createSignal<string | null>(null)
-    onMount(() => {
-        if (props.item.thumb && !props.warning) loadThumb(props.item.thumb).then(setArt, () => {})
-    })
-    return (
-        <div class="pc-status" role="alert">
-            <div class="pc-status-inner" classList={{ pictured: !!art() }}>
-                <Show when={art()}>
-                    <img class="pc-status-art" src={art()!} alt="" />
-                </Show>
-                <div class="pc-status-text">
-                    <p class="pc-status-name">{props.title}</p>
-                    <Show when={props.warning}>
-                        <span class="pc-status-warning">
-                            <Icon icon={Alert02Icon} size={40} />
-                        </span>
-                    </Show>
-                    <h2>{props.heading}</h2>
-                    <p class="pc-status-body">{props.body}</p>
-                    <Show when={props.format}>
-                        <p class="pc-status-format">{props.format}</p>
-                    </Show>
-                    <Show when={props.note}>
-                        <p class="pc-status-body">{props.note}</p>
-                    </Show>
-                    <div class="pc-status-actions">{props.children}</div>
-                </div>
-            </div>
-        </div>
     )
 }

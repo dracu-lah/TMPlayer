@@ -1,9 +1,10 @@
-import { createEffect, createResource, lazy, Match, Switch } from 'solid-js'
+import { createEffect, createResource, lazy, Match, Show, Switch } from 'solid-js'
 import { useLocation, useNavigate, useParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { askKeepOnce } from '../install'
 import { t } from '../i18n'
+import { locked } from '../accounts'
 import { progress as readProgress, settings } from '../store'
 import { chatGone, forgetGone } from '../goneVideos'
 import { watchPath } from './VideoList'
@@ -31,7 +32,8 @@ export function Watch() {
     const location = useLocation<{ video?: VideoItem }>()
     const navigate = useNavigate()
     const ids = () => ({ chatId: Number(params.chatId), messageId: Number(params.messageId) })
-    const [video] = createResource(ids, async ({ chatId, messageId }) => {
+    // While locked nothing of the profile starts: no lookup, no warm-up download, no play note.
+    const [video] = createResource(() => (locked() ? null : ids()), async ({ chatId, messageId }) => {
         const passed = location.state?.video
         let found: VideoItem | null
         try {
@@ -73,7 +75,7 @@ export function Watch() {
     })
     // The episodes and the next one wait for the chat's videos; the player does not wait for them.
     const [info] = createResource(
-        () => (progress.state === 'ready' && chatOrder.state === 'ready' && (!lastPlayed() || touchVer.state === 'ready') ? { ...ids(), view: view() } : null),
+        () => (!locked() && progress.state === 'ready' && chatOrder.state === 'ready' && (!lastPlayed() || touchVer.state === 'ready') ? { ...ids(), view: view() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[watch]', e), null)),
     )
     // A play noted in the quality the viewer usually plays (QualityHabit), once per video opened: a
@@ -89,25 +91,28 @@ export function Watch() {
     const close = () => back(navigate)
     const play = (next: VideoItem) => navigate(watchPath(next), { state: { video: next }, replace: true })
 
+    // Locked: nothing mounts (a browser Forward to /watch must not load the player or set the Media Session before the redirect).
     return (
-        <div class="watch">
-            <Switch fallback={<div class="player"><div class="spinner" aria-label={t('web.loading_player')} /></div>}>
-                <Match when={video.error}>
-                    <div class="boot">
-                        <p class="error" role="alert">{errorText(video.error)}</p>
-                        <button class="primary" onClick={close}>{t('common.back')}</button>
-                    </div>
-                </Match>
-                <Match when={video.state === 'ready' && video() === null}>
-                    <div class="boot">
-                        <p>{t('web.gone_from_chat')}</p>
-                        <button class="primary" onClick={close}>{t('common.back')}</button>
-                    </div>
-                </Match>
-                <Match when={video()} keyed>
-                    {(item) => <Player item={item} info={info() ?? null} onClose={close} onPlay={play} />}
-                </Match>
-            </Switch>
-        </div>
+        <Show when={!locked()}>
+            <div class="watch">
+                <Switch fallback={<div class="player"><div class="spinner" aria-label={t('web.loading_player')} /></div>}>
+                    <Match when={video.error}>
+                        <div class="boot">
+                            <p class="error" role="alert">{errorText(video.error)}</p>
+                            <button class="primary" onClick={close}>{t('common.back')}</button>
+                        </div>
+                    </Match>
+                    <Match when={video.state === 'ready' && video() === null}>
+                        <div class="boot">
+                            <p>{t('web.gone_from_chat')}</p>
+                            <button class="primary" onClick={close}>{t('common.back')}</button>
+                        </div>
+                    </Match>
+                    <Match when={video()} keyed>
+                        {(item) => <Player item={item} info={info() ?? null} onClose={close} onPlay={play} />}
+                    </Match>
+                </Switch>
+            </div>
+        </Show>
     )
 }

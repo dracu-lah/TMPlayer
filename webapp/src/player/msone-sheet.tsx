@@ -11,6 +11,7 @@ import { stateLine } from '../msoneFlag'
 import { PhoneSheet, variant } from './sheets'
 import { ServiceBadge } from '../ui/ServiceBadge'
 import { download, health, keptHits, knownHealth, search, type Ask, type Failure, type Health, type Hit } from './msone'
+import { dot } from '../ui/dot'
 
 /** What the search asks about the video: its cleaned title and year, and the episode it is. */
 export interface MsoneTarget extends Ask {
@@ -56,7 +57,7 @@ export function trackLabel(): string {
 /** "2020  ·  Season pack  ·  S1 E3": what a hit says of itself under its title. */
 function facts(hit: Hit): string {
     const ep = hit.season !== null && hit.episode !== null ? `S${hit.season} E${hit.episode}` : hit.season !== null ? `S${hit.season}` : hit.episode !== null ? `E${hit.episode}` : ''
-    return [hit.year !== null ? String(hit.year) : '', ep].filter((p) => p).join('  ·  ')
+    return [hit.year !== null ? String(hit.year) : '', ep].filter((p) => p).join(dot)
 }
 
 export function MsoneSheet(props: {

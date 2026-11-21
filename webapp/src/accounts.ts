@@ -90,9 +90,6 @@ export const names = B.namesOf(activeId, testMode)
 export const namesFor = (id: string) => B.namesOf(id, testMode)
 /** Work this page does in its profile with no screen: a sign out of it, or a step of Remove all. */
 export const pendingWork: B.Pending | null = plan.pending
-/** Whether the tab had chosen (and could open) the profile it runs when this page started. */
-export const chosenAtStart = !plan.pending && plan.picker === null && !!B.find(first, tabChoice)
-
 const [book, setBookSignal] = createSignal(first)
 export { book }
 export const profiles = () => book().profiles
@@ -219,7 +216,8 @@ export function stopMediaForLock() {
         if (document.pictureInPictureElement) void document.exitPictureInPicture().catch(() => {})
     } catch {}
     try {
-        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+        // Only the player's own full screen ends (its media-container.player, the element useFullscreen asks for): the TV build keeps its page in full screen (the document element).
+        if (document.fullscreenElement?.matches('media-container.player')) void document.exitFullscreen().catch(() => {})
     } catch {}
     try {
         const session = navigator.mediaSession
@@ -277,13 +275,8 @@ if (typeof HTMLDialogElement !== 'undefined') {
  * every child of the body but the app root, and inside the root everything but the picker or its cover.
  */
 const shielded = new Set<Element>()
-export function shieldPage(on: boolean) {
-    if (typeof document === 'undefined') return
-    if (!on) {
-        for (const el of shielded) (el.removeAttribute('inert'), el.removeAttribute('aria-hidden'))
-        shielded.clear()
-        return
-    }
+let shieldWatch: MutationObserver | null = null
+function shieldNow() {
     const app = document.getElementById('app')
     const keep = (el: Element) => el.matches('.profiles, .lock-cover, [data-while-locked], dialog.confirm-ask') || !!el.querySelector('dialog.profiles, dialog.lock-cover')
     const children = [...document.body.children].filter((el) => el !== app).concat(app ? [...app.children] : [])
@@ -292,6 +285,24 @@ export function shieldPage(on: boolean) {
         el.setAttribute('inert', '')
         el.setAttribute('aria-hidden', 'true')
         shielded.add(el)
+    }
+}
+export function shieldPage(on: boolean) {
+    if (typeof document === 'undefined') return
+    shieldWatch?.disconnect()
+    shieldWatch = null
+    if (!on) {
+        for (const el of shielded) (el.removeAttribute('inert'), el.removeAttribute('aria-hidden'))
+        shielded.clear()
+        return
+    }
+    shieldNow()
+    // A Nav or TvBar mounted after the lock (leaving /watch) and a later toast get the shield too.
+    if (typeof MutationObserver !== 'undefined') {
+        shieldWatch = new MutationObserver(shieldNow)
+        shieldWatch.observe(document.body, { childList: true })
+        const app = document.getElementById('app')
+        if (app) shieldWatch.observe(app, { childList: true })
     }
 }
 

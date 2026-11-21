@@ -2,7 +2,7 @@
 // by the app's own rules (WebRules' screen and shelf) once per change, the answer kept until the
 // chat, the order, the size limits or the words change. The page asks again on every scroll and
 // gets the kept answer.
-import type { Message, Peer, TelegramClient } from '@mtcute/web'
+import type { Message, TelegramClient } from '@mtcute/web'
 import { rules, type Rules, type Shelf, type ShelfTile, type Video } from '../rules'
 import { chatProtects, itemOf, photosAmong, rawOf, thumbnails, videoId } from './media'
 import { forgetChatTitles, noteChatTitle } from './hints'
@@ -11,15 +11,16 @@ import { tally } from '../ui/searchTally'
 import { cleanContext, correctionLines, NO_COPY_CONTEXT, type CopyContext } from './copyFit'
 import { copyRows, groupRefs, playCopy } from './copyPick'
 import { touchesFor } from './touchCache'
-import { forgetTopics, type ForumChat } from './topics'
 import { createVideoCounter } from './counts'
-import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, RecentPage, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
+import { forgetDialogs } from './dialogs'
+import { forgetRecent } from './recent'
+import type { CopyRef, ChatPage, ChatView, Found, ListView, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
-const PAGE = 100
+export const PAGE = 100
 /** Messages asked per filter of Telegram's search inside a chat. */
 const SEARCH_PAGE = 50
-const VIDEO_FILTER = { _: 'inputMessagesFilterVideo' } as const
-const DOC_FILTER = { _: 'inputMessagesFilterDocument' } as const
+export const VIDEO_FILTER = { _: 'inputMessagesFilterVideo' } as const
+export const DOC_FILTER = { _: 'inputMessagesFilterDocument' } as const
 const PHOTO_FILTER = { _: 'inputMessagesFilterPhotos' } as const
 /** An album read back for a search hit (AlbumPosts in core): six albums a page, three at once, one history window each. */
 const ALBUM_READS = 6
@@ -35,7 +36,7 @@ const KEEP_CHATS = 6
  * worker holds no settings of its own, so every cross-chat list reads this out of its own call's
  * view rather than asking the page again.
  */
-const addedSetOf = (view: Pick<ListView, 'added'>): Set<number> | null => (view.added ? new Set(view.added) : null)
+export const addedSetOf = (view: Pick<ListView, 'added'>): Set<number> | null => (view.added ? new Set(view.added) : null)
 
 // What the page says of the viewer's copies (HX38, copyFit.ts): the device, the picture kinds the
 // browser cannot play natively, the files kept apart, the copies chosen, the usual quality. A change
@@ -115,16 +116,7 @@ const KEEP_TOPIC_CHATS = 3
 export function forgetAll() {
     chats.clear()
     topicChats.clear()
-    topicHead = null
-    forgetTopics()
-    dialogs = null
-    dialogsLoading = null
-    dialogsSoFar = []
-    dialogsAt = 0
-    headLoading = null
-    archived = null
-    archivedLoading = null
-    epoch++
+    forgetDialogs()
     homeStates.clear()
     searches.clear()
     watchKept.clear()
@@ -135,8 +127,7 @@ export function forgetAll() {
         copyEpoch++
         rulesNow?.setCorrections([], [])
     }
-    recentState = null
-    homeChatsKnown = null
+    forgetRecent()
     videoCounter.forget()
     forgetSponsored()
     forgetChatTitles()
@@ -615,219 +606,6 @@ export async function newestOf(tg: TelegramClient, chatId: number): Promise<{ vi
     return { videos: [...s.videos.values()], items: s.items, complete: done(s) }
 }
 
-// The chat list
-
-let dialogs: ChatItem[] | null = null
-/** The chat list as far as it has come while it loads. */
-let dialogsSoFar: ChatItem[] = []
-let dialogsLoading: Promise<ChatItem[]> | null = null
-const dialogListeners = new Set<(chats: ChatItem[]) => void>()
-
-export function chatItem(peer: Peer, pinned: boolean): ChatItem {
-    const small = peer.photo?.small ?? null
-    if (small) thumbnails.set(small.uniqueFileId, small)
-    const self = peer.type === 'user' && peer.isSelf
-    noteChatTitle(peer.id, peer.displayName)
-    return {
-        id: peer.id,
-        title: peer.displayName,
-        photo: small && !self ? small.uniqueFileId : null,
-        pinned,
-        kind: peer.type === 'user' ? (peer.isBot ? 'bot' : 'user') : peer.chatType === 'channel' ? 'channel' : 'group',
-        forum: peer.type === 'chat' && peer.isForum,
-        self,
-    }
-}
-
-/** When the whole list was read, or its head last read again. */
-let dialogsAt = 0
-/** A kept list older than this has its head read again before it is handed out (HX44). */
-const FRESH_MS = 60_000
-let headLoading: Promise<ChatItem[]> | null = null
-/** Bumped by a sign out, so an answer that lands after it is not kept for the next account. */
-let epoch = 0
-
-/**
- * Every chat outside the archive, pinned first, in Telegram's order. The list arrives in pages
- * of a hundred, each sent on to `onBatch` as it comes; it is kept for the session, and
- * `refresh` asks again. A kept list more than a minute old is handed to `onBatch` at once and
- * its first page then read again (one call), so a chat joined since, or a new private chat,
- * shows up by itself, as the apps' list does without a Refresh button (HX44).
- */
-export async function chatList(tg: TelegramClient, refresh: boolean, onBatch: (chats: ChatItem[]) => void): Promise<ChatItem[]> {
-    if (dialogs && !refresh) {
-        if (Date.now() - dialogsAt < FRESH_MS) return dialogs
-        onBatch(dialogs)
-        headLoading ??= freshenHead(tg).finally(() => (headLoading = null))
-        return await headLoading
-    }
-    dialogListeners.add(onBatch)
-    try {
-        dialogsLoading ??= (async () => {
-            const mine = epoch
-            const out: ChatItem[] = []
-            const seen = new Set<number>()
-            for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include' })) {
-                if (seen.has(d.peer.id)) continue
-                seen.add(d.peer.id)
-                out.push(chatItem(d.peer, d.isPinned))
-                if (out.length % PAGE === 0) {
-                    if (mine !== epoch) break
-                    dialogsSoFar = out.slice()
-                    for (const fn of dialogListeners) fn(dialogsSoFar)
-                }
-            }
-            if (mine === epoch) {
-                dialogs = out
-                dialogsAt = Date.now()
-            }
-            return out
-        })().finally(() => (dialogsLoading = null))
-        return await dialogsLoading
-    } finally {
-        dialogListeners.delete(onBatch)
-    }
-}
-
-/**
- * The list's first page read again: Telegram's head in its own order, then the rest as kept, so
- * a chat moved up or newly joined comes first and nothing further down is asked for again. A
- * failure keeps the list as it was and waits another minute before trying.
- */
-async function freshenHead(tg: TelegramClient): Promise<ChatItem[]> {
-    const mine = epoch
-    const kept = dialogs ?? []
-    try {
-        const head: ChatItem[] = []
-        const seen = new Set<number>()
-        for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) {
-            if (seen.has(d.peer.id)) continue
-            seen.add(d.peer.id)
-            head.push(chatItem(d.peer, d.isPinned))
-        }
-        if (mine !== epoch) return kept
-        // Pinned chats all come in the head, so one further down is pinned no longer.
-        const rest = kept.filter((c) => !seen.has(c.id)).map((c) => (c.pinned ? { ...c, pinned: false } : c))
-        dialogs = [...head, ...rest]
-        dialogsAt = Date.now()
-        return dialogs
-    } catch {
-        if (mine === epoch) dialogsAt = Date.now()
-        return kept
-    }
-}
-
-let archived: ChatItem[] | null = null
-let archivedLoading: Promise<ChatItem[]> | null = null
-const archivedListeners = new Set<(chats: ChatItem[]) => void>()
-
-/**
- * Every chat in Telegram's archive, read whole (HX32) in pages of a hundred and kept for the
- * session. Only the Add chats picker and a Chats list narrowed to archived chats the viewer
- * added ask for it: a channel archived to keep Telegram tidy is still a channel of videos.
- */
-export async function archivedList(tg: TelegramClient, onBatch: (chats: ChatItem[]) => void): Promise<ChatItem[]> {
-    if (archived) return archived
-    archivedListeners.add(onBatch)
-    try {
-        archivedLoading ??= (async () => {
-            const mine = epoch
-            const out: ChatItem[] = []
-            const seen = new Set<number>()
-            for await (const d of tg.iterDialogs({ archived: 'only', pinned: 'include' })) {
-                if (seen.has(d.peer.id)) continue
-                seen.add(d.peer.id)
-                out.push({ ...chatItem(d.peer, false), archived: true })
-                if (out.length % PAGE === 0) {
-                    if (mine !== epoch) break
-                    const soFar = out.slice()
-                    for (const fn of archivedListeners) fn(soFar)
-                }
-            }
-            if (mine === epoch) archived = out
-            return out
-        })().finally(() => (archivedLoading = null))
-        return await archivedLoading
-    } finally {
-        archivedListeners.delete(onBatch)
-    }
-}
-
-/** The chat list: whole once it has loaded (`done`), else as far as it has come. */
-export function knownChats(): { chats: ChatItem[]; done: boolean } {
-    return dialogs ? { chats: dialogs, done: true } : { chats: dialogsSoFar, done: false }
-}
-
-/** A search by topic name waits this long for a chat list that is already being read (every chat is searched). */
-const TOPIC_LIST_WAIT_MS = 3_000
-/** Added chats the list has not reached whose peer is looked up (from the stored peers, no call) per search. */
-const TOPIC_PEER_CHECKS = 150
-/** The head of the chat list (the chats used most recently), read for a search by topic name when the whole list is not there: kept two minutes. */
-let topicHead: { at: number; chats: ChatItem[] } | null = null
-
-/**
- * The groups with topics a search by topic name may ask (U14), and the chat list's order for ties.
- * Telling a group with topics from one without is a read of what the chat list already holds (the
- * forum flag of the dialog), never a call per chat. Added chats the list has not reached are looked
- * up among the stored peers, at most TOPIC_PEER_CHECKS. With every chat searched, the list is used
- * as far as it has come (waiting a few seconds for one already being read); when none is being
- * read, only its first page (the chats used most recently, one call) is read, so a search never
- * starts the read of 3,000 chats.
- */
-export async function topicSources(tg: TelegramClient, added: readonly number[] | null, signal?: AbortSignal): Promise<{ forums: ForumChat[]; order: number[] }> {
-    let head: ChatItem[] = []
-    if (!added && !dialogs) {
-        if (dialogsLoading) {
-            await Promise.race([dialogsLoading.catch(() => []), new Promise((resolve) => setTimeout(resolve, TOPIC_LIST_WAIT_MS))])
-        } else if (dialogsSoFar.length === 0) {
-            if (!topicHead || Date.now() - topicHead.at > 120_000) {
-                const mine = epoch
-                const first: ChatItem[] = []
-                try {
-                    for await (const d of tg.iterDialogs({ archived: 'exclude', pinned: 'include', limit: PAGE })) {
-                        // A new letter gave the search up: the read stops with the page it is on, and the part read is not kept.
-                        if (signal?.aborted) break
-                        first.push(chatItem(d.peer, d.isPinned))
-                    }
-                } catch {
-                    // The chats read so far are used; none means no group is asked.
-                }
-                if (mine !== epoch || signal?.aborted) return { forums: [], order: [] }
-                topicHead = { at: Date.now(), chats: first }
-            }
-            head = topicHead.chats
-        }
-    }
-    const known: ChatItem[] = [...(dialogs ?? dialogsSoFar), ...head, ...(archived ?? [])]
-    const byId = new Map<number, ChatItem>()
-    for (const c of known) if (!byId.has(c.id)) byId.set(c.id, c)
-    if (added) {
-        const missing = added.filter((id) => !byId.has(id)).slice(0, TOPIC_PEER_CHECKS)
-        for (let i = 0; i < missing.length; i += 6) {
-            if (signal?.aborted) return { forums: [], order: [] }
-            await Promise.all(
-                missing.slice(i, i + 6).map(async (id) => {
-                    try {
-                        byId.set(id, chatItem(await tg.getPeer(id), false))
-                    } catch {
-                        // Not a peer this device knows (left, never seen): not asked.
-                    }
-                }),
-            )
-        }
-    }
-    const forums: ForumChat[] = []
-    for (const c of byId.values()) if (c.forum && c.kind === 'group') forums.push({ id: c.id, title: c.title, archived: !!c.archived })
-    return { forums, order: known.map((c) => c.id) }
-}
-
-/** Ids of the listed chats whose names answer `query`, best first, by the app's fuzzy search. */
-export async function rankChats(query: string): Promise<number[]> {
-    const r = await rules()
-    const list = dialogs ?? []
-    return r.rank(list.map((c) => c.title), query).map((i) => list[i].id)
-}
-
 // Search across chats, within the size limits
 
 /** Kept for two minutes, so a change of size limits arranges again without asking Telegram. */
@@ -997,167 +775,6 @@ const videoCounter = createVideoCounter((id) => oneVideoCount(counterClient!, id
 export function videoCounts(tg: TelegramClient, chatIds: readonly number[], signal?: AbortSignal): Promise<Record<number, number>> {
     counterClient = tg
     return videoCounter.counts(chatIds, signal)
-}
-
-// Recently added's See all
-
-/** Its videos kept this long, so leaving the page and coming back carries on where it was. */
-const RECENT_KEEP_MS = 3 * 60_000
-/**
- * The most videos the page holds: past this it stops reading on, so an account with a hundred
- * thousand videos never fills the worker's memory or the page's grid.
- */
-const RECENT_MAX = 2_000
-/** Pages of Telegram's search (a hundred each) one ask for more may read, at most. */
-const RECENT_ROUNDS = 4
-/** New videos one ask for more is content with. */
-const RECENT_ENOUGH = 30
-
-/** Where Telegram's search across chats goes on from (mtcute's SearchGlobalOffset, not exported by @mtcute/web). */
-type SearchGlobalOffset = NonNullable<NonNullable<Parameters<TelegramClient['searchGlobal']>[0]>['offset']>
-
-interface GlobalFeed {
-    filter: typeof VIDEO_FILTER | typeof DOC_FILTER
-    next: SearchGlobalOffset | undefined
-    done: boolean
-    /** Date (seconds) of the oldest message read so far; Infinity before the first page. */
-    oldest: number
-}
-
-interface RecentState {
-    key: string
-    /** Home's chats it keeps to; null for every chat (Home not built in this tab yet). */
-    chats: Set<number> | null
-    starredOnly: boolean
-    feeds: GlobalFeed[]
-    videos: Map<string, Video>
-    items: Map<string, VideoItem>
-    loading: Promise<void> | null
-    time: number
-}
-
-let recentState: RecentState | null = null
-/** Home's chats as its last build picked them, and whether they are all starred. */
-let homeChatsKnown: { ids: number[]; starredOnly: boolean } | null = null
-
-/** Home's chats as built, for Recently added's See all to read on through. */
-export function rememberHomeChats(ids: number[], starredOnly: boolean) {
-    homeChatsKnown = { ids: [...ids], starredOnly }
-}
-
-const recentDone = (s: RecentState) => s.videos.size >= RECENT_MAX || s.feeds.every((f) => f.done)
-
-/**
- * Videos older than this may still have newer ones unread in the other feed (videos and files
- * page apart), so they wait until it catches up: cards are only ever added at the grid's end.
- */
-function horizon(s: RecentState): number {
-    if (recentDone(s)) return -Infinity
-    return Math.max(...s.feeds.filter((f) => !f.done).map((f) => f.oldest))
-}
-
-/**
- * Reads on until enough new videos came, the rounds are spent, Telegram has no more or the page
- * holds its most. `gate` is the viewer's own added chats (HX27), null for every chat; it narrows
- * `s.chats` (Home's own chats for this run) further still, since a chat Home picked may since
- * have been taken out of the choice.
- */
-async function loadRecent(tg: TelegramClient, s: RecentState, signal: AbortSignal, gate: Set<number> | null): Promise<void> {
-    const r = await rules()
-    let added = 0
-    for (let round = 0; round < RECENT_ROUNDS && added < RECENT_ENOUGH && !recentDone(s) && !signal.aborted; round++) {
-        const open = s.feeds.filter((f) => !f.done)
-        // The feed read least far back holds the others' cards back: it is the one asked.
-        const behind = Math.max(...open.map((f) => f.oldest))
-        const ask = open.filter((f) => f.oldest === behind)
-        const pages = await Promise.all(
-            ask.map(async (f) => {
-                const res = await tg.searchGlobal({ query: '', filter: f.filter, limit: PAGE, offset: f.next })
-                const msgs = res as Message[]
-                const before = f.next
-                f.next = res.next
-                // No next page, an empty one, or the same offset again (a loop on a bad answer): this feed is over.
-                f.done = !res.next || !msgs.length || (before?.id === res.next.id && before?.rate === res.next.rate)
-                for (const m of msgs) {
-                    const at = m.date instanceof Date ? Math.floor(m.date.getTime() / 1000) : NaN
-                    if (Number.isFinite(at)) f.oldest = Math.min(f.oldest, at)
-                }
-                // A page whose dates could not be read still moves the feed on, never back.
-                if (!Number.isFinite(f.oldest)) f.oldest = -Infinity
-                return msgs
-            }),
-        )
-        const byId = new Map<string, Message>()
-        const raws = []
-        for (const msg of pages.flat()) {
-            if (s.chats && !s.chats.has(msg.chat?.id)) continue
-            if (gate && !gate.has(msg.chat?.id)) continue
-            const raw = rawOf(msg, chatProtects(msg))
-            if (!raw) continue
-            const id = videoId(raw)
-            if (s.videos.has(id) || byId.has(id)) continue
-            byId.set(id, msg)
-            raws.push(raw)
-        }
-        for (const v of r.screen(raws).videos) {
-            if (s.videos.size >= RECENT_MAX) break
-            const msg = byId.get(v.id)
-            const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v), undefined, r.tileTag(v))
-            if (!item || s.videos.has(v.id)) continue
-            s.videos.set(v.id, v)
-            s.items.set(v.id, item)
-            added++
-        }
-    }
-}
-
-/**
- * Recently added's See all: the newest videos across Home's chats, grouped as a chat's are.
- * `open` reads its first page unless it was read a moment ago, `more` the next one (one read at
- * a time: a second ask while one runs waits for it), `view` only arranges again.
- */
-export async function recentPage(tg: TelegramClient, view: ListView, mode: 'open' | 'more' | 'view', signal: AbortSignal): Promise<RecentPage> {
-    const r = await rules()
-    const gate = addedSetOf(view)
-    const known = homeChatsKnown?.ids.length ? homeChatsKnown : null
-    const key = known ? known.ids.join() : '*'
-    let s = recentState
-    if (!s || s.key !== key || (mode === 'open' && !s.loading && Date.now() - s.time > RECENT_KEEP_MS)) {
-        s = recentState = {
-            key,
-            chats: known && new Set(known.ids),
-            starredOnly: known?.starredOnly ?? false,
-            feeds: [VIDEO_FILTER, DOC_FILTER].map((filter) => ({ filter, next: undefined, done: false, oldest: Infinity })),
-            videos: new Map(),
-            items: new Map(),
-            loading: null,
-            time: Date.now(),
-        }
-        mode = 'more'
-    }
-    const st = s
-    // Left before its first page came: opened again, it reads that page now.
-    if (mode === 'open' && !st.loading && !st.videos.size) mode = 'more'
-    if (mode === 'more' && !recentDone(st)) {
-        st.loading ??= loadRecent(tg, st, signal, gate).finally(() => (st.loading = null))
-        await st.loading
-    } else if (st.loading) await st.loading
-    st.time = Date.now()
-    const edge = horizon(st)
-    // The shelf keeps the order it is given for Newest (a chat's own), so the two feeds are merged by date here.
-    // A chat taken out of the choice since this was read leaves its videos out here too, without losing what was already kept.
-    const shown = [...st.videos.values()]
-        .filter((v) => v.date >= edge && (!gate || gate.has(v.chatId)))
-        .sort((a, b) => b.date - a.date || b.messageId - a.messageId)
-    // The same floor as Home's row (SizeFilter.HOME_MIN), said on the page.
-    const shelf = r.shelf(shown, 'Newest', r.sizeHomeMin(view.minBytes), view.maxBytes, view.watched, view.started)
-    return {
-        tiles: tilesOf(shelf, st.items, view, { r, videoOf: (id) => st.videos.get(id) }),
-        hiddenBySize: shelf.hiddenBySize,
-        done: recentDone(st),
-        starredOnly: st.starredOnly,
-        capped: st.videos.size >= RECENT_MAX && !st.feeds.every((f) => f.done),
-    }
 }
 
 // The watch page

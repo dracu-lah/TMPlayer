@@ -13,6 +13,7 @@ import { pagePlayLabel, pageTitle, useFeatured } from './featured'
 import { featuredFactsLine } from './featuredFacts'
 import { detailPath, shortLength, tileCard, useProgress, watchPath } from './VideoList'
 import type { HomeRow, Tile } from '../tg/types'
+import { onGlobal } from '../ui/globalInput'
 
 /** How long a page is up before the next (FeaturedCarousel), and how many pages there are. */
 const ADVANCE_MS = 7_000
@@ -81,13 +82,14 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
         setAwake(true)
     }
     const onVisible = () => setSeen(!document.hidden)
+    const offInput: Array<() => void> = []
     onMount(() => {
         document.addEventListener('visibilitychange', onVisible)
-        for (const e of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) addEventListener(e, touched, { passive: true })
+        for (const e of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) offInput.push(onGlobal(window, e, touched, { passive: true }))
     })
     onCleanup(() => {
         document.removeEventListener('visibilitychange', onVisible)
-        for (const e of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) removeEventListener(e, touched)
+        for (const off of offInput) off()
     })
     // Reduced motion is read live: a change in the system's setting takes effect without a reload.
     const motion = matchMedia('(prefers-reduced-motion: reduce)')

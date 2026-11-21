@@ -4,11 +4,12 @@ import { answer, askOf, keptExtras, keptLogo, loadBackdropLightFirst, loadPoster
 import { TmdbMark } from '../ui/TmdbMark'
 import { loadThumb } from '../screens/thumbs'
 import { shortLength } from '../screens/VideoList'
-import { clock } from './Chrome'
+import { clock } from './chrome/parts'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
 import { settings } from '../store'
 import type { VideoItem, WatchInfo } from '../tg/types'
+import { dot } from '../ui/dot'
 
 /**
  * The short pre-roll while a video opens, the apps' PlayerLoader: TMDB's wide picture for the
@@ -65,9 +66,9 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
     const title = () => found()?.title || ep()?.show || props.info?.title || item.title
     const line = () => {
         const e = ep()
-        if (e) return [e.code, e.name].filter(Boolean).join('  ·  ')
+        if (e) return [e.code, e.name].filter(Boolean).join(dot)
         const genres = (extras()?.genres ?? []).slice(0, 2).join(', ')
-        return [found()?.year?.toString(), genres, shortLength(item.duration)].filter(Boolean).join('  ·  ')
+        return [found()?.year?.toString(), genres, shortLength(item.duration)].filter(Boolean).join(dot)
     }
     // An episode's own words are not in the poster answer: a show's overview would describe the wrong thing.
     const overview = () => (ep() ? '' : (found()?.overview ?? '').trim())
