@@ -10,10 +10,33 @@ import java.io.File
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
+private const val SHORT_TMP = 40
+
 class InstanceLockTest {
 
+    /**
+     * A socket's path has a 108 byte limit, so the folders here are made under a short temp
+     * directory even when the build points java.io.tmpdir somewhere deep (a worktree's build
+     * folder): the fallback the lock takes for a deep folder is java.io.tmpdir itself.
+     */
+    private val shortTmp: File = File(System.getProperty("java.io.tmpdir")).takeIf { it.absolutePath.length <= SHORT_TMP }
+        ?: File("/tmp").takeIf { it.isDirectory && it.canWrite() }
+        ?: File(System.getProperty("java.io.tmpdir"))
+
+    private val tmpdirBefore: String? = System.getProperty("java.io.tmpdir")
+
     @get:Rule
-    val tmp = TemporaryFolder()
+    val tmp = TemporaryFolder(shortTmp)
+
+    @org.junit.Before
+    fun shortTempDirectory() {
+        System.setProperty("java.io.tmpdir", shortTmp.absolutePath)
+    }
+
+    @org.junit.After
+    fun restoreTempDirectory() {
+        if (tmpdirBefore != null) System.setProperty("java.io.tmpdir", tmpdirBefore)
+    }
 
     @Test
     fun `a second launch forwards its arguments to the first and is told to exit`() {
