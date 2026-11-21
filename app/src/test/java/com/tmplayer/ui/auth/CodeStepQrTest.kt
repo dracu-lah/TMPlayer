@@ -16,11 +16,13 @@ import com.tmplayer.data.AuthState
 import com.tmplayer.data.CodeDelivery
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -38,6 +40,10 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CodeStepQrTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

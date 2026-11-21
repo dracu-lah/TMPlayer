@@ -22,6 +22,7 @@ import com.tmplayer.data.FormFactor
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.SetupOffline
 import com.tmplayer.ui.theme.TmMaterialTheme
 import kotlinx.coroutines.awaitCancellation
@@ -29,6 +30,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -47,6 +49,10 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AddChatsRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

@@ -40,6 +40,7 @@ import com.tmplayer.data.HomeFeatured
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
@@ -75,6 +76,10 @@ class TvBannerFromBarTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var nextId = 1L
     private var opened = 0

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.components.BigEmpty
 import com.tmplayer.ui.components.BigError
 import com.tmplayer.ui.components.LocalBottomChrome
@@ -42,6 +43,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -63,6 +65,10 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LargeTextUnderBarTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())
 

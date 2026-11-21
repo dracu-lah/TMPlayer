@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asAndroidBitmap
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import org.junit.After
@@ -58,6 +59,10 @@ class StreamStorageRowTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var saveSpace by mutableStateOf(false)
     private val picks = mutableListOf<Boolean>()

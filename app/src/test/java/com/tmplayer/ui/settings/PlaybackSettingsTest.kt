@@ -32,6 +32,7 @@ import com.tmplayer.player.EngineChoice
 import com.tmplayer.player.ExternalApp
 import com.tmplayer.player.InstalledPlayers
 import com.tmplayer.player.PlayerChoice
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -64,6 +65,10 @@ class PlaybackSettingsTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())
 

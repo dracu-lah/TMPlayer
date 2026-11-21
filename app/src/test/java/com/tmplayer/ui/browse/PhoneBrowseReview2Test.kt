@@ -34,6 +34,7 @@ import com.tmplayer.data.ForumTopicSummary
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.TelegramQuality
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.flow.first
@@ -42,6 +43,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -60,6 +62,10 @@ import java.nio.file.Files
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PhoneBrowseReview2Test {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

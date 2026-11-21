@@ -22,10 +22,12 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import kotlinx.coroutines.launch
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -132,6 +134,11 @@ abstract class FastScrollerRenderTest {
 }
 
 class FastScrollerRenderDarkTest : FastScrollerRenderTest() {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
     @Test
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
     fun `phone, dark`() = render("dark")

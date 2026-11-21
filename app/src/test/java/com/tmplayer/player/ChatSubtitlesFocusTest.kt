@@ -27,6 +27,7 @@ import com.tmplayer.R
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
 import com.tmplayer.online.SubtitleTarget
+import com.tmplayer.ui.DrainMainLooperRule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -53,6 +54,10 @@ import java.time.Duration
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
 class ChatSubtitlesFocusTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @get:Rule
     val rule = createEmptyComposeRule()

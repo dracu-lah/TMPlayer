@@ -28,6 +28,7 @@ import com.tmplayer.data.ChatInfo
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.icons.TmIcons
 import org.junit.Assert.assertEquals
@@ -35,6 +36,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -51,6 +53,10 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PhoneBrowseReviewTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private fun open(fontScale: Float = 1f, content: @Composable () -> Unit): ComponentActivity {
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()

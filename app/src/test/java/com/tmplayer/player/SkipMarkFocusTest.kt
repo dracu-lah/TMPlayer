@@ -18,6 +18,7 @@ import com.tmplayer.i18n.L
 import com.tmplayer.online.SkipKind
 import com.tmplayer.online.SkipSegment
 import com.tmplayer.online.SkipSource
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -46,6 +47,10 @@ class SkipMarkFocusTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

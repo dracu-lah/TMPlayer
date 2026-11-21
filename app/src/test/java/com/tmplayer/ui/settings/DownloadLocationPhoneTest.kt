@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Rule
@@ -35,6 +36,10 @@ class DownloadLocationPhoneTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.ChatFilter
 import com.tmplayer.ui.browse.HistoryTab
 import com.tmplayer.ui.icons.TmIcons
@@ -26,6 +27,7 @@ import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -45,6 +47,10 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class EmptyAndFillRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

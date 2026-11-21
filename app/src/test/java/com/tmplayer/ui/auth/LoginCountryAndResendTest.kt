@@ -27,6 +27,7 @@ import com.tmplayer.data.AuthState
 import com.tmplayer.data.CodeDelivery
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -54,6 +55,10 @@ class LoginCountryAndResendPhoneTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() = FormFactor.override(false)
@@ -133,6 +138,10 @@ class LoginCountryAndResendTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() = FormFactor.override(false)

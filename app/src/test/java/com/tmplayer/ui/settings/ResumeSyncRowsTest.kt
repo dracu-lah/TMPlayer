@@ -23,6 +23,7 @@ import androidx.compose.ui.test.assertCountEquals
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SyncStatus
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.flow.first
@@ -58,6 +59,10 @@ class ResumeSyncRowsTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())
 

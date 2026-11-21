@@ -17,12 +17,14 @@ import com.tmplayer.data.Accent
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ThemeChoice
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -44,6 +46,10 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AppearanceRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
 
     private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())

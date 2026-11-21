@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -42,6 +43,10 @@ class LoginFormKeyboardTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var password by mutableStateOf("")
     private var error by mutableStateOf<String?>(null)

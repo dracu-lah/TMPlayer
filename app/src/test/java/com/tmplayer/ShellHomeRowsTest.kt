@@ -9,6 +9,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.MediaItem
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.HomeSource
 import com.tmplayer.ui.browse.HomeViewModel
 import com.tmplayer.ui.browse.rememberHomeRows
@@ -32,6 +33,10 @@ class ShellHomeRowsTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val source = object : HomeSource {
         override suspend fun chatMedia(chatId: Long): List<MediaItem> = emptyList()

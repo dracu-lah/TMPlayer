@@ -11,6 +11,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.OfflineHome
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.ContinueCardArt
 import com.tmplayer.ui.browse.LocalOfflineHome
 import com.tmplayer.ui.connect.OfflineBanner
@@ -37,6 +38,10 @@ class OfflineHomeTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

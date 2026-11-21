@@ -29,6 +29,7 @@ import com.tmplayer.online.MetadataCache
 import com.tmplayer.online.MetadataStore
 import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.online.TrailerEmbed
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.DetailRow
 import com.tmplayer.ui.browse.LocalSeriesWatch
 import com.tmplayer.ui.browse.MediaDetailScreen
@@ -66,6 +67,10 @@ class TvTrailerPlayerTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @get:Rule
     val dir = TemporaryFolder()

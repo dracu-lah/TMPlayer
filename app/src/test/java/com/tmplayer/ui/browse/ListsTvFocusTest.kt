@@ -16,6 +16,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.ListsStore
 import com.tmplayer.data.WatchLaterRecord
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -45,6 +46,10 @@ class ListsTvFocusTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val dir = Files.createTempDirectory("tm-lists-tv").toFile()
     private val store: ListsStore = WatchedStore(WatchedStore.openDataStore(dir.resolve(WatchedStore.FILE_NAME))).lists

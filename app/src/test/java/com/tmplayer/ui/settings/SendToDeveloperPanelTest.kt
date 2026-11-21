@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.LogBundle
 import com.tmplayer.data.ReportSender.State
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -33,6 +34,10 @@ class SendToDeveloperPanelTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

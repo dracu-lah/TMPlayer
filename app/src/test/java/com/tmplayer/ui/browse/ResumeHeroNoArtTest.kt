@@ -42,6 +42,7 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.WatchPoint
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
@@ -69,6 +70,10 @@ class ResumeHeroNoArtTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var played: MediaItem? = null
     private var opened = 0

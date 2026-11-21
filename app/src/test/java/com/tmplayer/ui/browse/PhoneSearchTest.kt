@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.GlobalSearch
 import com.tmplayer.data.SearchFilters
 import com.tmplayer.data.SearchSort
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.components.ClearButton
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
@@ -57,6 +58,10 @@ class PhoneSearchTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var closed = 0
     private var filtersSet: SearchFilters? = null
@@ -201,6 +206,10 @@ class ClearButtonLookTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @Composable
     private fun Stage() {
