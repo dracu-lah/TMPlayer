@@ -37,7 +37,7 @@ class NativeJniWarmUpTest {
             }
         }
         start.countDown()
-        threads.forEach { it.join() }
+        threads.forEach { it.join(30_000) }
         assertEquals(List(32) { 1 }, widths.toList())
     }
 }

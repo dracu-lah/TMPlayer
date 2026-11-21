@@ -45,8 +45,6 @@ import kotlinx.coroutines.flow.first
 
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -157,7 +155,6 @@ class DesktopDownloadRunner(
     /** File ids already asked about again. See [resourceAndRequeue]. */
     private val resourced = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
     private var arrivals = 0L
-    private val persistLock = Mutex()
 
     /**
      * Steps downloads aside for a video playing from the network ([DownloadYield]). Held rows are
@@ -723,16 +720,12 @@ class DesktopDownloadRunner(
     }
 
     /**
-     * The rows and the profile they belong to, read together (HX88, B1 low item): a persist that
-     * lands after a switch writes for the rows' owner, never into the next profile's queue. No
-     * owner: the rows were dropped and the next profile's stored queue was not read yet, and an
-     * empty write then would wipe it before its restore.
+     * The one write path of the queue (HX88): [OfflineDownloads.persistQueue] reads the rows and
+     * the profile they belong to together, writes for that owner only, and re-checks the rows
+     * generation inside the edit, so a persist that straddles a switch or a session end can never
+     * tag one database's rows with another's marker or write into the next profile's queue.
      */
-    private suspend fun persistNow() = persistLock.withLock {
-        val (owner, queued) = OfflineDownloads.persistSnapshot()
-        if (owner != null) runCatching { settings.saveDownloadQueue(queued, owner = owner) }
-        Unit
-    }
+    private suspend fun persistNow() = OfflineDownloads.persistQueue(settings)
 
     private companion object {
         const val TAG = "DesktopDownloads"
