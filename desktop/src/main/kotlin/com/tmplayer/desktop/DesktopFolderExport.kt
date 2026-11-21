@@ -40,7 +40,15 @@ object DesktopFolderExport {
 
     class Item(val source: FolderCopyIo.Source, val record: ResumeRecord, val sizeBytes: Long, val newest: Long)
 
-    class Offer(val dir: File, val plan: FolderCopy.Plan<Item>)
+    /**
+     * What the viewer is asked to confirm, and the profile it was made for ([stamp], HX88 review
+     * round 2): the dialog names that profile's videos, so it is never confirmed, or even shown, under
+     * another one. 'Remove' would otherwise delete the first profile's originals under the second.
+     */
+    class Offer(val dir: File, val plan: FolderCopy.Plan<Item>, val stamp: com.tmplayer.data.AccountStamp = com.tmplayer.data.Accounts.stamp)
+
+    /** True while an offer made for [stamp] belongs to the profile open now. */
+    internal fun offerIsMine(stamp: com.tmplayer.data.AccountStamp, now: com.tmplayer.data.AccountStamp = com.tmplayer.data.Accounts.stamp): Boolean = stamp == now
 
     data class State(
         val offer: Offer? = null,
@@ -55,6 +63,11 @@ object DesktopFolderExport {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DesktopFolderExport"))
     private val cancel = AtomicBoolean(false)
     private val running = AtomicBoolean(false)
+
+    init {
+        // A switch takes the first profile's question and answer off the screen: the next profile's Downloads page shows none of it.
+        com.tmplayer.data.Accounts.onSwitch { if (!running.get()) _state.value = State() }
+    }
 
     /** The folder saved to last this session: where the picker opens, and the selection's warning. */
     @Volatile var lastDir: File? = null
@@ -99,6 +112,11 @@ object DesktopFolderExport {
 
     /** Starts the confirmed copy, or false when one is already going. */
     fun start(settings: SettingsStore, offer: Offer, items: List<Item>, remove: Boolean): Boolean {
+        // An offer made under another profile is dropped, never run (a switch lands between asking and confirming).
+        if (!offerIsMine(offer.stamp)) {
+            if (!running.get()) _state.value = State()
+            return false
+        }
         if (!running.compareAndSet(false, true)) return false
         cancel.set(false)
         val plan = offer.plan
