@@ -6,7 +6,9 @@
 import type { Message, TelegramClient } from '@mtcute/web'
 import { rules, type Video, type WebResume } from '../rules'
 import { addCapped } from '../ui/cappedSet'
-import { across, chatItem, chatList, knownChats, lookup, newestOf, rememberHomeChats, tilesOf } from './library'
+import { across, lookup, newestOf, tilesOf } from './library'
+import { chatItem, chatList, knownChats } from './dialogs'
+import { rememberHomeChats } from './recent'
 import { chatProtects, itemOf, rawOf } from './media'
 import type { ChatItem, HomePage, HomeRow, HomeView, Tile, VideoItem } from './types'
 
