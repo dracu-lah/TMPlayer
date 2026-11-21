@@ -214,11 +214,22 @@ class WindowPresence(
     private val shown = java.util.Collections.synchronizedSet(HashSet<Any>())
     private var away = false
 
+    /** The whole app hidden (macOS Hide, Cmd+H): away, whatever each window says of itself. */
+    private var appHidden = false
+
     /** [window] is on screen ([visible] and not minimised) or not. */
-    fun update(window: Any, visible: Boolean) {
+    fun update(window: Any, visible: Boolean) = settle { if (visible) shown += window else shown -= window }
+
+    /**
+     * The app as a whole hidden or shown again (HX88, review P4): macOS's Hide (Cmd+H) leaves each
+     * window showing as far as AWT's window events say, so it is heard on its own.
+     */
+    fun appHidden(hidden: Boolean) = settle { appHidden = hidden }
+
+    private fun settle(edit: () -> Unit) {
         val change = synchronized(this) {
-            if (visible) shown += window else shown -= window
-            val nowAway = shown.isEmpty()
+            edit()
+            val nowAway = appHidden || shown.isEmpty()
             if (nowAway == away) null else nowAway.also { away = it }
         } ?: return
         if (change) background(now()) else foreground(now())
@@ -240,13 +251,29 @@ class WindowPresence(
         window.addWindowStateListener(states)
         window.addWindowListener(events)
         window.addComponentListener(components)
+        val hides = followAppHidden()
         if (window.isShowing) update(window, visible())
         return {
             window.removeWindowStateListener(states)
             window.removeWindowListener(events)
             window.removeComponentListener(components)
+            hides()
         }
     }
+
+    /** macOS's Hide and Show, where the system tells of them (java.awt.desktop); nothing elsewhere. */
+    private fun followAppHidden(): () -> Unit = runCatching {
+        if (!java.awt.Desktop.isDesktopSupported()) return@runCatching null
+        val desktop = java.awt.Desktop.getDesktop()
+        if (!desktop.isSupported(java.awt.Desktop.Action.APP_EVENT_HIDDEN)) return@runCatching null
+        val listener = object : java.awt.desktop.AppHiddenListener {
+            override fun appHidden(e: java.awt.desktop.AppHiddenEvent) = appHidden(true)
+            override fun appUnhidden(e: java.awt.desktop.AppHiddenEvent) = appHidden(false)
+        }
+        desktop.addAppEventListener(listener)
+        val undo: () -> Unit = { runCatching { desktop.removeAppEventListener(listener) } }
+        undo
+    }.getOrNull() ?: {}
 
     companion object {
         /** The process's, for the main window. */

@@ -70,4 +70,24 @@ class WindowPresenceTest {
         counting.update(window, true)
         assertEquals(listOf("away", "back"), heard)
     }
+
+    @Test
+    fun `the app hidden as a whole (macOS Cmd+H) counts as away while its window still says shown`() {
+        presence.update(window, true)
+        ProfileUnlock.unlock("p1")
+        presence.appHidden(true)
+        now += ProfileUnlock.GRACE_MS + 1_000
+        presence.appHidden(false)
+        assertEquals(null, ProfileUnlock.unlockedId.value)
+    }
+
+    @Test
+    fun `a short Hide keeps the profile open`() {
+        presence.update(window, true)
+        ProfileUnlock.unlock("p1")
+        presence.appHidden(true)
+        now += 30_000
+        presence.appHidden(false)
+        assertEquals("p1", ProfileUnlock.unlockedId.value)
+    }
 }
