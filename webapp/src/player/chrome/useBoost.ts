@@ -14,9 +14,10 @@ export function useBoost(v: HTMLVideoElement, listen: (name: 'playing', fn: () =
     // A level that could not start yet (no tap has allowed audio) starts on the next one.
     let retry: (() => void) | null = null
     let offs: (() => void)[] = []
+    let gone = false
     const start = (level: number) => {
         void applyBoost(v, level).then((applied) => {
-            if (applied || retry) return
+            if (applied || retry || gone) return
             retry = () => {
                 offs.forEach((off) => off())
                 offs = []
@@ -35,6 +36,7 @@ export function useBoost(v: HTMLVideoElement, listen: (name: 'playing', fn: () =
     // A new source or engine (a quality pick, the fallback chain) starts without the graph: say the level again.
     listen('playing', () => boost() > 1 && !retry && start(boost()))
     onCleanup(() => {
+        gone = true
         offs.forEach((off) => off())
         releaseBoost(v)
     })

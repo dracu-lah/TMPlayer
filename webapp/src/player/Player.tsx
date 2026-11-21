@@ -729,13 +729,13 @@ export function Player(props: {
         unload()
         const f = frames()
         if (f) URL.revokeObjectURL(f.url)
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+        if (document.fullscreenElement === container) document.exitFullscreen().catch(() => {})
     })
 
     const close = () => {
         // Saved before leaving: Back may leave the site, and then no cleanup runs.
         savePosition(video.currentTime)
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+        if (document.fullscreenElement === container) document.exitFullscreen().catch(() => {})
         props.onClose()
     }
 

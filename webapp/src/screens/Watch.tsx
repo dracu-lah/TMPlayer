@@ -32,7 +32,8 @@ export function Watch() {
     const location = useLocation<{ video?: VideoItem }>()
     const navigate = useNavigate()
     const ids = () => ({ chatId: Number(params.chatId), messageId: Number(params.messageId) })
-    const [video] = createResource(ids, async ({ chatId, messageId }) => {
+    // While locked nothing of the profile starts: no lookup, no warm-up download, no play note.
+    const [video] = createResource(() => (locked() ? null : ids()), async ({ chatId, messageId }) => {
         const passed = location.state?.video
         let found: VideoItem | null
         try {
@@ -74,7 +75,7 @@ export function Watch() {
     })
     // The episodes and the next one wait for the chat's videos; the player does not wait for them.
     const [info] = createResource(
-        () => (progress.state === 'ready' && chatOrder.state === 'ready' && (!lastPlayed() || touchVer.state === 'ready') ? { ...ids(), view: view() } : null),
+        () => (!locked() && progress.state === 'ready' && chatOrder.state === 'ready' && (!lastPlayed() || touchVer.state === 'ready') ? { ...ids(), view: view() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[watch]', e), null)),
     )
     // A play noted in the quality the viewer usually plays (QualityHabit), once per video opened: a

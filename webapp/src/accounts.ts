@@ -216,8 +216,8 @@ export function stopMediaForLock() {
         if (document.pictureInPictureElement) void document.exitPictureInPicture().catch(() => {})
     } catch {}
     try {
-        // Only the player's own full screen ends: the TV build keeps its page in full screen (the document element).
-        if (document.fullscreenElement?.matches('.pc')) void document.exitFullscreen().catch(() => {})
+        // Only the player's own full screen ends (its media-container.player, the element useFullscreen asks for): the TV build keeps its page in full screen (the document element).
+        if (document.fullscreenElement?.matches('media-container.player')) void document.exitFullscreen().catch(() => {})
     } catch {}
     try {
         const session = navigator.mediaSession

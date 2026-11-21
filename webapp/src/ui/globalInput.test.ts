@@ -40,7 +40,7 @@ const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpressio
 function isPage(e: ts.Expression): boolean {
     e = unwrap(e)
     if (ts.isIdentifier(e)) return PAGE.has(e.text)
-    return ts.isPropertyAccessExpression(e) && isPage(e.expression) && ['document', 'body', 'documentElement', 'window'].includes(e.name.text)
+    return ts.isPropertyAccessExpression(e) && ((isPage(e.expression) && ['document', 'body', 'documentElement', 'window'].includes(e.name.text)) || e.name.text === 'ownerDocument')
 }
 
 /** The strings an event argument can be: a literal, or a name read from a literal, a const or a `for (const e of [...])`. Null when unknown. */
@@ -57,15 +57,18 @@ function eventNames(arg: ts.Expression, file: ts.SourceFile): string[] | null {
         if (ts.isArrayLiteralExpression(e) && e.elements.every((x) => ts.isStringLiteralLike(unwrap(x)))) return e.elements.map((x) => (unwrap(x) as ts.StringLiteralLike).text)
         return null
     }
+    // A name declared more than once in the file (another `e` elsewhere) cannot be told apart by scope here: unknown, so it counts as input.
+    let declared = 0
     const visit = (n: ts.Node) => {
         if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name) {
+            declared++
             const loop = n.parent?.parent
             found = loop && ts.isForOfStatement(loop) ? strings(loop.expression) : strings(n.initializer)
         }
         ts.forEachChild(n, visit)
     }
     visit(file)
-    return found
+    return declared > 1 ? null : found
 }
 
 /** Every page-wide input listener in `text`, as `line: source`; an event name it cannot resolve counts as input. */
