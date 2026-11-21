@@ -49,7 +49,7 @@ object TvChannelsPublisher {
     /** The promo fixture's channel pictures: iOS has no TV home screen to put them on. */
     internal var fixtureArt: ((TvChannels.Art) -> java.io.File?)? = null
 
-    suspend fun publish(context: Context, programs: List<TvChannels.Program>, names: (Channel) -> String) = Unit
+    suspend fun publish(context: Context, programs: List<TvChannels.Program>, stamp: AccountStamp? = null, names: (Channel) -> String) = Unit
     suspend fun clearPrograms(context: Context) = Unit
 
     /** No home screen channel exists to launch the app with a show. */
@@ -65,7 +65,7 @@ object WatchNextPublisher {
 
     /** Android TV's "Play next" row; iOS has none to update. */
     @Suppress("UNUSED_PARAMETER")
-    suspend fun apply(context: Context, changes: List<WatchNext.Change>) = Unit
+    suspend fun apply(context: Context, changes: List<WatchNext.Change>, stamp: AccountStamp? = null) = Unit
 }
 
 /**

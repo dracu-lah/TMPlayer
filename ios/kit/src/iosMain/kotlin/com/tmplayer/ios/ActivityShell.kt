@@ -355,6 +355,8 @@ internal object ActivityShell {
             front()?.start()
         }
         on(UIApplicationDidBecomeActiveNotification) {
+            // The app switcher's cover of a PIN profile comes off (HX88, SnapshotCover).
+            SnapshotCover.uncover()
             // The viewer may have changed it in Settings while away.
             android.app.IosNotifications.refresh()
             val run = front() ?: return@on
@@ -365,7 +367,11 @@ internal object ActivityShell {
         on(UIApplicationDidEnterBackgroundNotification) {
             com.tmplayer.data.IosDownloads.keepGoingBriefly()
             front()?.stop()
+            // Before iOS takes the app switcher's picture: nothing of a PIN profile in it (HX88).
+            @Suppress("DEPRECATION")
+            SnapshotCover.cover(UIApplication.sharedApplication.keyWindow)
         }
+
         on(UIApplicationDidReceiveMemoryWarningNotification) {
             // TMPlayer itself using half or more of what iOS allows it is the struggle upstream's
             // "struggling on this device" hint is for: the critical level raises it, as Android's

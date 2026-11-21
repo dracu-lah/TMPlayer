@@ -24,7 +24,12 @@ import platform.MediaPlayer.MPRemoteCommand
 import platform.MediaPlayer.MPRemoteCommandCenter
 import platform.MediaPlayer.MPRemoteCommandHandlerStatusCommandFailed
 import platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
+import kotlinx.coroutines.launch
 import platform.UIKit.UIImage
+
+/** What the system's screens name while a PIN profile is hidden. */
+private const val APP_NAME = "TMPlayer" // i18n-ok: the app's name
+
 
 /**
  * Android's media session as iOS's system controls (docs/IOS.md, layer 4 step 7): what
@@ -56,7 +61,21 @@ internal object NowPlaying {
         this.session = session
         watch(session.player)
         if (targets.isEmpty()) listen()
+        followProfile()
         refresh()
+    }
+
+    /**
+     * Drawn again each time a PIN profile hides or shows (HX88, invariant 6): while hidden (the
+     * app away, or locked) the lock screen and Control Center show the app's name only.
+     */
+    private var profileWatch: kotlinx.coroutines.Job? = null
+
+    private fun followProfile() {
+        if (profileWatch != null) return
+        profileWatch = kotlinx.coroutines.MainScope().launch {
+            com.tmplayer.data.ProfileUnlock.hidden().collect { refresh() }
+        }
     }
 
     /** [session]'s player changed (the next episode played in place). */
@@ -71,6 +90,8 @@ internal object NowPlaying {
         if (this.session !== session) return
         this.session = null
         watch(null)
+        profileWatch?.cancel()
+        profileWatch = null
         val center = MPRemoteCommandCenter.sharedCommandCenter()
         for ((command, target) in targets) command.removeTarget(target)
         targets.clear()
@@ -145,8 +166,11 @@ internal object NowPlaying {
         center.skipBackwardCommand.preferredIntervals = listOf(NSNumber(double = player.getSeekBackIncrement() / 1000.0))
         val metadata = player.getMediaMetadata()
         val info = HashMap<Any?, Any?>()
-        info[MPMediaItemPropertyTitle] = (metadata.displayTitle ?: metadata.title)?.toString().orEmpty()
-        info[MPMediaItemPropertyArtist] = (metadata.artist ?: metadata.subtitle)?.toString().orEmpty()
+        // Upstream's player already empties its metadata to the app's name while the profile is
+        // hidden; this holds the same rule at the last step before the system's screens (HX88).
+        val hidden = runCatching { com.tmplayer.data.ProfileUnlock.hiddenNow() }.getOrDefault(true)
+        info[MPMediaItemPropertyTitle] = if (hidden) APP_NAME else (metadata.displayTitle ?: metadata.title)?.toString().orEmpty()
+        info[MPMediaItemPropertyArtist] = if (hidden) "" else (metadata.artist ?: metadata.subtitle)?.toString().orEmpty()
         info[MPNowPlayingInfoPropertyMediaType] = NSNumber(unsignedLong = MPNowPlayingInfoMediaTypeVideo)
         val duration = player.getDuration()
         if (duration > 0) info[MPMediaItemPropertyPlaybackDuration] = NSNumber(double = duration / 1000.0)
@@ -154,7 +178,7 @@ internal object NowPlaying {
         val speed = player.getPlaybackParameters().speed.toDouble()
         info[MPNowPlayingInfoPropertyPlaybackRate] = NSNumber(double = if (player.isPlaying()) speed else 0.0)
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = NSNumber(double = 1.0)
-        artworkOf(metadata.artworkData)?.let { info[MPMediaItemPropertyArtwork] = it }
+        if (!hidden) artworkOf(metadata.artworkData)?.let { info[MPMediaItemPropertyArtwork] = it }
         MPNowPlayingInfoCenter.defaultCenter().nowPlayingInfo = info
     }
 

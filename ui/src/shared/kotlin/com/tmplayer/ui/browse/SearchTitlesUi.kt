@@ -103,7 +103,8 @@ fun SearchTitleCard(
 /** The region a Where to watch list is for, in the viewer's language: "United Kingdom" for GB. */
 fun regionName(code: String): String {
     val locale = java.util.Locale.getDefault()
-    return runCatching { java.util.Locale.Builder().setRegion(code).build().getDisplayCountry(locale) }
+    // By its tag rather than Locale.Builder: iOS's Locale is a type alias, which cannot name a nested class.
+    return runCatching { java.util.Locale.forLanguageTag("und-$code").getDisplayCountry(locale) }
         .getOrNull()?.takeIf { it.isNotBlank() } ?: code
 }
 

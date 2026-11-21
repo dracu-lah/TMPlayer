@@ -111,6 +111,9 @@ class VlcEngine(
 
     /** Opens the same source again where it stood. */
     internal fun prepareAgain() = Unit
+
+    /** Its item's metadata was written again (the player's private metadata, HX88): Now Playing reads it from the session. */
+    fun metadataChanged() = Unit
 }
 
 /** A Media3 player with nothing loaded and nothing to draw: [VlcEngine]'s on iOS. Listeners are kept and never told. */

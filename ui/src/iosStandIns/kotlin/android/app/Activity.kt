@@ -38,6 +38,12 @@ open class Activity : ContextWrapper(null) {
     open fun setPictureInPictureParams(params: PictureInPictureParams) {}
 
     /**
+     * Android 13's switch for the recents picture (HX88): nothing here; iOS's app switcher picture
+     * of a PIN profile is covered by the shell instead (ios, SnapshotCover).
+     */
+    open fun setRecentsScreenshotEnabled(enabled: Boolean) {}
+
+    /**
      * For the iOS shell (com.tmplayer.ios.ActivityShell): told when the activity asks to finish
      * and when it asks for another orientation. An activity the shell cannot close (the app's own
      * screens, as iOS has no going back past them) has no finish handler, and finish does nothing.
