@@ -69,6 +69,12 @@ class StorageRelocation(
         { src, dir, name, progress -> DownloadFiles.moveIntoDownloads(src, dir, name, onProgress = progress) },
     /** The profile a move works for, taken when it starts (HX88, invariant 2). */
     private val owner: () -> com.tmplayer.data.AccountStamp = { com.tmplayer.data.Accounts.stamp },
+    /** Whether the profile a move works for is still the open one, no switch under way (invariant 3). */
+    private val mayAct: (com.tmplayer.data.AccountStamp) -> Boolean = { com.tmplayer.data.OwnedSessions.mayAct(it) },
+    /** Every profile's folder name (null: the adopted one), for the caches a move leaves behind. */
+    private val profileFolders: () -> List<String?> = {
+        com.tmplayer.data.Accounts.book?.list?.value?.profiles?.map { it.folder }.orEmpty()
+    },
 ) {
     /** The running app, as a move needs it. */
     interface Host {
@@ -171,6 +177,29 @@ class StorageRelocation(
     @Volatile
     private var copying: Job? = null
 
+    /** Set by [stopForSwitch]: the move stops before its next file, so a switch can go ahead. */
+    @Volatile
+    private var switchStop = false
+
+    /**
+     * A [com.tmplayer.data.BeforeSwitch] hook (HX88, review D2): a move under way stops before its
+     * next file (the one in hand lands and is recorded for its owner) and the switch waits for it,
+     * at most [waitMs]. A move that outlasts the wait still writes nothing for the next profile:
+     * each file is checked against its owner first.
+     */
+    suspend fun stopForSwitch(waitMs: Long = SWITCH_WAIT_MS) {
+        if (!lock.isLocked) return
+        switchStop = true
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(waitMs) { lock.withLock { } }
+        } finally {
+            switchStop = false
+        }
+    }
+
+    /** What a switch says it waits for while a move runs, or null for nothing. */
+    fun waitingLabel(): String? = if (lock.isLocked) L.profilesWaitingMoving else null
+
     /** The storage location in use, or null for the default folders. */
     fun currentRoot(): File? = prefs.now.storageRoot.takeIf { it.isNotBlank() }?.let(::File)
 
@@ -214,7 +243,8 @@ class StorageRelocation(
         if (!lock.tryLock()) throw IOException(L.storageMoveBusy)
         try {
             val by = owner()
-            val from = layout(currentRoot(), by.folder)
+            val oldRoot = currentRoot()
+            val from = layout(oldRoot, by.folder)
             val to = layout(root, by.folder)
             preflight(root, to, moveDownloads)
             host.pause()
@@ -233,6 +263,7 @@ class StorageRelocation(
                     prepare(root, to)
                     host.restart(root)
                     deleteOldCache(from.cacheDir, to)
+                    deleteOtherCaches(oldRoot, root, by.folder, to)
                     finish(pending, root, to)
                 }
             } finally {
@@ -290,7 +321,7 @@ class StorageRelocation(
         val to = layout(root, by.folder)
         withContext(NonCancellable + com.tmplayer.data.AccountOwner(by)) {
             prepare(root, to)
-            sweepPartFiles(to)
+            if (mayAct(by)) sweepPartFiles(to)
             deleteOldCache(File(pending.oldCache), to)
             finish(pending, root, to)
         }
@@ -357,6 +388,22 @@ class StorageRelocation(
     }
 
     /**
+     * The caches the other profiles had at the old root (HX88, review D2): the root moves for every
+     * profile, so theirs would otherwise stay there for good, never swept or purged. None of their
+     * clients runs while another profile is open, and TDLib fetches again whatever it misses. Never
+     * anything the new layout of any profile uses.
+     */
+    private suspend fun deleteOtherCaches(oldRoot: File?, root: File?, openFolder: String?, to: StorageLayout) {
+        for (folder in profileFolders().distinct()) {
+            if (folder == openFolder) continue
+            val old = layout(oldRoot, folder).cacheDir
+            val theirs = layout(root, folder)
+            if (listOf(theirs.cacheDir, theirs.downloadsDir, theirs.updatesDir).any { StorageRelocationPlan.inside(it, old) || StorageRelocationPlan.inside(old, it) }) continue
+            deleteOldCache(old, to)
+        }
+    }
+
+    /**
      * Whether the new location is still there. For a chosen root that is its TMPlayer folder,
      * which a drive pulled mid move takes with it (a mount point left behind is an empty folder).
      */
@@ -390,6 +437,14 @@ class StorageRelocation(
             ?.let { com.tmplayer.data.AccountAddress(it.folder) } ?: kotlin.coroutines.EmptyCoroutineContext
 
     private suspend fun finish(pending: StorageRelocationPlan.Pending?, root: File?, to: StorageLayout): Outcome {
+        // The records read are the open profile's: only while that is still the move's owner, and
+        // checked again before each file (HX88, review D2: a switch beside the launch picker).
+        val by = kotlinx.coroutines.currentCoroutineContext()[com.tmplayer.data.AccountOwner]?.stamp
+        fun ownerOpen() = !switchStop && (by == null || mayAct(by))
+        if (!ownerOpen()) {
+            Logger.i(TAG, "The downloads' move stopped: its profile is no longer the open one")
+            return Outcome(downloadsDir = to.downloadsDir, moved = 0, failed = emptyList(), stop = Stop.Cancelled, total = 0)
+        }
         var records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
         // A file that landed in the new folder with its record not written (a kill, a failed write):
         // point the record at it before anything else, or it would be taken for a missing file.
@@ -422,7 +477,7 @@ class StorageRelocation(
         try {
             for (record in moving) {
                 val src = File(record.localPath.orEmpty())
-                if (cancelled) {
+                if (cancelled || !ownerOpen()) {
                     stop = Stop.Cancelled
                     break
                 }
@@ -540,6 +595,9 @@ class StorageRelocation(
         const val NOTIFY_ID = (1L shl 34) + 2
         const val REPORT_NAMES = 6
         const val WINDOWS_PATH_LIMIT = 259
+
+        /** The longest a switch waits for a move's file in hand, never for ever. */
+        const val SWITCH_WAIT_MS = 60_000L
         val IS_WINDOWS = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
     }
 }

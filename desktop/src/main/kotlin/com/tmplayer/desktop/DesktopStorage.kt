@@ -51,7 +51,10 @@ object DesktopStorage {
     val relocationProgress = kotlinx.coroutines.flow.MutableStateFlow<StorageRelocation.Moving?>(null)
 
     val relocation: StorageRelocation by lazy {
-        StorageRelocation(DesktopServices.settings, DesktopServices.prefs, LiveHost, notifier = { notifier }, _moving = relocationProgress)
+        StorageRelocation(DesktopServices.settings, DesktopServices.prefs, LiveHost, notifier = { notifier }, _moving = relocationProgress).also { move ->
+            // A switch, a sign out or Remove all accounts waits for a move under way (HX88).
+            com.tmplayer.data.BeforeSwitch.add({ move.stopForSwitch() }) { move.waitingLabel() }
+        }
     }
 
     /** True while a storage move runs: the sweep must not judge a cache that is being replaced. */
