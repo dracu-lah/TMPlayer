@@ -17,6 +17,7 @@ import androidx.compose.ui.test.pressKey
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.CodeDelivery
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.ui.theme.Tone
@@ -42,6 +43,10 @@ class RajuSignInTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() = FormFactor.override(false)

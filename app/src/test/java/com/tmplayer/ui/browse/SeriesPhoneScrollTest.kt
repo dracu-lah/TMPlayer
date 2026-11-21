@@ -19,10 +19,12 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -40,6 +42,10 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [28], qualifiers = "w411dp-h891dp-port-notnight-xhdpi")
 class SeriesPhoneScrollTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

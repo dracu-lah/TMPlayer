@@ -20,6 +20,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Release
 import com.tmplayer.data.UpdateState
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.auth.PaneError
 import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.connect.ProxyScreen
@@ -46,6 +47,10 @@ class FlowsReviewTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

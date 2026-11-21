@@ -47,6 +47,7 @@ import com.tmplayer.data.BackupSender
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SignOutBackup
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.settings.SettingsPage
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
@@ -87,6 +88,10 @@ class KeepPlaceTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     // One store for the whole test, as Home keeps one: rememberKeepPlaceCardState remembers its
     // state by the store, so a new store on every read made a new state (keep = false) whenever

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ThemeChoice
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.components.TvChoiceRow
 import com.tmplayer.ui.theme.FocusContrast
 import com.tmplayer.ui.theme.Motion
@@ -34,6 +35,7 @@ import com.tmplayer.ui.theme.floatingSurface
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -58,6 +60,10 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
 class TvFocusRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val settings get() = SettingsStore(RuntimeEnvironment.getApplication())
 

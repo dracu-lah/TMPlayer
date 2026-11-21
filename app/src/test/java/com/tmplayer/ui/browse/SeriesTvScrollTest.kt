@@ -26,10 +26,12 @@ import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -42,6 +44,10 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [28], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
 class SeriesTvScrollTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var metadata: OnlineMetadata? = null
 

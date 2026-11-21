@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.SupportRegion
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.about.SupportActions
 import com.tmplayer.ui.about.SupportDialog
 import com.tmplayer.ui.about.SupportStep
@@ -20,6 +21,7 @@ import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -39,6 +41,10 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SupportCardsRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val counters = SupportReminder.Counters(completedWatches = 7, watchTimeMs = 11L * 60 * 60 * 1000)
 

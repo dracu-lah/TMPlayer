@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SupportRegion
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.about.SupportActions
 import com.tmplayer.ui.about.SupportDialog
 import com.tmplayer.ui.about.SupportStep
@@ -51,6 +52,10 @@ class SupportDialogTvFocusTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val opened = mutableListOf<String>()
     private var closed = 0

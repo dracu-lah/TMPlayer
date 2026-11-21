@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.TvBrowseHintCard
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.After
@@ -45,6 +46,10 @@ class TourOfferFrameTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private var offer by mutableStateOf(true)
     private var hintUp by mutableStateOf(true)
@@ -144,6 +149,10 @@ class TourOfferFramePhoneTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @Test
     fun `the card sits under the last row on a phone`() {

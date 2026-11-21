@@ -35,6 +35,17 @@ class DownloadStamps(
         stamps.remove(id)
     }
 
+    /**
+     * [id] reached the front of the queue and may not start (asked under another profile, in rows
+     * that are gone, or with no request left): its stamp goes, and the set of rows it was queued in
+     * is returned, for [OfflineDownloads.forgetQueuedIn] to remove its row only there (HX88, review LOW).
+     */
+    fun discard(id: Int): Long {
+        val rows = rowsOf(id)
+        stamps.remove(id)
+        return rows
+    }
+
     fun clear() {
         stamps.clear()
     }

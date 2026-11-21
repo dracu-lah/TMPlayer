@@ -1,5 +1,9 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -29,6 +33,7 @@ class DatabaseMarkerTest {
     @After
     fun tearDown() {
         OfflineDownloads.forget(request.fileId)
+        OfflineDownloads.resetForTest()
     }
 
     @Test
@@ -51,6 +56,55 @@ class DatabaseMarkerTest {
         OfflineDownloads.restore(settings, database = "newdatabase2")
         assertTrue("nothing offered from another database", OfflineDownloads.active.value.isEmpty())
         assertTrue("and the stale queue is gone", settings.downloadQueueNow().isEmpty())
+    }
+
+    @Test
+    fun `a row already in memory wins over the stored one of the same id`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "samedatabase")
+        val live = OfflineDownloads.Progress(request, 500, request.sizeBytes, OfflineDownloads.Stage.Running)
+        OfflineDownloads.note(live)
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertEquals("a download asked before the restore ran keeps its place", live, OfflineDownloads.active.value[41])
+    }
+
+    @Test
+    fun `two writes of the queue never cross, so the newer rows are the last written`() = runBlocking {
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        OfflineDownloads.note(OfflineDownloads.Progress(request, 0, request.sizeBytes, OfflineDownloads.Stage.Queued))
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        // The first write has taken its snapshot (one row) and is held before it writes.
+        val first = launch(Dispatchers.Default) {
+            OfflineDownloads.persistQueue(settings) {
+                entered.complete(Unit)
+                gate.await()
+            }
+        }
+        entered.await()
+        // A newer row, and its write: it must wait behind the first, not overtake it.
+        val newer = request.copy(fileId = 42, messageId = 8L)
+        OfflineDownloads.note(OfflineDownloads.Progress(newer, 0, newer.sizeBytes, OfflineDownloads.Stage.Queued))
+        val second = launch(Dispatchers.Default) { OfflineDownloads.persistQueue(settings) }
+        delay(300)
+        gate.complete(Unit)
+        first.join()
+        second.join()
+        assertEquals(setOf(41, 42), settings.downloadQueueNow().map { it.fileId }.toSet())
+    }
+
+    @Test
+    fun `restore runs once for each set of rows, so a recreated screen cannot bring a cancelled download back`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "samedatabase")
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertEquals(setOf(41), OfflineDownloads.active.value.keys)
+        // The viewer cancels: the row goes at once, its write is still to come.
+        OfflineDownloads.forget(41)
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertTrue("the stored queue still has it, the second restore must not read it", OfflineDownloads.active.value.isEmpty())
+        // A new set of rows (a switch or a new database) reads the store again.
+        OfflineDownloads.newDatabase()
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertEquals(setOf(41), OfflineDownloads.active.value.keys)
     }
 
     @Test

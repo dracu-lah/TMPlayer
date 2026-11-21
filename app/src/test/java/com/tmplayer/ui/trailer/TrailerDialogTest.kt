@@ -19,6 +19,7 @@ import androidx.lifecycle.Lifecycle
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
 import com.tmplayer.online.MetaTrailer
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import org.junit.After
@@ -49,6 +50,10 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TrailerDialogTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @get:Rule
     val rule = createEmptyComposeRule()

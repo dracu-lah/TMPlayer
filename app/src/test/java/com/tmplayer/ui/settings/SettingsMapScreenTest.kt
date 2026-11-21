@@ -17,6 +17,7 @@ import com.tmplayer.data.SettingsLink
 import com.tmplayer.data.SettingsMap
 import com.tmplayer.data.SettingsNeed
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import org.junit.After
@@ -42,6 +43,10 @@ class SettingsMapScreenTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

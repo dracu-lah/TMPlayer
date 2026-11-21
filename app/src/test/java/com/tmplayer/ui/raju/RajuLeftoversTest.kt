@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.OpenDownloadsFolder
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.EmptySearchWays
 import com.tmplayer.ui.components.BigEmpty
 import com.tmplayer.ui.components.BrandLoader
@@ -60,6 +61,10 @@ class RajuLeftoversPhoneTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {
@@ -252,6 +257,10 @@ class RajuLeftoversTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

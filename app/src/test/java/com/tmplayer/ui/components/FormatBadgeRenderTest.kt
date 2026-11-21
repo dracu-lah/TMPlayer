@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.FormatFacts
 import com.tmplayer.data.MediaItem
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.browse.MediaCard
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
@@ -38,6 +39,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -57,6 +59,10 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FormatBadgeRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

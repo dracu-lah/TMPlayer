@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import org.junit.After
@@ -39,6 +40,10 @@ class GroupAFixesTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

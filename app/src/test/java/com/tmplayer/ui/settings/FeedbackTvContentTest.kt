@@ -27,6 +27,7 @@ import com.tmplayer.data.LogUpload
 import com.tmplayer.data.MemoryFeedbackDraft
 import com.tmplayer.data.TitleUpload
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.components.FeedbackActions
 import com.tmplayer.ui.components.FeedbackTags
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -57,6 +58,10 @@ class FeedbackTvContentTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val facts = Feedback.Facts("1.40.0", Feedback.Platform.AndroidTv, "Xiaomi MIBOX4, Android 9", "en")
     private val sent = mutableListOf<String>()

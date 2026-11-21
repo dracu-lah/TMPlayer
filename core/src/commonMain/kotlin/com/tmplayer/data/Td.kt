@@ -342,14 +342,26 @@ object Td {
         databaseDirOf(folder)?.let { DatabaseMarker.fromBeforeMarkers(it, marker) } == true
 
     /**
-     * The open profile's database is a new one now (a sign out, an ended session): a new marker,
-     * and the download rows of the old one dropped.
+     * The open profile's database is a new one now (a sign out, an ended session): the download
+     * rows of the old one dropped, and a new marker.
+     *
+     * In that order (review LOW): a persist that took its rows before the drop and reads the marker
+     * after the renew would tag the old database's rows with the new database's marker. With the
+     * drop first, that persist finds the rows gone when it re-checks them ([SettingsStore.saveDownloadQueue]),
+     * and one that read the marker before the renew writes the old marker, which is the truth. The
+     * rows are dropped again after the renew, so a restore that began between the two (and read the
+     * old marker) finds its rows gone and is dropped, not merged.
      */
     fun renewDatabaseMarker(): String? {
-        val marker = databaseDirOf(Accounts.active.folder)?.let(DatabaseMarker::renew)
         OfflineDownloads.newDatabase()
+        betweenDropAndRenew?.invoke()
+        val marker = databaseDirOf(Accounts.active.folder)?.let(DatabaseMarker::renew)
+        OfflineDownloads.dropRowsQuietly()
         return marker
     }
+
+    /** For tests: runs in [renewDatabaseMarker] between the drop of the rows and the renewal of the marker, where a restore can land. */
+    internal var betweenDropAndRenew: (() -> Unit)? = null
 
     private fun databaseDirOf(folder: String?): java.io.File? =
         basePaths?.let { AccountDirs.pathsFor(it, Profile(id = "db", folder = folder)).databaseDir }

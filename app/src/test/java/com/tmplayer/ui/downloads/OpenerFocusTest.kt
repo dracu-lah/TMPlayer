@@ -3,6 +3,7 @@ package com.tmplayer.ui.downloads
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.Lifecycle
+import com.tmplayer.ui.DrainMainLooperRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -22,6 +23,10 @@ class OpenerFocusTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     private val memory = OpenerMemory()
     private val restored = mutableListOf<String>()

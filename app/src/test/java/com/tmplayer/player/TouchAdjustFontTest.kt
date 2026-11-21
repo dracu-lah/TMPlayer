@@ -14,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import com.tmplayer.R
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -39,6 +40,10 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TouchAdjustFontTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @get:Rule
     val rule = createEmptyComposeRule()

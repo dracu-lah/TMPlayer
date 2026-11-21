@@ -17,6 +17,7 @@ import androidx.fragment.app.FragmentActivity
 import com.tmplayer.R
 import com.tmplayer.data.FormFactor
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -45,6 +46,10 @@ class EngineFocusTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

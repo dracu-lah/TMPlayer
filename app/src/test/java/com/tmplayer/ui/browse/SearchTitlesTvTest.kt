@@ -28,6 +28,7 @@ import com.tmplayer.data.GlobalSearch
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.ResultGroup
 import com.tmplayer.online.PosterChoice
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
@@ -56,6 +57,10 @@ class SearchTitlesTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

@@ -10,11 +10,13 @@ import com.tmplayer.R
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.WatchLaterRecord
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.ui.DrainMainLooperRule
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -35,6 +37,10 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PlayerMoreRenderTest {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() {

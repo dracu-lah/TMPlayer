@@ -27,6 +27,7 @@ import com.tmplayer.online.MetaTrailer
 import com.tmplayer.online.MetadataCache
 import com.tmplayer.online.MetadataStore
 import com.tmplayer.online.OnlineMetadata
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.online.LocalTrailerOpener
 import com.tmplayer.ui.online.TrailerOpener
@@ -59,6 +60,10 @@ class TvTrailerFocusTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @get:Rule
     val dir = TemporaryFolder()

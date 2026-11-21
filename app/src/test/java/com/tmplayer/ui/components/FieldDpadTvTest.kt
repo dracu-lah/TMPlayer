@@ -24,6 +24,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import com.tmplayer.data.Country
 import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.auth.COUNTRY_SEARCH_TAG
 import com.tmplayer.ui.auth.CountryPicker
@@ -57,6 +58,10 @@ class FieldDpadTvTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
 
     @After
     fun tearDown() = FormFactor.override(false)

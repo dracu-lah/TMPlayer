@@ -23,12 +23,14 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.GlobalSearch
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.ResultGroup
+import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -200,6 +202,11 @@ abstract class TvSearchWalk {
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TvSearchTelevision720AtOneToOneRenderTest : TvSearchWalk() {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
     @Test
     @Config(sdk = [35], qualifiers = "w1280dp-h720dp-land-television-night-mdpi")
     fun television720AtOneToOne() = run("tv-search-720-mdpi.png")
@@ -213,6 +220,11 @@ class TvSearchTelevision720AtOneToOneRenderTest : TvSearchWalk() {
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TvSearchTelevisionRtlRenderTest : TvSearchWalk() {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
     @Test
     @Config(sdk = [35], qualifiers = "ar-ldrtl-w960dp-h540dp-land-television-night-xhdpi")
     fun televisionRtl() = run("tv-search-rtl.png")
@@ -226,6 +238,11 @@ class TvSearchTelevisionRtlRenderTest : TvSearchWalk() {
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TvSearchTelevision1080RenderTest : TvSearchWalk() {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun television1080() = run("tv-search-1080.png")
@@ -235,6 +252,11 @@ class TvSearchTelevision1080RenderTest : TvSearchWalk() {
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TvSearchRenderTest : TvSearchWalk() {
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-tvdpi")
     fun television720() = run("tv-search-720.png")

@@ -3305,13 +3305,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /**
      * Records the queue as it now stands. An empty list clears the key rather than storing "".
+     * [rowsGeneration] (from [OfflineDownloads.persistSnapshot]) makes it write only while the rows
+     * are still that set.
      *
      * Written on every change to the queue, which is a handful of writes per download rather than
      * one per second: progress is deliberately not stored, since a resumed download asks TDLib how
      * many bytes are actually on disk rather than trusting a number the crash may have caught mid
      * write.
      */
-    suspend fun saveDownloadQueue(requests: List<DownloadRequest>, owner: AccountStamp? = null, database: String? = DATABASE_OF_STORE) = owned(owner) {
+    suspend fun saveDownloadQueue(
+        requests: List<DownloadRequest>,
+        owner: AccountStamp? = null,
+        database: String? = DATABASE_OF_STORE,
+        rowsGeneration: Long? = null,
+    ) = owned(owner) {
         // The database of the profile this store writes for (its owner, else the open one), read
         // from that profile's own folder (HX88): never from the folder a switch points at first.
         val marker = if (database == DATABASE_OF_STORE) {
@@ -3321,6 +3328,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             database
         }
         prefs.edit { prefs ->
+            // The rows these were read from went meanwhile (a sign out or an ended session, which
+            // drops them before it renews the marker): they are the old database's, and the marker
+            // read above may already be the new one's. Checked inside the edit, which is one at a
+            // time, so a write that was waiting never lands after the next database's restore.
+            if (rowsGeneration != null && OfflineDownloads.rowsGeneration != rowsGeneration) return@edit
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
                 prefs.remove(DOWNLOAD_QUEUE_DB)

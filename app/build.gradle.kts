@@ -374,6 +374,10 @@ android {
                 // changed setting never reached the screen (CP101), and whole runs sat for close to
                 // an hour on CI. Each class starting clean costs a few seconds and removes all of it.
                 it.forkEvery = 1
+                // Exit value 134 (SIGABRT) from a test JVM is not a shutdown fault: it is the native
+                // graphics library aborting when several threads decode their first picture at once
+                // (core dump in `coredumpctl`, no hs_err file). NativeJniWarmUp (src/test) prevents it;
+                // if it comes back, read the core's stack before tolerating the exit value.
             }
         }
     }
