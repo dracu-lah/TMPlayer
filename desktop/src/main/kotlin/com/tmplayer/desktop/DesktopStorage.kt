@@ -41,7 +41,10 @@ object DesktopStorage {
     var closePlayer: () -> Unit = {}
 
     val migration: DownloadMigration by lazy {
-        DownloadMigration(DesktopServices.settings, notifier = { notifier })
+        DownloadMigration(DesktopServices.settings, notifier = { notifier }).also { run ->
+            // A switch waits for the file in hand (HX88).
+            com.tmplayer.data.BeforeSwitch.add({ run.stopForSwitch() })
+        }
     }
 
     /**

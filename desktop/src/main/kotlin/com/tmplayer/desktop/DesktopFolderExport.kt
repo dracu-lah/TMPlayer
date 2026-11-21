@@ -103,7 +103,11 @@ object DesktopFolderExport {
         cancel.set(false)
         val plan = offer.plan
         _state.value = State(progress = FolderCopy.Progress(0, items.size, items.firstOrNull()?.source?.title.orEmpty(), 0f, 0, items.sumOf { it.sizeBytes }))
-        scope.launch {
+        // The profile whose downloads these are (HX88, review D4): every record written is its own,
+        // and a switch, a sign out or Remove all accounts stops the copy between two files and
+        // waits for it ([com.tmplayer.data.BeforeSwitch]).
+        val owner = com.tmplayer.data.Accounts.stamp
+        val job = scope.launch(com.tmplayer.data.AccountOwner(owner), start = kotlinx.coroutines.CoroutineStart.LAZY) {
             var outcome = runCatching {
                 FolderCopyIo.copyAll(DirFolder(offer.dir), items.map { it.source }, plan.forbidden, plan.unfinished, { cancel.get() }) {
                     _state.value = State(progress = it)
@@ -117,10 +121,22 @@ object DesktopFolderExport {
             }
             val leftOut = plan.items.size - items.size
             if (leftOut > 0) outcome = outcome.copy(notReached = outcome.notReached + leftOut)
-            if (remove) outcome = removeSaved(settings, outcome, items.associate { it.source.key to it.record })
+            if (remove) {
+                outcome = removeSaved(outcome, items.associate { it.source.key to it.record }, owner) { DownloadIndex.delete(settings, it) }
+            }
             _state.value = State(outcome = outcome)
             running.set(false)
         }
+        val hook: suspend () -> Unit = {
+            cancel.set(true)
+            kotlinx.coroutines.withTimeoutOrNull(SWITCH_WAIT_MS) { job.join() }
+        }
+        com.tmplayer.data.BeforeSwitch.add(hook) { com.tmplayer.i18n.L.profilesWaitingExport }
+        job.invokeOnCompletion {
+            com.tmplayer.data.BeforeSwitch.remove(hook)
+            running.set(false)
+        }
+        job.start()
         return true
     }
 
@@ -140,20 +156,30 @@ object DesktopFolderExport {
      * "Remove from TMPlayer's downloads after saving": each original whose copy was checked whole
      * goes the way Delete on the Downloads page takes it (the file, then the record), so the page,
      * the badges and the space figures agree; Continue watching keeps its place. A file the player
-     * holds open on Windows will not delete and is counted as kept.
+     * holds open on Windows will not delete and is counted as kept. Only while [owner] is still the
+     * open profile, asked before each file (HX88, invariant 3): after a switch every original stays.
      */
-    private suspend fun removeSaved(settings: SettingsStore, outcome: FolderCopy.Outcome, records: Map<String, ResumeRecord>): FolderCopy.Outcome {
+    internal suspend fun removeSaved(
+        outcome: FolderCopy.Outcome,
+        records: Map<String, ResumeRecord>,
+        owner: com.tmplayer.data.AccountStamp,
+        mayAct: (com.tmplayer.data.AccountStamp) -> Boolean = { com.tmplayer.data.OwnedSessions.mayAct(it) },
+        delete: suspend (ResumeRecord) -> Boolean,
+    ): FolderCopy.Outcome {
         var removed = 0
         var kept = 0
         for (key in outcome.verifiedKeys) {
             val record = records[key] ?: continue
-            if (runCatching { DownloadIndex.delete(settings, record) }.getOrDefault(false)) removed++ else kept++
+            if (mayAct(owner) && runCatching { delete(record) }.getOrDefault(false)) removed++ else kept++
         }
         kept += (outcome.copied - outcome.verifiedKeys.size).coerceAtLeast(0)
         return outcome.copy(moved = removed, notMoved = kept)
     }
 
     fun keyOf(record: ResumeRecord): String = "${record.chatId}:${record.messageId}"
+
+    /** The longest a switch waits for the copy in hand. */
+    private const val SWITCH_WAIT_MS = 60_000L
 
     private fun label(dir: File): String = dir.name.ifBlank { dir.path }
 
