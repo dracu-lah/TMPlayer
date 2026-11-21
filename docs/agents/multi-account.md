@@ -433,7 +433,7 @@ Two choke points, one rule each:
   is still on screen. Minimised or hidden more than 60 s, the open profile asks its PIN again.
 - `DesktopProfiles` holds the one `ProfileFlow` for the process over `DesktopProfilePlatform`
   (the player's `BeforeSwitch` hook from `PlayerHost`, the download runner's pause and moves, the
-  wipe `desktopForgetProfile`, the app lock's PIN). `DesktopShell` draws `ProfilesGate` around the
+  wipe `desktopForgetProfile`, the app lock's PIN). `DesktopShell` draws `DesktopProfilesGate` (the shared `ProfilesGate`, the arrow keys moving the focus in the picker and its panels when nothing focused took them) around the
   window's content; `ShellState` is built again for each open profile (full screen carries over),
   so no page, chat, player or search of one profile is drawn for the next. The trailer host,
   "Wrong title?" and the toasts show only while `profileShellShown`.
