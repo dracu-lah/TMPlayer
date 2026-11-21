@@ -142,8 +142,11 @@ fun PlayerHost(
         onFreeUpSpace = onFreeUpSpace,
     )
 
+    // The profile the player opened under (HX88): its title shows only while that profile is the open one.
+    val openedFor = remember { com.tmplayer.data.Accounts.stamp }
     LaunchedEffect(engine, playing) {
         val e = engine ?: return@LaunchedEffect
+
         val name = playing.fileName.ifBlank { playing.title }
         val title = MediaName.parse(name).title.ifBlank { name }
         // Through a cast too: the OS media controls follow the TV while it plays. A PIN profile
@@ -151,7 +154,7 @@ fun PlayerHost(
         // title comes back the moment it shows again.
         kotlinx.coroutines.flow.combine(e.stateUpdates(), com.tmplayer.data.ProfileUnlock.hidden()) { s, hidden -> s to hidden }.collect { (s, hidden) ->
             if (s.playing && s.opened && !s.ended) keepAwake.acquire() else keepAwake.release()
-            session.update(com.tmplayer.desktop.os.ProfileOutside.mediaTitle(title, hidden), s.durationMs, s.positionMs, s.playing && !s.ended)
+            session.update(com.tmplayer.desktop.os.ProfileOutside.mediaTitle(title, hidden, owner = openedFor), s.durationMs, s.positionMs, s.playing && !s.ended)
         }
     }
 }

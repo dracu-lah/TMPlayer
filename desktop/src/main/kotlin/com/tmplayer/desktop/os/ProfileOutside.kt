@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.os
 
+import com.tmplayer.data.AccountStamp
 import com.tmplayer.data.Accounts
 import com.tmplayer.data.ProfileUnlock
 import com.tmplayer.platform.TransferNotifier
@@ -34,8 +35,20 @@ object ProfileOutside {
     /** The neutral words: the app's name, the same on every language (a name, not a sentence). */
     const val APP_NAME = "TMPlayer" // i18n-ok: the app's name
 
-    /** The title the system's media controls show for [real]. */
-    fun mediaTitle(real: String, hidden: Boolean): String = if (hidden) APP_NAME else real
+    /**
+     * The one rule (as Android's ProfileNotifications): the real words only for the profile that
+     * made them ([owner]) while it is the open one ([current]) and shown; otherwise neutral words
+     * or nothing.
+     */
+    fun mayShow(owner: AccountStamp?, current: AccountStamp, hidden: Boolean): Boolean =
+        !hidden && (owner == null || owner == current)
+
+    /**
+     * The title the system's media controls show for [real], played under [owner] (null: the
+     * open profile's).
+     */
+    fun mediaTitle(real: String, hidden: Boolean, owner: AccountStamp? = null, current: AccountStamp = Accounts.stamp): String =
+        if (mayShow(owner, current, hidden)) real else APP_NAME
 
     /** Whether a profile's alert may go out now. */
     fun alertsAllowed(hidden: Boolean): Boolean = !hidden
@@ -44,18 +57,22 @@ object ProfileOutside {
     fun hiddenNow(): Boolean = runCatching { ProfileUnlock.hiddenNow() }.getOrDefault(true)
 
     /**
-     * A profile's alert (a new video, an episode, a piece): dropped while the profile is hidden,
-     * as the phone never even checks then. Device notices go to [target] directly.
+     * A profile's alert (a new video, an episode, a piece), made for [owner]: posted only while
+     * [owner] is still the open profile and shown, read again at the moment of posting (an alert
+     * built before a switch or a lock is dropped, never posted for the next profile). Device
+     * notices go to [target] directly.
      */
     internal fun profileNotice(
         target: DesktopNotices?,
+        owner: AccountStamp,
         title: String,
         body: String?,
         onPress: (() -> Unit)?,
         buttons: List<NoticeButton> = emptyList(),
         hidden: Boolean = hiddenNow(),
+        current: AccountStamp = Accounts.stamp,
     ) {
-        if (!alertsAllowed(hidden)) return
+        if (!mayShow(owner, current, hidden)) return
         target?.notice(title, body, onPress, buttons)
     }
 
@@ -85,38 +102,62 @@ object ProfileOutside {
 internal class ProfileGuardedNotifier(
     private val inner: TransferNotifier,
     private val hidden: () -> Boolean = ProfileOutside::hiddenNow,
+    private val current: () -> AccountStamp = { Accounts.stamp },
 ) : TransferNotifier, DesktopNotices, DockProgress {
 
-    private class Ongoing(val kind: Kind, val title: String, var neutral: Boolean, var done: Long = 0, var total: Long? = null)
+    /** A transfer up on the system's list: the profile it was begun for ([owner]) and what it said. */
+    private class Ongoing(val owner: AccountStamp, val kind: Kind, val title: String, var neutral: Boolean, var done: Long = 0, var total: Long? = null)
 
     private val ongoing = LinkedHashMap<Long, Ongoing>()
 
+    /** Ids taken down with their profile ([clearProfile]): a late update of one posts nothing. */
+    private val gone = LinkedHashSet<Long>()
+
     override val capabilities: Set<TransferNotifier.Capability> get() = inner.capabilities
 
+    /** Its owner may show it now: still the open profile, and shown. */
+    private fun real(owner: AccountStamp): Boolean = ProfileOutside.mayShow(owner, current(), hidden())
+
     override fun begin(id: Long, kind: Kind, title: String) {
-        val neutral = hidden()
-        synchronized(ongoing) { ongoing[id] = Ongoing(kind, title, neutral) }
+        val owner = current()
+        val neutral = !real(owner)
+        synchronized(ongoing) {
+            gone -= id
+            ongoing[id] = Ongoing(owner, kind, title, neutral)
+        }
         inner.begin(id, kind, if (neutral) ProfileOutside.APP_NAME else title)
     }
 
     override fun progress(id: Long, done: Long, total: Long?, bytesPerSecond: Long?) {
-        synchronized(ongoing) {
-            ongoing[id]?.let {
+        val forward = synchronized(ongoing) {
+            val entry = ongoing[id]
+            entry?.let {
                 it.done = done
                 it.total = total
             }
+            // One taken down with its profile, or one of a profile no longer open: nothing.
+            id !in gone && (entry == null || entry.owner == current())
         }
-        inner.progress(id, done, total, bytesPerSecond)
+        if (forward) inner.progress(id, done, total, bytesPerSecond)
+    }
+
+    /**
+     * Whose a result is: the owner its [begin] recorded; for one never begun (a download that
+     * failed before it started, its rows still the open profile's), the open profile's. Null for
+     * one taken down with its profile: nothing is posted.
+     */
+    private fun ownerOfResult(id: Long): AccountStamp? = synchronized(ongoing) {
+        if (id in gone) null else ongoing.remove(id)?.owner ?: current()
     }
 
     override fun complete(id: Long, title: String, body: String, open: OpenTarget?) {
-        synchronized(ongoing) { ongoing.remove(id) }
-        if (hidden()) inner.complete(id, ProfileOutside.APP_NAME, "", OpenTarget.DownloadsScreen) else inner.complete(id, title, body, open)
+        val owner = ownerOfResult(id) ?: return
+        if (real(owner)) inner.complete(id, title, body, open) else inner.complete(id, ProfileOutside.APP_NAME, "", OpenTarget.DownloadsScreen)
     }
 
     override fun fail(id: Long, title: String, reason: String, retryable: Boolean) {
-        synchronized(ongoing) { ongoing.remove(id) }
-        if (hidden()) inner.fail(id, ProfileOutside.APP_NAME, "", retryable) else inner.fail(id, title, reason, retryable)
+        val owner = ownerOfResult(id) ?: return
+        if (real(owner)) inner.fail(id, title, reason, retryable) else inner.fail(id, ProfileOutside.APP_NAME, "", retryable)
     }
 
     override fun cancel(id: Long) {
@@ -135,19 +176,34 @@ internal class ProfileGuardedNotifier(
 
     /** Each transfer still up drawn again, neutral or real, when the profile hid or showed. */
     fun refresh() {
-        val neutral = hidden()
         val redraw = synchronized(ongoing) {
-            ongoing.filter { it.value.neutral != neutral }.onEach { it.value.neutral = neutral }.toList()
+            ongoing.mapNotNull { (id, entry) ->
+                val neutral = !real(entry.owner)
+                if (entry.neutral == neutral) null else id to entry.also { it.neutral = neutral }
+            }
         }
         for ((id, entry) in redraw) {
-            inner.begin(id, entry.kind, if (neutral) ProfileOutside.APP_NAME else entry.title)
-            if (entry.done > 0) inner.progress(id, entry.done, entry.total, null)
+            inner.begin(id, entry.kind, if (entry.neutral) ProfileOutside.APP_NAME else entry.title)
+            if (entry.done > 0 && entry.owner == current()) inner.progress(id, entry.done, entry.total, null)
         }
     }
 
-    /** Every transfer of the profile off the system's list. */
+    /** Every transfer of the profile off the system's list; a late update of one posts nothing. */
     fun clearProfile() {
-        val ids = synchronized(ongoing) { ongoing.keys.toList().also { ongoing.clear() } }
+        val ids = synchronized(ongoing) {
+            ongoing.keys.toList().also {
+                gone += it
+                ongoing.clear()
+                // Bounded: the oldest go first; a transfer's id is begun again before it is reused.
+                while (gone.size > MAX_GONE) gone.remove(gone.first())
+            }
+        }
         ids.forEach { inner.cancel(it) }
     }
+
+    private companion object {
+        const val MAX_GONE = 512
+    }
+
+
 }

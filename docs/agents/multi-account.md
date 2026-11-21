@@ -457,9 +457,9 @@ Outside the window (`ProfileOutside`, tested in `ProfileOutsideTest`):
 
 | Surface | Rule |
 | --- | --- |
-| Download and move progress (Linux D-Bus, Windows toasts) | `ProfileGuardedNotifier`: the app's name while hidden, drawn again for real when shown |
-| Download and move results | the app's name, no file to open, while hidden |
-| New video, episode and piece alerts | not even checked while hidden (`DesktopChecks`), posted through `ProfileOutside.profileNotice` |
+| Download and move progress (Linux D-Bus, Windows toasts) | `ProfileGuardedNotifier`: each transfer keeps the profile it was begun for; its title only while that profile is the open one and shown, the app's name otherwise; a late update of one taken down with its profile posts nothing |
+| Download and move results | real only for the open, shown owner; the app's name and no file to open otherwise (a transfer of A done after a switch to B names nothing of A) |
+| New video, episode and piece alerts | not even checked while hidden (`DesktopChecks`), posted through `ProfileOutside.profileNotice` with the owner taken when the check began, read again at each post |
 | Low storage, a new version, the support ask | the device's, unchanged |
 | Media controls (MPRIS on Linux, SMTC on Windows) | `ProfileOutside.mediaTitle`: the app's name while hidden, the title again once shown |
 | On a switch or a sign out | every transfer of the profile left comes off the system's list |
