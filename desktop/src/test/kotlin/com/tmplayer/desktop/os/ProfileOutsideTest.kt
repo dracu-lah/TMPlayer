@@ -80,10 +80,12 @@ class ProfileOutsideTest {
     @Test
     fun `the device's notices are unchanged and a profile's alert waits while hidden`() {
         val inner = Recording()
-        val guarded = ProfileGuardedNotifier(inner, hidden = { true })
+        var hidden = true
+        val guarded = ProfileGuardedNotifier(inner, hidden = { hidden }, current = { a })
         guarded.notice("A new version", "2.0 is out", null)
         ProfileOutside.profileNotice(guarded, a, "New in Harbour", "3 videos", null, hidden = true, current = a)
         assertEquals(listOf("notice A new version|2.0 is out"), inner.calls)
+        hidden = false
         ProfileOutside.profileNotice(guarded, a, "New in Harbour", "3 videos", null, hidden = false, current = a)
         assertEquals("notice New in Harbour|3 videos", inner.calls.last())
     }
@@ -156,5 +158,88 @@ class ProfileOutsideTest {
     fun `with no PIN profile open nothing is hidden`() {
         // The process's accounts are never opened in the desktop's tests: one profile, no PIN.
         assertEquals(false, ProfileOutside.hiddenNow())
+    }
+
+    /** A platform that can take down what it posted, and keeps the press checks it was handed. */
+    private class Keyed : TransferNotifier, DesktopNotices, KeyedResults {
+        val calls = mutableListOf<String>()
+        val gates = mutableMapOf<Long, () -> Boolean>()
+        val presses = mutableMapOf<Long, (() -> Unit)?>()
+        override val capabilities: Set<TransferNotifier.Capability> = emptySet()
+        override fun begin(id: Long, kind: Kind, title: String) { calls += "begin $id $title" }
+        override fun progress(id: Long, done: Long, total: Long?, bytesPerSecond: Long?) { calls += "progress $id $done" }
+        override fun complete(id: Long, title: String, body: String, open: OpenTarget?) { calls += "complete $id $title" }
+        override fun fail(id: Long, title: String, reason: String, retryable: Boolean) { calls += "fail $id $title" }
+        override fun cancel(id: Long) { calls += "cancel $id" }
+        override fun notice(title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) { calls += "notice $title" }
+        override fun result(key: Long, id: Long, title: String, body: String, open: OpenTarget?, failed: Boolean, mayOpen: () -> Boolean) {
+            calls += "result $key $title"
+            gates[key] = mayOpen
+        }
+        override fun keyedNotice(key: Long, title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) {
+            calls += "alert $title"
+            presses[key] = onPress
+        }
+        override fun dismiss(key: Long) { calls += "dismiss $key" }
+    }
+
+    @Test
+    fun `a result and an alert come down with their profile on a switch, and a stale press opens nothing`() {
+        var open = a
+        val inner = Keyed()
+        val guarded = ProfileGuardedNotifier(inner, hidden = { false }, current = { open })
+        guarded.begin(1, Kind.Download, "Harbour Notes")
+        guarded.complete(1, "Downloaded", "Harbour Notes is in Downloads", OpenTarget.File("/d/Harbour.mkv"))
+        var pressed = 0
+        ProfileOutside.profileNotice(guarded, a, "New in Harbour", "3 videos", { pressed++ }, hidden = false, current = a)
+        assertEquals(listOf("begin 1 Harbour Notes", "result 1 Downloaded", "alert New in Harbour"), inner.calls)
+        assertTrue("A open: its result opens", inner.gates.getValue(1)())
+
+        open = b
+        // A press on the stale ones before they come down: nothing of A opens.
+        assertEquals(false, inner.gates.getValue(1)())
+        inner.presses.values.single()!!.invoke()
+        assertEquals(0, pressed)
+        guarded.clearProfile()
+        assertEquals(2, inner.calls.count { it.startsWith("dismiss") })
+        assertTrue(inner.calls.contains("dismiss 1"))
+        // Taken down once: nothing more to take down.
+        guarded.clearProfile()
+        assertEquals(2, inner.calls.count { it.startsWith("dismiss") })
+    }
+
+    @Test
+    fun `a PIN profile's results leave the system's list when it hides, a shown one's stay`() {
+        var hidden = false
+        val inner = Keyed()
+        val guarded = ProfileGuardedNotifier(inner, hidden = { hidden }, current = { a })
+        guarded.complete(5, "Downloaded", "Harbour Notes is in Downloads", OpenTarget.File("/d/Harbour.mkv"))
+        guarded.refresh()
+        assertTrue("shown: it stays", inner.calls.none { it.startsWith("dismiss") })
+        hidden = true
+        guarded.refresh()
+        assertEquals("dismiss 5", inner.calls.last())
+        assertEquals(false, inner.gates.getValue(5)())
+    }
+
+    @Test
+    fun `a transfer begun for A while B is open is A's, and so is a result never begun`() {
+        val inner = Recording()
+        val guarded = ProfileGuardedNotifier(inner, hidden = { false }, current = { b })
+        ProfileOutside.asOwner(a) { guarded.begin(7, Kind.Download, "Harbour Notes") }
+        ProfileOutside.asOwner(a) { guarded.fail(9, "Harbour Notes 2 did not download", "No space", retryable = true) }
+        assertEquals(listOf("begin 7 $app", "fail 9 $app|"), inner.calls)
+        // Outside asOwner: the open profile's, as before.
+        guarded.begin(8, Kind.Download, "Lighthouse")
+        assertEquals("begin 8 Lighthouse", inner.calls.last())
+    }
+
+    @Test
+    fun `a Windows result is tagged so it can be taken off the Action Center`() {
+        val line = WindowsToast.showDone("<toast/>", tag = "r5")
+        assertTrue(line, line.contains(".Tag = ") && line.contains("r5"))
+        assertTrue(WindowsToast.remove("r5").contains("r5"))
+        // Without a tag, as before.
+        assertTrue(!WindowsToast.showDone("<toast/>").contains(".Tag"))
     }
 }

@@ -105,7 +105,7 @@ class DownloadMigration(
         var moved = 0
         var left = 0
         val note = notifier()
-        note.begin(NOTIFY_ID, TransferNotifier.Kind.Migrate, L.downloadsMigratingToFolder(ready.size))
+        com.tmplayer.desktop.os.ProfileOutside.asOwner(by) { note.begin(NOTIFY_ID, TransferNotifier.Kind.Migrate, L.downloadsMigratingToFolder(ready.size)) }
         for ((record, resolved) in ready) {
             val (id, src) = resolved
             // Its profile left (a switch, a sign out): the rest waits for its next launch.
@@ -142,7 +142,7 @@ class DownloadMigration(
         if (left == 0) runCatching { settings.markDownloadsMigrated() }
         val body = L.downloadsMigrated(moved, dir.toString())
         if (moved > 0) {
-            note.complete(NOTIFY_ID, L.downloadsMoved, body, TransferNotifier.OpenTarget.Folder(dir.absolutePath))
+            com.tmplayer.desktop.os.ProfileOutside.asOwner(by) { note.complete(NOTIFY_ID, L.downloadsMoved, body, TransferNotifier.OpenTarget.Folder(dir.absolutePath)) }
         } else {
             note.cancel(NOTIFY_ID)
         }

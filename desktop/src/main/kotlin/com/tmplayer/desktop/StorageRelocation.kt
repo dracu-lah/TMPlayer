@@ -471,7 +471,7 @@ class StorageRelocation(
         val failed = mutableListOf<String>()
         val reasons = mutableMapOf<String, Reason>()
         if (moving.isNotEmpty()) {
-            note.begin(id, TransferNotifier.Kind.Relocate, L.storageMovingDownloads)
+            com.tmplayer.desktop.os.ProfileOutside.asOwner(by) { note.begin(id, TransferNotifier.Kind.Relocate, L.storageMovingDownloads) }
             _moving.value = Moving(0, total)
         }
         try {
@@ -570,10 +570,12 @@ class StorageRelocation(
             missing = gone,
         )
         if (moving.isNotEmpty()) {
-            when {
-                stop is Stop.Cancelled -> note.cancel(id)
-                stop != null || failed.isNotEmpty() -> note.fail(id, L.storageSomeDidNotMove, outcome.message, retryable = true)
-                else -> note.complete(id, L.downloadsMoved, outcome.message, TransferNotifier.OpenTarget.Folder(to.downloadsDir.path))
+            com.tmplayer.desktop.os.ProfileOutside.asOwner(by) {
+                when {
+                    stop is Stop.Cancelled -> note.cancel(id)
+                    stop != null || failed.isNotEmpty() -> note.fail(id, L.storageSomeDidNotMove, outcome.message, retryable = true)
+                    else -> note.complete(id, L.downloadsMoved, outcome.message, TransferNotifier.OpenTarget.Folder(to.downloadsDir.path))
+                }
             }
         }
         return outcome

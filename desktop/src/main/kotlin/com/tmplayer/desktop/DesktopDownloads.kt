@@ -127,6 +127,15 @@ class DesktopDownloadRunner(
         OfflineDownloads.ifRows(rows) { update() }
     }
 
+    /**
+     * A call to the notifier as the work of the running job's profile (HX88, review P5): a transfer
+     * begun, or a result never begun, belongs to it, not to the profile open by then.
+     */
+    private suspend inline fun asOwner(crossinline call: () -> Unit) {
+        val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp
+        com.tmplayer.desktop.os.ProfileOutside.asOwner(owner) { call() }
+    }
+
     /** The profile the running job works for; the open one for work with no owner. */
     private suspend fun ownerNow(): AccountStamp = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
 
@@ -404,7 +413,7 @@ class DesktopDownloadRunner(
         // current id. Once per id, so a video whose number keeps moving cannot become a loop.
         if (withContext(NonCancellable) { resourceAndRequeue(request) }) return@coroutineScope
 
-        notifier.begin(request.fileId.toLong(), TransferNotifier.Kind.Download, request.title)
+        asOwner { notifier.begin(request.fileId.toLong(), TransferNotifier.Kind.Download, request.title) }
         val ticker = launch {
             while (isActive) {
                 delay(PROGRESS_INTERVAL_MS)
@@ -573,7 +582,7 @@ class DesktopDownloadRunner(
                 synchronized(lock) { requests.remove(fileId) }
                 ownRows { OfflineDownloads.forget(fileId) }
                 persistNow()
-                notifier.fail(fileId.toLong(), request.title, ContentProtection.NOT_SAVABLE, retryable = false)
+                asOwner { notifier.fail(fileId.toLong(), request.title, ContentProtection.NOT_SAVABLE, retryable = false) }
             }
             return
         }
@@ -596,7 +605,7 @@ class DesktopDownloadRunner(
 
         val moveId = moveId(fileId)
         val rowsOfJob = kotlinx.coroutines.currentCoroutineContext()[OfflineDownloads.Rows]?.generation
-        notifier.begin(moveId, TransferNotifier.Kind.MoveToDownloads, request.title)
+        asOwner { notifier.begin(moveId, TransferNotifier.Kind.MoveToDownloads, request.title) }
         val target = try {
             DownloadFiles.moveIntoDownloads(src, dir, DownloadFiles.safeName(request.title, request.fileName)) { done, total ->
                 OfflineDownloads.ifRows(rowsOfJob) { OfflineDownloads.moving(fileId, movedBytes = done) }
@@ -689,7 +698,7 @@ class DesktopDownloadRunner(
             DownloadResults.isPrivate(request.chatId, ChatGate.awaitReady(), settings.appLock.first())
         }.getOrDefault(false)
         val words = DownloadResults.words(result, private, reason.takeIf { result.total == 1 })
-        when {
+        asOwner { when {
             result.failed.isNotEmpty() -> notifier.fail(notifierId, words.title, words.body.orEmpty(), retryable = true)
             result.total == 1 && target != null && !private -> notifier.complete(
                 notifierId,
@@ -698,7 +707,7 @@ class DesktopDownloadRunner(
                 TransferNotifier.OpenTarget.File(target.absolutePath),
             )
             else -> notifier.complete(notifierId, words.title, words.body.orEmpty(), TransferNotifier.OpenTarget.DownloadsScreen)
-        }
+        } }
     }
 
     private fun persist() {
