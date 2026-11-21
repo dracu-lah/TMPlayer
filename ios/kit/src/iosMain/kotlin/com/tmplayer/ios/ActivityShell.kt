@@ -363,13 +363,17 @@ internal object ActivityShell {
             run.start()
             run.resume()
         }
-        on(UIApplicationWillResignActiveNotification) { front()?.pause() }
+        on(UIApplicationWillResignActiveNotification) {
+            front()?.pause()
+            // Inactive already shows in the app switcher's live card: every window of every scene
+            // is covered now, not at the background (HX88), while a PIN profile is open.
+            SnapshotCover.cover(SnapshotCover.appWindows())
+        }
         on(UIApplicationDidEnterBackgroundNotification) {
             com.tmplayer.data.IosDownloads.keepGoingBriefly()
             front()?.stop()
-            // Before iOS takes the app switcher's picture: nothing of a PIN profile in it (HX88).
-            @Suppress("DEPRECATION")
-            SnapshotCover.cover(UIApplication.sharedApplication.keyWindow)
+            // Before iOS takes the app switcher's picture: covered already, unless a window came since.
+            SnapshotCover.cover(SnapshotCover.appWindows())
         }
 
         on(UIApplicationDidReceiveMemoryWarningNotification) {
