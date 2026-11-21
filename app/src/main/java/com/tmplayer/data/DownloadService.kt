@@ -33,8 +33,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -555,6 +553,8 @@ class DownloadService : Service() {
             // screen reading "Queued" that nothing would ever start, and the same pass would then
             // decide the queue was empty and stop the service.
             var stale = 0
+            // The set of rows the stale id was queued in, read as its stamp goes (HX88, review LOW).
+            var staleRows = 0L
             val next = synchronized(lock) {
                 if (running.size >= MAX_PARALLEL) return@synchronized null
                 val id = waiting.removeFirstOrNull() ?: return@synchronized null
@@ -565,7 +565,7 @@ class DownloadService : Service() {
                 if (request == null || !stamps.startable(id)) {
                     stale = id
                     requests.remove(id)
-                    stamps.forget(id)
+                    staleRows = stamps.discard(id)
                     return@synchronized null
                 }
                 // As the work of the profile it was asked under (HX88): its writes never land in another.
@@ -577,7 +577,9 @@ class DownloadService : Service() {
                 id
             }
             if (stale != 0) {
-                OfflineDownloads.forget(stale)
+                // Only the row of the rows it was queued in: after a switch or a new database the same
+                // id is the next database's own video, which this must not remove.
+                OfflineDownloads.forgetQueuedIn(stale, staleRows)
                 continue
             }
             if (next == null) break
@@ -967,19 +969,10 @@ class DownloadService : Service() {
      * Still called directly from the completion paths, which run under [NonCancellable] because
      * the record of a finished download has to survive the service stopping a moment later: a
      * conflated request would simply be dropped there. The lock is what makes those safe next to
-     * the coalesced writer above, since the snapshot and the write are one operation under it.
+     * the coalesced writer above, since the snapshot and the write are one operation under it
+     * ([OfflineDownloads.persistQueue], which the queue model test drives too).
      */
-    private suspend fun persistNow() = persistLock.withLock {
-        // The rows and the profile they belong to, read together (HX88): a persist that lands
-        // after a switch is dropped for its owner, never written into the next profile's queue.
-        // No owner: the rows were dropped and nothing is in them yet, and an empty write then would
-        // wipe the next profile's queue before its restore.
-        val (owner, queued) = OfflineDownloads.persistSnapshot()
-        if (owner != null) runCatching { SettingsStore(applicationContext).saveDownloadQueue(queued, owner = owner) }
-        Unit
-    }
-
-    private val persistLock = Mutex()
+    private suspend fun persistNow() = OfflineDownloads.persistQueue(SettingsStore(applicationContext))
 
     /**
      * Stops the service once nothing is moving and nothing is waiting on the world to change.

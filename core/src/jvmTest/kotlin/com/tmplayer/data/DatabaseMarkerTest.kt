@@ -29,6 +29,7 @@ class DatabaseMarkerTest {
     @After
     fun tearDown() {
         OfflineDownloads.forget(request.fileId)
+        OfflineDownloads.resetForTest()
     }
 
     @Test

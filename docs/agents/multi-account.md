@@ -310,7 +310,19 @@ The download rows (`OfflineDownloads`) belong to one profile and one database:
 - The rows' owner (`rowsOwner`) is set by `restore` only, after it read that profile's stored
   queue; a persist writes for that owner, never before it is set, so a download asked early never
   replaces the stored queue, and a late persist never lands in the next profile. `restore` merges
-  with rows already there and can run twice.
+  with rows already there and runs once for each profile and set of rows (`restoredFor`): the
+  screen that asks for it composes again with every recreation of the activity, and a second run
+  would read the stored queue as it still is, with a video the viewer just cancelled in it (its
+  write may be pending).
+- A write that straddles a session end is dropped, not tagged with the new marker: the snapshot
+  carries the set of rows (`persistSnapshot().generation`), `saveDownloadQueue(rowsGeneration)`
+  re-checks it inside the edit after it read the marker, and `Td.renewDatabaseMarker` drops the
+  rows first, renews second, and drops them again (so a restore that began in between finds its
+  rows gone). `OfflineDownloads.persistQueue` is the one write path (the service and the model
+  test run it).
+- A start the queue skips (asked under another profile or in rows that are gone) removes the
+  row of its id only in the rows it was queued in (`DownloadStamps.discard`,
+  `OfflineDownloads.forgetQueuedIn`): the same id in the next database is another video.
 - The stored queue carries the TDLib database's marker (`DatabaseMarker`, a random id in the
   profile's database folder, made with the folder by `AccountDirs.make`, renewed on a sign out and
   an ended session, synchronized and read back from the disk). It is taken from the writing
@@ -323,7 +335,18 @@ The download rows (`OfflineDownloads`) belong to one profile and one database:
 
 `DownloadQueueModelTest` (core) runs thousands of seeded random sequences of these events on the
 real rows, stamps, markers and scoped store, checks the invariants after every step and prints the
-failing seed with its steps shrunk.
+failing seed with its steps shrunk. Its writes are the service's own (`persistQueue`, with a hook
+for a persist that straddles a switch, `PersistAcrossSwitch`, or a session end,
+`PersistAcrossRenew`), and a Cancel whose write is pending followed by a second `restore`
+(`CancelThenRestore`) must not bring the row back. A second test runs the same write path on real
+threads: three writers hammer `persistQueue` while the orchestrator enqueues, cancels, signs out,
+ends sessions and switches, with the invariants checked after every step. Mutation check (run by
+hand, 2026-11-21): the model catches removing the generation re-check, the once-per-generation
+restore, the rows guard of a skipped start, the marker match on restore, `startable`, the count of
+a drop, and the others listed in the commit that added it. Still not caught, and why: see below.
+Not modelled: the service's own scope, its conflated writer channel and the `NonCancellable`
+completion paths (they call the same `persistQueue`), TDLib's answers, and the clock (nothing in
+this path reads one, so there is nothing to fake).
 
 The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
 background scope as the profile open when they were asked (`AccountOwner`), so one that lands

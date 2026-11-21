@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The videos the viewer asked to keep: what is arriving, what is waiting its turn, what is held.
@@ -52,11 +54,24 @@ object OfflineDownloads {
     /** For tests: the rows of a process that just started (none, no owner), without telling the runner. */
     internal fun resetForTest() = dropRows()
 
+    /**
+     * The profile and set of rows [restore] has read the stored queue into, or null: it runs once
+     * for each (HX88, review LOW). The screen that asks for it composes again with every
+     * recreation of the activity, and a second run reads the stored queue as it still is, which
+     * has the video the viewer just cancelled until that cancel's write lands: it came back as a
+     * paused row.
+     */
+    private var restoredFor: Pair<AccountStamp, Long>? = null
+
+    /** The rows dropped again without telling the runner, which [newDatabase] already did ([Td.renewDatabaseMarker]). */
+    internal fun dropRowsQuietly() = dropRows()
+
     private fun dropRows() {
         synchronized(this) {
             _active.value = emptyMap()
             rowsOwner = null
             rowsGeneration++
+            restoredFor = null
         }
     }
 
@@ -80,8 +95,54 @@ object OfflineDownloads {
         if (generation != null && generation != rowsGeneration) null else update()
     }
 
+    /**
+     * The rows to persist, the profile they are for and the set of rows they are ([rowsGeneration]),
+     * read together. A write that straddles a session end hands [generation] to
+     * [SettingsStore.saveDownloadQueue], which drops it when the rows went meanwhile (HX88).
+     */
+    data class PersistSnapshot(val owner: AccountStamp?, val requests: List<DownloadRequest>, val generation: Long)
+
+    /**
+     * Removes the row of [fileId] only while the rows are still the set [rows] it was queued in
+     * ([ifRows]): after a switch or a new database the same id is another video, the next
+     * database's own, which a skipped start must not remove.
+     */
+    fun forgetQueuedIn(fileId: Int, rows: Long) {
+        ifRows(rows) { forget(fileId) }
+    }
+
     /** The rows to persist and the profile they are for, read together. */
-    fun persistSnapshot(): Pair<AccountStamp?, List<DownloadRequest>> = synchronized(this) { rowsOwner to ordered.map { it.request } }
+    fun persistSnapshot(): PersistSnapshot = synchronized(this) { PersistSnapshot(rowsOwner, ordered.map { it.request }, rowsGeneration) }
+
+    private val persistLock = Mutex()
+
+    /**
+     * Writes the queue, now, and never alongside another write of it: the rows and the profile and
+     * set of rows they are, read together ([persistSnapshot]) and written under one lock (HX88).
+     * - A write that lands after a switch is dropped for its owner, never written into the next
+     *   profile's queue.
+     * - No owner: the rows were dropped and nothing is in them yet, and an empty write then would
+     *   wipe the next profile's queue before its restore.
+     * - A write that straddles a session end (the rows dropped, the marker renewed) is dropped
+     *   rather than tagged with the next database's marker ([SettingsStore.saveDownloadQueue]).
+     *
+     * The service's writer and its completion paths call this, and so does the queue model test:
+     * [afterSnapshot] is its hook for what happens between the snapshot and the write.
+     */
+    suspend fun persistQueue(settings: SettingsStore, afterSnapshot: suspend () -> Unit = {}) {
+        persistLock.withLock {
+            val (owner, queued, generation) = persistSnapshot()
+            afterSnapshot()
+            if (owner == null) return@withLock
+            try {
+                settings.saveDownloadQueue(queued, owner = owner, rowsGeneration = generation)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failed: Exception) {
+                Logger.w(TAG, "could not write the download queue", failed)
+            }
+        }
+    }
 
     /** Where a video has got to, which is the only thing a row needs to know to draw itself. */
     enum class Stage {
@@ -320,14 +381,19 @@ object OfflineDownloads {
      * on. Restoring them as running would mean a process the system killed for using too much
      * silently starting to use it again, with the viewer nowhere near the phone.
      *
-     * Called again after each switch and sign in (HX88), and safe to call twice: rows already in
-     * memory (a download asked before this ran) stay as they are and the stored ones join them,
-     * never written over. Until it has run for the open profile ([rowsOwner] null) nothing writes
-     * the queue, so a download asked early never replaces the stored queue it has not read.
+     * Called again after each switch and sign in (HX88), and safe to call twice: it runs once for
+     * each profile and set of rows ([rowsGeneration]), so a second call (the screen composing again)
+     * changes nothing. Rows already in memory (a download asked before this ran) stay as they are
+     * and the stored ones join them, never written over. Until it has run for the open profile
+     * ([rowsOwner] null) nothing writes the queue, so a download asked early never replaces the
+     * stored queue it has not read.
      */
     suspend fun restore(settings: SettingsStore, database: String? = DATABASE_OF_STORE, beforeMarkers: Boolean? = null) {
         val owner = Accounts.stamp
         val generation = rowsGeneration
+        // Already read into these rows: the memory is newer than the store (a Cancel may not have
+        // been written yet), so a second run would bring back what the viewer removed.
+        if (synchronized(this) { restoredFor == owner to generation }) return
         // The database of the profile the rows will be, from its own folder (HX88).
         val marker = if (database == DATABASE_OF_STORE) Td.databaseMarkerFor(owner.folder) else database
         // The database could not be told: the stored queue stays as it is, unrestored and not
@@ -366,6 +432,7 @@ object OfflineDownloads {
             // What is in memory now wins over what was stored under the same id.
             _active.value = restored + _active.value
             rowsOwner = owner
+            restoredFor = owner to generation
             ordered.map { it.request }
         } ?: return
         runCatching { settings.saveDownloadQueue(merged, owner = owner, database = marker) }

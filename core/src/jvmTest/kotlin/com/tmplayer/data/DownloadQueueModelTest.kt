@@ -49,9 +49,9 @@ class DownloadQueueModelTest {
     }
 
     private enum class Kind {
-        Enqueue, Start, LateUpdate, PauseAll, Persist, PersistAcrossSwitch, Switch, FailedSwitch, StrayCancelSwitch,
-        Cancel, SignOutLast, SignOutNotLast, SessionEnded, SignInAgain, RestoreBackup, RemoveAll, Restart,
-        RunnerCatchesUp, MarkerUnreadable,
+        Enqueue, Start, LateUpdate, PauseAll, Persist, PersistAcrossSwitch, PersistAcrossRenew, Switch, FailedSwitch,
+        StrayCancelSwitch, Cancel, CancelThenRestore, SignOutLast, SignOutNotLast, SessionEnded, SignInAgain,
+        RestoreBackup, RemoveAll, Restart, RunnerCatchesUp, MarkerUnreadable,
     }
 
     /** How often each kind comes up: the work that races (queue, start, late updates) more than the rest. */
@@ -66,8 +66,8 @@ class DownloadQueueModelTest {
     }
 
     private val singleProfileKinds = listOf(
-        Kind.Enqueue, Kind.Start, Kind.LateUpdate, Kind.PauseAll, Kind.Persist, Kind.Cancel, Kind.RestoreBackup, Kind.Restart,
-        Kind.RunnerCatchesUp, Kind.MarkerUnreadable,
+        Kind.Enqueue, Kind.Start, Kind.LateUpdate, Kind.PauseAll, Kind.Persist, Kind.Cancel, Kind.CancelThenRestore,
+        Kind.RestoreBackup, Kind.Restart, Kind.RunnerCatchesUp, Kind.MarkerUnreadable,
     )
 
     private class Violation(message: String) : Exception(message)
@@ -111,10 +111,8 @@ class DownloadQueueModelTest {
             chatTitle = "c", durationSec = 60, mimeType = "video/mp4", fileName = "v$id.mp4",
         )
 
-        suspend fun persist() {
-            val (owner, queued) = OfflineDownloads.persistSnapshot()
-            if (owner != null) settings.saveDownloadQueue(queued, owner = owner)
-        }
+        /** The service's own write (`DownloadService.persistNow` runs this same call). */
+        suspend fun persist(afterSnapshot: suspend () -> Unit = {}) = OfflineDownloads.persistQueue(settings, afterSnapshot)
 
         suspend fun storedOf(p: Int): Pair<List<DownloadRequest>, String?> {
             val view = scoped.everyProfileNow()[profiles[p].folder] ?: return emptyList<DownloadRequest>() to null
@@ -134,14 +132,14 @@ class DownloadQueueModelTest {
             Accounts.resetForTest(book)
         }
 
-        suspend fun restore() {
+        suspend fun restore(cancelled: Int? = null) {
             val before = (0 until profiles.size).associateWith { storedOf(it) }
             OfflineDownloads.restore(settings)
             noteMarker(open)
             // (c) a queue of the open database now is never dropped.
             val (was, _) = before.getValue(open)
             val (now, _) = storedOf(open)
-            val current = was.filter { it.chatId == chatOf(open, epoch[open]) }.map { it.fileId }.toSet()
+            val current = was.filter { it.chatId == chatOf(open, epoch[open]) }.map { it.fileId }.toSet() - setOfNotNull(cancelled)
             check(now.map { it.fileId }.containsAll(current)) { "restore dropped the open database's queue $current" }
         }
 
@@ -206,8 +204,15 @@ class DownloadQueueModelTest {
                     val id = waiting.removeFirstOrNull() ?: return
                     val request = requests[id] ?: return
                     if (!stamps.startable(id)) {
+                        // As DownloadService.pump (the same two calls): the row of the same id is removed only in the rows it was queued in.
+                        val rowBefore = OfflineDownloads.active.value[id]
                         requests.remove(id)
-                        stamps.forget(id)
+                        val rows = stamps.discard(id)
+                        OfflineDownloads.forgetQueuedIn(id, rows)
+                        // (e) another database's video under the same id is never removed by a skipped start.
+                        check(rowBefore == null || rows == OfflineDownloads.rowsGeneration || OfflineDownloads.active.value[id] != null) {
+                            "a skipped start of id $id removed the open database's row of that id"
+                        }
                         return
                     }
                     isOpenVideo(request, "started")
@@ -232,10 +237,16 @@ class DownloadQueueModelTest {
                 Kind.Persist -> persist()
                 Kind.PersistAcrossSwitch -> {
                     // A conflated persist: the snapshot is taken, then the switch lands, then it writes.
-                    val (owner, queued) = OfflineDownloads.persistSnapshot()
-                    beforeSwitch()
-                    publish(1 - open)
-                    if (owner != null) settings.saveDownloadQueue(queued, owner = owner)
+                    persist {
+                        beforeSwitch()
+                        publish(1 - open)
+                    }
+                    restore()
+                }
+                Kind.PersistAcrossRenew -> {
+                    // The same across a session end: the snapshot is taken, the rows drop and the marker is
+                    // renewed, then it writes. Its rows are the old database's and must not get the new marker.
+                    persist { renewOpen() }
                     restore()
                 }
                 Kind.Switch -> {
@@ -269,6 +280,21 @@ class DownloadQueueModelTest {
                     waiting.remove(row.fileId)
                     stamps.forget(row.fileId)
                     OfflineDownloads.forget(row.fileId)
+                    persist()
+                }
+                Kind.CancelThenRestore -> {
+                    // A Cancel whose write is still pending, and the screen composing again (restore runs
+                    // again): the row must not come back from the stored queue, which still has it. Only
+                    // once the first restore ran (before it, the stored queue is what the rows are made of).
+                    if (OfflineDownloads.rowsOwner == null) return
+                    val row = OfflineDownloads.active.value.values.sortedBy { it.fileId }.getOrNull(pick % 5) ?: return
+                    isOpenVideo(row.request, "deleted")
+                    requests.remove(row.fileId)
+                    waiting.remove(row.fileId)
+                    stamps.forget(row.fileId)
+                    OfflineDownloads.forget(row.fileId)
+                    restore(cancelled = row.fileId)
+                    check(!OfflineDownloads.active.value.containsKey(row.fileId)) { "a cancelled download ${row.fileId} came back on a second restore" }
                     persist()
                 }
                 Kind.SignOutLast -> {
@@ -345,8 +371,8 @@ class DownloadQueueModelTest {
         return List(length) { Step(kinds[random.nextInt(kinds.size)], random.nextInt(1_000)) }
     }
 
-    /** Runs [steps] from a clean device; the first violation, or null. */
-    private fun run(steps: List<Step>, single: Boolean, beforeMarkers: Boolean): String? = runBlocking {
+    /** A clean device with A open (and B beside it unless [single]), and the world over it. */
+    private suspend fun freshWorld(single: Boolean, beforeMarkers: Boolean): World {
         root.resolve("device").deleteRecursively()
         raw.edit { it.clear() }
         OfflineDownloads.resetForTest()
@@ -367,6 +393,12 @@ class DownloadQueueModelTest {
             world.noteMarker(0)
         }
         if (single || !beforeMarkers) world.restore()
+        return world
+    }
+
+    /** Runs [steps] from a clean device; the first violation, or null. */
+    private fun run(steps: List<Step>, single: Boolean, beforeMarkers: Boolean): String? = runBlocking {
+        val world = freshWorld(single, beforeMarkers)
         var baseline: Set<Int>? = if (single) OfflineDownloads.active.value.keys.toSet() else null
         for ((index, step) in steps.withIndex()) {
             try {
@@ -376,12 +408,12 @@ class DownloadQueueModelTest {
                 for (p in profiles.indices) {
                     val kept = world.storedOf(p).first.map { it.fileId }.toSet()
                     val own = before.getValue(p).filter { it.chatId == world.chatOf(p, world.epoch[p]) }.map { it.fileId }
-                        .filter { !(step.kind == Kind.Cancel && it == cancelled && p == world.open) }
+                        .filter { !((step.kind == Kind.Cancel || step.kind == Kind.CancelThenRestore) && it == cancelled && p == world.open) }
                     world.check(kept.containsAll(own)) { "profile $p's queue of its database now lost ${own - kept}" }
                 }
                 if (single) {
                     when (step.kind) {
-                        Kind.Enqueue, Kind.Cancel -> baseline = OfflineDownloads.active.value.keys.toSet()
+                        Kind.Enqueue, Kind.Cancel, Kind.CancelThenRestore -> baseline = OfflineDownloads.active.value.keys.toSet()
                         else -> Unit
                     }
                 }
@@ -424,6 +456,69 @@ class DownloadQueueModelTest {
                 "seed $seed (single=$single, beforeMarkers=$beforeMarkers): $failure\n" +
                     "shrunk to ${shrunk.size} steps: $shrunk\n  -> ${run(shrunk, single, beforeMarkers)}",
             )
+        }
+    }
+
+    /**
+     * The service's own write ([OfflineDownloads.persistQueue]) on real threads: writers hammer it
+     * while the queue changes under them (enqueue, cancel, sign out, ended session, switch, and a
+     * write that straddles a switch or a session end), then the same invariants are checked. The
+     * model above runs one step at a time; this is the interleaving it cannot make. Each round is
+     * seeded, and a failure prints the seed.
+     */
+    @Test
+    fun `writes racing on real threads never tag a database's videos with another's marker`() {
+        val rounds = System.getProperty("queueModel.raceRounds")?.toIntOrNull() ?: 120
+        val first = System.getProperty("queueModel.seed")?.toLongOrNull() ?: 20261122L
+        val kinds = listOf(
+            Kind.Enqueue, Kind.Enqueue, Kind.Enqueue, Kind.Cancel, Kind.CancelThenRestore, Kind.SessionEnded, Kind.SignOutLast,
+            Kind.Switch, Kind.SignOutNotLast, Kind.PersistAcrossRenew, Kind.PersistAcrossSwitch, Kind.RestoreBackup,
+        )
+        for (round in 0 until rounds) {
+            val seed = first + round
+            val random = Random(seed)
+            val failures = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+            runBlocking {
+                val world = freshWorld(single = false, beforeMarkers = false)
+                val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+                val writers = List(3) {
+                    Thread {
+                        runBlocking {
+                            while (!stop.get()) {
+                                try {
+                                    OfflineDownloads.persistQueue(settings)
+                                } catch (e: Throwable) {
+                                    failures += e
+                                }
+                                Thread.yield()
+                            }
+                        }
+                    }.also { it.start() }
+                }
+                try {
+                    val trail = ArrayList<Step>()
+                    repeat(30) { index ->
+                        val step = Step(kinds[random.nextInt(kinds.size)], random.nextInt(1_000))
+                        trail += step
+                        try {
+                            world.step(step)
+                            world.invariants(null)
+                        } catch (violation: Violation) {
+                            failures += AssertionError("seed $seed, step $index $step: ${violation.message}\n  steps: $trail")
+                        }
+                    }
+                } finally {
+                    stop.set(true)
+                    writers.forEach { it.join() }
+                }
+                // Quiet: the writers are done, so what is stored is what the last write left.
+                try {
+                    world.invariants(null)
+                } catch (violation: Violation) {
+                    failures += AssertionError("seed $seed, after the writers stopped: ${violation.message}")
+                }
+            }
+            failures.firstOrNull()?.let { throw it }
         }
     }
 
