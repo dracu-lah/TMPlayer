@@ -55,6 +55,30 @@ class DatabaseMarkerTest {
     }
 
     @Test
+    fun `a row already in memory wins over the stored one of the same id`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "samedatabase")
+        val live = OfflineDownloads.Progress(request, 500, request.sizeBytes, OfflineDownloads.Stage.Running)
+        OfflineDownloads.note(live)
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertEquals("a download asked before the restore ran keeps its place", live, OfflineDownloads.active.value[41])
+    }
+
+    @Test
+    fun `restore runs once for each set of rows, so a recreated screen cannot bring a cancelled download back`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "samedatabase")
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertEquals(setOf(41), OfflineDownloads.active.value.keys)
+        // The viewer cancels: the row goes at once, its write is still to come.
+        OfflineDownloads.forget(41)
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertTrue("the stored queue still has it, the second restore must not read it", OfflineDownloads.active.value.isEmpty())
+        // A new set of rows (a switch or a new database) reads the store again.
+        OfflineDownloads.newDatabase()
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        assertEquals(setOf(41), OfflineDownloads.active.value.keys)
+    }
+
+    @Test
     fun `the same database's queue comes back`() = runBlocking {
         settings.saveDownloadQueue(listOf(request), database = "samedatabase")
         OfflineDownloads.restore(settings, database = "samedatabase")

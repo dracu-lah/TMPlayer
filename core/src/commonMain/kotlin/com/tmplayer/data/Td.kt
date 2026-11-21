@@ -354,10 +354,14 @@ object Td {
      */
     fun renewDatabaseMarker(): String? {
         OfflineDownloads.newDatabase()
+        betweenDropAndRenew?.invoke()
         val marker = databaseDirOf(Accounts.active.folder)?.let(DatabaseMarker::renew)
         OfflineDownloads.dropRowsQuietly()
         return marker
     }
+
+    /** For tests: runs in [renewDatabaseMarker] between the drop of the rows and the renewal of the marker, where a restore can land. */
+    internal var betweenDropAndRenew: (() -> Unit)? = null
 
     private fun databaseDirOf(folder: String?): java.io.File? =
         basePaths?.let { AccountDirs.pathsFor(it, Profile(id = "db", folder = folder)).databaseDir }

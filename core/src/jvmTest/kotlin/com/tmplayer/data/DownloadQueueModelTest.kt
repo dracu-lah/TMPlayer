@@ -50,7 +50,7 @@ class DownloadQueueModelTest {
 
     private enum class Kind {
         Enqueue, Start, LateUpdate, PauseAll, Persist, PersistAcrossSwitch, PersistAcrossRenew, Switch, FailedSwitch,
-        StrayCancelSwitch, Cancel, CancelThenRestore, SignOutLast, SignOutNotLast, SessionEnded, SignInAgain,
+        StrayCancelSwitch, Cancel, CancelThenRestore, RestoreAcrossSwitch, RestoreAcrossRenew, SignOutLast, SignOutNotLast, SessionEnded, SignInAgain,
         RestoreBackup, RemoveAll, Restart, RunnerCatchesUp, MarkerUnreadable,
     }
 
@@ -138,7 +138,11 @@ class DownloadQueueModelTest {
             noteMarker(open)
             // (c) a queue of the open database now is never dropped.
             val (was, _) = before.getValue(open)
-            val (now, _) = storedOf(open)
+            val (now, tag) = storedOf(open)
+            // What restore wrote is tagged with the marker of the database it is for.
+            if (now.isNotEmpty() && Td.platformPaths != null) {
+                check(tag == DatabaseMarker.ensure(dirOf(open))) { "restore wrote the open database's queue tagged $tag" }
+            }
             val current = was.filter { it.chatId == chatOf(open, epoch[open]) }.map { it.fileId }.toSet() - setOfNotNull(cancelled)
             check(now.map { it.fileId }.containsAll(current)) { "restore dropped the open database's queue $current" }
         }
@@ -296,6 +300,35 @@ class DownloadQueueModelTest {
                     restore(cancelled = row.fileId)
                     check(!OfflineDownloads.active.value.containsKey(row.fileId)) { "a cancelled download ${row.fileId} came back on a second restore" }
                     persist()
+                }
+                Kind.RestoreAcrossSwitch -> {
+                    // A restore reads the stored queue, then a switch lands, then it merges: its rows are the
+                    // old profile's, so it must merge nothing.
+                    OfflineDownloads.afterStoredRead = {
+                        OfflineDownloads.afterStoredRead = null
+                        beforeSwitch()
+                        publish(1 - open)
+                    }
+                    try {
+                        restore()
+                    } finally {
+                        OfflineDownloads.afterStoredRead = null
+                    }
+                    restore()
+                }
+                Kind.RestoreAcrossRenew -> {
+                    // A restore (the screen composing again) lands between the drop of the rows and the new
+                    // marker: it reads the old marker and the old queue, so what it merged must go again.
+                    Td.betweenDropAndRenew = {
+                        Td.betweenDropAndRenew = null
+                        runBlocking { OfflineDownloads.restore(settings) }
+                    }
+                    try {
+                        renewOpen()
+                    } finally {
+                        Td.betweenDropAndRenew = null
+                    }
+                    restore()
                 }
                 Kind.SignOutLast -> {
                     // Its store keys may outlive it (a purge cut short): the marker is what keeps them out.

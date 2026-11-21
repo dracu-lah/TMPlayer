@@ -63,6 +63,9 @@ object OfflineDownloads {
      */
     private var restoredFor: Pair<AccountStamp, Long>? = null
 
+    /** For tests: runs in [restore] after the stored queue was read and before it is merged, where a switch or a new database can land. */
+    internal var afterStoredRead: (suspend () -> Unit)? = null
+
     /** The rows dropped again without telling the runner, which [newDatabase] already did ([Td.renewDatabaseMarker]). */
     internal fun dropRowsQuietly() = dropRows()
 
@@ -426,6 +429,7 @@ object OfflineDownloads {
                 order = order++,
             )
         }.toMap()
+        afterStoredRead?.invoke()
         val merged = synchronized(this) {
             // Another profile or database opened while this read: its rows are not these.
             if (Accounts.stamp != owner || rowsGeneration != generation) return@synchronized null
