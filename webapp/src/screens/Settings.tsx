@@ -24,6 +24,7 @@ import { LayoutChoices, ThemeChoices } from './settings/shared'
 import { StoragePage } from './settings/Storage'
 import { Support } from './settings/Support'
 import { TvSettings } from './settings/Tv'
+import { dot } from '../ui/dot'
 
 /** The app's pages (SettingsPage) that the web has something to put in, in its order. Home and library are one page, as in the apps (11.1). */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
@@ -39,7 +40,6 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
     { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
     { id: 'about', icon: InformationCircleIcon, title: () => t('settings.page_about'), summary: () => t('about.licence_line') },
 ]
-const dot = '  ·  '
 const PAGE_ICONS = Object.fromEntries(PAGES.map((p) => [p.id, p.icon])) as Record<PageId, IconData>
 
 /** What decides which rows this page draws, for the search over them. */

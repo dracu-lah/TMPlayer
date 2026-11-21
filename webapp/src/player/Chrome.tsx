@@ -1,222 +1,54 @@
-// The player's controls, drawn as the apps draw theirs: the phone's PlayerControls.kt
-// (player_controls.xml, PlayerFeedback.kt, the pickers in PlayerSheets.kt) and the desktop's
-// PlayerOverlay.kt with StoryboardPreview.kt and PlayerKeys.kt. Video.js is not drawn at all: the
-// `<video>` underneath is fed by engines.ts, and everything on top of it is here.
-//
-// One overlay, three shapes chosen by the layout (form.ts): `phone` (top bar, the centre cluster,
-// the times over the bar and the round-button pill with Copies and Episodes), `desktop` (the
-// same three groups at the desktop's sizes, the hover preview, the volume slider and the menus
-// that open from their buttons) and `tv` (the Android TV player: no top bar, the title over the
-// bar, one play disc, a row of round buttons with More at its end, the time as a button, every
-// control reached with the remote's arrows and OK, see `tvKey`).
-import { onGlobal } from '../ui/globalInput'
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js'
-import {
-    Add01Icon,
-    Bookmark02Icon,
-    CheckmarkCircle02Icon,
-    ArrowExpandIcon,
-    ArrowLeft02Icon,
-    ArrowShrinkIcon,
-    Cancel01Icon,
-    CropIcon,
-    DashboardSpeed02Icon,
-    FitToScreenIcon,
-    HeadphonesIcon,
-    InformationCircleIcon,
-    KeyboardIcon,
-    ListVideoIcon,
-    MaximizeScreenIcon,
-    MinusSignIcon,
-    Moon02Icon,
-    MoreVerticalIcon,
-    NextIcon,
-    PictureInPictureOnIcon,
-    PreviousIcon,
-    RepeatIcon,
-    ScreenRotationIcon,
-    SquareLock02Icon,
-    SquareUnlock02Icon,
-    SubtitleIcon,
-    Sun03Icon,
-    TranslateIcon,
-    VolumeHighIcon,
-    VolumeLowIcon,
-    VolumeMute02Icon,
-} from '@hugeicons/core-free-icons'
+
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
+import { Add01Icon, Bookmark02Icon, CheckmarkCircle02Icon, ArrowExpandIcon, ArrowLeft02Icon, ArrowShrinkIcon, Cancel01Icon, DashboardSpeed02Icon, HeadphonesIcon, InformationCircleIcon, KeyboardIcon, ListVideoIcon, Moon02Icon, MoreVerticalIcon, NextIcon, PictureInPictureOnIcon, PreviousIcon, RepeatIcon, ScreenRotationIcon, SquareLock02Icon, SquareUnlock02Icon, SubtitleIcon, Sun03Icon, TranslateIcon, VolumeHighIcon, VolumeLowIcon, VolumeMute02Icon } from '@hugeicons/core-free-icons'
 import './player.css'
 import './subfonts.css'
 import './rotate.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
-import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, variant, walk } from './sheets'
-import { nextShape, objectFit, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
-import { clampedTo, NONE as NO_ZOOM, panBy, percent, pinch as pinchZoom, settled, stepped, wheelSteps, zoomed, type Frame, type Zoom } from './zoom'
-import { actionFor, FRAME, playerHearsKeys } from './playerKeys'
-import { confirmOpen } from '../ui/Confirm'
-import { cueOverlay, type CueOverlay } from './cueoverlay'
+import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, variant } from './sheets'
+import { SHAPES } from './shape'
+import { percent, zoomed } from './zoom'
 import './zoom.css'
-import { remoteKey } from '../tv/remote'
-import { frameAt, type Frames } from './storyboard'
-import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, PICTURES_SHOWN, type FrameGrabber } from './seekpreview'
-import { coverBackground } from '../screens/cover'
-import { loadThumb } from '../screens/thumbs'
-import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
+import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
 import { copyLink, linkOf, linkOffered } from '../ui/tgLinks'
-import { MsoneSheet, trackLabel as onlineLabel, type MsoneTarget } from './msone-sheet'
-import { episodeOf } from './msone'
+import { MsoneSheet } from './msone-sheet'
 import { SubmakerJobLine, SubmakerSheet } from './submaker-sheet'
-import { createJobs } from './submaker-job'
-import { idFor, type Kind } from './submaker'
 import { submakerBase, submakerSet } from '../submakerBase'
 import * as subpick from './subpick-use'
 import { mergeSkips } from './skipOnline'
-import { answer, askOf, loadAnimeSkips, loadExtras } from '../screens/posters'
-import { openingSpeed, readBoost, rememberSpeed, settings, writeBoost } from '../store'
+import { answer, askOf, loadAnimeSkips } from '../screens/posters'
+import { openingSpeed, rememberSpeed, settings } from '../store'
 import { msoneOn } from '../msoneFlag'
-import { AUTOPLAY_LIMIT, BOOSTS, fineRate, IDLE_LIMIT, nextTurn, noteInput, pressLoop, repeats, repeatState, SeekUndo, sidewaysTurn, pictureTransform, SLEEP_CHOICES, sleepState, speedScopes, TURNS, turnedPictureSize, turnFrame, watching, wrapLoop, type Loop } from './extras'
-import { applyBoost, boostIsIos, boostSupported, releaseBoost } from './boost'
+import { AUTOPLAY_LIMIT, BOOSTS, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, speedScopes, TURNS, watching, wrapLoop, type Loop } from './extras'
 import {
     addBookmark, deleteBookmark, loadBookmarks, readAutoplay, readChatOrder, readKeepRepeat, renameBookmark, writeAutoplay, writeChatOrder, writeKeepRepeat, writeLook,
     type Bookmark, type SubtitleLook,
 } from './keep'
-import type { SoundTrack } from './engines'
-import type { ChatSubtitle, VideoCopy, VideoItem, WatchInfo } from '../tg/types'
+import type { VideoItem } from '../tg/types'
 import { call } from '../tg/rpc'
-import { ChatSubtitleError } from './chatsubs'
-import { readChatSubtitle } from './chatsubs-read'
-import { SubtitleError } from './subtitles'
-
-/** TmIcons.PlaySolid and PauseSolid: Hugeicons Play and Pause, filled. */
-const PLAY_PATH =
-    'M20.1406 12.846C19.7871 14.189 18.1167 15.138 14.7757 17.0361C11.546 18.8709 9.9312 19.7884 8.6298 19.4196C8.0918 19.2671 7.6016 18.9776 7.2062 18.5787C6.25 17.6139 6.25 15.7426 6.25 12C6.25 8.2574 6.25 6.3861 7.2062 5.42132C7.6016 5.02245 8.0918 4.73288 8.6298 4.58042C9.9312 4.21165 11.546 5.12907 14.7757 6.96393C18.1167 8.86197 19.7871 9.811 20.1406 11.154C20.2865 11.7084 20.2865 12.2916 20.1406 12.846Z'
-const PlaySolid: IconData = [['path', { d: PLAY_PATH, fill: 'currentColor' }]]
-const PauseSolid: IconData = [
-    ['path', { d: 'M4 7C4 5.58579 4 4.87868 4.43934 4.43934C4.87868 4 5.58579 4 7 4C8.41421 4 9.12132 4 9.56066 4.43934C10 4.87868 10 5.58579 10 7V17C10 18.4142 10 19.1213 9.56066 19.5607C9.12132 20 8.41421 20 7 20C5.58579 20 4.87868 20 4.43934 19.5607C4 19.1213 4 18.4142 4 17V7Z', fill: 'currentColor' }],
-    ['path', { d: 'M14 7C14 5.58579 14 4.87868 14.4393 4.43934C14.8787 4 15.5858 4 17 4C18.4142 4 19.1213 4 19.5607 4.43934C20 4.87868 20 5.58579 20 7V17C20 18.4142 20 19.1213 19.5607 19.5607C19.1213 20 18.4142 20 17 20C15.5858 20 14.8787 20 14.4393 19.5607C14 19.1213 14 18.4142 14 17V7Z', fill: 'currentColor' }],
-]
-/** The phone's copies button (ic_copies.xml): three stacked layers, drawn by hand in Hugeicons' stroke. */
-const CopiesIcon: IconData = [
-    ['path', { d: 'M12 3.5L21 8.25L12 13L3 8.25Z' }],
-    ['path', { d: 'M3 12.25L12 17L21 12.25' }],
-    ['path', { d: 'M3 16.25L12 21L21 16.25' }],
-]
-
-/** PlaybackSpeed.CHOICES, and the fine control's step and ends. */
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
-const FINE_STEP = 0.05
-const SPEED_MIN = 0.25
-const SPEED_MAX = 4
-
-/** PlayerControls' timings: in a touch slower than out, hidden after 3.5 s of playing untouched. */
-const HIDE_MS = 3500
-/** A second press inside this is a double tap or click (VideoGestures' DOUBLE_CLICK_MS). */
-const DOUBLE_MS = 300
-/** A finger held this long plays fast until it lifts. */
-const HOLD_MS = 450
-/** A side tap within this of the last jump adds another (the running total). */
-const RUN_MS = 700
-/** A finger that moved further than this is a drag, not a tap. */
-const SLOP = 12
-/** TapZone.SIDE_FRACTION: the left and right thirds-and-a-bit that jump. */
-const SIDE = 0.35
-/** PlayerControls.WIDE_ROW_DP: from this width the phone's row adds picture shape and the lock. */
-const WIDE_ROW = 540
-const NOTE_MS = 900
-/** How long the TV's card stays after an arrow press on the bar. */
-const PEEK_MS = 1200
-/** An iPhone or iPad: a page cannot set the volume there (the side buttons do), so the right side's drag does nothing. */
-const FIXED_VOLUME = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-const UNLOCK_PILL_MS = 2500
-/** PlayerFeedback.ZOOM_MS: the zoom's figure stays this long after the fingers lift or a key zooms. */
-const ZOOM_MS = 1800
-/** Cmd is the command key on a Mac (and an iPad's keyboard, which says MacIntel), Ctrl elsewhere. */
-const MAC = /Mac/.test(navigator.platform)
-
-export type { Shape }
-const SHAPE_ICON: Partial<Record<Shape, IconData>> = { fit: FitToScreenIcon, crop: CropIcon, stretch: MaximizeScreenIcon }
-/** The glyph for a shape: the three of the apps' button, a frame at its ratio for a fixed one. */
-const shapeIcon = (s: Shape): IconData => SHAPE_ICON[s] ?? [['path', { d: ratioPath(shapeRatio(s) ?? 1) }]]
-/** Original, Fill and Stretch from the catalog; a ratio is its own name in every language, as in the apps. */
-const shapeName = (s: Shape) => (s === 'fit' || s === 'crop' || s === 'stretch' ? t(`player.scale_${s}`) : s)
-
-/** SeekMath.clock: 4:05, 1:02:03. */
-export function clock(seconds: number): string {
-    const s = Math.max(0, Math.floor(isFinite(seconds) ? seconds : 0))
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = String(s % 60).padStart(2, '0')
-    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
-}
-
-/** PlaybackSpeed.label: 1x, 1.25x, 0.5x. */
-export const speedLabel = (rate: number) => t('format.speed_factor', { speed: String(Math.round(rate * 100) / 100) })
-
-/** What the overlay needs from the player: its video, the item, and the actions that load things. */
-export interface Ctl {
-    video: HTMLVideoElement
-    root: HTMLElement
-    item: VideoItem
-    info: () => WatchInfo | null
-    close: () => void
-    play: (next: VideoItem | null) => void
-    /** A status sheet is up (stall, failure, needs the app): the controls stand aside. */
-    blocked: () => boolean
-    audios: () => SoundTrack[]
-    audio: () => SoundTrack | null
-    canSwitchAudio: () => boolean
-    pickAudio: (index: number) => void
-    trackLabel: (track: SoundTrack, index: number) => string
-    copies: VideoCopy[]
-    sourceKey: () => string
-    sourceHeight: () => number
-    pickQuality: (key: string) => void
-    qualityLabel: (height: number) => string
-    readout: () => string
-    details: () => string
-    /** Report stutter (WB18): null when this browser has no frame counters, so the line is not offered. */
-    stutter: () => { press: () => 'kept' | 'already' } | null
-    /** What the page's logs weigh, scrubbed, for the line under Copy details. */
-    logsSize: () => string
-    /** The scrubbed logs as text, for the selected copy a browser that refuses the clipboard gets. */
-    logsText: () => string
-    /** Copy details with the logs, written to the clipboard inside the press itself; false when the browser refused. */
-    copyLogs: () => Promise<boolean>
-    loadSubtitleFile: () => void
-    /** Lays a subtitle file over the video and shows it; throws when the file cannot be read. */
-    addSubtitle: (file: File, as?: { label: string; language: string }, replacing?: TextTrack | null) => Promise<void>
-    frames: () => Frames | null
-    /** The video's own frames for the seek bar's card, for a natively played file; null otherwise. */
-    grabber: () => FrameGrabber | null
-    /** Where the video was resumed from, for the Start over offer; null when it starts at the beginning. */
-    resumedAt: () => number | null
-    startOver: () => void
-    /** The controls came up or went: subtitles move up out of the bar's way while they show. */
-    onControls?: (up: boolean) => void
-    /** The file's chapter marks (empty when it has none or they are not read). */
-    chapters: () => Chapter[]
-    /** How much of the file has arrived (0 to 1); null once all of it has. */
-    loaded: () => number | null
-    /** Whether the video is on the Watched list, and the menu's way to change it. */
-    watched: () => boolean
-    markWatched: (on: boolean) => void
-}
-
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'submaker' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
-
-/** A file name the three systems all take: no path or reserved characters, not too long. */
-function shotName(title: string, at: number): string {
-    const name = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'TMPlayer'
-    return `${name} ${clock(at).replace(/:/g, '.')}.png`
-}
+import { PlaySolid, PauseSolid, CopiesIcon, SPEEDS, SPEED_MIN, SPEED_MAX, HIDE_MS, SIDE, WIDE_ROW, NOTE_MS, PEEK_MS, UNLOCK_PILL_MS, MAC, shapeIcon, shapeName, clock, speedLabel } from './chrome/parts'
+import type { Ctl, Sheet } from './chrome/types'
+import { SeekBar } from './chrome/SeekBar'
+import { DetailsSheet, StillSheet } from './chrome/Dialogs'
+import { createScreenshot } from './chrome/screenshot'
+import { useBoost } from './chrome/useBoost'
+import { useGestures } from './chrome/useGestures'
+import { useKeys } from './chrome/useKeys'
+import { usePicture } from './chrome/usePicture'
+import { useSleep } from './chrome/useSleep'
+import { useSubtitles } from './chrome/useSubtitles'
+import { timed } from '../ui/timed'
+import { chatDetail, EpisodesPanel, msoneTarget, SpeedSheet, subtitleLine, VolumeControl } from './chrome/menus'
 
 export { variant }
 
 export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const c = props.ctl
     const v = c.video
+    const info = () => c.info()
     const phone = () => variant() === 'phone'
     const tv = () => variant() === 'tv'
     /** Plain labels (no key hints): the phone's and the TV's remote have no letters to press. */
@@ -287,41 +119,6 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // ---- showing and hiding ------------------------------------------------------------------
     const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
-    // Playback details (WB18): what Report stutter and Copy details just did, and what the logs weigh.
-    const [detailsNote, setDetailsNote] = createSignal('')
-    const [logsSize, setLogsSize] = createSignal<string | null>(null)
-    /** The text a browser that would not copy gets to select and copy itself. */
-    const [copyFallback, setCopyFallback] = createSignal<string | null>(null)
-    createEffect(() => {
-        if (sheet() !== 'details') return
-        setDetailsNote('')
-        setCopyFallback(null)
-        try {
-            setLogsSize(untrack(() => c.logsSize()))
-        } catch {
-            setLogsSize(null)
-        }
-        // The remote and the keyboard come into the sheet on its close button, so OK still closes it as before.
-        queueMicrotask(() => c.root.querySelector<HTMLElement>('.pc-details .pc-btn')?.focus({ preventScroll: true }))
-    })
-    const copyDetails = () =>
-        void c.copyLogs().then((ok) => {
-            setCopyFallback(ok ? null : c.logsText())
-            setDetailsNote(ok ? t('player.details_copied') : t('web.copy_failed'))
-        })
-    // The subtitle files posted in this video's chat (EG-F48): looked for once, when the Subtitles
-    // picker (or More options, which leads to it) first opens. One search, answered best first; the
-    // entry shows only when there are some, and a failure just leaves it out.
-    const [chatSubs, setChatSubs] = createSignal<ChatSubtitle[]>([])
-    const [chatNote, setChatNote] = createSignal('')
-    const [chatBusy, setChatBusy] = createSignal<string | null>(null)
-    let chatAsked = false
-    createEffect(() => {
-        if (chatAsked || (sheet() !== 'subtitles' && sheet() !== 'more')) return
-        chatAsked = true
-        const wanted = [navigator.language.slice(0, 2).toLowerCase(), 'en']
-        call('chatSubtitles', [c.item.chatId, c.item.messageId, c.item.fileName || c.item.title, '', wanted]).then(setChatSubs, () => {})
-    })
     // Copy link at this time (the apps' CopyLinkAtTime): the link is asked as More options opens, so the tap that copies it has it.
     // Not for a chat that restricts saving, nor a video played from pieces. `linkShown` is the link, when the browser refused the clipboard.
     const askLink = (chatId: number, messageId: number) => call('messageLink', [chatId, messageId])
@@ -357,36 +154,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             linkBusy = false
         }
     }
-    /** The listed file read and laid over the video, or the sentence saying why not (a gone file leaves the list). */
-    const pickChat = async (sub: ChatSubtitle) => {
-        if (chatBusy()) return
-        setChatBusy(sub.key)
-        setChatNote('')
-        const failed = t('player.subtitle_load_failed', { file: sub.name })
-        try {
-            const own = episodeOf(c.item.fileName ?? '') ?? (info()?.episode ? episodeOf(info()!.episode!.code) : null)
-            const file = await readChatSubtitle(sub, own)
-            await c.addSubtitle(file, { label: sub.name.replace(/\.[^.]+$/, ''), language: sub.language ?? '' })
-            subpick.choseOther(c.item)
-            setSheet(null)
-        } catch (e) {
-            if (e instanceof ChatSubtitleError) {
-                setChatNote(e.why === 'gone' ? t('tracks.in_chat_gone') : e.why === 'too-big' ? t('tracks.file_too_big') : e.why === 'offline' ? t('errors.offline') : failed)
-                if (e.why === 'gone') {
-                    setChatSubs((list) => list.filter((s) => s.key !== sub.key))
-                    void call('chatSubtitlesForget', [c.item.chatId, c.item.messageId])
-                    if (!chatSubs().length) setSheet('subtitles')
-                }
-            } else if (e instanceof SubtitleError) {
-                setChatNote(e.why === 'vobsub' ? t('web.needs_app_picture_subtitles') : e.why === 'too-big' ? t('tracks.file_too_big') : failed)
-            } else setChatNote(failed)
-        } finally {
-            setChatBusy(null)
-        }
-    }
     /** The pointer rests on the controls (desktop): they stay. */
     const [held, setHeld] = createSignal(false)
     const [locked, setLocked] = createSignal(false)
+    const resting = { onPointerEnter: () => setHeld(true), onPointerLeave: () => setHeld(false) }
     let hideTimer = 0
     const poke = () => {
         clearTimeout(hideTimer)
@@ -474,14 +245,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     )
 
     // ---- actions -------------------------------------------------------------------------------
-    const [note, setNote] = createSignal<{ text: string; side: 'left' | 'right' | 'centre' } | null>(null)
-    let noteTimer = 0
-    const flash = (text: string, side: 'left' | 'right' | 'centre' = 'centre') => {
-        clearTimeout(noteTimer)
-        setNote({ text, side })
-        noteTimer = window.setTimeout(() => setNote(null), NOTE_MS)
-    }
-    onCleanup(() => clearTimeout(noteTimer))
+    const [note, showNote] = timed<{ text: string; side: 'left' | 'right' | 'centre' }>(NOTE_MS)
+    const flash = (text: string, side: 'left' | 'right' | 'centre' = 'centre') => showNote({ text, side })
 
     const togglePlay = () => (v.paused ? v.play().catch(() => {}) : v.pause())
     const seekTo = (s: number, from = v.currentTime) => {
@@ -530,89 +295,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         v.volume = Math.max(0, Math.min(1, x))
         v.muted = v.volume === 0
     }
-    // The online subtitle laid over this video (picked from MSone, or brought back by itself): the one track the
-    // remembered pick is about. Choosing it again ends an Off; Off is remembered; any other track ends the pick (HX25).
-    let onlineTrack: TextTrack | null = null
-    const layOnline = async (file: File, as: { label: string; language: string }) => {
-        const before = new Set(Array.from(v.textTracks))
-        await c.addSubtitle(file, as)
-        onlineTrack = Array.from(v.textTracks).find((tt) => !before.has(tt)) ?? null
-        readSubs()
-    }
-    // SubMaker (the viewer's own addon): a subtitle it lists loads as MSone's does; a translation it makes runs as a background
-    // job whose track is replaced in place as the file grows, and ends with the video or the player (submaker-job.ts).
-    let makerTrack: TextTrack | null = null
-    const onlineLabelFor = (language: string) => t('online.track_label', { language, provider: 'SubMaker' })
-    const layMaker = async (file: File, as: { label: string; language: string }) => {
-        await c.addSubtitle(file, as)
-        readSubs()
-    }
-    const jobs = createJobs({
-        videoKey: () => `${c.item.chatId}:${c.item.messageId}`,
-        duration: () => duration(),
-        said: (what, language) => flash(what === 'started' ? t('submaker.started', { language }) : t('submaker.cancelled')),
-        lay: async (srt, language, replace) => {
-            const before = new Set(Array.from(v.textTracks))
-            await c.addSubtitle(new File([srt], `${language}.srt`), { label: onlineLabelFor(language), language: '' }, replace ? makerTrack : null)
-            makerTrack = Array.from(v.textTracks).find((tt) => !before.has(tt)) ?? makerTrack
-            if (!replace) subpick.choseOther(c.item)
-            readSubs()
-        },
-    })
-    onCleanup(() => jobs.dispose())
-    createEffect(on(() => `${c.item.chatId}:${c.item.messageId}`, () => (makerTrack = null, jobs.dispose()), { defer: true }))
-    /** The IMDb id the addon is asked about, from the poster lookup the page already makes (the apps' ids); null when it names none (posters off, no match, an anime AniList matched). */
-    const submakerTarget = async (): Promise<{ kind: Kind; id: string } | null> => {
-        const ask = askOf(c.item)
-        if (!ask || !settings().posters) return null
-        const found = await answer(ask)
-        if (!found.match || !found.id || !found.kind) return null
-        const m = /^S(\d+)E(\d+)/i.exec(info()?.episode?.code ?? '')
-        const ep = m ? { season: Number(m[1]), episode: Number(m[2]) } : null
-        if (found.kind === 'show' && !ep) return null
-        const extras = await loadExtras(found, found.kind === 'show' ? ep : null)
-        const id = idFor(extras.found ? extras.imdb : null, found.kind === 'show' ? ep!.season : null, found.kind === 'show' ? ep!.episode : null)
-        return id ? { kind: found.kind === 'show' ? 'series' : 'movie', id } : null
-    }
-    const pickSub = (track: TextTrack | null) => {
-        for (const tt of subs()) tt.mode = tt === track ? 'showing' : 'disabled'
-        readSubs()
-        if (!track) subpick.choseOff(c.item)
-        else if (track === onlineTrack) subpick.choseOnline(c.item)
-        else subpick.choseOther(c.item)
-        flash(track ? t('player.subtitles_track', { track: subLabel(track, subs().indexOf(track)) }) : t('player.subtitles_off'))
-    }
-    const subLabel = (tt: TextTrack, i: number) => tt.label || (tt.language ? tt.language.toUpperCase() : t('player.track_number', { number: i + 1 }))
-    const cycleSub = (back = false) => {
-        const list = [null, ...subs()]
-        const at = list.indexOf(subOn())
-        pickSub(list[(at + (back ? -1 : 1) + list.length) % list.length])
-    }
-    // HX25, the start: the online subtitle picked for this video before comes back by itself (its own copy, the MSone
-    // cache's file, or one download when nothing forbids it), and so does Off. The lookup began when the player opened
-    // (Player's warmRestore), so the track is usually in before the first frame, and always before the viewer can enter
-    // the iPhone's own full screen. A subtitle the viewer chose meanwhile is never replaced; nothing here shows an error.
-    let leaving = false
-    onCleanup(() => (leaving = true))
-    onMount(() => {
-        void subpick.takeRestore(c.item).then(async ({ found, wanted }) => {
-            const showing = () => Array.from(v.textTracks).some((tt) => (tt.kind === 'subtitles' || tt.kind === 'captions') && tt.mode === 'showing')
-            // Whatever the viewer chose while this was looked for (Off, a track, a file, MSone's list) stands over it.
-            if (leaving || !wanted() || showing()) return
-            if (found.kind === 'ready') {
-                try {
-                    await layOnline(found.file, { label: onlineLabel(), language: 'ml' })
-                    if (!wanted()) return
-                    if (!found.fromDevice) subpick.keepRestored(c.item, found.hit, found.file)
-                    if (onlineTrack) flash(t('player.subtitles_track', { track: subLabel(onlineTrack, subs().indexOf(onlineTrack)) }))
-                } catch {
-                    // A copy that does not read is no pick: the viewer is simply asked again, no error card.
-                    subpick.choseOther(c.item)
-                }
-            }
-            // Off needs nothing laid: no subtitle shows by itself, and none is laid.
-        })
-    })
+    const subtitles = useSubtitles(c, { subs, subOn, readSubs, sheet, setSheet, flash, duration, info })
+    const { chatSubs, chatNote, setChatNote, chatBusy, pickChat, layOnline, layMaker, jobs, submakerTarget, subLabel, pickSub, cycleSub } = subtitles
     const cycleAudio = (back = false) => {
         const list = c.audios()
         if (list.length < 2 || !c.canSwitchAudio()) return
@@ -622,299 +306,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         flash(c.trackLabel(list[next], next))
     }
 
-    // Picture shape (VideoScale): Original, Fill and Stretch as object-fit on the video; a fixed
-    // ratio as the video's box sized to it inside the stage, the picture filling the box. For this
-    // player only: a new one starts on Original. The box follows the stage's size, so a resize,
-    // fullscreen and a turned phone keep the ratio.
-    const [shape, setShape] = createSignal<Shape>('fit')
-    const [stage, setStage] = createSignal({ width: 0, height: 0 })
-    {
-        const box = v.parentElement
-        if (box && typeof ResizeObserver !== 'undefined') {
-            const watch = new ResizeObserver(() => setStage({ width: box.clientWidth, height: box.clientHeight }))
-            watch.observe(box)
-            onCleanup(() => watch.disconnect())
-        }
-    }
-    // Rotate picture (PictureRotation): the picture turned a quarter at a time as it is drawn, the box resized so a
-    // sideways picture still fits the stage; for this video only (a new player starts upright).
-    const [turn, setTurn] = createSignal(0)
-    createEffect(() => {
-        const s = shape()
-        const deg = turn()
-        const sw = stage().width || v.parentElement?.clientWidth || 0
-        const sh = stage().height || v.parentElement?.clientHeight || 0
-        v.style.objectFit = objectFit(s)
-        // The canvas engines' pictures follow this (movi.ts by custom properties, libavcanvas.ts by mirroring the style).
-        c.root.style.setProperty('--stage-w', `${sw}px`)
-        c.root.style.setProperty('--stage-h', `${sh}px`)
-        c.root.style.setProperty('--turn', `${deg}deg`)
-        if (deg) c.root.setAttribute('data-turn', String(deg))
-        else c.root.removeAttribute('data-turn')
-        const ratio = shapeRatio(s)
-        const frame = turnFrame(sw, sh, deg)
-        const inner = ratio === null ? null : ratioBox(frame.width, frame.height, ratio)
-        const at = inner ? { left: frame.left + inner.left, top: frame.top + inner.top, width: inner.width, height: inner.height } : sidewaysTurn(deg) && sw > 0 && sh > 0 ? frame : null
-        if (!at) {
-            for (const p of ['position', 'left', 'top', 'width', 'height'] as const) v.style.removeProperty(p)
-            return
-        }
-        Object.assign(v.style, { position: 'absolute', left: `${at.left}px`, top: `${at.top}px`, width: `${at.width}px`, height: `${at.height}px` })
-    })
-    onCleanup(() => {
-        for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit'] as const) v.style.removeProperty(p)
-        for (const p of ['--stage-w', '--stage-h', '--turn']) c.root.style.removeProperty(p)
-        c.root.removeAttribute('data-turn')
-    })
-    const pickTurn = (deg: number) => {
-        // The turn changes the picture the zoom enlarges, as another shape does: the zoom starts again from 100 per cent.
-        resetZoom(true)
-        setTurn(deg)
-        zoomFrameKept = null
-        flash(deg ? t('player.rotate_picture_now', { degrees: deg }) : t('player.rotate_picture_off'))
-    }
-
-    // Volume boost (boost.ts): the sound above the file's own level, kept for every video until turned off. Not on an
-    // iPhone or iPad, where the page cannot carry it, so the entry is left out there.
-    const boostOk = boostSupported()
-    const boostIos = boostIsIos()
-    const [boost, setBoost] = createSignal(1)
-    let boostPicked = false
-    let startBoost: (level: number) => void = () => {}
-    {
-        // A level that could not start yet (no tap has allowed audio) starts on the next one.
-        let retry: (() => void) | null = null
-        const start = (level: number) => {
-            void applyBoost(v, level).then((ok) => {
-                if (ok || retry) return
-                const offs: (() => void)[] = []
-                retry = () => {
-                    offs.forEach((off) => off())
-                    retry = null
-                    if (boost() === level) start(level)
-                }
-                offs.push(onGlobal(document, 'pointerdown', retry, true), onGlobal(document, 'keydown', retry, true))
-            })
-        }
-        startBoost = start
-        if (boostOk)
-            void readBoost().then((level) => {
-                if (boostPicked || level <= 1) return
-                setBoost(level)
-                start(level)
-            })
-        // A new source or engine (a quality pick, the fallback chain) starts without the graph: say the level again.
-        listen('playing', () => boost() > 1 && !retry && start(boost()))
-        onCleanup(() => {
-            if (retry) (document.removeEventListener('pointerdown', retry, true), document.removeEventListener('keydown', retry, true))
-            releaseBoost(v)
-        })
-    }
-    const pickBoost = (level: number) => {
-        boostPicked = true
-        setBoost(level)
-        writeBoost(level)
-        startBoost(level)
-        flash(level > 1 ? t('player.volume_boost_now', { percent: Math.round(level * 100) }) : t('player.volume_boost_off'))
-    }
-    const pickShape = (next: Shape) => {
-        // Another shape starts the zoom again from 100 per cent (PictureZoom: the shape sizes the picture
-        // it enlarges), quietly: the shape's own note says what happened.
-        resetZoom(true)
-        setShape(next)
-        zoomFrameKept = null
-        flash(t('player.picture_shape_now', { shape: shapeName(next) }))
-    }
-    const cycleShape = () => pickShape(nextShape(shape()))
-
-    // ---- free zoom (PZ1, PictureZoom): 100 to 400 per cent over the shape, around the fingers -----
-    // Drawn as a transform on the picture (the <video>, or the canvas an engine draws on in its
-    // place), centred on the stage as every shape's box is, so the zoom's pan is the transform's
-    // move. The subtitles stay outside it: the <video>'s own cue box would grow with the picture,
-    // so while zoomed it is hidden (zoom.css) and the cues are drawn in the layer over the picture
-    // the canvas engines already use. A new video is a new Chrome, so it starts at 100 per cent.
-    const [zoom, setZoom] = createSignal<Zoom>(NO_ZOOM)
-    const [zoomChip, setZoomChip] = createSignal(false)
-    let zoomChipTimer = 0
-    type WebkitShown = HTMLVideoElement & { webkitDisplayingFullscreen?: boolean }
-    /** Not on the TV (no fingers, no zoom keys), not while locked or a status sheet is up, not in the iPhone's own full screen. */
-    const zoomAllowed = () => !tv() && !locked() && !c.blocked() && !(v as WebkitShown).webkitDisplayingFullscreen
-    const engineCanvas = () => c.root.querySelector<HTMLCanvasElement>('canvas.sw-canvas, canvas.movi-canvas')
-    /**
-     * The stage and the picture's size in it, measured once and kept: a pinch's moves only write
-     * the transform, never read the layout back. Measured again after a resize, another shape,
-     * a new frame size or an engine's canvas coming or going.
-     */
-    let zoomFrameKept: Frame | null = null
-    const zoomFrame = (): Frame => {
-        if (zoomFrameKept) return zoomFrameKept
-        const w = c.root.clientWidth
-        const h = c.root.clientHeight
-        const cv = engineCanvas()
-        const pic = turnedPictureSize(w, h, v.videoWidth || cv?.width || w, v.videoHeight || cv?.height || h, shape(), turn())
-        const frame = { viewWidth: w, viewHeight: h, pictureWidth: pic?.width ?? w, pictureHeight: pic?.height ?? h }
-        // A stage not laid out yet is measured again next time.
-        if (w > 0 && h > 0) zoomFrameKept = frame
-        return frame
-    }
-    listen('resize', () => (zoomFrameKept = null))
-    const showZoomChip = (live: boolean) => {
-        clearTimeout(zoomChipTimer)
-        setZoomChip(true)
-        if (!live) zoomChipTimer = window.setTimeout(() => setZoomChip(false), ZOOM_MS)
-    }
-    /** Back to 100 per cent: with the figure saying so, or `quiet` (a new shape says it with its own note). */
-    function resetZoom(quiet = false) {
-        if (quiet) (clearTimeout(zoomChipTimer), setZoomChip(false))
-        if (!zoomed(zoom())) return
-        setZoom(NO_ZOOM)
-        if (!quiet) showZoomChip(false)
-    }
-    /** A key's or a wheel's steps, around a point of the stage (its centre for a key). */
-    const zoomBy = (steps: number, x = c.root.clientWidth / 2, y = c.root.clientHeight / 2) => {
-        if (!zoomAllowed() || !steps) return
-        setZoom((z) => stepped(z, steps, x, y, zoomFrame()))
-        showZoomChip(false)
-    }
-    /** The transform on every picture there is now: the <video>, and an engine's canvas, however late it came. */
-    // The turn (Rotate picture) and the zoom share the one transform, composed in extras.ts pictureTransform.
-    const applyZoom = (z: Zoom) => {
-        const tf = pictureTransform(untrack(turn), z)
-        for (const el of [v, engineCanvas()]) {
-            if (!el) continue
-            if (el.style.transform !== tf) el.style.transform = tf
-            el.style.transformOrigin = tf ? 'center center' : ''
-        }
-        c.root.classList.toggle('pc-zoomed', zoomed(z))
-    }
-    // The cues while zoomed: a layer of our own over the native picture, unless an engine draws its
-    // own (movi.ts, libavcanvas.ts), which wins whenever it comes, so the words are never drawn twice.
-    let zoomCues: CueOverlay | null = null
-    let zoomCuesEl: Element | null = null
-    const engineCues = () => Array.from(c.root.querySelectorAll('.movi-cues')).some((el) => el !== zoomCuesEl)
-    const placeCues = (z: Zoom) => {
-        // One layer for both: the zoomed picture and the turned one each take the element's own cue box with them.
-        const want = (zoomed(z) || untrack(turn) !== 0) && !engineCues()
-        if (want && !zoomCues) {
-            const before = new Set(c.root.querySelectorAll('.movi-cues'))
-            zoomCues = cueOverlay(v, () => v.currentTime)
-            zoomCuesEl = Array.from(c.root.querySelectorAll('.movi-cues')).find((el) => !before.has(el)) ?? null
-            zoomCues.draw()
-        } else if (!want && zoomCues) {
-            zoomCues.remove()
-            zoomCues = null
-            zoomCuesEl = null
-        }
-    }
-    createEffect(() => {
-        const z = zoom()
-        turn()
-        applyZoom(z)
-        placeCues(z)
-    })
-    // An engine's canvas or cue layer added (or taken away) after the zoom was set: the transform
-    // and the cues follow it, and the picture is measured again.
-    if (typeof MutationObserver !== 'undefined') {
-        const engines = new MutationObserver(() => {
-            zoomFrameKept = null
-            const z = untrack(zoom)
-            applyZoom(z)
-            placeCues(z)
-        })
-        engines.observe(c.root, { childList: true })
-        onCleanup(() => engines.disconnect())
-    }
-    // A resized stage (a turned phone, a window, full screen) keeps the scale and pulls the pan back inside.
-    createEffect(on(stage, () => ((zoomFrameKept = null), setZoom((z) => (zoomed(z) ? clampedTo(z, zoomFrame()) : z))), { defer: true }))
-    const redrawCues = () => zoomCues?.draw()
-    listen('timeupdate', redrawCues)
-    v.textTracks.addEventListener('change', redrawCues)
-    // The iPhone's own full screen is the system's player: the page's transform does not reach it.
-    const quietReset = () => resetZoom(true)
-    v.addEventListener('webkitbeginfullscreen', quietReset)
-    onCleanup(() => {
-        clearTimeout(zoomChipTimer)
-        zoomCues?.remove()
-        v.textTracks.removeEventListener('change', redrawCues)
-        v.removeEventListener('webkitbeginfullscreen', quietReset)
-        c.root.classList.remove('pc-zoomed')
-        for (const el of [v, engineCanvas()]) el?.style.removeProperty('transform')
-        v.style.removeProperty('transform-origin')
-    })
-    const zoomText = () => t('player.zoom_percent', { percent: `${percent(zoom())}%` })
+    const pic = usePicture(c, { listen, flash, tv, locked })
+    const { shape, turn, zoom, zoomChip, zoomText, zoomBy, resetZoom, pickTurn, pickShape, cycleShape } = pic
+    const boost = useBoost(v, listen, flash)
 
     // ---- screenshots (S with the subtitles, Shift+S without) -----------------------------------
-    // The frame shown, at the video's own size, as a PNG the browser saves. The canvas engines'
-    // picture is their canvas; a frame the page may not read (a WebGL canvas that kept no copy, a
-    // source the browser calls foreign) comes out empty or throws, and the note says it failed.
-    const screenshot = async (withSubtitles: boolean) => {
-        const cv = engineCanvas()
-        const onCanvas = !!cv && (v.classList.contains('movi-active') || v.classList.contains('sw-active'))
-        const w = onCanvas ? cv!.width : v.videoWidth
-        const h = onCanvas ? cv!.height : v.videoHeight
-        const at = v.currentTime
-        if (!(w > 0) || !(h > 0)) return flash(t('player.screenshot_failed'))
-        try {
-            const out = document.createElement('canvas')
-            out.width = w
-            out.height = h
-            const g = out.getContext('2d')
-            if (!g) throw new Error('no 2d')
-            g.drawImage(onCanvas ? cv! : v, 0, 0, w, h)
-            // A cleared WebGL buffer reads as see-through black; a real frame is opaque.
-            if (g.getImageData(w >> 1, h >> 1, 1, 1).data[3] === 0) throw new Error('empty frame')
-            // A turned picture is saved as it is shown (Rotate picture): the frame turned, the subtitles upright over it.
-            let shot = out
-            if (turn() !== 0) {
-                const side = sidewaysTurn(turn())
-                shot = document.createElement('canvas')
-                shot.width = side ? h : w
-                shot.height = side ? w : h
-                const r = shot.getContext('2d')
-                if (!r) throw new Error('no 2d')
-                r.translate(shot.width / 2, shot.height / 2)
-                r.rotate((turn() * Math.PI) / 180)
-                r.drawImage(out, -w / 2, -h / 2)
-            }
-            if (withSubtitles) drawCuesOn(shot.getContext('2d')!, shot.width, shot.height, at)
-            const blob = await new Promise<Blob | null>((done) => shot.toBlob(done, 'image/png'))
-            if (!blob) throw new Error('no image')
-            const file = shotName(info()?.title ?? c.item.title, at)
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = file
-            a.click()
-            window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-            flash(t('player.screenshot_saved', { file }))
-        } catch {
-            flash(t('player.screenshot_failed'))
-        }
-    }
-    /** The subtitles showing at `at`, drawn at the foot of the frame in the player's look (white, a dark edge). */
-    const drawCuesOn = (g: CanvasRenderingContext2D, w: number, h: number, at: number) => {
-        const track = subOn()
-        const lines = Array.from(track?.cues ?? [])
-            .filter((cue) => cue.startTime <= at && at < cue.endTime)
-            .flatMap((cue) => String((cue as VTTCue).text ?? '').replace(/<[^>]*>/g, '').split('\n'))
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .slice(-4)
-        if (!lines.length) return
-        const size = Math.max(14, Math.round(h * 0.05))
-        g.font = `600 ${size}px system-ui, sans-serif`
-        g.textAlign = 'center'
-        g.textBaseline = 'bottom'
-        g.lineJoin = 'round'
-        g.lineWidth = Math.max(2, size / 8)
-        g.strokeStyle = 'rgba(0, 0, 0, .85)'
-        g.fillStyle = '#fff'
-        lines.forEach((line, i) => {
-            const y = h - Math.round(h * 0.06) - (lines.length - 1 - i) * size * 1.25
-            g.strokeText(line, w / 2, y, w * 0.9)
-            g.fillText(line, w / 2, y, w * 0.9)
-        })
-    }
+    const screenshot = createScreenshot({ video: v, canvas: pic.engineCanvas, turn, subtitles: subOn, title: () => info()?.title ?? c.item.title, flash })
 
 
     // ---- chapters (Chapters.kt) --------------------------------------------------------------
@@ -1000,96 +397,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     })
 
     // ---- the sleep timer (SleepTimer) and "Still watching?" ----------------------------------
-    const [sleepAt, setSleepAt] = createSignal(sleepState.at)
-    const [sleepEnd, setSleepEnd] = createSignal(sleepState.end)
-    const [sleepPick, setSleepPick] = createSignal<number | null>(null)
-    const [stillWhy, setStillWhy] = createSignal<'idle' | 'autoplay' | 'sleep' | 'sleep_end'>('idle')
-    let sleepTimer = 0
-    /** The next episode keeps the timer; leaving the player ends it. */
-    let keepSleep = false
-    const askStill = (why: 'idle' | 'autoplay' | 'sleep' | 'sleep_end') => {
-        v.pause()
-        setStillWhy(why)
-        setSheet('still')
-        show()
-    }
-    const clearSleep = () => {
-        clearTimeout(sleepTimer)
-        setSleepAt(null)
-        setSleepEnd(false)
-        sleepState.at = null
-        sleepState.end = false
-    }
-    const armSleep = () => {
-        clearTimeout(sleepTimer)
-        const at = sleepAt()
-        if (at !== null) sleepTimer = window.setTimeout(sleepCheck, Math.max(0, Math.min(at - Date.now(), 2 ** 30)))
-    }
-    function sleepCheck() {
-        const at = sleepAt()
-        if (at === null) return
-        if (Date.now() < at) return armSleep()
-        clearSleep()
-        askStill('sleep')
-    }
-    const sleepLabel = (minutes: number) =>
-        minutes === 0
-            ? t('player.sleep_end_of_video')
-            : minutes < 60
-              ? t('unit.minutes', { count: minutes })
-              : minutes % 60 === 0
-                ? t('unit.hours', { count: minutes / 60 })
-                : t('sleep.hours_minutes', { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
-    const setSleep = (minutes: number | null) => {
-        clearSleep()
-        setSleepPick(minutes)
-        if (minutes === null) return flash(t('player.sleep_off'))
-        if (minutes === 0) {
-            setSleepEnd(true)
-            sleepState.end = true
-        } else {
-            const at = Date.now() + minutes * 60_000
-            setSleepAt(at)
-            sleepState.at = at
-            armSleep()
-        }
-        flash(t('player.sleep_in', { time: sleepLabel(minutes) }))
-    }
-    const sleepSummary = () => {
-        const at = sleepAt()
-        if (at !== null) return t('sleep.minutes_left', { count: Math.max(1, Math.ceil((at - Date.now()) / 60_000)) })
-        return sleepEnd() ? t('player.sleep_end_of_video') : t('common.off')
-    }
-    const onVisible = () => document.visibilityState === 'visible' && sleepAt() !== null && sleepCheck()
-    onMount(() => (armSleep(), document.addEventListener('visibilitychange', onVisible)))
-    onCleanup(() => {
-        clearTimeout(sleepTimer)
-        document.removeEventListener('visibilitychange', onVisible)
-        if (!keepSleep) (sleepState.at = null, (sleepState.end = false))
-    })
-    // Two hours of playing with nothing pressed (StillWatching.askAfterIdle): one timer, armed only while it plays.
-    let idleTimer = 0
-    const armIdle = () => {
-        clearTimeout(idleTimer)
-        if (v.paused) return
-        const left = IDLE_LIMIT - (Date.now() - watching.lastInput)
-        idleTimer = window.setTimeout(() => {
-            if (v.paused) return
-            if (Date.now() - watching.lastInput >= IDLE_LIMIT) askStill('idle')
-            else armIdle()
-        }, Math.max(1000, left))
-    }
-    listen('play', armIdle)
-    listen('pause', () => clearTimeout(idleTimer))
-    onMount(() => {
-        const offs = (['keydown', 'pointerdown'] as const).map((e) => onGlobal(document, e, noteInput, { capture: true, passive: true }))
-        onCleanup(() => offs.forEach((off) => off()))
-    })
-    onCleanup(() => clearTimeout(idleTimer))
+    const sleep = useSleep(v, listen, { flash, ask: () => (setSheet('still'), show()) })
+    const { sleepAt, sleepEnd, sleepPick, stillWhy, askStill, clearSleep, sleepLabel, setSleep, sleepSummary } = sleep
 
     /** Another episode: autoplay's count and the sleep timer go with it. */
     const go = (next: VideoItem | null) => {
-        keepSleep = true
+        sleep.keep()
         c.play(next)
     }
 
@@ -1292,20 +605,13 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         setLocked(true)
         showUnlock()
     }
-    const [unlockShown, setUnlockShown] = createSignal(false)
-    let unlockTimer = 0
-    const showUnlock = () => {
-        clearTimeout(unlockTimer)
-        setUnlockShown(true)
-        unlockTimer = window.setTimeout(() => setUnlockShown(false), UNLOCK_PILL_MS)
-    }
+    const [unlockShown, pillUp, hideUnlock] = timed<true>(UNLOCK_PILL_MS)
+    const showUnlock = () => pillUp(true)
     const unlock = () => {
-        clearTimeout(unlockTimer)
+        hideUnlock()
         setLocked(false)
-        setUnlockShown(false)
         show()
     }
-    onCleanup(() => clearTimeout(unlockTimer))
 
     // ---- times -------------------------------------------------------------------------------
     const REMAINING = 'tmplayer-remaining'
@@ -1327,219 +633,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
     const [dragTime, setDragTime] = createSignal<number | null>(null)
     // The TV's arrows seek at once: the card shows the new place for a moment after each press.
-    const [peek, setPeek] = createSignal<number | null>(null)
-    let peekTimer = 0
-    const peekAt = (s: number) => {
-        clearTimeout(peekTimer)
-        setPeek(s)
-        peekTimer = window.setTimeout(() => setPeek(null), PEEK_MS)
-    }
-    onCleanup(() => clearTimeout(peekTimer))
+    const [peek, peekAt] = timed<number>(PEEK_MS)
     /** Where the video was when a drag on the bar began: what a slip there is measured from. */
     let dragFrom = -1
     const shownTime = () => dragTime() ?? time()
     const endText = () => (remaining() && duration() ? `-${clock(duration() - shownTime())}` : clock(duration()))
 
-    // ---- the TV's remote (PlayerActivity.dispatchKeyEvent and PlayerControls' D-pad rules) --
-    // Over the bare picture: Left and Right jump ten seconds at once (held, they repeat), OK plays
-    // or pauses (a pause raises the row with the remote on the disc), Up and Down raise the row,
-    // Back leaves. With the row up: the remote is on the bar (Left and Right seek, OK plays or
-    // pauses), Down walks to the buttons, Up back to the bar and the disc, Back puts the row away.
-    // A list or menu keeps the remote inside it; Back closes it. The media keys work throughout.
-    const jumpRemote = (forward: boolean) => {
-        const w = c.root.clientWidth
-        jump(forward ? 'right' : 'left', w * (forward ? 0.85 : 0.15), c.root.clientHeight / 2)
-    }
-    const tvKey = (e: KeyboardEvent): boolean | 'native' => {
-        const key = remoteKey(e)
-        if (!key) return false
-        const active = document.activeElement as HTMLElement | null
-        switch (key) {
-            case 'play':
-                if (v.paused) (togglePlay(), flash(t('player.play')))
-                return true
-            case 'pause':
-            case 'stop':
-                if (!v.paused) v.pause()
-                return true
-            case 'playpause':
-                if (!e.repeat) togglePlay()
-                return true
-            case 'forward':
-            case 'rewind':
-                jumpRemote(key === 'forward')
-                return true
-            case 'next':
-            case 'previous': {
-                const to = key === 'next' ? info()?.next : info()?.previous
-                if (!to) return false
-                go(to)
-                return true
-            }
-        }
-        const arrow = key === 'up' || key === 'down' || key === 'left' || key === 'right'
-        if (c.blocked()) {
-            if (key === 'back') c.close()
-            else if (arrow) walk(c.root.querySelector('.pc-status'), key, active)
-            else return 'native'
-            return true
-        }
-        if (sheet()) {
-            // Playback details holds buttons now (Report stutter, Copy details): OK presses the one the remote is on, and closes the sheet from anywhere else.
-            const onDetailsButton = sheet() === 'details' && !!active?.closest('.pc-details-btn')
-            if (key === 'back' || (sheet() === 'details' && key === 'ok' && !onDetailsButton)) setSheet(null)
-            else if (key === 'ok') return 'native'
-            else if (arrow && sheet() === 'details') walk(c.root.querySelector('.pc-details'), key, active)
-            else if (arrow && ['episodes', 'timing', 'bookmarks', 'still', 'msone'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
-            return true
-        }
-        // The next episode's card holds Left, Right and OK once it has the remote; Back puts it away.
-        if (counting() !== null && key === 'back') return (stopCount(), setNextHidden(true), true)
-        const card = c.root.querySelector<HTMLElement>('.pc-next')
-        if (card && active && card.contains(active)) {
-            if (key === 'back') (stopCount(), setNextHidden(true), focusIt(c.root))
-            else if (key === 'left' || key === 'right') walk(card, key, active)
-            else if (key === 'ok') return 'native'
-            if (key === 'back' || key === 'left' || key === 'right') return true
-        }
-        // A notice over the picture with its own close (no sound, a slow decoder): Up from the
-        // row's top reaches it; Down, Back or closing it puts the remote back there, with the row
-        // up again if it went meanwhile (HX22).
-        const closing = noticeClose()
-        if (closing && active === closing) {
-            if (key === 'ok') closing.click()
-            if (key === 'ok' || key === 'back' || key === 'down') (show(), focusIt(discEl() ?? barEl()))
-            return true
-        }
-        if (!(visible() && !locked())) {
-            const playNow = card?.querySelector<HTMLElement>('button:last-child')
-            if (key === 'left' || key === 'right') playNow ? focusIt(playNow) : jumpRemote(key === 'right')
-            else if (key === 'ok' && skipNow() && !playNow) skipIt()
-            else if (key === 'ok') playNow ? focusIt(playNow) : togglePlay()
-            else if (key === 'up' && backTo() !== null) takeBack()
-            else if (key === 'up' && offer() && c.resumedAt() !== null) (c.startOver(), setOffer(false))
-            else if (key === 'up' || key === 'down') show()
-            else if (key === 'back') c.close()
-            return true
-        }
-        poke()
-        const items = rowItems()
-        const at = active ? items.indexOf(active) : -1
-        const bar = barEl()
-        const disc = discEl()
-        const notice = noticeClose()
-        const top = disc ?? bar
-        if (key === 'back') hide()
-        else if (key === 'ok') {
-            if (inLayer(active) && active !== bar) return 'native'
-            togglePlay()
-        } else if (key === 'left' || key === 'right') {
-            if (at >= 0) focusIt(items[at + (key === 'right' ? 1 : -1)])
-            else if (active === bar) (seekBy(key === 'right' ? 10 : -10), peekAt(v.currentTime))
-            else if (active !== disc) jumpRemote(key === 'right')
-        } else if (key === 'up') {
-            if (at >= 0) focusIt(bar)
-            else if (active === bar && disc) focusIt(disc)
-            else if (active === top && notice) focusIt(notice)
-            else if (active !== disc && active !== bar) focusIt(bar)
-        } else if (key === 'down') {
-            if (at >= 0) return true
-            if (active === disc) focusIt(bar)
-            else if (active === bar) focusIt(items[0])
-            else focusIt(bar)
-        }
-        return true
-    }
-
-    // ---- keys (PlayerKeys.actionFor, the parts a browser can do) --------------------------
-    const onKey = (e: KeyboardEvent) => {
-        const target = e.target as HTMLElement | null
-        const typing = !!target && (target.isContentEditable || (target instanceof HTMLInputElement && target.type !== 'range') || target instanceof HTMLTextAreaElement)
-        // A confirm question (ui/Confirm.tsx) has every key, Escape first: the player behind it stays.
-        if (!playerHearsKeys({ handled: e.defaultPrevented, typing, confirm: confirmOpen() })) return
-        if (tv()) {
-            const handled = tvKey(e)
-            if (handled) {
-                if (handled === true) e.preventDefault()
-                return
-            }
-        }
-        if (c.blocked()) return
-        if (locked()) {
-            if (e.key === 'Enter') unlock()
-            else showUnlock()
-            e.preventDefault()
-            return
-        }
-        // A sheet or menu up: Escape closes it, the rest is its own.
-        if (sheet()) {
-            if (e.key === 'Escape') {
-                setSheet(null)
-                e.preventDefault()
-            }
-            return
-        }
-        const k = e.key
-        // Not every target is an element: a key sent to the document itself has none.
-        const onSlider = target instanceof Element && target.getAttribute('role') === 'slider'
-        const onButton = target instanceof HTMLButtonElement || onSlider
-        // The seek bar's own arrows, and a focused button's Space and Enter, are theirs.
-        if ((k === 'ArrowLeft' || k === 'ArrowRight') && onSlider) return
-        if ((k === ' ' || k === 'Enter') && onButton && !e.altKey) return
-        const a = actionFor(
-            { key: k, code: e.code, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey },
-            { mac: MAC, chapters: chapters().length > 0, paused: v.paused, speedNormal: Math.abs(v.playbackRate - 1) <= 0.001, fullscreen: !!document.fullscreenElement, skipShown: !!skipNow() },
-        )
-        if (!a) return
-        let done = true
-        let raise = true
-        switch (a.do) {
-            case 'togglePlay': togglePlay(); break
-            case 'seek':
-                seekBy(a.by)
-                flash(`${a.by > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: Math.abs(a.by) })}`, a.by > 0 ? 'right' : 'left')
-                break
-            case 'chapter': stepChapter(a.forward); break
-            case 'volume':
-                setVol(v.volume + a.by)
-                flash(`${Math.round(v.volume * 100)}%`)
-                raise = false
-                break
-            case 'mute': v.muted = !v.muted; raise = false; break
-            case 'episode': go((a.next ? c.info()?.next : c.info()?.previous) ?? null); break
-            case 'speed': stepSpeed(a.up); break
-            case 'speedReset': setSpeed(1); break
-            case 'frame': seekBy(a.forward ? FRAME : -FRAME); break
-            case 'subtitles': cycleSub(a.back); break
-            case 'subtitlesToggle': cycleSub(); break
-            case 'audio': cycleAudio(a.back); break
-            case 'subtitleDelay': nudgeDelay(a.by); break
-            case 'subtitleSize': stepSize(a.by); break
-            case 'fullscreen': void toggleFullscreen(); break
-            case 'exitFullscreen': document.exitFullscreen().catch(() => {}); break
-            case 'shape': cycleShape(); break
-            case 'rotate': pickTurn(nextTurn(turn())); break
-            case 'zoom': zoomBy(a.steps); raise = false; break
-            case 'zoomReset': resetZoom(); raise = false; break
-            case 'screenshot': void screenshot(a.subtitles); raise = false; break
-            case 'repeat': pressRepeat(); break
-            case 'bookmark': bookmarkHere(); break
-            case 'skip': skipIt(); break
-            case 'goToTime': askTime(); break
-            case 'undoSeek': takeBack(); break
-            // Where the browser has no small window, Ctrl+P stays its print.
-            case 'pip': pipSupported() ? void togglePip() : (done = false); break
-            case 'details': setSheet('details'); break
-            case 'sheet': setSheet('shortcuts'); break
-            case 'jump': seekTo((duration() * a.tenth) / 10); break
-            case 'end': seekTo(duration()); break
-            case 'back': c.close(); break
-        }
-        if (done) {
-            e.preventDefault()
-            if (raise) show()
-        }
-    }
     /** Go to a time: the prompt, with the keyboard handed back to where it was when it closes. */
     const askTime = (from: Element | null = document.activeElement) => {
         opener = from instanceof HTMLElement && from !== document.body ? from : null
@@ -1549,303 +648,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         setSheet(null)
         queueMicrotask(() => focusIt(opener?.isConnected ? opener : c.root))
     }
-    // Not while the profile is locked: no key of the page may play, skip or open the locked video.
-    onMount(() => onCleanup(onGlobal(document, 'keydown', onKey)))
-
-    // ---- the picture: taps, clicks and the phone's gestures ---------------------------------
-    const [hold, setHold] = createSignal(false)
-    const [ripple, setRipple] = createSignal<{ side: 'left' | 'right'; total: number; x: number; y: number; n: number } | null>(null)
-    const [level, setLevel] = createSignal<{ side: 'left' | 'right'; value: number; brightness: boolean } | null>(null)
-    const [scrub, setScrub] = createSignal<{ from: number; to: number; rate?: number } | null>(null)
-    const [brightness, setBrightness] = createSignal(1)
-    createEffect(() => (v.style.filter = brightness() < 0.999 ? `brightness(${brightness()})` : ''))
-
-    let down: { x: number; y: number; at: number; id: number; time: number; vol: number; bright: number } | null = null
-    /** Fingers on the picture, in the stage's own pixels (two of them are a pinch, which zooms the picture). */
-    const touches = new Map<number, { x: number; y: number }>()
-    /** The pinch under way: the fingers' spread and the point between them at the last step. Null when none. */
-    let pinch: { dist: number; x: number; y: number } | null = null
-    const spread = () => {
-        const [a, b] = [...touches.values()]
-        return Math.hypot(a.x - b.x, a.y - b.y)
-    }
-    const middle = () => {
-        const [a, b] = [...touches.values()]
-        return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-    }
-    /** Where the drag that moves the enlarged picture was at its last step. */
-    let panAt = { x: 0, y: 0 }
-    /** The sideways scrub, slowed to a half and a quarter as the finger leaves its line (FineScrub.Tracker). */
-    let fineScrub = { x: 0, last: 0 }
-    let mode: 'tap' | 'hold' | 'scrub' | 'level' | 'pan' = 'tap'
-    let holdTimer = 0
-    let heldRate = 1
-    let lastTap = { at: 0, zone: '' as 'left' | 'right' | 'centre' | '', x: 0 }
-    let tapTimer = 0
-    let runUntil = 0
-    let rippleTimer = 0
-    let levelTimer = 0
-    let scrubTimer = 0
-    const zoneOf = (x: number): 'left' | 'right' | 'centre' => {
-        const w = c.root.clientWidth
-        return x < w * SIDE ? 'left' : x > w * (1 - SIDE) ? 'right' : 'centre'
-    }
-    /**
-     * Where a pointer is on the stage. The stage's place is read when a touch or press begins and
-     * kept for its moves (`fresh` reads it again), so a drag that writes the zoom's transform never
-     * makes the browser lay the page out again to answer a read.
-     */
-    let rootAt = { left: 0, top: 0 }
-    const local = (e: { clientX: number; clientY: number }, fresh = false) => {
-        if (fresh) {
-            const r = c.root.getBoundingClientRect()
-            rootAt = { left: r.left, top: r.top }
-        }
-        return { x: e.clientX - rootAt.left, y: e.clientY - rootAt.top }
-    }
-    const jump = (side: 'left' | 'right', x: number, y: number) => {
-        seekBy(side === 'left' ? -10 : 10)
-        const prev = ripple()
-        const total = prev && prev.side === side ? prev.total + 10 : 10
-        setRipple({ side, total, x, y, n: (prev?.n ?? 0) + 1 })
-        runUntil = performance.now() + RUN_MS
-        clearTimeout(rippleTimer)
-        rippleTimer = window.setTimeout(() => setRipple(null), RUN_MS + 300)
-    }
-    /**
-     * The desktop's wheel over the picture: volume, or with Shift ten seconds a notch. Ctrl+wheel
-     * zooms around the pointer, and so does a trackpad's pinch, which browsers send as Ctrl+wheel;
-     * it is never the page's zoom over the picture (a tablet's trackpad included).
-     */
-    const onWheel = (e: WheelEvent) => {
-        if (tv()) return
-        if (e.ctrlKey) {
-            e.preventDefault()
-            if (locked() || c.blocked() || sheet()) return
-            const p = local(e, true)
-            zoomBy(wheelSteps(e.deltaY, e.deltaMode), p.x, p.y)
-            return
-        }
-        if (phone() || locked() || c.blocked() || sheet() || !e.deltaY) return
-        e.preventDefault()
-        if (e.shiftKey) {
-            seekBy(e.deltaY < 0 ? 10 : -10)
-            flash(`${e.deltaY < 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: 10 })}`, e.deltaY < 0 ? 'right' : 'left')
-        } else {
-            setVol(v.volume + (e.deltaY < 0 ? 0.05 : -0.05))
-            flash(`${Math.round(v.volume * 100)}%`)
-        }
-    }
-    const onDown = (e: PointerEvent) => {
-        if (locked() || e.button > 0) return
-        // Any touch screen: a phone, an iPad, a touch laptop in the desktop form (the TV has no fingers).
-        if (e.pointerType === 'touch' && !tv()) {
-            touches.set(e.pointerId, local(e, true))
-            if (touches.size === 2) {
-                clearTimeout(holdTimer)
-                clearTimeout(tapTimer)
-                if (mode === 'hold') (v.playbackRate = heldRate, setHold(false))
-                // A drag of the first finger that had begun (a scrub, a level) ends where it was.
-                if (mode === 'scrub') scrubTimer = window.setTimeout(() => setScrub(null), 400)
-                if (mode === 'level') levelTimer = window.setTimeout(() => setLevel(null), 1000)
-                mode = 'tap'
-                down = null
-                pinch = { dist: spread(), ...middle() }
-                return
-            }
-            if (touches.size > 2 || pinch) return
-        }
-        const p = local(e, true)
-        down = { ...p, at: performance.now(), id: e.pointerId, time: v.currentTime, vol: v.volume, bright: brightness() }
-        mode = 'tap'
-        clearTimeout(holdTimer)
-        if (!v.paused) {
-            holdTimer = window.setTimeout(() => {
-                if (!down || mode !== 'tap') return
-                mode = 'hold'
-                heldRate = v.playbackRate
-                v.playbackRate = 2
-                setHold(true)
-            }, e.pointerType === 'mouse' ? 500 : HOLD_MS)
-        }
-    }
-    const onMove = (e: PointerEvent) => {
-        if (pinch) {
-            if (touches.has(e.pointerId)) touches.set(e.pointerId, local(e))
-            if (touches.size !== 2) return
-            // One step of the pinch: the scale by the spread's change, around the point between the
-            // fingers, and moved with that point (a two finger drag pans), as PlayerGestures' onZoom.
-            const dist = spread()
-            const m = middle()
-            if (dist > 0 && pinch.dist > 0 && zoomAllowed()) {
-                const frame = zoomFrame()
-                const dx = m.x - pinch.x
-                const dy = m.y - pinch.y
-                setZoom((z) => panBy(pinchZoom(z, dist / pinch!.dist, m.x, m.y, frame), dx, dy, frame))
-                showZoomChip(true)
-            }
-            pinch = { dist, ...m }
-            return
-        }
-        const mouse = e.pointerType === 'mouse'
-        if (variant() !== 'phone' && mouse) {
-            show()
-            // The mouse's drag moves an enlarged picture (the desktop app's pan); otherwise a move is only a move.
-            if (!down || e.pointerId !== down.id || !(e.buttons & 1) || (mode !== 'pan' && !(mode === 'tap' && zoomed(zoom())))) return
-        }
-        if (!down || e.pointerId !== down.id || mode === 'hold') return
-        const p = local(e)
-        const dx = p.x - down.x
-        const dy = p.y - down.y
-        const w = c.root.clientWidth
-        const h = c.root.clientHeight
-        if (mode === 'tap' && Math.hypot(dx, dy) > SLOP) {
-            clearTimeout(holdTimer)
-            // A pointer the browser no longer counts as down cannot be captured; the drag goes on without.
-            try {
-                ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
-            } catch {}
-            if (zoomed(zoom()) && zoomAllowed()) {
-                // Enlarged, a drag moves the picture and the scrub waits until it is back at 100 per
-                // cent; an up or down drag from the side strips still sets brightness and volume.
-                const strip = !mouse && (down.x < w * SIDE || down.x > w * (1 - SIDE))
-                if (strip && Math.abs(dy) > Math.abs(dx) * 1.5) mode = 'level'
-                else (mode = 'pan', (panAt = { x: down.x, y: down.y }))
-            } else if (Math.abs(dx) > Math.abs(dy)) (mode = 'scrub', (fineScrub = { x: down.x, last: down.x }))
-            else mode = 'level'
-        }
-        if (mode === 'pan') {
-            const frame = zoomFrame()
-            setZoom((z) => panBy(z, p.x - panAt.x, p.y - panAt.y, frame))
-            panAt = p
-            showZoomChip(true)
-            return
-        }
-        if (mode === 'scrub' && duration()) {
-            // A full width's drag covers a ninetieth of an hour-long film per pixel, as the app's scrub reads.
-            const rate = fineRate(dy)
-            fineScrub.x += (p.x - fineScrub.last) * rate
-            fineScrub.last = p.x
-            const to = Math.max(0, Math.min(duration(), down.time + ((fineScrub.x - down.x) / w) * Math.min(duration(), 600)))
-            setScrub({ from: down.time, to, rate })
-            clearTimeout(scrubTimer)
-        } else if (mode === 'level') {
-            const left = down.x < w / 2
-            const change = -dy / (h * 0.8)
-            if (left) {
-                const b = Math.max(0.15, Math.min(1, down.bright + change))
-                setBrightness(b)
-                setLevel({ side: 'left', value: (b - 0.15) / 0.85, brightness: true })
-            } else if (!FIXED_VOLUME) {
-                setVol(down.vol + change)
-                setLevel({ side: 'right', value: v.volume, brightness: false })
-            }
-            clearTimeout(levelTimer)
-        }
-    }
-    /** The fingers of a pinch lift (or the browser takes them): it comes to rest, just over 100 per cent being 100. */
-    const endPinch = (e: PointerEvent) => {
-        const was = touches.size
-        touches.delete(e.pointerId)
-        if (was === 2 && touches.size < 2) {
-            setZoom((z) => settled(z, zoomFrame()))
-            showZoomChip(false)
-        }
-        if (!touches.size) pinch = null
-    }
-    const onUp = (e: PointerEvent) => {
-        if (pinch) return endPinch(e)
-        touches.delete(e.pointerId)
-        clearTimeout(holdTimer)
-        if (!down || e.pointerId !== down.id) return
-        const start = down
-        down = null
-        if (mode === 'pan') {
-            showZoomChip(false)
-            return
-        }
-        if (mode === 'hold') {
-            v.playbackRate = heldRate
-            setHold(false)
-            return
-        }
-        if (mode === 'scrub') {
-            const s = scrub()
-            if (s) seekTo(s.to, start.time)
-            scrubTimer = window.setTimeout(() => setScrub(null), 400)
-            return
-        }
-        if (mode === 'level') {
-            levelTimer = window.setTimeout(() => setLevel(null), 1000)
-            return
-        }
-        const zone = zoneOf(start.x)
-        const now = performance.now()
-        if (e.pointerType === 'mouse') {
-            // Desktop: a click plays or pauses, a double click goes full screen.
-            if (now - lastTap.at < DOUBLE_MS) {
-                clearTimeout(tapTimer)
-                lastTap.at = 0
-                toggleFullscreen()
-                return
-            }
-            lastTap = { at: now, zone, x: start.x }
-            tapTimer = window.setTimeout(() => (plain() ? toggle() : togglePlay()), DOUBLE_MS)
-            return
-        }
-        // Touch: a side tap during a run adds a jump; a double tap on a side jumps, in the middle plays or pauses.
-        if (zone !== 'centre' && now < runUntil && ripple()?.side === zone) {
-            clearTimeout(tapTimer)
-            jump(zone, start.x, start.y)
-            return
-        }
-        if (now - lastTap.at < DOUBLE_MS && lastTap.zone === zone) {
-            clearTimeout(tapTimer)
-            lastTap.at = 0
-            if (zone === 'centre') togglePlay()
-            else jump(zone, start.x, start.y)
-            return
-        }
-        lastTap = { at: now, zone, x: start.x }
-        tapTimer = window.setTimeout(toggle, DOUBLE_MS)
-    }
-    const onCancel = (e: PointerEvent) => {
-        if (pinch) return endPinch(e)
-        touches.delete(e.pointerId)
-        clearTimeout(holdTimer)
-        if (mode === 'hold') {
-            v.playbackRate = heldRate
-            setHold(false)
-        }
-        if (mode === 'pan') showZoomChip(false)
-        down = null
-    }
-    onCleanup(() => [holdTimer, tapTimer, rippleTimer, levelTimer, scrubTimer].forEach(clearTimeout))
-    // Safari's own pinch (gesture events, beside the pointer events above): on an iPhone the page
-    // must not zoom under the fingers, so it is refused and the pointers do the work; on a Mac's
-    // trackpad, where no pointers come, its scale is the zoom, around the pointer.
-    type Gesture = UIEvent & { scale: number; clientX: number; clientY: number }
-    let gestureScale = 1
-    const onGesture = (e: Event) => {
-        e.preventDefault()
-        const g = e as Gesture
-        if (e.type === 'gesturestart') return void (gestureScale = 1)
-        if (e.type !== 'gesturechange' || touches.size || tv() || locked() || c.blocked() || sheet() || !(g.scale > 0)) return
-        const r = c.root.getBoundingClientRect()
-        const frame = zoomFrame()
-        if (!zoomAllowed()) return
-        setZoom((z) => pinchZoom(z, g.scale / gestureScale, g.clientX - r.left, g.clientY - r.top, frame))
-        gestureScale = g.scale
-        showZoomChip(false)
-    }
-    const onGestureEnd = (e: Event) => {
-        e.preventDefault()
-        if (touches.size) return
-        setZoom((z) => settled(z, zoomFrame()))
-    }
+    const gestures = useGestures({ c, pic, tv, phone, plain, locked, sheet, duration, flash, seekBy, seekTo, setVol, togglePlay, toggleFullscreen, toggle, show })
+    const { hold, ripple, level, scrub, jumpRemote, onGesture, onGestureEnd, onDown, onMove, onUp, onCancel, onWheel } = gestures
 
     // ---- what the row offers ---------------------------------------------------------------
-    const info = () => c.info()
     const prevCode = () => info()?.previousCode ?? info()?.previous?.title ?? ''
     const nextCode = () => info()?.nextCode ?? info()?.next?.title ?? ''
     const hasEpisodes = () => (info()?.seasons.length ?? 0) > 0
@@ -1899,6 +705,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         </Show>
     )
     const [anchor, setAnchor] = createSignal<DOMRect | null>(null)
+    /** A picker list beside its button (the desktop and the TV) or in the phone's sheet, closing back into the controls. */
+    const Pick = (p: { title: string; note?: string; phone?: boolean; panel: boolean; onBack?: () => void; children: JSX.Element }) => (
+        <Picker title={p.title} note={p.note} phone={p.phone ?? phone()} panel={p.panel} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={p.onBack}>{p.children}</Picker>
+    )
 
     const Btn = (p: { icon: IconData; label: string; onClick: (e: MouseEvent) => void; class?: string; size?: number; tipBelow?: boolean; shot?: string; pressed?: boolean }) => (
         <button
@@ -1914,6 +724,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             <Icon icon={p.icon} size={p.size ?? 24} />
         </button>
     )
+
+    useKeys({
+        c, tv, sheet, setSheet, visible, locked, counting, skipNow, backTo, offer, setOffer, barEl, discEl, noticeClose, rowItems, inLayer, focusIt, show, hide, poke, unlock, showUnlock,
+        flash, togglePlay, seekBy, seekTo, peekAt, jumpRemote, stopCount, setNextHidden, go, skipIt, takeBack, stepChapter, setVol, stepSpeed, setSpeed, cycleSub, cycleAudio, nudgeDelay, stepSize,
+        toggleFullscreen, cycleShape, turn, duration, pickTurn, zoomBy, resetZoom, screenshot, pressRepeat, bookmarkHere, askTime, pipSupported, togglePip,
+    })
 
     return (
         <div
@@ -1951,7 +767,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 <div class="pc-scrim top" />
                 <div class="pc-scrim bottom" />
 
-                <div class="pc-top" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
+                <div class="pc-top" {...resting}>
                     <Btn icon={ArrowLeft02Icon} label={plain() ? t('common.back') : t('player.back_hint')} onClick={() => c.close()} tipBelow />
                     <div class="pc-titles">
                         <div class="pc-title">{info()?.title ?? c.item.title}</div>
@@ -1964,7 +780,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <span class="pc-chipline loading" role="status">{t('player.cached_chip', { percent: `${Math.round(c.loaded()! * 100)}%` })}</span>
                 </Show>
 
-                <div class="pc-center" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
+                <div class="pc-center" {...resting}>
                     <div class="pc-step" classList={{ gone: !info()?.previous }}>
                         <Show when={phone()}><span class="pc-caption-space" /></Show>
                         <Btn
@@ -2007,7 +823,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <div class="pc-clock" aria-hidden="true">{wall()}</div>
                 </Show>
 
-                <div class="pc-bottom" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
+                <div class="pc-bottom" {...resting}>
                     <Show when={tv()}>
                         <div class="pc-cluster-title">{info()?.title ?? c.item.title}</div>
                         <Show when={subtitleLine(info(), c.item)}>{(line) => <div class="pc-cluster-sub">{line()}</div>}</Show>
@@ -2238,8 +1054,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Entry text={t('player.picture_shape')} trailing={shapeName(shape())} onClick={() => setSheet('shape')} />
                         <Entry text={t('player.rotate_picture')} trailing={turn() ? t('player.rotate_picture_degrees', { degrees: turn() }) : undefined} onClick={() => setSheet('rotate')} />
                         {/* On an iPhone the entry stays and says why it does nothing there. */}
-                        <Show when={boostOk || boostIos}>
-                            <Entry text={t('player.volume_boost')} trailing={boost() > 1 ? t('player.volume_boost_level', { percent: Math.round(boost() * 100) }) : undefined} onClick={() => setSheet('boost')} />
+                        <Show when={boost.ok || boost.ios}>
+                            <Entry text={t('player.volume_boost')} trailing={boost.level() > 1 ? t('player.volume_boost_level', { percent: Math.round(boost.level() * 100) }) : undefined} onClick={() => setSheet('boost')} />
                         </Show>
                         {/* PhoneMenuEntry.ResetZoom: the pinch's undo without a gesture, so a screen reader reaches it too. */}
                         <Show when={zoomed(zoom())}>
@@ -2284,14 +1100,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </MorePage>
                 </Match>
                 <Match when={sheet() === 'sleep'}>
-                    <Picker title={t('player.sleep_timer')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('options')}>
+                    <Pick title={t('player.sleep_timer')} panel onBack={() => setSheet('options')}>
                         <Show when={sleepAt() !== null || sleepEnd()}>
                             <Choice icon={Cancel01Icon} text={t('player.sleep_turn_off')} phone={phone()} onClick={() => (setSleep(null), setSheet(null))} />
                         </Show>
                         <For each={SLEEP_CHOICES}>
                             {(m) => <Choice text={sleepLabel(m)} on={sleepPick() === m && (sleepAt() !== null || sleepEnd())} phone={phone()} onClick={() => (setSleep(m), setSheet(null))} />}
                         </For>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'bookmarks'}>
                     <BookmarksSheet
@@ -2327,29 +1143,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     />
                 </Match>
                 <Match when={sheet() === 'still'}>
-                    <div class="pc-sheet-scrim still">
-                        <div class="pc-still" role="alertdialog" aria-label={t('player.still_watching')} ref={(el) => queueMicrotask(() => el.querySelector<HTMLElement>('.primary')?.focus({ preventScroll: true }))}>
-                            <h2>{t('player.still_watching')}</h2>
-                            <p>
-                                {stillWhy() === 'idle'
-                                    ? t('player.still_watching_idle')
-                                    : stillWhy() === 'autoplay'
-                                      ? t('player.still_watching_autoplay', { count: AUTOPLAY_LIMIT })
-                                      : stillWhy() === 'sleep'
-                                        ? t('player.still_watching_sleep')
-                                        : t('player.still_watching_sleep_end')}
-                            </p>
-                            <p class="muted">{t('player.still_watching_paused')}</p>
-                            <div class="pc-still-actions">
-                                <button type="button" class="pc-sheet-button" onClick={() => c.close()}>{t('player.go_back')}</button>
-                                <button type="button" class="pc-sheet-button primary" onClick={keepWatching}>{t('player.keep_watching')}</button>
-                            </div>
-                        </div>
-                    </div>
+                    <StillSheet why={stillWhy()} onBack={() => c.close()} onKeep={keepWatching} />
                 </Match>
                 <Match when={sheet() === 'rotate'}>
                     {/* The picture beside it is the answer, as for the shapes: the panel stays open. */}
-                    <Picker title={t('player.rotate_picture')} note={t('player.rotate_picture_note')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                    <Pick title={t('player.rotate_picture')} note={t('player.rotate_picture_note')} panel onBack={() => setSheet('more')}>
                         <For each={TURNS}>
                             {(deg) => (
                                 <Choice
@@ -2361,25 +1159,25 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 />
                             )}
                         </For>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'boost'}>
-                    <Picker title={t('player.volume_boost')} note={boostOk ? t('player.volume_boost_note') : t('web.volume_boost_not_here')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
-                        <For each={boostOk ? BOOSTS : []}>
+                    <Pick title={t('player.volume_boost')} note={boost.ok ? t('player.volume_boost_note') : t('web.volume_boost_not_here')} panel onBack={() => setSheet('more')}>
+                        <For each={boost.ok ? BOOSTS : []}>
                             {(level) => (
                                 <Choice
                                     text={level === 1 ? t('player.volume_boost_off') : t('player.volume_boost_level', { percent: Math.round(level * 100) })}
-                                    on={Math.abs(boost() - level) < 0.001}
+                                    on={Math.abs(boost.level() - level) < 0.001}
                                     phone={phone()}
-                                    onClick={() => (pickBoost(level), phone() && setSheet(null))}
+                                    onClick={() => (boost.pick(level), phone() && setSheet(null))}
                                 />
                             )}
                         </For>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'shape'}>
                     {/* In the panel a pick leaves it open: the picture beside it is the answer. */}
-                    <Picker title={t('player.picture_shape')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                    <Pick title={t('player.picture_shape')} panel onBack={() => setSheet('more')}>
                         <For each={SHAPES}>
                             {(s) => (
                                 <>
@@ -2388,10 +1186,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 </>
                             )}
                         </For>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'subtitles'}>
-                    <Picker title={t('tracks.subtitles')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
+                    <Pick title={t('tracks.subtitles')} panel={inPanel()} onBack={panelBack('more')}>
                         <Choice text={t('common.off')} on={!subOn()} phone={phone()} onClick={() => (pickSub(null), setSheet(null))} />
                         <For each={subs()}>{(tt, i) => <Choice text={subLabel(tt, i())} on={subOn() === tt} phone={phone()} onClick={() => (pickSub(tt), setSheet(null))} />}</For>
                         <Show when={!phone()}><hr /></Show>
@@ -2405,14 +1203,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Show when={submakerSet()}>
                             <Choice icon={TranslateIcon} service="submaker" text={t('submaker.search')} detail={t('submaker.search_detail')} phone={phone()} onClick={() => setSheet('submaker')} />
                         </Show>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'chatsubs'}>
-                    <Picker title={t('tracks.in_chat')} note={chatNote() || t('tracks.in_chat_detail')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('subtitles')}>
+                    <Pick title={t('tracks.in_chat')} note={chatNote() || t('tracks.in_chat_detail')} panel={inPanel()} onBack={() => setSheet('subtitles')}>
                         <For each={chatSubs()}>
                             {(sub) => <Choice text={sub.name} detail={chatDetail(sub, chatBusy() === sub.key)} phone={phone()} disabled={chatBusy() !== null && chatBusy() !== sub.key} onClick={() => void pickChat(sub)} />}
                         </For>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'msone'}>
                     <MsoneSheet target={msoneTarget(c.item, info())} onLoad={async (file, as, hit) => (await layOnline(file, as), subpick.picked(c.item, hit, file))} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
@@ -2434,7 +1232,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     )}
                 </Match>
                 <Match when={sheet() === 'audio'}>
-                    <Picker title={t('player.audio')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
+                    <Pick title={t('player.audio')} panel={inPanel()} onBack={panelBack('more')}>
                         <Show when={c.audios().length} fallback={<Choice text={t('player.no_audio_tracks')} phone={phone()} onClick={() => setSheet(null)} />}>
                             <For each={c.audios()}>
                                 {(tr, i) => (
@@ -2448,80 +1246,38 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 )}
                             </For>
                         </Show>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'speed'}>
                     <Show
                         when={phone()}
                         fallback={
-                            <Picker title={t('player.playback_speed')} phone={false} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
+                            <Pick title={t('player.playback_speed')} phone={false} panel={inPanel()} onBack={panelBack('more')}>
                                 <For each={SPEEDS}>{(s) => <Choice text={speedLabel(s)} on={Math.abs(rate() - s) < 0.001} phone={false} onClick={() => (setSpeed(s), setSheet(null))} />}</For>
-                            </Picker>
+                            </Pick>
                         }
                     >
                         <SpeedSheet rate={rate} landscape={width() > c.root.clientHeight} onPick={(s) => (setSpeed(s), setSheet(null))} onFine={setSpeed} onClose={() => setSheet(null)} />
                     </Show>
                 </Match>
                 <Match when={sheet() === 'copies'}>
-                    <Picker title={t('player.copies')} note={t('player.copies_note')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
+                    <Pick title={t('player.copies')} note={t('player.copies_note')} panel={inPanel()} onBack={panelBack('more')}>
                         <For each={[{ key: c.item.key, height: 0 }, ...c.copies]}>
                             {(copy) => <Choice text={c.qualityLabel(copy.height)} on={c.sourceKey() === copy.key} phone={phone()} onClick={() => (c.pickQuality(copy.key), setSheet(null))} />}
                         </For>
-                    </Picker>
+                    </Pick>
                 </Match>
                 <Match when={sheet() === 'episodes'}>
                     <EpisodesPanel info={info()!} current={c.item} phone={phone()} autoplay={autoplay()} onAutoplay={changeAutoplay} onPlay={(item) => (setSheet(null), go(item))} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'details'}>
-                    <div class="pc-details" role="dialog" aria-label={t('player.playback_details')}>
-                        <div class="pc-details-head">
-                            <strong>{t('player.playback_details')}</strong>
-                            <button type="button" class="pc-btn" aria-label={t('common.close')} onClick={() => setSheet(null)}>
-                                <Icon icon={Cancel01Icon} size={20} />
-                            </button>
-                        </div>
-                        <p>{c.details()}</p>
-                        <p>{c.readout()}</p>
-                        <p>{t('player.details_speed', { speed: speedLabel(rate()) })}</p>
-                        <Show when={c.item.dc}>
-                            <p>{t('player.details_datacenter', { number: c.item.dc! })}</p>
-                        </Show>
-                        <div class="pc-details-actions">
-                            <Show when={c.stutter()}>
-                                <button type="button" class="pc-details-btn" onClick={() => setDetailsNote(c.stutter()!.press() === 'already' ? t('player.stutter_marked_already') : t('web.stutter_marked'))}>
-                                    {t('player.report_stutter')}
-                                </button>
-                            </Show>
-                            <Show when={!tv()}>
-                                <button type="button" class="pc-details-btn" onClick={copyDetails}>
-                                    {t('player.copy_details')}
-                                </button>
-                            </Show>
-                        </div>
-                        <Show when={c.stutter()}>
-                            <p class="pc-details-hint">{t('web.report_stutter_detail')}</p>
-                        </Show>
-                        <Show when={logsSize() && !tv()}>
-                            <p class="pc-details-hint">{t('feedback.logs_size', { size: logsSize()! })}</p>
-                        </Show>
-                        <p class="pc-details-note" role="status" aria-live="polite">{detailsNote()}</p>
-                        <Show when={copyFallback()}>
-                            <textarea
-                                class="pc-details-copy"
-                                readonly
-                                rows="6"
-                                aria-label={t('player.copy_details')}
-                                value={copyFallback()!}
-                                ref={(el) => queueMicrotask(() => (el.focus({ preventScroll: true }), el.select()))}
-                            />
-                        </Show>
-                    </div>
+                    <DetailsSheet c={c} tv={tv()} rate={rate()} onClose={() => setSheet(null)} />
                 </Match>
             </Switch>
 
             <Show when={locked()}>
                 <div class="pc-shield" onClick={showUnlock}>
-                    <button type="button" class="pc-unlock" classList={{ shown: unlockShown() }} onClick={(e) => (e.stopPropagation(), unlock())} aria-label={t('player.unlock')}>
+                    <button type="button" class="pc-unlock" classList={{ shown: unlockShown() !== null }} onClick={(e) => (e.stopPropagation(), unlock())} aria-label={t('player.unlock')}>
                         <Icon icon={SquareUnlock02Icon} size={22} />
                         {t('player.tap_to_unlock')}
                     </button>
@@ -2529,458 +1285,4 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             </Show>
         </div>
     )
-}
-
-/**
- * What MSone is asked about the video: the title the poster lookup cleaned from its name (the
- * show's, for an episode) and its year, and the episode's season and number from its code ("S1 E3").
- */
-function chatDetail(sub: ChatSubtitle, busy: boolean): string | undefined {
-    if (busy) return t('online.downloading')
-    let language: string | undefined
-    try {
-        if (sub.language) language = new Intl.DisplayNames([navigator.language], { type: 'language' }).of(sub.language)
-    } catch {}
-    const parts = [language, sub.forced ? t('tracks.forced') : '', sub.hearing ? t('online.hearing_impaired') : '', sub.archive ? t('tracks.in_chat_compressed') : '']
-    return parts.filter((p) => p).join('  ·  ') || undefined
-}
-
-function msoneTarget(item: VideoItem, info: WatchInfo | null): MsoneTarget {
-    const ep = info?.episode ? episodeOf(info.episode.code) : null
-    return {
-        q: item.poster?.title || info?.episode?.show || item.title,
-        year: item.poster?.year ?? null,
-        season: ep?.season ?? null,
-        episode: ep?.episode ?? null,
-    }
-}
-
-/**
- * The top bar's second line: the episode's code and name, then the chat, as the phone, TV and
- * desktop players write it. The length and size stay in the details.
- */
-function subtitleLine(info: WatchInfo | null, item: VideoItem): string {
-    const ep = info?.episode
-    const chat = info?.chatTitle || item.chat
-    return [ep ? (ep.name ? `${ep.code}  ·  ${ep.name}` : ep.code) : '', chat].filter((p) => p).join('  ·  ')
-}
-
-/**
- * The seek bar: the played run in the accent over the buffered run, a thumb that grows while
- * held, and over it the preview card for the time under the pointer or the finger, or the TV's
- * place after an arrow press ([PreviewCard], StoryboardPreview's SeekPreview). The seek lands on
- * release.
- */
-function SeekBar(props: {
-    time: () => number
-    duration: () => number
-    buffered: () => number
-    frames: () => Frames | null
-    grabber: () => FrameGrabber | null
-    item: VideoItem
-    /** The TV's place after an arrow press, for the card; null otherwise. */
-    peek: () => number | null
-    tv: boolean
-    dragTime: () => number | null
-    setDragTime: (s: number | null) => void
-    onSeek: (s: number) => void
-    phone: boolean
-    /** The chapter starts, drawn as gaps in the bar. */
-    marks: () => number[]
-    /** The chapter's name for a time, for the preview card. */
-    chapterAt: (s: number) => string | null
-}) {
-    let bar!: HTMLDivElement
-    const [hoverX, setHoverX] = createSignal<number | null>(null)
-    const [barWidth, setBarWidth] = createSignal(0)
-    const fraction = (s: number) => (props.duration() ? Math.max(0, Math.min(1, s / props.duration())) : 0)
-    const timeAt = (clientX: number) => {
-        const r = bar.getBoundingClientRect()
-        setBarWidth(r.width)
-        return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * props.duration()
-    }
-    const xOf = (clientX: number) => clientX - bar.getBoundingClientRect().left
-    let dragging = false
-    // A finger moving off the bar slows the drag to a half and a quarter (FineScrub): the bar's position is its own, not the finger's.
-    let fine = { x: 0, last: 0, y: 0 }
-    const [slow, setSlow] = createSignal(1)
-    const down = (e: PointerEvent) => {
-        if (!props.duration() || e.button > 0) return
-        dragging = true
-        bar.setPointerCapture(e.pointerId)
-        const r = bar.getBoundingClientRect()
-        fine = { x: e.clientX, last: e.clientX, y: r.top + r.height / 2 }
-        setSlow(1)
-        props.setDragTime(timeAt(e.clientX))
-        if (e.pointerType === 'mouse') setHoverX(xOf(e.clientX))
-        e.stopPropagation()
-    }
-    const move = (e: PointerEvent) => {
-        if (dragging) {
-            if (e.pointerType === 'mouse') props.setDragTime(timeAt(e.clientX))
-            else {
-                const rate = fineRate(e.clientY - fine.y)
-                const r = bar.getBoundingClientRect()
-                fine.x = Math.max(r.left, Math.min(r.right, fine.x + (e.clientX - fine.last) * rate))
-                fine.last = e.clientX
-                setSlow(rate)
-                props.setDragTime(timeAt(fine.x))
-            }
-        }
-        if (e.pointerType === 'mouse') {
-            setBarWidth(bar.getBoundingClientRect().width)
-            setHoverX(xOf(e.clientX))
-        }
-    }
-    const up = () => {
-        if (!dragging) return
-        dragging = false
-        const s = props.dragTime()
-        if (s !== null) props.onSeek(s)
-        props.setDragTime(null)
-        setSlow(1)
-    }
-    const played = () => fraction(props.dragTime() ?? props.time())
-    const ahead = () => fraction(props.buffered())
-    // Where the card points: the finger while dragging, else the pointer.
-    const at = createMemo(() => {
-        const d = props.dragTime()
-        if (d !== null) return { time: d, x: fraction(d) * (barWidth() || bar?.clientWidth || 0) }
-        const x = hoverX()
-        if (x === null || !props.duration()) return null
-        const w = barWidth() || bar.clientWidth
-        return { time: (Math.max(0, Math.min(w, x)) / w) * props.duration(), x }
-    })
-    // The TV's arrows: the card over the new place for a moment.
-    const card = createMemo(() => {
-        const a = at()
-        if (a) return a
-        const p = props.peek()
-        if (p === null || !props.duration()) return null
-        return { time: p, x: fraction(p) * (barWidth() || bar?.clientWidth || 0) }
-    })
-    return (
-        <div
-            ref={bar}
-            class="pc-bar"
-            classList={{ thick: hoverX() !== null || props.dragTime() !== null }}
-            role="slider"
-            tabIndex={0}
-            aria-label={t('web.seek_bar')}
-            aria-valuemin={0}
-            aria-valuemax={Math.round(props.duration())}
-            aria-valuenow={Math.round(props.time())}
-            aria-valuetext={`${clock(props.time())} / ${clock(props.duration())}`}
-            onPointerDown={down}
-            onPointerMove={move}
-            onPointerUp={up}
-            onPointerCancel={up}
-            onPointerLeave={(e) => e.pointerType === 'mouse' && !dragging && setHoverX(null)}
-            onKeyDown={(e) => {
-                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-                e.preventDefault()
-                e.stopPropagation()
-                props.onSeek(props.time() + (e.key === 'ArrowRight' ? 10 : -10))
-            }}
-        >
-            <div class="pc-track">
-                <Show when={ahead() > played()}>
-                    <div class="pc-buffered" style={{ width: `${ahead() * 100}%` }} />
-                </Show>
-                <div class="pc-played" style={{ width: `${played() * 100}%` }} />
-                <For each={props.marks()}>{(m) => <span class="pc-mark" style={{ left: `${fraction(m) * 100}%` }} />}</For>
-            </div>
-            <div class="pc-thumb" style={{ left: `${played() * 100}%` }} />
-            <Show when={card()}>
-                {(k) => (
-                    <PreviewCard
-                        time={() => k().time}
-                        x={() => k().x}
-                        barWidth={() => barWidth() || bar.clientWidth}
-                        duration={props.duration}
-                        frames={props.frames}
-                        grabber={props.grabber}
-                        item={props.item}
-                        phone={props.phone}
-                        tv={props.tv}
-                        chapter={() => props.chapterAt(k().time)}
-                        slow={slow}
-                    />
-                )}
-            </Show>
-        </div>
-    )
-}
-
-/**
- * The seek bar's card (StoryboardPreview's SeekPreview): always shown while scrubbing, 16:9 at a
- * standard size, with the time in a chip at its foot. Telegram's storyboard tile where the video
- * has one, else the video's own frame from [FrameGrabber]; the skeleton shimmers until a picture
- * for the moment is in, the last one stays up while the next is grabbed, and where nothing has
- * answered within [GIVE_UP_MS] it shows the video's thumbnail dimmed (or the title's cover) with
- * the time large, so it never shimmers for ever.
- */
-function PreviewCard(props: {
-    time: () => number
-    x: () => number
-    barWidth: () => number
-    duration: () => number
-    frames: () => Frames | null
-    grabber: () => FrameGrabber | null
-    item: VideoItem
-    phone: boolean
-    tv: boolean
-    chapter: () => string | null
-    slow: () => number
-}) {
-    const size = createMemo(() => {
-        const w = props.barWidth()
-        if (props.tv) {
-            const width = Math.round(Math.max(240, Math.min(400, w * 0.22)))
-            return { width, height: Math.round((width * 9) / 16) }
-        }
-        return cardSize(props.phone, w)
-    })
-    const left = () => cardLeft(props.x(), size().width, props.barWidth(), props.phone ? 16 : 0)
-    // A grab ending (picture or none) makes the card look again.
-    const [tick, setTick] = createSignal(0)
-    createEffect(() => {
-        const g = props.grabber()
-        if (!g) return
-        const stop = g.listen(() => setTick((n) => n + 1))
-        onCleanup(stop)
-    })
-    const slot = createMemo(() => frameSlot(props.duration(), props.time()))
-    const tile = createMemo(() => {
-        const f = props.frames()
-        if (!f) return null
-        const { width, height } = size()
-        // Letterboxed: the tile's own shape inside the 16:9 card.
-        const scale = Math.min(width / f.width, height / f.height)
-        const p = frameAt(f, props.time())
-        return {
-            width: `${Math.round(f.width * scale)}px`,
-            height: `${Math.round(f.height * scale)}px`,
-            'background-image': `url(${f.url})`,
-            'background-size': `${f.spriteWidth * scale}px ${f.spriteHeight * scale}px`,
-            'background-position': `${-p.x * scale}px ${-p.y * scale}px`,
-        }
-    })
-    const grabbed = createMemo(() => {
-        tick()
-        return props.grabber()?.frame(slot()) ?? null
-    })
-    const declined = createMemo(() => {
-        tick()
-        return props.grabber()?.declined(slot()) ?? false
-    })
-    // Asked once per slot, and not where the storyboard answers; the grabber throttles and keeps only the newest wish.
-    createEffect(
-        on(slot, (s) => {
-            const g = props.grabber()
-            if (g && !tile()) g.want(s)
-        }),
-    )
-    const [last, setLast] = createSignal<string | null>(null)
-    createEffect(() => {
-        const u = grabbed()
-        if (u) setLast(u)
-    })
-    const [late, setLate] = createSignal(false)
-    createEffect(
-        on(slot, () => {
-            setLate(false)
-            const id = window.setTimeout(() => setLate(true), GIVE_UP_MS)
-            onCleanup(() => clearTimeout(id))
-        }),
-    )
-    const gaveUp = () => !tile() && !grabbed() && (late() || declined())
-    const picture = () => (tile() ? null : (grabbed() ?? (gaveUp() ? null : last())))
-    const [thumb, setThumb] = createSignal<string | null>(null)
-    let thumbAsked = false
-    createEffect(() => {
-        if (!gaveUp() || thumbAsked || !props.item.thumb) return
-        thumbAsked = true
-        loadThumb(props.item.thumb).then(setThumb, () => {})
-    })
-    return (
-        <div class="pc-preview" style={{ left: `${left()}px`, width: `${size().width}px` }} aria-hidden="true">
-            <Show when={PICTURES_SHOWN} fallback={<span class="pc-chip">{clock(props.time())}</span>}>
-            <div class="pc-card" style={{ width: `${size().width}px`, height: `${size().height}px` }}>
-                <Show
-                    when={tile()}
-                    fallback={
-                        <Show
-                            when={picture()}
-                            fallback={
-                                <Show when={gaveUp()} fallback={<div class="pc-card-wait" />}>
-                                    <div class="pc-card-fallback" style={{ background: coverBackground(props.item.title) }}>
-                                        <Show when={thumb()}>{(u) => <img class="pc-card-thumb" src={u()} alt="" />}</Show>
-                                        <span class="pc-card-time">{clock(props.time())}</span>
-                                    </div>
-                                </Show>
-                            }
-                        >
-                            {(u) => <img class="pc-card-pic" src={u()} alt="" />}
-                        </Show>
-                    }
-                >
-                    {(style) => <div class="pc-card-tile" style={style()} />}
-                </Show>
-                <Show when={tile() || picture() || !gaveUp()}>
-                    <span class="pc-chip">{clock(props.time())}</span>
-                </Show>
-            </div>
-            </Show>
-            <Show when={props.chapter()}>{(name) => <span class="pc-chapter">{name()}</span>}</Show>
-            <Show when={props.slow() < 1}>
-                <span class="pc-slow">{t(props.slow() <= 0.25 ? 'player.scrub_quarter' : 'player.scrub_half')}</span>
-            </Show>
-        </div>
-    )
-}
-
-/** The desktop's volume: the speaker button, and on hover a slider beside it (VolumeControl). */
-function VolumeControl(props: { volume: () => number; muted: () => boolean; icon: () => IconData; onVolume: (x: number) => void; onMute: () => void }) {
-    return (
-        <div class="pc-volume">
-            <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                aria-label={t('keys.row_volume')}
-                value={props.muted() ? 0 : Math.round(props.volume() * 100)}
-                style={{ '--v': `${props.muted() ? 0 : props.volume() * 100}%` }}
-                onInput={(e) => props.onVolume(Number(e.currentTarget.value) / 100)}
-            />
-            <button type="button" class="pc-btn" aria-label={props.muted() ? t('player.unmute_hint') : t('player.mute_hint')} data-tip={props.muted() ? t('player.unmute_hint') : t('player.mute_hint')} onClick={props.onMute}>
-                <Icon icon={props.icon()} size={24} />
-            </button>
-        </div>
-    )
-}
-
-
-/**
- * The phone's speed sheet: the presets as tiles (four to a row upright, all seven sideways), then
- * the fine control, minus and plus either side of the figure, a press at a time.
- */
-function SpeedSheet(props: { rate: () => number; landscape: boolean; onPick: (s: number) => void; onFine: (s: number) => void; onClose: () => void }) {
-    const fine = (up: boolean) => props.onFine(Math.round((props.rate() + (up ? FINE_STEP : -FINE_STEP)) * 100) / 100)
-    return (
-        <PhoneSheet title={t('player.playback_speed')} onClose={props.onClose} class="speed">
-            <div class="pc-tiles" classList={{ wide: props.landscape }}>
-                <For each={SPEEDS}>
-                    {(s) => (
-                        <button type="button" class="pc-tile" role="radio" aria-checked={Math.abs(props.rate() - s) < 0.001} onClick={() => props.onPick(s)}>
-                            {speedLabel(s)}
-                        </button>
-                    )}
-                </For>
-            </div>
-            <div class="pc-fine">
-                <div class="pc-fine-head">{t('player.speed_fine')}</div>
-                <div class="pc-fine-detail">{t('player.speed_fine_detail', { step: speedLabel(FINE_STEP), min: speedLabel(SPEED_MIN), max: speedLabel(SPEED_MAX) })}</div>
-                <div class="pc-fine-row">
-                    <button type="button" class="pc-round" aria-label={t('player.speed_slower')} disabled={props.rate() <= SPEED_MIN + 0.001} onClick={() => fine(false)}>
-                        <Icon icon={MinusSignIcon} size={24} />
-                    </button>
-                    <span class="pc-fine-value" aria-live="polite">{speedLabel(props.rate())}</span>
-                    <button type="button" class="pc-round" aria-label={t('player.speed_faster')} disabled={props.rate() >= SPEED_MAX - 0.001} onClick={() => fine(true)}>
-                        <Icon icon={Add01Icon} size={24} />
-                    </button>
-                </div>
-            </div>
-        </PhoneSheet>
-    )
-}
-
-/**
- * The episode list (EpisodesPanel): the show and its count at the top, the previous and next
- * steps, the seasons as chips and the season's episodes, the one playing marked. On a phone the
- * whole screen; on the desktop a panel in the middle of the picture.
- */
-function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phone: boolean; autoplay: boolean; onAutoplay: (on: boolean) => void; onPlay: (v: VideoItem) => void; onClose: () => void }) {
-    const seasonOf = () => props.info.seasons.find((s) => s.episodes.some((e) => e.item.messageId === props.current.messageId))?.number ?? props.info.seasons[0]?.number
-    const [picked, setPicked] = createSignal<number | null>(null)
-    const season = createMemo(() => props.info.seasons.find((s) => s.number === (picked() ?? seasonOf())) ?? props.info.seasons[0])
-    const count = () => props.info.seasons.reduce((n, s) => n + s.episodes.length, 0)
-    const show = () => props.info.episode?.show ?? props.info.title
-    let el!: HTMLDivElement
-    onMount(() => el.querySelector<HTMLElement>('.pc-episode.playing, .pc-episode')?.focus({ preventScroll: true }))
-    return (
-        <div class="pc-sheet-scrim episodes" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
-            <div ref={el} class="pc-sheet pc-episodes" role="dialog" aria-label={t('episodes.title')}>
-                <div class="pc-sheet-head">
-                    <div>
-                        <h2>{t('episodes.title')}</h2>
-                        <p>{`${show()}  ·  ${t('series.summary', { seasons: props.info.seasons.length, episodes: count() })}`}</p>
-                    </div>
-                    <button type="button" class="pc-sheet-close" aria-label={t('common.close')} onClick={props.onClose}>
-                        <Icon icon={Cancel01Icon} size={24} />
-                    </button>
-                </div>
-                <div class="pc-episodes-body">
-                    <div class="pc-episodes-side">
-                        <button type="button" class="pc-step-line pc-switch" role="switch" aria-checked={props.autoplay} onClick={() => props.onAutoplay(!props.autoplay)}>
-                            <span class="pc-sw" aria-hidden="true" />
-                            {t('episodes.autoplay')}
-                        </button>
-                        <Show when={props.info.previous}>
-                            <button type="button" class="pc-step-line" onClick={() => props.onPlay(props.info.previous!)}>
-                                <Icon icon={PreviousIcon} size={18} />
-                                {t('player.previous_up', { title: props.info.previousCode ?? props.info.previous!.title })}
-                            </button>
-                        </Show>
-                        <Show when={props.info.next}>
-                            <button type="button" class="pc-step-line" onClick={() => props.onPlay(props.info.next!)}>
-                                <Icon icon={NextIcon} size={18} />
-                                {t('player.next_up', { title: props.info.nextCode ?? props.info.next!.title })}
-                            </button>
-                        </Show>
-                    </div>
-                    <div class="pc-episodes-main">
-                        <Show when={props.info.seasons.length > 1}>
-                            <div class="pc-seasons" role="tablist">
-                                <For each={props.info.seasons}>
-                                    {(s) => (
-                                        <button type="button" role="tab" class="pc-season" aria-selected={s.number === season()?.number} onClick={() => setPicked(s.number)}>
-                                            <span>{t('series.season', { number: s.number })}</span>
-                                            <small>{t('series.episodes_count', { count: s.episodes.length })}</small>
-                                        </button>
-                                    )}
-                                </For>
-                            </div>
-                        </Show>
-                        <ol class="pc-episode-list">
-                            <For each={season()?.episodes ?? []}>
-                                {(e) => {
-                                    const playing = () => e.item.messageId === props.current.messageId && e.item.chatId === props.current.chatId
-                                    return (
-                                        <li>
-                                            <button type="button" class="pc-episode" classList={{ playing: playing() }} aria-current={playing() ? 'true' : undefined} onClick={() => !playing() && props.onPlay(e.item)}>
-                                                <span class="pc-episode-code">
-                                                    {e.code}
-                                                    <Show when={playing()}><span class="pc-badge">{t('episodes.playing')}</span></Show>
-                                                </span>
-                                                <span class="pc-episode-name">{e.name ?? e.item.title}</span>
-                                                <span class="pc-episode-facts">{facts(e.item)}</span>
-                                            </button>
-                                        </li>
-                                    )
-                                }}
-                            </For>
-                        </ol>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function facts(v: VideoItem): string {
-    const m = Math.round(v.duration / 60)
-    const size = v.size >= 1e9 ? `${(v.size / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(v.size / 1e6))} MB`
-    return [m ? `${m}m` : '', size].filter(Boolean).join('  ·  ')
 }

@@ -7,6 +7,7 @@ import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { ChatPicture } from './ChatPicture'
 import type { ChatInfo as Info } from '../tg/types'
+import { dot } from '../ui/dot'
 
 /**
  * A chat's info (the apps' ChatInfoSheet, here a page of its own behind the chat's Info button): its
@@ -86,5 +87,5 @@ export function ChatInfo() {
 function facts(info: Info): string {
     const kind = info.kind === 'saved' ? '' : info.kind === 'channel' ? t('chats.kind_channels') : info.kind === 'group' ? t('chats.kind_groups') : t('chats.kind_people')
     const count = info.members === null ? '' : info.kind === 'channel' ? t('chats.info_subscribers', { count: info.members }) : t('chats.info_members', { count: info.members })
-    return [kind, count].filter(Boolean).join('  ·  ')
+    return [kind, count].filter(Boolean).join(dot)
 }
