@@ -513,7 +513,9 @@ the gate (`ProfilesRoot`, `AndroidProfiles`), Settings' rows and the sign out th
 - The app switcher's picture (`SnapshotCover`): a plain cover over every window of every
   connected scene (an iPad's split view and Stage Manager) as the app resigns active, since the
   switcher's live card shows an inactive app, while the open profile has a PIN; again at the
-  background for a window that came since; off when it is active again. A system alert or the
+  background; each call covers every window that has none yet (a second window or scene, an
+  external display that came since) and forgets the ones gone (`WindowCovers`, core, tested in
+  `WindowCoversTest`); every cover off when it is active again. A system alert or the
   Control Center over the app covers it too while it lasts.
 - Notifications go through `ProfileNotifications` as on Android. There are no widgets, Spotlight
   items or Siri suggestions in the iOS app today.

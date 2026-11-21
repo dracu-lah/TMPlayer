@@ -23,8 +23,18 @@ import platform.UIKit.systemBackgroundColor
  * screen recording while the app is open are not blocked: iOS gives an app no way to.
  */
 object SnapshotCover {
-    /** The covers up now, one per window. Main thread only. */
-    private val views = mutableListOf<UIView>()
+    /** The covers up now, one per window ([WindowCovers]). Main thread only. */
+    @OptIn(ExperimentalForeignApi::class)
+    private val views = com.tmplayer.data.WindowCovers<UIWindow, UIView>(
+        make = { window ->
+            val view = UIView(frame = window.bounds)
+            view.backgroundColor = UIColor.systemBackgroundColor
+            view.autoresizingMask = UIViewAutoresizingFlexibleWidth or UIViewAutoresizingFlexibleHeight
+            window.addSubview(view)
+            view
+        },
+        remove = { it.removeFromSuperview() },
+    )
 
     /** Whether the window is covered on leaving: only while the open profile has a PIN. */
     fun covers(openHasPin: Boolean): Boolean = OutsideWrites.secureWindow(openHasPin)
@@ -37,25 +47,16 @@ object SnapshotCover {
             .mapNotNull { it as? UIWindowScene }
             .flatMap { scene -> scene.windows.mapNotNull { it as? UIWindow } }
 
-    /** The app is leaving (inactive, then the background): a cover over each of [windows], when the rule asks for it. */
-    @OptIn(ExperimentalForeignApi::class)
+    /**
+     * The app is leaving (inactive, then the background): a cover over each of [windows] that has
+     * none yet, when the rule asks for it. A window that came since the last call (a second iPad
+     * window or scene, an external display) is covered too; one that went away is forgotten.
+     */
     fun cover(windows: List<UIWindow>) {
-        if (views.isNotEmpty() || windows.isEmpty() || !covers(openHasPin())) return
-        for (window in windows) {
-            val view = UIView(frame = window.bounds)
-            view.backgroundColor = UIColor.systemBackgroundColor
-            view.autoresizingMask = UIViewAutoresizingFlexibleWidth or UIViewAutoresizingFlexibleHeight
-            window.addSubview(view)
-            views += view
-        }
+        if (!covers(openHasPin())) return
+        views.cover(windows)
     }
-
-    /** One window, as before. */
-    fun cover(window: UIWindow?) = cover(listOfNotNull(window))
 
     /** Active again: every cover comes off. */
-    fun uncover() {
-        views.forEach { it.removeFromSuperview() }
-        views.clear()
-    }
+    fun uncover() = views.uncover()
 }
