@@ -192,6 +192,8 @@ class DesktopDownloadRunner(
             stamps.clear()
             all to ids
         }
+        // The ids asked about again were the last database's: the next one may need its own asked.
+        resourced.clear()
         jobs.forEach { it.cancel() }
         ids.forEach {
             notifier.cancel(it.toLong())
@@ -364,7 +366,7 @@ class DesktopDownloadRunner(
 
     private suspend fun fetch(request: DownloadRequest) = coroutineScope {
         if (Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete) {
-            withContext(NonCancellable) { startMove(request) }
+            withContext(NonCancellable) { startMove(request, kotlinx.coroutines.currentCoroutineContext()) }
             return@coroutineScope
         }
 
@@ -448,7 +450,7 @@ class DesktopDownloadRunner(
             val complete = Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete
             if (error == null && complete) {
                 notifier.cancel(request.fileId.toLong())
-                startMove(request)
+                startMove(request, kotlinx.coroutines.currentCoroutineContext())
             } else if (offline()) {
                 hold(request)
             } else {
@@ -509,17 +511,22 @@ class DesktopDownloadRunner(
 
     /**
      * Hands a complete file to its own coroutine for the move into Downloads, so the queue's slot
-     * is free for the next video while this one waits for a player or copies across drives.
+     * is free for the next video while this one waits for a player or copies across drives. It
+     * runs as the profile and rows of the fetch that called it ([fetchJob]), taken from that job,
+     * never looked up again: a switch has cleared the stamps by then (HX88, review D1).
      */
-    private fun startMove(request: DownloadRequest) {
+    private fun startMove(request: DownloadRequest, fetchJob: kotlin.coroutines.CoroutineContext) {
+        val context = moveContextOf(fetchJob) ?: run {
+            Logger.i(TAG, "Not moving ${request.title}: its profile or its rows are no longer the open ones")
+            return
+        }
         synchronized(lock) {
             if (moves.containsKey(request.fileId)) return
-            // The same profile and rows as the download it finishes (HX88).
-            val job = scope.launch(ownerOf(request.fileId)) { finished(request) }
+            val job = scope.launch(context) { finished(request) }
             moves[request.fileId] = job
             job.invokeOnCompletion { synchronized(lock) { if (moves[request.fileId] === job) moves.remove(request.fileId) } }
         }
-        OfflineDownloads.moving(request.fileId)
+        OfflineDownloads.ifRows(context[OfflineDownloads.Rows]?.generation) { OfflineDownloads.moving(request.fileId) }
     }
 
     /** Waits for every move into Downloads now in flight; a storage move must not start under one. */
@@ -537,6 +544,10 @@ class DesktopDownloadRunner(
      */
     private suspend fun finished(request: DownloadRequest) {
         val fileId = request.fileId
+        // Its profile is no longer open (a switch since it was handed over): nothing is read from
+        // the next profile's client, moved or written.
+        val owner = ownerNow()
+        if (!OwnedSessions.mayAct(owner)) return
         val path = Td.localFilePath(fileId)
         if (path == null) {
             fail(request, Td.localDownloadedBytes(fileId), FAILED_TEXT)
@@ -549,7 +560,6 @@ class DesktopDownloadRunner(
         }
         ownRows { OfflineDownloads.moving(fileId) }
         // Its profile is no longer open (a switch while it waited): nothing is moved or written.
-        val owner = ownerNow()
         if (!OwnedSessions.mayAct(owner)) return
 
         // Asked again at the last moment: the chat may have turned on "restrict saving content"
@@ -723,4 +733,21 @@ class DesktopDownloadRunner(
         /** The notifier id of a move, apart from the download's own so the two never collide. */
         fun moveId(fileId: Int): Long = (1L shl 33) + fileId
     }
+}
+
+/**
+ * What the move of a finished download runs as (HX88, review D1): the owner and the rows of the
+ * fetch job that finished it ([fetchJob]), never looked up again by its file id, since a switch
+ * clears the runner's stamps and a lookup would record the profile open at that moment. Null when
+ * the job carries no owner or its rows are no longer the open ones ([rowsNow]: a switch, a sign
+ * out, an ended session): the move does not start and the file stays where its profile fetched it.
+ */
+internal fun moveContextOf(
+    fetchJob: kotlin.coroutines.CoroutineContext,
+    rowsNow: () -> Long = { OfflineDownloads.rowsGeneration },
+): kotlin.coroutines.CoroutineContext? {
+    val owner = fetchJob[AccountOwner] ?: return null
+    val rows = fetchJob[OfflineDownloads.Rows] ?: return null
+    if (rows.generation != rowsNow()) return null
+    return AccountOwner(owner.stamp) + OfflineDownloads.Rows(rows.generation)
 }
