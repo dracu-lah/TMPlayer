@@ -340,13 +340,24 @@ for a persist that straddles a switch, `PersistAcrossSwitch`, or a session end,
 `PersistAcrossRenew`), and a Cancel whose write is pending followed by a second `restore`
 (`CancelThenRestore`) must not bring the row back. A second test runs the same write path on real
 threads: three writers hammer `persistQueue` while the orchestrator enqueues, cancels, signs out,
-ends sessions and switches, with the invariants checked after every step. Mutation check (run by
-hand, 2026-11-21): the model catches removing the generation re-check, the once-per-generation
-restore, the rows guard of a skipped start, the marker match on restore, `startable`, the count of
-a drop, and the others listed in the commit that added it. Still not caught, and why: see below.
-Not modelled: the service's own scope, its conflated writer channel and the `NonCancellable`
-completion paths (they call the same `persistQueue`), TDLib's answers, and the clock (nothing in
-this path reads one, so there is nothing to fake).
+ends sessions and switches, with the invariants checked after every step. Small tests in
+`DatabaseMarkerTest` pin the rest: a restore runs once for each set of rows, a row already in
+memory keeps its place, and two writes never cross (a held write while a newer one is asked).
+Two seams (`OfflineDownloads.afterStoredRead`, `Td.betweenDropAndRenew`) let the model land a
+switch or a restore at the two places a race can only be made on purpose.
+
+Mutation check (by hand, 2026-11-21, 14 one-line changes of the production code, each must turn
+the suite red): generation re-check in the store write, once-per-generation restore, the rows
+guard of a skipped start, the write without an owner, `startable` always true, a drop that does
+not count, a restore that ignores the marker, a merge that ignores a switch meanwhile, a write
+with no lock, renew before the drop, no second drop, `ifRows` ignoring the count and a restore
+written without its marker are all caught. The first run missed four of them (the merge across a
+switch, the second drop, the restored queue's tag, the lock), which the seams and tests above
+now catch. One is an equivalent mutant: swapping the order of `restored + _active.value`
+changes nothing, since `restore` already leaves out the ids that are in memory. Not modelled:
+the service's own scope, its conflated writer channel and the `NonCancellable` completion paths
+(they call the same `persistQueue`), TDLib's answers, and the clock (nothing in this path reads
+one, so there is nothing to fake).
 
 The list writes from a menu (`listWrite`) and the chat list's cold start snapshot run on the
 background scope as the profile open when they were asked (`AccountOwner`), so one that lands
