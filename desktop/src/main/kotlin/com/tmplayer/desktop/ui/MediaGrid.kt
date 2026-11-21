@@ -1339,7 +1339,7 @@ internal fun TileMenu(
     val later = SettingsStore.progressKey(item.chatId, item.messageId) in laterKeys
     // Measured each time the menu opens, off the UI thread, for the "x GB free" on the download line.
     val free by produceState(0L, expanded) {
-        if (expanded) value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.downloadsDir).freeBytes }
+        if (expanded) value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.profileDownloadsDir).freeBytes }
     }
 
     // Held here rather than in the menu, which is gone by the time the prompt is answered.

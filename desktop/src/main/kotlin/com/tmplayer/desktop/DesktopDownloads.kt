@@ -1,6 +1,11 @@
 package com.tmplayer.desktop
 
+import com.tmplayer.data.AccountOwner
+import com.tmplayer.data.AccountStamp
+import com.tmplayer.data.Accounts
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.DownloadStamps
+import com.tmplayer.data.OwnedSessions
 import com.tmplayer.data.ChatGate
 import com.tmplayer.data.DownloadResults
 import com.tmplayer.data.Notice
@@ -35,7 +40,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -59,13 +66,14 @@ import java.io.IOException
  * rather than in its one slot, because it may have to wait for a player to let the file go, and a
  * film being watched is no reason for the next download to sit idle.
  *
- * @param downloadsDir where finished files go, asked each time, since a storage move changes it.
+ * @param downloadsDir where finished files go for the profile on a folder name (null: the adopted
+ *   one), asked each time, since a storage move changes it (HX88: the owner's own folder).
  * @param isOpen whether a player has the file open, and the move must wait.
  * @param disk free space where TDLib writes, and in the Downloads folder.
  */
 class DesktopDownloadRunner(
     private val settings: SettingsStore,
-    private val downloadsDir: () -> File = { DesktopPaths.downloadsDir },
+    private val downloadsDir: (String?) -> File = { DesktopPaths.downloadsDirFor(it) },
     private val isOpen: (Int) -> Boolean = ActiveStreams::isOpen,
     private val cacheDisk: () -> DiskInfo = { DesktopPaths.disk() },
     private val downloadsDisk: (File) -> DiskInfo = { DiskInfo.of(it) },
@@ -102,6 +110,26 @@ class DesktopDownloadRunner(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DesktopDownloads"))
     private val lock = Any()
+
+    /**
+     * The profile each request was asked under and the rows it was queued in (HX88, review LOW 2),
+     * taken when it is queued: a request asked before a switch never starts in the next profile,
+     * whose database knows nothing of its file id. Guarded by [lock].
+     */
+    private val stamps = DownloadStamps()
+
+    /** What a job of [id] runs as: its profile, and the set of rows it was queued in. Call under [lock]. */
+    private fun ownerOf(id: Int) = AccountOwner(stamps.of(id)) + OfflineDownloads.Rows(stamps.rowsOf(id))
+
+    /** A row update of a job: dropped once the rows it was queued in are gone (a switch, a sign out, an ended session). */
+    private suspend inline fun ownRows(crossinline update: () -> Unit) {
+        val rows = kotlinx.coroutines.currentCoroutineContext()[OfflineDownloads.Rows]?.generation
+        OfflineDownloads.ifRows(rows) { update() }
+    }
+
+    /** The profile the running job works for; the open one for work with no owner. */
+    private suspend fun ownerNow(): AccountStamp = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
+
     private val requests = mutableMapOf<Int, DownloadRequest>()
     private val waiting = ArrayDeque<Int>()
     private val running = mutableMapOf<Int, Job>()
@@ -128,6 +156,7 @@ class DesktopDownloadRunner(
 
     init {
         yielding.start()
+        followProfiles()
         // A download that stopped because the network did waits rather than failing, and goes
         // back on the queue by itself when the network returns: nobody asked for it to stop.
         connectivity?.let { net ->
@@ -141,6 +170,36 @@ class DesktopDownloadRunner(
         }
     }
 
+    /**
+     * A switch (HX88): the jobs of the profile left stop where they are (their queue is written for
+     * the profile that asked) and what is in memory belongs to a database that is closed now.
+     * Nothing of it is started, finished or written in the next one. A new database of the same
+     * profile (a sign out, an ended session) does the same.
+     */
+    private fun followProfiles() {
+        scope.launch { Accounts.activeFolder.drop(1).collect { stopForSwitch() } }
+        scope.launch { OfflineDownloads.databaseChanges.collect { stopForSwitch() } }
+    }
+
+    private fun stopForSwitch() {
+        val (jobs, ids) = synchronized(lock) {
+            val all = running.values.toList() + moves.values.toList()
+            val ids = (running.keys + moves.keys + waiting).toSet()
+            running.clear()
+            moves.clear()
+            waiting.clear()
+            requests.clear()
+            stamps.clear()
+            all to ids
+        }
+        jobs.forEach { it.cancel() }
+        ids.forEach {
+            notifier.cancel(it.toLong())
+            notifier.cancel(moveId(it))
+        }
+        if (jobs.isNotEmpty()) Logger.i(TAG, "A profile switch: ${jobs.size} download(s) of the last profile stopped")
+    }
+
     override fun download(request: DownloadRequest) {
         val known = OfflineDownloads.active.value[request.fileId]
         // Already coming down or already waiting: pressing download twice is not two downloads.
@@ -151,6 +210,8 @@ class DesktopDownloadRunner(
             adoptExistingQueue()
             if (running.containsKey(request.fileId) || waiting.contains(request.fileId)) return
             requests[request.fileId] = request
+            // The profile and the rows it is asked in, now, not when the queue reaches it.
+            stamps.queued(request.fileId)
             waiting.addLast(request.fileId)
             known?.order ?: arrivals++
         }
@@ -281,8 +342,15 @@ class DesktopDownloadRunner(
                     OfflineDownloads.forget(id)
                     return@synchronized null
                 }
+                // Asked under another profile or database than the open one: its file id means
+                // nothing here, so it never starts. It is that profile's paused row again there.
+                if (!stamps.startable(id)) {
+                    requests.remove(id)
+                    stamps.forget(id)
+                    return@synchronized null
+                }
                 // As the work of the profile it was asked under (HX88): its writes never land in another.
-                val job = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { fetch(request) }
+                val job = scope.launch(ownerOf(id)) { fetch(request) }
                 running[id] = job
                 job.invokeOnCompletion {
                     synchronized(lock) { running.remove(id) }
@@ -315,7 +383,8 @@ class DesktopDownloadRunner(
             return@coroutineScope
         }
 
-        val session = if (offline()) null else Td.awaitConnectedSessionOrNull(CONNECT_WAIT_MS)
+        // The client of the profile the download was queued under (HX88), never the next one's.
+        val session = if (offline()) null else Td.sessionFor(ownerNow(), CONNECT_WAIT_MS)
         if (session == null) {
             withContext(NonCancellable) {
                 if (offline()) {
@@ -338,7 +407,7 @@ class DesktopDownloadRunner(
             while (isActive) {
                 delay(PROGRESS_INTERVAL_MS)
                 val done = Td.localDownloadedBytes(request.fileId)
-                OfflineDownloads.sample(request.fileId, done)
+                ownRows { OfflineDownloads.sample(request.fileId, done) }
                 val rate = OfflineDownloads.active.value[request.fileId]?.bytesPerSecond?.takeIf { it > 0 }
                 notifier.progress(request.fileId.toLong(), done, request.sizeBytes.takeIf { it > 0 }, rate)
             }
@@ -403,6 +472,7 @@ class DesktopDownloadRunner(
      */
     private suspend fun resourceAndRequeue(request: DownloadRequest): Boolean {
         if (request.chatId == 0L || request.messageId == 0L) return false
+        if (!OwnedSessions.mayAct(ownerNow())) return false
         if (!resourced.add(request.fileId)) return false
         val fresh = runCatching { Td.refreshMedia(request.chatId, request.messageId) }.getOrNull()
         val id = fresh?.fileId ?: return false
@@ -411,22 +481,28 @@ class DesktopDownloadRunner(
         val moved = request.copy(fileId = id, sizeBytes = fresh.sizeBytes.takeIf { it > 0 } ?: request.sizeBytes)
         resourced.add(id)
         val old = OfflineDownloads.active.value[request.fileId]
+        val rows = kotlinx.coroutines.currentCoroutineContext()[OfflineDownloads.Rows]?.generation
+        // Only into the rows it was queued in: after a switch or a sign out the id is another's.
+        if (OfflineDownloads.ifRows(rows) { Unit } == null) return true
         synchronized(lock) {
             requests.remove(request.fileId)
             requests[id] = moved
+            stamps.forget(request.fileId)
+            stamps.queued(id)
             waiting.remove(id)
             waiting.addFirst(id)
         }
-        OfflineDownloads.forget(request.fileId)
-        OfflineDownloads.note(
+        ownRows { OfflineDownloads.forget(request.fileId) }
+        val landed = Td.localDownloadedBytes(id)
+        ownRows { OfflineDownloads.note(
             OfflineDownloads.Progress(
                 request = moved,
-                downloadedBytes = Td.localDownloadedBytes(id),
+                downloadedBytes = landed,
                 totalBytes = moved.sizeBytes,
                 stage = OfflineDownloads.Stage.Queued,
                 order = old?.order ?: OfflineDownloads.nextOrder(),
             ),
-        )
+        ) }
         persistNow()
         return true
     }
@@ -438,7 +514,8 @@ class DesktopDownloadRunner(
     private fun startMove(request: DownloadRequest) {
         synchronized(lock) {
             if (moves.containsKey(request.fileId)) return
-            val job = scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { finished(request) }
+            // The same profile and rows as the download it finishes (HX88).
+            val job = scope.launch(ownerOf(request.fileId)) { finished(request) }
             moves[request.fileId] = job
             job.invokeOnCompletion { synchronized(lock) { if (moves[request.fileId] === job) moves.remove(request.fileId) } }
         }
@@ -467,10 +544,13 @@ class DesktopDownloadRunner(
         }
         // Moving a file a player is reading loses the picture, and on Windows is refused outright.
         if (isOpen(fileId)) {
-            OfflineDownloads.moving(fileId, heldByPlayer = true)
+            ownRows { OfflineDownloads.moving(fileId, heldByPlayer = true) }
             while (isOpen(fileId)) delay(HOLD_POLL_MS)
         }
-        OfflineDownloads.moving(fileId)
+        ownRows { OfflineDownloads.moving(fileId) }
+        // Its profile is no longer open (a switch while it waited): nothing is moved or written.
+        val owner = ownerNow()
+        if (!OwnedSessions.mayAct(owner)) return
 
         // Asked again at the last moment: the chat may have turned on "restrict saving content"
         // since the download was queued. The file stays in TDLib's cache, counted there like any
@@ -481,7 +561,7 @@ class DesktopDownloadRunner(
             withContext(NonCancellable) {
                 runCatching { settings.rememberCachedVideo(request.item(), request.chatTitle) }
                 synchronized(lock) { requests.remove(fileId) }
-                OfflineDownloads.forget(fileId)
+                ownRows { OfflineDownloads.forget(fileId) }
                 persistNow()
                 notifier.fail(fileId.toLong(), request.title, ContentProtection.NOT_SAVABLE, retryable = false)
             }
@@ -489,7 +569,8 @@ class DesktopDownloadRunner(
         }
 
         val src = File(path)
-        val dir = downloadsDir()
+        // The owner's own downloads folder, from its folder name (invariant 4), never the open one's.
+        val dir = downloadsDir(owner.folder)
         if (!DownloadFiles.sameStore(src, dir)) {
             val room = downloadsDisk(dir)
             val needed = src.length() + CacheShelf.HEADROOM_BYTES
@@ -504,10 +585,11 @@ class DesktopDownloadRunner(
         }
 
         val moveId = moveId(fileId)
+        val rowsOfJob = kotlinx.coroutines.currentCoroutineContext()[OfflineDownloads.Rows]?.generation
         notifier.begin(moveId, TransferNotifier.Kind.MoveToDownloads, request.title)
         val target = try {
             DownloadFiles.moveIntoDownloads(src, dir, DownloadFiles.safeName(request.title, request.fileName)) { done, total ->
-                OfflineDownloads.moving(fileId, movedBytes = done)
+                OfflineDownloads.ifRows(rowsOfJob) { OfflineDownloads.moving(fileId, movedBytes = done) }
                 notifier.progress(moveId, done, total, null)
             }
         } catch (e: CancellationException) {
@@ -520,15 +602,23 @@ class DesktopDownloadRunner(
             return
         }
 
-        withContext(NonCancellable) {
+        // The file is in the owner's folder now: its record is written for the owner even after a
+        // switch ([com.tmplayer.data.AccountAddress]), so it never points at a copy that is gone.
+        withContext(NonCancellable + com.tmplayer.data.AccountAddress(owner.folder)) {
             settings.noteDownload(request.item(), request.chatTitle, target.absolutePath)
+        }
+        withContext(NonCancellable) {
             com.tmplayer.data.SupportReminder.downloadFinished()
             // It belongs to the viewer now: no cache rule may count it, and TDLib, whose copy has
-            // just left its directory, is told so instead of finding out on the next stream.
+            // just left its directory, is told so instead of finding out on the next stream. Only
+            // while its profile's client is the live one (invariant 3).
             runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }
-            runCatching { Td.deleteFile(fileId) }
-            synchronized(lock) { requests.remove(fileId) }
-            OfflineDownloads.forget(fileId)
+            if (OwnedSessions.mayAct(owner)) runCatching { Td.deleteFile(fileId) }
+            synchronized(lock) {
+                requests.remove(fileId)
+                stamps.forget(fileId)
+            }
+            ownRows { OfflineDownloads.forget(fileId) }
             persistNow()
             settled(request, ok = true, notifierId = moveId, reason = null, target = target)
             _finished.tryEmit(Finished(request.title, target))
@@ -539,9 +629,10 @@ class DesktopDownloadRunner(
     private suspend fun hold(request: DownloadRequest) {
         val row = OfflineDownloads.active.value[request.fileId] ?: return
         if (row.stage != OfflineDownloads.Stage.Running) return
-        OfflineDownloads.note(
-            row.copy(downloadedBytes = Td.localDownloadedBytes(request.fileId), stage = OfflineDownloads.Stage.Offline, bytesPerSecond = 0),
-        )
+        val landed = Td.localDownloadedBytes(request.fileId)
+        ownRows {
+            OfflineDownloads.note(row.copy(downloadedBytes = landed, stage = OfflineDownloads.Stage.Offline, bytesPerSecond = 0))
+        }
         notifier.cancel(request.fileId.toLong())
         persistNow()
     }
@@ -550,15 +641,19 @@ class DesktopDownloadRunner(
     private suspend fun fail(request: DownloadRequest, landed: Long, text: String) {
         val row = OfflineDownloads.active.value[request.fileId]
         if (row != null && (row.stage == OfflineDownloads.Stage.Running || row.stage == OfflineDownloads.Stage.Moving)) {
-            OfflineDownloads.note(
-                row.copy(
-                    downloadedBytes = landed,
-                    stage = OfflineDownloads.Stage.Failed,
-                    failure = text,
-                    bytesPerSecond = 0,
-                    heldByPlayer = false,
-                ),
-            )
+            val rows = kotlinx.coroutines.currentCoroutineContext()[OfflineDownloads.Rows]?.generation
+            // A late failure of a job whose rows are gone (a switch, a sign out) is no one's to show.
+            OfflineDownloads.ifRows(rows) {
+                OfflineDownloads.note(
+                    row.copy(
+                        downloadedBytes = landed,
+                        stage = OfflineDownloads.Stage.Failed,
+                        failure = text,
+                        bytesPerSecond = 0,
+                        heldByPlayer = false,
+                    ),
+                )
+            } ?: return
             settled(request, ok = false, notifierId = request.fileId.toLong(), reason = text, target = null)
         }
         persistNow()
@@ -600,8 +695,15 @@ class DesktopDownloadRunner(
         scope.launch { persistNow() }
     }
 
+    /**
+     * The rows and the profile they belong to, read together (HX88, B1 low item): a persist that
+     * lands after a switch writes for the rows' owner, never into the next profile's queue. No
+     * owner: the rows were dropped and the next profile's stored queue was not read yet, and an
+     * empty write then would wipe it before its restore.
+     */
     private suspend fun persistNow() = persistLock.withLock {
-        runCatching { settings.saveDownloadQueue(OfflineDownloads.ordered.map { it.request }) }
+        val (owner, queued) = OfflineDownloads.persistSnapshot()
+        if (owner != null) runCatching { settings.saveDownloadQueue(queued, owner = owner) }
         Unit
     }
 

@@ -32,7 +32,7 @@ import java.io.IOException
  */
 class DownloadMigration(
     private val settings: SettingsStore,
-    private val downloadsDir: () -> File = { DesktopPaths.downloadsDir },
+    private val downloadsDir: () -> File = { DesktopPaths.profileDownloadsDir },
     private val files: TdFiles = TdFiles.Live,
     private val availability: suspend (Int) -> LocalFileAvailability = { Td.localFileAvailability(it) },
     private val isOpen: (Int) -> Boolean = { com.tmplayer.desktop.player.ActiveStreams.isOpen(it) },

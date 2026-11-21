@@ -17,7 +17,20 @@ data class StorageLayout(
     val downloadsDir: File,
     /** Self update packages while they are checked and installed. */
     val updatesDir: File,
-)
+) {
+    /**
+     * These folders as the profile on [folder] has them (HX88): its own cache and downloads beside
+     * these, the update staging shared; unchanged for the profile adopted in place (null).
+     */
+    fun forProfile(folder: String?): StorageLayout = if (folder == null) {
+        this
+    } else {
+        copy(
+            cacheDir = com.tmplayer.data.AccountDirs.beside(cacheDir, folder),
+            downloadsDir = com.tmplayer.data.AccountDirs.beside(downloadsDir, folder),
+        )
+    }
+}
 
 /**
  * Per user directories in each OS's own place (XDG on Linux, AppData on Windows, Library on
@@ -118,6 +131,24 @@ object DesktopPaths : Paths {
     val updatesDir: File get() = layout().updatesDir
 
     /**
+     * The open profile's downloads folder (HX88): [downloadsDir] for the profile adopted in place,
+     * `<downloads>-<folder>` beside it for another. Where a download is written, listed or offered.
+     */
+    val profileDownloadsDir: File get() = downloadsDirFor(com.tmplayer.data.Accounts.active.folder)
+
+    /** The downloads folder of the profile on [folder] (null: the adopted one), from its own folder name. */
+    fun downloadsDirFor(folder: String?): File = folder?.let { com.tmplayer.data.AccountDirs.beside(downloadsDir, it) } ?: downloadsDir
+
+    /** TDLib's files folder of the profile on [folder], the one its cache sweep walks (invariant 4). */
+    fun filesDirFor(folder: String?): File = profileFilesDir(this, folder)
+
+    /**
+     * [layout] as the profile on [folder] has it: its own cache and downloads folders beside the
+     * platform's, the update staging shared. What a storage move carries for the open profile only.
+     */
+    fun layoutFor(root: File?, folder: String?): StorageLayout = layout(root).forProfile(folder)
+
+    /**
      * Where the trailer player (Chromium, about 350 to 470 MB unpacked) may live, preferred first:
      * `<root>/TMPlayer/browser` for a chosen storage location that is usable this run, then
      * `<data>/browser` beside the session. Not created here: nothing is written before the viewer
@@ -129,6 +160,13 @@ object DesktopPaths : Paths {
 
     override fun disk(): DiskInfo = DiskInfo.of(filesDir)
 }
+
+/**
+ * TDLib's files folder of the profile on [folder] over the platform's [base] folders (HX88): the
+ * platform's own for the profile adopted in place, `<files>-<folder>` beside it for another.
+ */
+internal fun profileFilesDir(base: Paths, folder: String?): File =
+    com.tmplayer.data.AccountDirs.pathsFor(base, com.tmplayer.data.Profile(id = "sweep", folder = folder)).filesDir
 
 fun desktopDeviceInfo(): DeviceInfo = DeviceInfo(
     model = "Desktop", // i18n-ok: the device name Telegram lists, not UI

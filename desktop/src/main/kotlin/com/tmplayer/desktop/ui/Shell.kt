@@ -169,6 +169,14 @@ fun DesktopShell(
             color = if (LocalVideoBehindPage.current && state.playerUp) androidx.compose.ui.graphics.Color.Transparent else Tone.background,
         ) {
             val auth by Td.auth.collectAsState()
+            // The profiles (HX88): Who's watching? at launch with two or more, the open profile's
+            // PIN when it has one, then everything below keyed on the open profile. With one
+            // profile and no PIN the gate draws this window's content and nothing else.
+            val profiles = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
+            LaunchedEffect(profiles) { com.tmplayer.desktop.profiles.DesktopProfiles.messages.collect { toasts.showSnackbar(it) } }
+            val shellShown = com.tmplayer.ui.lock.profileShellShown(profiles)
+            Box(Modifier.fillMaxSize()) {
+            com.tmplayer.desktop.profiles.DesktopProfilesGate(profiles, signInStep = Setup.isSignInStep(auth)) {
             Box(Modifier.fillMaxSize()) {
                 // The QR code stays up for a moment after it is scanned, marked "Scanned".
                 val shownAuth = com.tmplayer.ui.auth.rememberScanHold(auth)
@@ -183,6 +191,9 @@ fun DesktopShell(
                         // after the next sign in.
                         state.closePlayer()
                         runCatching { Td.clearMediaCache() }
+                        // Telegram ended the session: the database it signs in to next is a new
+                        // one (HX88), so nothing stored with this one's file ids is resumed on it.
+                        runCatching { Td.renewDatabaseMarker() }
                         runCatching { state.settings.clearColdStartSnapshots() }
                     }
                     if (Setup.isSignInStep(auth)) {
@@ -190,7 +201,11 @@ fun DesktopShell(
                         if (!Td.sessionEnded.value) runCatching { state.settings.armSetup() }
                         // The account is gone, however it went (signed out from Telegram's
                         // Devices list is the way back from a forgotten PIN): so is its lock.
-                        runCatching { state.settings.clearAppLock() }
+                        // Unless other profiles share the computer (HX88): the lock is the
+                        // device's, and a new profile's sign in, or one profile's ended login,
+                        // is not theirs.
+                        val others = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.profiles?.size ?: 1
+                        if (others <= 1) runCatching { state.settings.clearAppLock() }
                     }
                 }
                 val appLock by state.settings.appLock.collectAsState(initial = null)
@@ -267,11 +282,18 @@ fun DesktopShell(
                 }
                 if (com.tmplayer.ui.connect.ProxyScreenState.open) CoverWindowControls()
                 com.tmplayer.ui.connect.ProxyScreenHost()
+            }
+            }
                 // At the foot, centred just over the floating bar or a chat's bar, as a desktop
                 // app's messages sit: the top of a window is Back, the chat's name and the window's
                 // own buttons, which a message there covered.
-                TopMessageHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = maxOf(NavBarClearance, ChatBarClearance), start = 24.dp, end = 24.dp))
+                // Only while the open profile's shell is what shows (HX88): never over its PIN or
+                // the picker. The flow's own lines wait until then.
+                if (shellShown) {
+                    TopMessageHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = maxOf(NavBarClearance, ChatBarClearance), start = 24.dp, end = 24.dp))
+                }
             }
+
         }
         }
     }

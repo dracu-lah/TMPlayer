@@ -522,7 +522,7 @@ private fun CategoryList(
     // The free space where downloads go, once measured, which is what somebody opening Storage
     // is usually after; reading it is a blocking call, so it is not made while drawing.
     val disk by produceState<DiskInfo?>(initialValue = null) {
-        value = withContext(Dispatchers.IO) { runCatching { DiskInfo.of(DesktopPaths.downloadsDir) }.getOrNull() }
+        value = withContext(Dispatchers.IO) { runCatching { DiskInfo.of(DesktopPaths.profileDownloadsDir) }.getOrNull() }
     }
     val offered = if (state.extras.updates != null) updateState.release else null
 

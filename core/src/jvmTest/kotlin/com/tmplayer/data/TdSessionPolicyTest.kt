@@ -19,7 +19,7 @@ class TdSessionPolicyTest {
     private val uses = Regex("""awaitConnectedSessionOrNull\(|awaitConnectedSession\(\)|awaitAuthorizedSession\(\)|\b[Tt]d\.(deleteFile|cancelDownload\w*|myId|downloadFileInBackground|logOut|localDownloadedBytes|currentFileId|trimStorage|dropStalledDownload|clearPicturesAndPreviews)\(""")
 
     private val screenRead = "a read for the screen on screen, in the shell keyed on the open profile"
-    private val desktop = "the desktop's, bound to its owner in phase B2 (its player and downloads run as the open profile)"
+    private val desktopScreen = "a press or a read on the desktop's screen of the open profile; the window's state is built again on a switch (B2)"
 
     /** File, how many uses it has, and why they are safe. */
     private val allowed = mapOf(
@@ -53,19 +53,18 @@ class TdSessionPolicyTest {
         "core/src/commonMain/kotlin/com/tmplayer/data/WatchCacheRules.kt" to (4 to "the watch cache's claims, sweep and clear over the open profile's own folder; a sweep or clear stops when the open profile changes (stamp checked before the walk and each delete)"),
         "core/src/commonMain/kotlin/com/tmplayer/player/StreamWarmup.kt" to (3 to "warming the next video's bytes, a read the player's closing stops"),
         "core/src/commonMain/kotlin/com/tmplayer/player/TdByteWindow.kt" to (4 to "the player's byte window on its own client, a read that closes with the player"),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopDownloads.kt" to (12 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopStorage.kt" to (1 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/DownloadIndex.kt" to (3 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/Main.kt" to (1 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerMedia.kt" to (19 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerScreen.kt" to (3 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/DesktopChecks.kt" to (1 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/DetailPane.kt" to (1 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/Downloads.kt" to (13 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/GridSelection.kt" to (3 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/MediaGrid.kt" to (1 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/SignOut.kt" to (1 to desktop),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/StorageSettings.kt" to (2 to desktop),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopDownloads.kt" to (11 to "the desktop's download queue: each request carries its stamp and rows (DownloadStamps), its fetch takes Td.sessionFor, its cancels and byte reads are of rows a switch stops (stopForSwitch), and TDLib's copy is deleted only while its owner may act"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopStorage.kt" to (1 to "the housekeeping trim after sign in, of the open profile's own cache; a switch builds the window that runs it again"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/DownloadIndex.kt" to (3 to "a download's delete and its bytes, pressed on the Downloads page of the open profile, or Remove after watching for the profile the mark was made for"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerMedia.kt" to (19 to "the desktop player's reads and its own downloads' cancels; it closes before a switch (BeforeSwitch, PlayerHost) and its writes carry its owner"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerScreen.kt" to (3 to "the desktop player's reads; it closes before a switch and its resume saves carry the owner it opened under"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/DetailPane.kt" to (1 to desktopScreen),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/Downloads.kt" to (13 to "presses on the desktop's Downloads page of the open profile"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/GridSelection.kt" to (3 to desktopScreen),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/MediaGrid.kt" to (1 to desktopScreen),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/SignOut.kt" to (1 to "the sign out without profiles (no accounts file opened); with them it goes through AccountSwitcher.signOutProfile"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/ui/StorageSettings.kt" to (2 to "Free up space and the storage figures of the open profile, on its screen"),
+
         "ui/src/shared/kotlin/com/tmplayer/data/Thumbnails.kt" to (3 to "pictures for the screen on screen, a read"),
         "ui/src/shared/kotlin/com/tmplayer/ui/browse/AddChatsViewModel.kt" to (1 to screenRead),
         "ui/src/shared/kotlin/com/tmplayer/ui/browse/BrowseViewModel.kt" to (22 to "the chat browser's reads and the sponsored signals of the screen on screen; its view models are per profile"),

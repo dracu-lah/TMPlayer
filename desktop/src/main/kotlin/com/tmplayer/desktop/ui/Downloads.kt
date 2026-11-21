@@ -126,7 +126,7 @@ internal val REMOVE_AFTER_WATCHING: String get() = L.downloadsRemoveAfterWatchin
 internal val REMOVE_AFTER_WATCHING_DETAIL: String get() = L.downloadsRemoveAfterWatchingDetail
 
 @Composable
-fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloadsDir) {
+fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.profileDownloadsDir) {
     val s = LocalStrings.current
     val active by OfflineDownloads.active.collectAsState()
     val sources = rememberDownloadSources(state)

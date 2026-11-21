@@ -127,6 +127,11 @@ object DownloadIndex {
 
     private val _unlisted = MutableStateFlow<List<File>>(emptyList())
 
+    init {
+        // The last scan was of the profile left's folder (HX88): nothing of it is offered to the next.
+        com.tmplayer.data.Accounts.onSwitch { _unlisted.value = emptyList() }
+    }
+
     /**
      * Files in the Downloads folder that no record names, from the last [scan]: left by an earlier
      * install, dropped in by hand, or adopted with a storage location TMPlayer used before.
@@ -134,7 +139,7 @@ object DownloadIndex {
     val unlisted: StateFlow<List<File>> = _unlisted.asStateFlow()
 
     /** Looks through [dir] for files the index does not name, and publishes them to [unlisted]. */
-    suspend fun scan(settings: SettingsStore, dir: File = DesktopPaths.downloadsDir): List<File> = withContext(Dispatchers.IO) {
+    suspend fun scan(settings: SettingsStore, dir: File = DesktopPaths.profileDownloadsDir): List<File> = withContext(Dispatchers.IO) {
         val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
         unlistedIn(dir, records).also { _unlisted.value = it }
     }

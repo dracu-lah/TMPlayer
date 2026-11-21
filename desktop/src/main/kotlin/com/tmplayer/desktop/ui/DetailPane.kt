@@ -200,7 +200,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     val title = request.chatTitle.ifBlank { state.chatTitleOf(item.chatId) }
     val chat = state.chatOf(item.chatId)
     val free by produceState(0L, item.id) {
-        value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.downloadsDir).freeBytes }
+        value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.profileDownloadsDir).freeBytes }
     }
     val first = remember(item.id) { FocusRequester() }
     val back = state.detailReturn
@@ -415,7 +415,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                     toast(ContentProtection.NOT_SAVABLE)
                     return@launch
                 }
-                val folder = com.tmplayer.desktop.os.FolderPicker.pick(s.keepExportFolder, DesktopPaths.downloadsDir.parentFile) ?: return@launch
+                val folder = com.tmplayer.desktop.os.FolderPicker.pick(s.keepExportFolder, DesktopPaths.profileDownloadsDir.parentFile) ?: return@launch
                 toast(s.keepExporting(item.title))
                 val said = withContext(Dispatchers.IO) {
                     runCatching {
