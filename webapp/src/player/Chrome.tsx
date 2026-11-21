@@ -1082,8 +1082,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     listen('play', armIdle)
     listen('pause', () => clearTimeout(idleTimer))
     onMount(() => {
-        for (const e of ['keydown', 'pointerdown'] as const) document.addEventListener(e, noteInput, { capture: true, passive: true })
-        onCleanup(() => (['keydown', 'pointerdown'] as const).forEach((e) => document.removeEventListener(e, noteInput, { capture: true })))
+        const offs = (['keydown', 'pointerdown'] as const).map((e) => onGlobal(document, e, noteInput, { capture: true, passive: true }))
+        onCleanup(() => offs.forEach((off) => off()))
     })
     onCleanup(() => clearTimeout(idleTimer))
 
