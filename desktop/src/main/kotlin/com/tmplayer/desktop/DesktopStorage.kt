@@ -34,6 +34,8 @@ object DesktopStorage {
         set(value) {
             field = value
             DesktopServices.downloads.notifier = value
+            // A transfer begun, or a result never begun, is the job's own profile's (HX88).
+            DesktopServices.downloads.notifyAs = { owner, call -> com.tmplayer.desktop.os.ProfileOutside.asOwner(owner, call) }
         }
 
     /** Closes the player, if one is open. Set by `Main.kt` to the shell's own. */

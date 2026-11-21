@@ -133,8 +133,16 @@ class DesktopDownloadRunner(
      */
     private suspend inline fun asOwner(crossinline call: () -> Unit) {
         val owner = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp
-        com.tmplayer.desktop.os.ProfileOutside.asOwner(owner) { call() }
+        notifyAs(owner) { call() }
     }
+
+    /**
+     * Runs a call to [notifier] as the work of a profile; the desktop sets it to
+     * `ProfileOutside.asOwner` with its notifier (this file is compiled for iOS too, which has no
+     * such notifier, so it is not named here).
+     */
+    @Volatile
+    var notifyAs: (AccountStamp?, () -> Unit) -> Unit = { _, call -> call() }
 
     /** The profile the running job works for; the open one for work with no owner. */
     private suspend fun ownerNow(): AccountStamp = kotlinx.coroutines.currentCoroutineContext()[AccountOwner]?.stamp ?: Accounts.stamp
