@@ -419,3 +419,71 @@ Two choke points, one rule each:
 | Trailers, offline downloads | drawn inside `ProfilesGate`, keyed on the open profile: a switch or a lock closes them |
 | "Wrong title?" and the toasts (`TopMessageHost`) | where they always were, over everything, but only while the open profile's shell shows (`profileShellShown`); "Wrong title?" keyed on the open profile |
 | Share targets, shortcuts | none exist today |
+
+## Phase B2: the desktop and iOS
+
+### The desktop (Windows, Linux, macOS)
+
+- `Main.kt`: `Accounts.open` before `Td.start` (as before), then once `HomeCache.file`,
+  `PageQueries.store` and the three stores are made, `Accounts.storesRegistered()`,
+  `ProfileUnlock.install()` and `ProfileOutside.follow`. The download queue is restored on every
+  sign in of a client (the launch, a switch, Add account), not once.
+- The window: `WindowPresence` follows its minimise, restore, hide and show and calls
+  `ProfileUnlock.onBackground` / `onForeground`. A window that only lost the focus to another app
+  is still on screen. Minimised or hidden more than 60 s, the open profile asks its PIN again.
+- `DesktopProfiles` holds the one `ProfileFlow` for the process over `DesktopProfilePlatform`
+  (the player's `BeforeSwitch` hook from `PlayerHost`, the download runner's pause and moves, the
+  wipe `desktopForgetProfile`, the app lock's PIN). `DesktopShell` draws `ProfilesGate` around the
+  window's content; `ShellState` is built again for each open profile (full screen carries over),
+  so no page, chat, player or search of one profile is drawn for the next. The trailer host,
+  "Wrong title?" and the toasts show only while `profileShellShown`.
+- Settings, Account: Switch profile and Remove all accounts with two profiles or more, Add account
+  while there is room (one profile too: it is how the second is added), all through the flow.
+  Sign out goes through `ProfileFlow.signOutOpen` after its backup question.
+- Folders, from the owner's folder name (invariant 4): `DesktopPaths.profileDownloadsDir` and
+  `downloadsDirFor(folder)` for every download written, listed or offered; the watch cache's sweep
+  takes `rootFor = profileFilesDir(DesktopPaths, owner.folder)`; a storage move carries the open
+  profile's cache and downloads only (`StorageLayout.forProfile`), runs as its owner, and writes a
+  moved file's record with `AccountAddress`. Other profiles' caches stay where they were (TDLib
+  fetches again what it needs there); the update staging is the device's.
+- The download runner: each request takes its stamp and rows when queued (`DownloadStamps`), a
+  stale one never starts, its fetch takes `Td.sessionFor`, row updates go through `ifRows`, a switch
+  or a new database stops every job (`stopForSwitch`), the queue is written with
+  `persistSnapshot()` for the rows' owner, and a finished file's record is addressed to its owner.
+- An ended session renews the database marker; the app lock is cleared at a sign in screen only
+  while one profile is left.
+
+Outside the window (`ProfileOutside`, tested in `ProfileOutsideTest`):
+
+| Surface | Rule |
+| --- | --- |
+| Download and move progress (Linux D-Bus, Windows toasts) | `ProfileGuardedNotifier`: the app's name while hidden, drawn again for real when shown |
+| Download and move results | the app's name, no file to open, while hidden |
+| New video, episode and piece alerts | not even checked while hidden (`DesktopChecks`), posted through `ProfileOutside.profileNotice` |
+| Low storage, a new version, the support ask | the device's, unchanged |
+| Media controls (MPRIS on Linux, SMTC on Windows) | `ProfileOutside.mediaTitle`: the app's name while hidden, the title again once shown |
+| On a switch or a sign out | every transfer of the profile left comes off the system's list |
+| Window title | always "TMPlayer": nothing of a profile |
+| Not blockable | the system's own pictures of the window (taskbar and dock previews, Alt+Tab, Mission Control, screenshots) show what the window last drew; a result already posted stays in the system's history (Windows Action Center) until dismissed |
+| None on the desktop | tray icon, recent items, presence (Discord or other), macOS media controls (no session there) |
+
+### iOS
+
+The iOS app compiles Android's `App.kt`, `MainActivity.kt`, `ui/**` and `data/**`, so the B1
+wiring is its wiring: `Accounts.open` (through `SettingsStore(context)` and `Td.start(context)` on
+the app's own files folder), `storesRegistered`, `ProfileUnlock.install`, `ProfileNotifications`,
+the gate (`ProfilesRoot`, `AndroidProfiles`), Settings' rows and the sign out through
+`signOutProfile`. The scene's phases reach `ProfileUnlock` through the activity's start and stop
+(`ios/kit` `ActivityShell.follow` to App's `LockOnLeave`). iOS's own pieces:
+
+- Downloads (`IosDownloads`): the owner's folder (`DesktopPaths.downloadsDirFor`), the queue
+  restored on every sign in, its file check written for the profile that read it.
+- Now Playing (`NowPlaying`): the app's name, no artist, no artwork while hidden, drawn again on
+  each flip.
+- The app switcher's picture (`SnapshotCover`): a plain cover over the window as the app enters
+  the background while the open profile has a PIN, off when it is active again.
+- Notifications go through `ProfileNotifications` as on Android. There are no widgets, Spotlight
+  items or Siri suggestions in the iOS app today.
+- Needs a Mac or a device: linking the framework, the kit's `SnapshotCover` call and the cover on
+  a real app switcher, Now Playing on the lock screen, the scene phases (60 s re-lock), the picker
+  and PIN pad on a phone and an iPad, notifications while hidden.
