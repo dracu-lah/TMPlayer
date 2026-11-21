@@ -436,20 +436,40 @@ Two choke points, one rule each:
   wipe `desktopForgetProfile`, the app lock's PIN). `DesktopShell` draws `DesktopProfilesGate` (the shared `ProfilesGate`, the arrow keys moving the focus in the picker and its panels when nothing focused took them) around the
   window's content; `ShellState` is built again for each open profile (full screen carries over),
   so no page, chat, player or search of one profile is drawn for the next. The trailer host,
-  "Wrong title?" and the toasts show only while `profileShellShown`.
+  "Wrong title?" and the toasts show only while `profileShellShown`. Add to a list lives inside
+  the gate (`GatedShell`), so a lock or a switch takes an open picker down; Home's offline
+  downloads are read for the open profile's shell and forgotten on a switch
+  (`rememberOfflineHome`). Every other host, menu, sheet, palette, drop target and the player is
+  drawn by `Browse`, inside the gate; outside it are only the device's (the crash question, the
+  recovery card, the window's buttons). While the gate shows, the window's shortcuts leave the
+  hidden shell alone (`ShellState.shellShown`): quit, minimise and full screen still work, Esc is
+  the gate's.
 - Settings, Account: Switch profile and Remove all accounts with two profiles or more, Add account
   while there is room (one profile too: it is how the second is added), all through the flow.
   Sign out goes through `ProfileFlow.signOutOpen` after its backup question.
 - Folders, from the owner's folder name (invariant 4): `DesktopPaths.profileDownloadsDir` and
   `downloadsDirFor(folder)` for every download written, listed or offered; the watch cache's sweep
   takes `rootFor = profileFilesDir(DesktopPaths, owner.folder)`; a storage move carries the open
-  profile's cache and downloads only (`StorageLayout.forProfile`), runs as its owner, and writes a
-  moved file's record with `AccountAddress`. Other profiles' caches stay where they were (TDLib
-  fetches again what it needs there); the update staging is the device's.
+  profile's cache and downloads only (`StorageLayout.forProfile`), runs as its owner, reads the
+  records only while the owner is open and checks it before each file, and writes a moved file's
+  record with `AccountAddress`. A switch, a sign out or Remove all accounts waits for the file in
+  hand (`StorageRelocation.stopForSwitch`, a `BeforeSwitch` hook, 60 s at most) and the move stops
+  after it. The other profiles' caches at the old root are deleted with the move (none of their
+  clients runs; TDLib fetches again what it misses); their downloads stay where they are and play
+  from there. The update staging is the device's.
+- Save to folder (`DesktopFolderExport`) and the legacy downloads' move (`DownloadMigration`) take
+  their owner when they start, run as it, check `mayAct` before each removal, record and TDLib
+  call, and a switch stops them between two files and waits.
 - The download runner: each request takes its stamp and rows when queued (`DownloadStamps`), a
   stale one never starts, its fetch takes `Td.sessionFor`, row updates go through `ifRows`, a switch
-  or a new database stops every job (`stopForSwitch`), the queue is written with
-  `persistSnapshot()` for the rows' owner, and a finished file's record is addressed to its owner.
+  or a new database stops every job (`stopForSwitch`, which also forgets the ids asked about
+  again), the queue is written with `persistSnapshot()` for the rows' owner, and a finished file's
+  record is addressed to its owner. The move into Downloads runs as the owner and rows of the
+  fetch that finished it (`moveContextOf`), never looked up again by file id: after a switch has
+  cleared the stamps that lookup would name the profile open then.
+- The window away: minimised, hidden, or the whole app hidden with macOS's Hide (Cmd+H, an
+  `AppHiddenListener` where `java.awt.Desktop` offers it). Losing the focus to another app, or the
+  window being on another virtual desktop, is not away (accepted).
 - An ended session renews the database marker; the app lock is cleared at a sign in screen only
   while one profile is left.
 
@@ -458,14 +478,24 @@ Outside the window (`ProfileOutside`, tested in `ProfileOutsideTest`):
 | Surface | Rule |
 | --- | --- |
 | Download and move progress (Linux D-Bus, Windows toasts) | `ProfileGuardedNotifier`: each transfer keeps the profile it was begun for; its title only while that profile is the open one and shown, the app's name otherwise; a late update of one taken down with its profile posts nothing |
-| Download and move results | real only for the open, shown owner; the app's name and no file to open otherwise (a transfer of A done after a switch to B names nothing of A) |
-| New video, episode and piece alerts | not even checked while hidden (`DesktopChecks`), posted through `ProfileOutside.profileNotice` with the owner taken when the check began, read again at each post |
+| Download and move results | real only for the open, shown owner; the app's name and no file to open otherwise (a transfer of A done after a switch to B names nothing of A). A transfer begun, or a result never begun, belongs to the job's own owner (`ProfileOutside.asOwner`). A real one is kept by its owner (`KeyedResults`) and taken off the system's list when that profile hides, is left or signs out: Linux `CloseNotification` by the server's id, Windows `History.Remove` by its tag. Its press asks first: a stale one opens no file or folder (Linux checks before Show in folder; a Windows result opens through a `tmplayer:` link that checks) |
+| New video, episode and piece alerts | not even checked while hidden (`DesktopChecks`), posted through `ProfileOutside.profileNotice` with the owner taken when the check began, read again at each post; kept and taken down like a result; a press on a stale one does nothing |
 | Low storage, a new version, the support ask | the device's, unchanged |
 | Media controls (MPRIS on Linux, SMTC on Windows) | `ProfileOutside.mediaTitle`: the app's name while hidden, the title again once shown |
-| On a switch or a sign out | every transfer of the profile left comes off the system's list |
+| On a switch or a sign out | every transfer, result and alert of the profile left comes off the system's list |
 | Window title | always "TMPlayer": nothing of a profile |
-| Not blockable | the system's own pictures of the window (taskbar and dock previews, Alt+Tab, Mission Control, screenshots) show what the window last drew; a result already posted stays in the system's history (Windows Action Center) until dismissed |
-| None on the desktop | tray icon, recent items, presence (Discord or other), macOS media controls (no session there) |
+| Not blockable | the system's own pictures of the window (taskbar and dock previews, Alt+Tab, Mission Control, screenshots) show what the window last drew; on Linux without a session bus (`notify-send`) a result cannot be taken down; on a Windows development run (no `tmplayer:` link) a result's press is the file's own URI |
+| None on the desktop | tray icon, recent items, presence (Discord or other), macOS notifications and media controls (nothing is posted there) |
+
+Left LOW after the B2 fix round (2026-11-21):
+
+- A storage move cut short and finished at the next launch (`resumePending`) deletes only the open
+  profile's old cache: the pending note keeps that one path, not the old root, so the other
+  profiles' old caches stay until a later move. Keep the old root in the note to sweep them too.
+- A stale Windows result's press on a development run, and a notify-send result on Linux, cannot
+  be checked or taken down (see Not blockable).
+- Needs Windows: the tagged results leaving the Action Center, the `tmplayer:` press. Needs a Mac:
+  the Cmd+H re-lock.
 
 ### iOS
 
@@ -480,10 +510,13 @@ the gate (`ProfilesRoot`, `AndroidProfiles`), Settings' rows and the sign out th
   restored on every sign in, its file check written for the profile that read it.
 - Now Playing (`NowPlaying`): the app's name, no artist, no artwork while hidden, drawn again on
   each flip.
-- The app switcher's picture (`SnapshotCover`): a plain cover over the window as the app enters
-  the background while the open profile has a PIN, off when it is active again.
+- The app switcher's picture (`SnapshotCover`): a plain cover over every window of every
+  connected scene (an iPad's split view and Stage Manager) as the app resigns active, since the
+  switcher's live card shows an inactive app, while the open profile has a PIN; again at the
+  background for a window that came since; off when it is active again. A system alert or the
+  Control Center over the app covers it too while it lasts.
 - Notifications go through `ProfileNotifications` as on Android. There are no widgets, Spotlight
   items or Siri suggestions in the iOS app today.
-- Needs a Mac or a device: linking the framework, the kit's `SnapshotCover` call and the cover on
-  a real app switcher, Now Playing on the lock screen, the scene phases (60 s re-lock), the picker
+- Needs a Mac or a device: linking the framework, the kit's `SnapshotCover` calls (`ios/kit`
+  does not compile on Linux) and the cover on a real app switcher and on an iPad with two windows, Now Playing on the lock screen, the scene phases (60 s re-lock), the picker
   and PIN pad on a phone and an iPad, notifications while hidden.
