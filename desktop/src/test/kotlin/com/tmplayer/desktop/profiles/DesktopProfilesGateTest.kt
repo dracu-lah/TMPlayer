@@ -31,6 +31,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 
 /**
  * The profiles on the desktop (HX88, B2): the gate the window draws around its shell, driven by
@@ -197,5 +199,50 @@ class DesktopProfilesGateTest {
 
     private companion object {
         const val SHELL_FIRST = "Home"
+    }
+
+    @Test
+    fun `a list picker open when the profile locks goes with the shell and does not come back`() {
+        val kit = kit("Asha")
+        kit.pin(0, "2580")
+        val lists = com.tmplayer.data.WatchedStore(
+            com.tmplayer.data.WatchedStore.openDataStore(
+                java.nio.file.Files.createTempDirectory("tm-gate-lists").resolve(com.tmplayer.data.WatchedStore.FILE_NAME).toFile(),
+            ),
+        ).lists
+        val record = com.tmplayer.data.WatchLaterRecord(
+            chatId = 1, messageId = 2, fileId = 3, title = "Harbour Notes", fileName = "Harbour Notes.mkv", chatTitle = "Chat",
+            sizeBytes = 10, durationSec = 60, mimeType = "video/x-matroska", addedAt = 0,
+        )
+        val flow = kit.flow()
+        runComposeUiTest {
+            setContent {
+                TmMaterialTheme(dark = true) {
+                    CompositionLocalProvider(LocalBackStack provides BackStack()) {
+                        com.tmplayer.desktop.ui.GatedShell(flow, signInStep = false, lists = lists, onMessage = {}, onOpenList = {}) {
+                            val pick = com.tmplayer.ui.browse.LocalListPicker.current
+                            Button(onClick = { pick?.invoke(record) }) { Text(SHELL_FIRST) }
+                        }
+                    }
+                }
+            }
+            waitForIdle()
+            for (key in listOf(Key.Two, Key.Five, Key.Eight, Key.Zero)) press(key)
+            waitUntil(timeoutMillis = 5_000) { exists(SHELL_FIRST) }
+            onNodeWithText(SHELL_FIRST).performClick()
+            waitUntil(timeoutMillis = 5_000) { exists(L.listsAddTo) }
+            assertTrue(exists("Harbour Notes"))
+
+            // Away more than a minute: the PIN pad, and nothing of the picker over it.
+            ProfileUnlock.lock()
+            waitUntil(timeoutMillis = 5_000) { exists(L.profilesPinFor(name = "Asha")) }
+            assertFalse(exists(L.listsAddTo))
+            assertFalse(exists("Harbour Notes"))
+
+            // Unlocked again: the shell, with the picker closed.
+            for (key in listOf(Key.Two, Key.Five, Key.Eight, Key.Zero)) press(key)
+            waitUntil(timeoutMillis = 5_000) { exists(SHELL_FIRST) }
+            assertFalse(exists(L.listsAddTo))
+        }
     }
 }

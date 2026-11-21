@@ -132,21 +132,9 @@ fun DesktopShell(
     val network by DesktopConnectivity.status.collectAsState()
     val telegramConnected by Td.connected.collectAsState()
     val offline = com.tmplayer.ui.browse.rememberSettledOffline(network == NetworkStatus.Offline && !telegramConnected)
-    var offlineDownloads by remember { mutableStateOf<List<com.tmplayer.data.ResumeRecord>>(emptyList()) }
-    var offlineRead by remember { mutableStateOf(false) }
-    LaunchedEffect(offline) {
-        offlineRead = false
-        offlineDownloads = if (offline) {
-            com.tmplayer.data.runCatchingCancellable {
-                state.settings.downloadsNow().filter { com.tmplayer.desktop.DownloadIndex.state(it) == com.tmplayer.desktop.DownloadIndex.FileState.Present }
-            }.getOrDefault(emptyList())
-        } else {
-            emptyList()
-        }
-        offlineRead = true
-    }
-    val offlineHome = remember(offline, offlineDownloads, offlineRead) {
-        com.tmplayer.data.OfflineHome(offline, offlineDownloads, settled = !offline || offlineRead)
+    // Keyed on the open profile's shell (HX88, review D3): a switch never shows the last one's.
+    val offlineHome = rememberOfflineHome(offline, owner = state) {
+        state.settings.downloadsNow().filter { com.tmplayer.desktop.DownloadIndex.state(it) == com.tmplayer.desktop.DownloadIndex.FileState.Present }
     }
     CompositionLocalProvider(
         com.tmplayer.ui.browse.LocalOfflineHome provides offlineHome,
@@ -157,8 +145,6 @@ fun DesktopShell(
         // The big-screen mode's dialogs take the remote as they open and walk with the arrows.
         com.tmplayer.ui.components.LocalRemoteArrows provides BigScreen.on,
     ) {
-        // "Add to a list" (HX43) from any menu or pane: the picker opens over the window.
-        com.tmplayer.ui.browse.ListPickerHost(state.watched.lists, onMessage = { state.notices.tryEmit(it) }, onOpenList = { state.openLists(it) }) {
         Surface(
             Modifier
                 .fillMaxSize()
@@ -175,8 +161,16 @@ fun DesktopShell(
             val profiles = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
             LaunchedEffect(profiles) { com.tmplayer.desktop.profiles.DesktopProfiles.messages.collect { toasts.showSnackbar(it) } }
             val shellShown = com.tmplayer.ui.lock.profileShellShown(profiles)
+            // The window's keys act on the shell only while it is what shows (HX88, review P3).
+            androidx.compose.runtime.SideEffect { state.shellShown = shellShown }
             Box(Modifier.fillMaxSize()) {
-            com.tmplayer.desktop.profiles.DesktopProfilesGate(profiles, signInStep = Setup.isSignInStep(auth)) {
+            GatedShell(
+                profiles,
+                signInStep = Setup.isSignInStep(auth),
+                lists = state.watched.lists,
+                onMessage = { state.notices.tryEmit(it) },
+                onOpenList = { state.openLists(it) },
+            ) {
             Box(Modifier.fillMaxSize()) {
                 // The QR code stays up for a moment after it is scanned, marked "Scanned".
                 val shownAuth = com.tmplayer.ui.auth.rememberScanHold(auth)
@@ -295,7 +289,56 @@ fun DesktopShell(
             }
 
         }
+    }
+}
+
+/**
+ * The profiles' gate around the window's content, and what must live inside it (HX88, review P1):
+ * "Add to a list" (HX43), opened from any menu or pane, is held under the gate, which draws its
+ * content only while the open profile's shell shows and keys it on that profile. A lock (the window
+ * away more than a minute) or a switch takes an open picker down with it, so the video's title and
+ * the locked profile's list names are never drawn over the PIN pad, and nothing writes to them.
+ */
+@Composable
+internal fun GatedShell(
+    profiles: com.tmplayer.ui.lock.ProfileFlow?,
+    signInStep: Boolean,
+    lists: com.tmplayer.data.ListsStore,
+    onMessage: (String) -> Unit,
+    onOpenList: (String) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    com.tmplayer.desktop.profiles.DesktopProfilesGate(profiles, signInStep = signInStep) {
+        com.tmplayer.ui.browse.ListPickerHost(lists, onMessage = onMessage, onOpenList = onOpenList, content = content)
+    }
+}
+
+/**
+ * What Home shows while offline: the downloads whose file is really there, read for the open
+ * profile's shell ([owner]) and forgotten the moment it changes (HX88, review D3), so a switch while
+ * offline never shows the last profile's downloads, a PIN profile's titles included. [settled]
+ * stays false until the new profile's own read is in.
+ */
+@Composable
+internal fun rememberOfflineHome(
+    offline: Boolean,
+    owner: Any?,
+    read: suspend () -> List<com.tmplayer.data.ResumeRecord>,
+): com.tmplayer.data.OfflineHome {
+    var offlineDownloads by remember(owner) { mutableStateOf<List<com.tmplayer.data.ResumeRecord>>(emptyList()) }
+    var offlineRead by remember(owner) { mutableStateOf(false) }
+    val reader by androidx.compose.runtime.rememberUpdatedState(read)
+    LaunchedEffect(offline, owner) {
+        offlineRead = false
+        offlineDownloads = if (offline) {
+            com.tmplayer.data.runCatchingCancellable { reader() }.getOrDefault(emptyList())
+        } else {
+            emptyList()
         }
+        offlineRead = true
+    }
+    return remember(offline, offlineDownloads, offlineRead) {
+        com.tmplayer.data.OfflineHome(offline, offlineDownloads, settled = !offline || offlineRead)
     }
 }
 
