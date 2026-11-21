@@ -90,9 +90,6 @@ export const names = B.namesOf(activeId, testMode)
 export const namesFor = (id: string) => B.namesOf(id, testMode)
 /** Work this page does in its profile with no screen: a sign out of it, or a step of Remove all. */
 export const pendingWork: B.Pending | null = plan.pending
-/** Whether the tab had chosen (and could open) the profile it runs when this page started. */
-export const chosenAtStart = !plan.pending && plan.picker === null && !!B.find(first, tabChoice)
-
 const [book, setBookSignal] = createSignal(first)
 export { book }
 export const profiles = () => book().profiles
