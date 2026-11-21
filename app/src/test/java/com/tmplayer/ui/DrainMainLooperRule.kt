@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.EmptyCoroutineContext
@@ -53,19 +54,36 @@ class DrainMainLooperRule : TestWatcher() {
             // A dispatch with nothing in it posts the dispatcher's callback again, which runs
             // everything that was queued behind the dropped one, the snapshot notifier included.
             dispatcher.dispatch(EmptyCoroutineContext, Runnable { })
-            looper.idleFor(Duration.ofMillis(STEP_MS))
+            drain(looper, START_ROUNDS, STEP_MS)
         }
     }
 
     override fun finished(description: Description) {
-        // A few rounds, since running a post can make the next one (apply, then recompose).
-        runCatching {
-            repeat(ROUNDS) { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(STEP_MS)) }
+        runCatching { drain(shadowOf(Looper.getMainLooper()), ROUNDS, STEP_MS) }
+    }
+
+    /**
+     * Runs what is ready on the looper, then moves the clock on a little and runs again, [rounds]
+     * times (running a post can make the next one: apply, then recompose). Counted task by task,
+     * never `idleFor`: a screen that recomposes itself without end (a carousel's timer, a state
+     * written in a composition) posts its next task at the same instant, so `idleFor` never
+     * returned and a full run sat in one such drain for half an hour. Here a round gives up after
+     * [MAX_TASKS] tasks, so a loop costs a bounded few thousand and the class goes on.
+     */
+    private fun drain(looper: org.robolectric.shadows.ShadowLooper, rounds: Int, stepMs: Long) {
+        repeat(rounds) {
+            var ran = 0
+            while (!looper.isIdle && ran++ < MAX_TASKS) looper.runOneTask()
+            ShadowSystemClock.advanceBy(Duration.ofMillis(stepMs))
         }
+        var ran = 0
+        while (!looper.isIdle && ran++ < MAX_TASKS) looper.runOneTask()
     }
 
     private companion object {
-        const val ROUNDS = 5
-        const val STEP_MS = 100L
+        const val ROUNDS = 25
+        const val START_ROUNDS = 5
+        const val STEP_MS = 20L
+        const val MAX_TASKS = 400
     }
 }
