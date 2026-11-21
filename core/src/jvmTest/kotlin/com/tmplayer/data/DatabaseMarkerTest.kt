@@ -1,5 +1,9 @@
 package com.tmplayer.data
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -61,6 +65,31 @@ class DatabaseMarkerTest {
         OfflineDownloads.note(live)
         OfflineDownloads.restore(settings, database = "samedatabase")
         assertEquals("a download asked before the restore ran keeps its place", live, OfflineDownloads.active.value[41])
+    }
+
+    @Test
+    fun `two writes of the queue never cross, so the newer rows are the last written`() = runBlocking {
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        OfflineDownloads.note(OfflineDownloads.Progress(request, 0, request.sizeBytes, OfflineDownloads.Stage.Queued))
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        // The first write has taken its snapshot (one row) and is held before it writes.
+        val first = launch(Dispatchers.Default) {
+            OfflineDownloads.persistQueue(settings) {
+                entered.complete(Unit)
+                gate.await()
+            }
+        }
+        entered.await()
+        // A newer row, and its write: it must wait behind the first, not overtake it.
+        val newer = request.copy(fileId = 42, messageId = 8L)
+        OfflineDownloads.note(OfflineDownloads.Progress(newer, 0, newer.sizeBytes, OfflineDownloads.Stage.Queued))
+        val second = launch(Dispatchers.Default) { OfflineDownloads.persistQueue(settings) }
+        delay(300)
+        gate.complete(Unit)
+        first.join()
+        second.join()
+        assertEquals(setOf(41, 42), settings.downloadQueueNow().map { it.fileId }.toSet())
     }
 
     @Test
