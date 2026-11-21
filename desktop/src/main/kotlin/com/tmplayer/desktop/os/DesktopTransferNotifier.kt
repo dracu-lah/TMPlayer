@@ -32,12 +32,17 @@ object DesktopTransferNotifier {
             OsInfo.isWindows -> WindowsNotifications(window, onOpenDownloads)
             else -> NoTransferNotifier
         }
-        notices = platform as? DesktopNotices
-        val notifier = CoalescingTransferNotifier(platform)
+        // Behind the open profile's lock (HX88, ProfileOutside): every transfer and notice of a
+        // PIN profile carries the app's name only while it is hidden.
+        val guarded = ProfileGuardedNotifier(platform)
+        ProfileOutside.guarded = guarded
+        notices = guarded.takeIf { platform is DesktopNotices }
+        val notifier = CoalescingTransferNotifier(guarded)
         if (platform is DockProgress) {
-            scope.launch { notifier.aggregate.collect { platform.dockProgress(it) } }
+            scope.launch { notifier.aggregate.collect { guarded.dockProgress(it) } }
         }
         return notifier
+
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + com.tmplayer.platform.JobFailures.handler("DesktopTransferNotifier"))

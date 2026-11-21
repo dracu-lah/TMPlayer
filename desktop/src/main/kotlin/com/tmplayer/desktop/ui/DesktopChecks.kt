@@ -58,8 +58,12 @@ private suspend fun checkOnce(state: ShellState) = withContext(Dispatchers.IO) {
     val newVideos = settings.noticeOnNow(Notice.NewVideos)
     val episodes = settings.noticeOnNow(Notice.NewEpisodes)
     val pieces = settings.noticeOnNow(Notice.MissingPieces)
-    if (newVideos || episodes || pieces) {
-        val session = withTimeoutOrNull(CONNECT_WAIT_MS) { Td.awaitConnectedSession() }
+    // A PIN profile hidden (locked, or no window on screen) is not even checked (HX88), as on the
+    // phone: its alerts would name its chats outside the window. The profile is the one open when
+    // the check began, and its own client ([Td.sessionFor]), never the next profile's.
+    val owner = com.tmplayer.data.Accounts.stamp
+    if ((newVideos || episodes || pieces) && com.tmplayer.desktop.os.ProfileOutside.alertsAllowed(com.tmplayer.desktop.os.ProfileOutside.hiddenNow())) {
+        val session = Td.sessionFor(owner, CONNECT_WAIT_MS)
         if (session != null) {
             // The kids lock and the chats the viewer added (HX27): no alert comes from a chat
             // they never added.
@@ -67,7 +71,7 @@ private suspend fun checkOnce(state: ShellState) = withContext(Dispatchers.IO) {
             if (newVideos) {
                 val alert = NewVideoAlerts.check(session.client, settings, allowed)
                 if (alert != null && !focused) {
-                    notices?.notice(alert.title, alert.body) { openChat(state, alert.chatId) }
+                    com.tmplayer.desktop.os.ProfileOutside.profileNotice(notices, alert.title, alert.body, { openChat(state, alert.chatId) })
                 }
             }
             if (episodes) {
@@ -75,7 +79,7 @@ private suspend fun checkOnce(state: ShellState) = withContext(Dispatchers.IO) {
                 if (alert != null && !focused && notices != null) {
                     val play = alert.play
                     val buttons = if (play != null) listOf(NoticeButton(L.commonPlay) { playFromNotice(state, play, alert.chatTitle) }) else emptyList()
-                    notices.notice(alert.title, alert.body, { openChat(state, alert.chatId) }, buttons)
+                    com.tmplayer.desktop.os.ProfileOutside.profileNotice(notices, alert.title, alert.body, { openChat(state, alert.chatId) }, buttons)
                 }
             }
             if (pieces) {
@@ -84,7 +88,8 @@ private suspend fun checkOnce(state: ShellState) = withContext(Dispatchers.IO) {
                     for (alert in alerts) {
                         val play = alert.play
                         val buttons = if (play != null) listOf(NoticeButton(L.commonPlay) { playFromNotice(state, play, alert.chatTitle) }) else emptyList()
-                        notices.notice(alert.title, alert.body, { openChat(state, play?.chatId) }, buttons)
+                        com.tmplayer.desktop.os.ProfileOutside.profileNotice(notices, alert.title, alert.body, { openChat(state, play?.chatId) }, buttons)
+
                     }
                 }
             }
