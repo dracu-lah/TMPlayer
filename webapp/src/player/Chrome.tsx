@@ -1,5 +1,5 @@
 
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { Add01Icon, Bookmark02Icon, CheckmarkCircle02Icon, ArrowExpandIcon, ArrowLeft02Icon, ArrowShrinkIcon, Cancel01Icon, DashboardSpeed02Icon, HeadphonesIcon, InformationCircleIcon, KeyboardIcon, ListVideoIcon, Moon02Icon, MoreVerticalIcon, NextIcon, PictureInPictureOnIcon, PreviousIcon, RepeatIcon, ScreenRotationIcon, SquareLock02Icon, SquareUnlock02Icon, SubtitleIcon, Sun03Icon, TranslateIcon, VolumeHighIcon, VolumeLowIcon, VolumeMute02Icon } from '@hugeicons/core-free-icons'
 import './player.css'
 import './subfonts.css'
@@ -10,17 +10,14 @@ import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, v
 import { SHAPES } from './shape'
 import { percent, zoomed } from './zoom'
 import './zoom.css'
-import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type SkipSegment } from './chapters'
+import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
-import { copyLink, linkOf, linkOffered } from '../ui/tgLinks'
 import { MsoneSheet } from './msone-sheet'
 import { SubmakerJobLine, SubmakerSheet } from './submaker-sheet'
 import { submakerBase, submakerSet } from '../submakerBase'
 import * as subpick from './subpick-use'
-import { mergeSkips } from './skipOnline'
-import { answer, askOf, loadAnimeSkips } from '../screens/posters'
-import { openingSpeed, rememberSpeed, settings } from '../store'
+import { openingSpeed, rememberSpeed } from '../store'
 import { msoneOn } from '../msoneFlag'
 import { AUTOPLAY_LIMIT, BOOSTS, noteInput, pressLoop, repeats, repeatState, SeekUndo, SLEEP_CHOICES, speedScopes, TURNS, watching, wrapLoop, type Loop } from './extras'
 import {
@@ -28,14 +25,16 @@ import {
     type Bookmark, type SubtitleLook,
 } from './keep'
 import type { VideoItem } from '../tg/types'
-import { call } from '../tg/rpc'
 import { PlaySolid, PauseSolid, CopiesIcon, SPEEDS, SPEED_MIN, SPEED_MAX, HIDE_MS, SIDE, WIDE_ROW, NOTE_MS, PEEK_MS, UNLOCK_PILL_MS, MAC, shapeIcon, shapeName, clock, speedLabel } from './chrome/parts'
 import type { Ctl, Sheet } from './chrome/types'
 import { SeekBar } from './chrome/SeekBar'
 import { DetailsSheet, StillSheet } from './chrome/Dialogs'
 import { createScreenshot } from './chrome/screenshot'
 import { useBoost } from './chrome/useBoost'
+import { useCopyLink } from './chrome/useCopyLink'
+import { useFullscreen } from './chrome/useFullscreen'
 import { useGestures } from './chrome/useGestures'
+import { useSkips } from './chrome/useSkips'
 import { useKeys } from './chrome/useKeys'
 import { usePicture } from './chrome/usePicture'
 import { useSleep } from './chrome/useSleep'
@@ -65,7 +64,6 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const [volume, setVolume] = createSignal(1)
     const [muted, setMuted] = createSignal(false)
     const [rate, setRate] = createSignal(1)
-    const [fullscreen, setFullscreen] = createSignal(false)
     const [subs, setSubs] = createSignal<TextTrack[]>([])
     const [subOn, setSubOn] = createSignal<TextTrack | null>(null)
     const [width, setWidth] = createSignal(c.root.clientWidth || innerWidth)
@@ -101,59 +99,17 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     listen('ratechange', () => setRate(v.playbackRate))
     v.textTracks.addEventListener('addtrack', readSubs)
     v.textTracks.addEventListener('change', readSubs)
-    const onFullscreen = () => {
-        setFullscreen(!!document.fullscreenElement)
-        // Leaving full screen (the button, Esc, the system's back gesture) hands the turn back to the phone.
-        if (!document.fullscreenElement) unlockTurn()
-    }
-    document.addEventListener('fullscreenchange', onFullscreen)
     const resize = new ResizeObserver(() => setWidth(c.root.clientWidth))
     resize.observe(c.root)
     onCleanup(() => {
         v.textTracks.removeEventListener('addtrack', readSubs)
         v.textTracks.removeEventListener('change', readSubs)
-        document.removeEventListener('fullscreenchange', onFullscreen)
         resize.disconnect()
     })
 
     // ---- showing and hiding ------------------------------------------------------------------
     const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
-    // Copy link at this time (the apps' CopyLinkAtTime): the link is asked as More options opens, so the tap that copies it has it.
-    // Not for a chat that restricts saving, nor a video played from pieces. `linkShown` is the link, when the browser refused the clipboard.
-    const askLink = (chatId: number, messageId: number) => call('messageLink', [chatId, messageId])
-    const [linkShown, setLinkShown] = createSignal('')
-    // Telegram says this video may not be passed on now (the chat became protected, or the message destroys itself): the entry goes.
-    const [linkBlocked, setLinkBlocked] = createSignal(false)
-    let linkAsked: string | null = null
-    createEffect(() => {
-        if (sheet() !== 'more' || !linkOffered(c.item)) return
-        const key = `${c.item.chatId}:${c.item.messageId}`
-        if (linkAsked !== key) {
-            linkAsked = key
-            setLinkBlocked(false)
-            void linkOf(c.item, askLink).then((a) => linkAsked === key && setLinkBlocked(!('link' in a) && a.none === 'protected'))
-        }
-    })
-    let linkBusy = false
-    const copyLinkAtTime = async () => {
-        if (linkBusy || !linkOffered(c.item)) return
-        linkBusy = true
-        const at = Math.floor(v.currentTime)
-        setSheet(null)
-        try {
-            const out = await copyLink(c.item, at, askLink)
-            if (out.done === 'shown') {
-                setLinkShown(out.link)
-                setSheet('link')
-            } else {
-                if (out.done === 'none' && out.why === 'protected') setLinkBlocked(true)
-                flash(out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links'))
-            }
-        } finally {
-            linkBusy = false
-        }
-    }
     /** The pointer rests on the controls (desktop): they stay. */
     const [held, setHeld] = createSignal(false)
     const [locked, setLocked] = createSignal(false)
@@ -247,6 +203,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // ---- actions -------------------------------------------------------------------------------
     const [note, showNote] = timed<{ text: string; side: 'left' | 'right' | 'centre' }>(NOTE_MS)
     const flash = (text: string, side: 'left' | 'right' | 'centre' = 'centre') => showNote({ text, side })
+    const link = useCopyLink(c, sheet, setSheet, flash)
 
     const togglePlay = () => (v.paused ? v.play().catch(() => {}) : v.pause())
     const seekTo = (s: number, from = v.currentTime) => {
@@ -432,38 +389,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     }
 
     // ---- skip offers from the file's own chapters -----------------------------------------------
-    // An anime AniList matched adds what AniSkip holds (the worker's /tmdb/skip, by the file's episode number and length);
-    // the file's own chapters stay first, and a database's second opening beside them is not wanted (SkipMerge).
-    const [onlineSkips, setOnlineSkips] = createSignal<SkipSegment[]>([])
-    createEffect(() => {
-        const code = c.info()?.episode?.code
-        const ask = askOf(c.item)
-        const number = code ? /^S\d+E(\d+)/i.exec(code)?.[1] : undefined
-        if (!ask || !number || !settings().posters) return
-        let live = true
-        onCleanup(() => (live = false))
-        answer(ask).then(
-            (found) => {
-                if (!live || !found.match || found.source !== 'anilist' || found.kind !== 'show' || !found.id) return
-                loadAnimeSkips(found.id, Number(number), c.item.duration || 0).then((list) => live && setOnlineSkips(list), () => {})
-            },
-            () => {},
-        )
-    })
-    const segments = createMemo(() => (c.info()?.episode ? mergeSkips(skipSegments(chapters(), duration()), onlineSkips(), duration()) : []))
-    const [skipNow, setSkipNow] = createSignal<SkipSegment | null>(null)
-    listen('timeupdate', () => {
-        const list = segments()
-        if (!list.length) return void (skipNow() && setSkipNow(null))
-        const p = v.currentTime
-        const hit = list.find((s) => p >= s.start && p < s.end - 1) ?? null
-        if (hit !== skipNow()) setSkipNow(hit)
-    })
-    const skipLabel = (s: SkipSegment) => t(`player.skip_${s.kind}`)
-    const skipIt = () => {
-        const s = skipNow()
-        if (s) (seekTo(s.end), setSkipNow(null))
-    }
+    const { skipNow, skipLabel, skipIt } = useSkips(c, listen, duration, seekTo)
 
     // ---- subtitle timing and look ----------------------------------------------------------------
     const nudgeDelay = (d: number) => {
@@ -559,45 +485,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     listen('seeking', stopCount)
     listen('play', stopCount)
 
-    // Full screen: the player's own box where the browser has it; the iPhone's video full screen otherwise
-    // (none for movi's canvas, which takes the iPhone's away). The app's player always fills the
-    // screen and opens sideways (ScreenOrientation.DEFAULT), so on a phone the row's button does both:
-    // full screen, then the turn locked sideways for a wide video, where the browser can lock it.
-    type WebkitFull = HTMLVideoElement & { webkitEnterFullscreen?: () => void }
-    const iosFullscreen = () => typeof (v as WebkitFull).webkitEnterFullscreen === 'function'
-    const canFullscreen = () => !!document.fullscreenEnabled || iosFullscreen()
-    const orientation = (screen as Screen & { orientation?: ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void } }).orientation
-    const canTurn = () => !!orientation?.lock && !!document.fullscreenEnabled
-    function unlockTurn() {
-        try {
-            orientation?.unlock?.()
-        } catch {}
-    }
-    const toggleFullscreen = async () => {
-        if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {})
-        if (document.fullscreenEnabled && c.root.requestFullscreen) {
-            try {
-                await c.root.requestFullscreen({ navigationUI: 'hide' })
-            } catch {
-                return
-            }
-            // An upright video (or one not measured yet) is left to the phone; a refused lock changes nothing.
-            if (phone() && canTurn() && v.videoWidth > v.videoHeight) await orientation!.lock!('landscape').catch(() => {})
-            return
-        }
-        try {
-            ;(v as WebkitFull).webkitEnterFullscreen?.()
-        } catch {}
-    }
-    // Rotate (the phone's More menu): flips the locked turn, entering full screen first, where the browser can lock it.
-    const rotate = async () => {
-        try {
-            if (!document.fullscreenElement) await c.root.requestFullscreen({ navigationUI: 'hide' })
-            const upright = orientation!.type.startsWith('portrait')
-            await orientation!.lock!(upright ? 'landscape' : 'portrait')
-            flash(upright ? t('player.rotation_landscape') : t('player.rotation_portrait'))
-        } catch {}
-    }
+    const { fullscreen, canFullscreen, canTurn, toggle: toggleFullscreen, rotate } = useFullscreen(c, phone, flash)
 
     const lock = () => {
         setSheet(null)
@@ -1062,8 +950,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />
                         </Show>
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
-                        <Show when={linkOffered(c.item) && !linkBlocked()}>
-                            <Entry text={t('player.copy_link_at_time')} onClick={copyLinkAtTime} />
+                        <Show when={link.offered()}>
+                            <Entry text={t('player.copy_link_at_time')} onClick={link.copyAtTime} />
                         </Show>
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <hr />
@@ -1124,7 +1012,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <TimingSheet delay={subDelay} onDelay={setDelay} look={look} onLook={changeLook} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'link'}>
-                    <LinkSheet link={linkShown()} onClose={() => setSheet(null)} />
+                    <LinkSheet link={link.shown()} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'shortcuts'}>
                     <ShortcutsSheet mac={MAC} onClose={() => setSheet(null)} />
