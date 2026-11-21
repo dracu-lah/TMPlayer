@@ -34,6 +34,8 @@ object DesktopStorage {
         set(value) {
             field = value
             DesktopServices.downloads.notifier = value
+            // A transfer begun, or a result never begun, is the job's own profile's (HX88).
+            DesktopServices.downloads.notifyAs = { owner, call -> com.tmplayer.desktop.os.ProfileOutside.asOwner(owner, call) }
         }
 
     /** Closes the player, if one is open. Set by `Main.kt` to the shell's own. */
@@ -41,7 +43,10 @@ object DesktopStorage {
     var closePlayer: () -> Unit = {}
 
     val migration: DownloadMigration by lazy {
-        DownloadMigration(DesktopServices.settings, notifier = { notifier })
+        DownloadMigration(DesktopServices.settings, notifier = { notifier }).also { run ->
+            // A switch waits for the file in hand (HX88).
+            com.tmplayer.data.BeforeSwitch.add({ run.stopForSwitch() })
+        }
     }
 
     /**
@@ -51,7 +56,10 @@ object DesktopStorage {
     val relocationProgress = kotlinx.coroutines.flow.MutableStateFlow<StorageRelocation.Moving?>(null)
 
     val relocation: StorageRelocation by lazy {
-        StorageRelocation(DesktopServices.settings, DesktopServices.prefs, LiveHost, notifier = { notifier }, _moving = relocationProgress)
+        StorageRelocation(DesktopServices.settings, DesktopServices.prefs, LiveHost, notifier = { notifier }, _moving = relocationProgress).also { move ->
+            // A switch, a sign out or Remove all accounts waits for a move under way (HX88).
+            com.tmplayer.data.BeforeSwitch.add({ move.stopForSwitch() }) { move.waitingLabel() }
+        }
     }
 
     /** True while a storage move runs: the sweep must not judge a cache that is being replaced. */

@@ -620,13 +620,60 @@ internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onK
             onDismiss = { syncConfirm = null },
         )
     }
+    ProfileRows(state)
     // Last, under the card rather than in it: the one press here that ends the session. It asks first.
     SignOutButton(s.settingsSignOut) { confirmSignOut = true }
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
 }
 
 /**
+ * The profiles on this computer (HX88): Switch profile and Remove all accounts once there are two,
+ * Add account while there is room (one profile too: it is how a second one is added). Each press
+ * goes through the process's [com.tmplayer.ui.lock.ProfileFlow], which draws what it asks (the app
+ * lock's PIN, the question while a video plays, the picker) over this page.
+ */
+@Composable
+internal fun ProfileRows(state: ShellState) {
+    val s = LocalStrings.current
+    val flow = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
+    val list by remember(flow) {
+        flow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(com.tmplayer.data.AccountRules.adopted(0L))
+    }.collectAsState()
+    val several = com.tmplayer.data.ProfilePicker.atLaunch(list)
+    var confirmRemoveAll by remember { mutableStateOf(false) }
+    if (several) {
+        Action(s.profilesSwitchProfile, list.active?.shownName.orEmpty(), TmIcons.Person) { flow?.ask() }
+    }
+    if (com.tmplayer.data.AccountRules.canAdd(list)) {
+        Action(s.profilesAdd, s.profilesAddDetail(count = com.tmplayer.data.AccountRules.MAX), TmIcons.PersonAdd) { flow?.add() }
+    }
+    if (several) {
+        Action(s.profilesRemoveAll, s.profilesRemoveAllDetail, TmIcons.Delete) { confirmRemoveAll = true }
+    }
+    if (confirmRemoveAll) {
+        ConfirmDialog(
+            title = s.profilesRemoveAllTitle,
+            message = s.profilesRemoveAllBody,
+            confirmLabel = s.profilesRemoveAll,
+            destructive = true,
+            onDismiss = { confirmRemoveAll = false },
+            onConfirm = {
+                confirmRemoveAll = false
+                flow?.removeAll(deleteDownloads = false) { result ->
+                    if (result is com.tmplayer.data.SignOutResult.SignedOut) {
+                        java.awt.EventQueue.invokeLater {
+                            state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
+
+/**
  * About and help: the version and its updates (only where this build updates itself), the backup,
+
  * then help, privacy and About TMPlayer, and the privacy note at the end, as the phone's page has them.
  */
 @Composable

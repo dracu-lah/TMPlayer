@@ -41,9 +41,13 @@ object DesktopServices {
     val watchCache: DesktopWatchCache by lazy {
         DesktopWatchCache(
             settings = settings,
-            filesRoot = { DesktopPaths.filesDir },
+            filesRoot = { DesktopPaths.filesDirFor(com.tmplayer.data.Accounts.active.folder) },
             playing = { com.tmplayer.desktop.player.ActiveStreams.openIds() },
             rule = { CacheRule.UnderCap(prefs.now.cacheLimitBytes) },
+            // The TDLib folder of the profile a sweep works for (HX88, invariants 3 and 4): taken
+            // from its own folder name when the sweep starts, never from the folder open later,
+            // so a sweep as one profile never walks another's files against its own records.
+            rootFor = { owner -> DesktopPaths.filesDirFor(owner.folder) },
         )
     }
 

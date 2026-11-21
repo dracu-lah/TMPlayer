@@ -65,6 +65,20 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
         // On the process's scope, not this dialog's: closing the dialog cancelled its scope
         // part way, every step's runCatching swallowed the cancel, nothing was cleared and the
         // logout itself was never sent, so the window sat on Connecting for good.
+        // Through the profiles (HX88): only this profile goes ([desktopForgetProfile] says what),
+        // then the picker, the one left, or the sign in when it was the last. The flow runs on the
+        // app's scope: a switch builds this window again.
+        val flow = com.tmplayer.desktop.profiles.DesktopProfiles.flow()
+        if (flow != null) {
+            flow.signOutOpen(deleteDownloads) { result ->
+                if (result is com.tmplayer.data.SignOutResult.SignedOut) {
+                    java.awt.EventQueue.invokeLater {
+                        state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+                    }
+                }
+            }
+            return
+        }
         com.tmplayer.platform.Background.scope.launch {
             signOut(settings, deleteDownloads, state.watched, state.bookmarks)
             withContext(Dispatchers.Main) {
@@ -72,6 +86,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
             }
             Td.logOut()
         }
+
     }
     fun saveThenSignOut() {
         phase = SignOutPhase.Saving
@@ -84,7 +99,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
     when (val shown = phase) {
         SignOutPhase.Asking -> ConfirmDialog(
             title = s.signoutTitle,
-            message = s.signoutBody(DesktopPaths.downloadsDir.path),
+            message = s.signoutBody(DesktopPaths.profileDownloadsDir.path),
             confirmLabel = s.signoutConfirm,
             onDismiss = onDismiss,
             onConfirm = { if (backupFirst) saveThenSignOut() else signOutNow() },

@@ -26,6 +26,16 @@ class Path private constructor(private val file: File) : Comparable<Path> {
     /** Not null, unlike the JDK's for a root, since callers rely on the JVM's platform type. */
     val fileName: Path get() = Path(File(file.name.ifEmpty { file.path }))
     fun getParent(): Path? = file.parentFile?.let(::Path)
+    val parent: Path? get() = getParent()
+    /** The path with its links followed, as [File.canonicalFile] gives it. */
+    fun toRealPath(): Path = Path(file.canonicalFile)
+    /** [other] from here: what is left of its path once this path is taken off its front. */
+    fun relativize(other: Path): Path {
+        val base = file.path.trimEnd('/')
+        val rest = other.file.path.let { if (it == base) "" else it.removePrefix("$base/") }
+        return Path(File(rest))
+    }
+
     fun toAbsolutePath(): Path = Path(file.absoluteFile)
     fun startsWith(other: Path): Boolean = file.startsWith(other.file)
     fun startsWith(other: String): Boolean = file.startsWith(File(other))

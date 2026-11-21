@@ -58,6 +58,9 @@ class URI(private val text: String) {
     val rawQuery: String? get() = parts.percentEncodedQuery
     val fragment: String? get() = parts.fragment
     val userInfo: String? get() = parts.user
+    /** The user and password as written (percent encoded), "user:password" or "user"; null for none. */
+    val rawUserInfo: String? get() = parts.percentEncodedUser?.let { user -> parts.percentEncodedPassword?.let { "$user:$it" } ?: user }
+
     val authority: String? get() = host.takeIf { it.isNotEmpty() }?.let { h -> if (port >= 0) "$h:$port" else h }
     fun getScheme(): String? = scheme
     fun getHost(): String = host

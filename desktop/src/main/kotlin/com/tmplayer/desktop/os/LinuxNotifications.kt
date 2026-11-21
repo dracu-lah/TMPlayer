@@ -66,7 +66,7 @@ internal class LinuxNotifications(
     private val connect: () -> DBusConnection = {
         DBusConnectionBuilder.forSessionBus().withShared(false).build()
     },
-) : TransferNotifier, DockProgress, DesktopNotices {
+) : TransferNotifier, DockProgress, DesktopNotices, KeyedResults {
 
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "tmplayer-notify").apply { isDaemon = true }
@@ -106,6 +106,20 @@ internal class LinuxNotifications(
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, OpenTarget>?) = size > MAX_TARGETS
         },
     )
+
+    /**
+     * Asked before a press on a result opens its file or folder (HX88): false for a result whose
+     * profile is no longer the open, shown one. By the server's id, bounded like [targets].
+     */
+    private val gates: MutableMap<Long, () -> Boolean> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<Long, () -> Boolean>() {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, () -> Boolean>?) = size > MAX_TARGETS
+        },
+    )
+
+    /** What was posted under a key ([KeyedResults]), by the server's id or notify-send's. Worker thread only. */
+    private val keyedIds = LinkedHashMap<Long, UInt32>()
+    private val keyedTool = LinkedHashMap<Long, Long>()
 
     private val kinds = mutableMapOf<Long, Kind>()
     private var lastDock: Int? = null
@@ -179,7 +193,50 @@ internal class LinuxNotifications(
 
     override fun cancel(id: Long) = post { closeProgress(id) }
 
-    private fun finish(id: Long, title: String, body: String, category: String, urgency: Byte, open: OpenTarget?) {
+    override fun result(key: Long, id: Long, title: String, body: String, open: OpenTarget?, failed: Boolean, mayOpen: () -> Boolean) = post {
+        val category = if (failed) LinuxNotificationText.CATEGORY_ERROR else LinuxNotificationText.CATEGORY_COMPLETE
+        finish(id, title, body, category, URGENCY_NORMAL, open, key, mayOpen)
+    }
+
+    override fun keyedNotice(key: Long, title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
+        postNotice(title, body, onPress, buttons, key)
+    }
+
+    override fun dismiss(key: Long) = post {
+        keyedIds.remove(key)?.let { serverId ->
+            runCatching { server()?.CloseNotification(serverId) }
+            val at = serverId.toLong()
+            targets.remove(at)
+            gates.remove(at)
+            presses.remove(at)
+            buttonPresses.remove(at)
+        }
+        keyedTool.remove(key)?.let { toolId -> notifySend()?.takeIf { it.canReplace }?.expire(toolId) }
+    }
+
+    /** Keeps [serverId] under [key], bounded: the oldest go first. */
+    private fun keep(key: Long?, serverId: UInt32) {
+        if (key == null) return
+        keyedIds[key] = serverId
+        while (keyedIds.size > MAX_TARGETS) keyedIds.remove(keyedIds.keys.first())
+    }
+
+    private fun keepTool(key: Long?, toolId: Long?) {
+        if (key == null || toolId == null) return
+        keyedTool[key] = toolId
+        while (keyedTool.size > MAX_TARGETS) keyedTool.remove(keyedTool.keys.first())
+    }
+
+    private fun finish(
+        id: Long,
+        title: String,
+        body: String,
+        category: String,
+        urgency: Byte,
+        open: OpenTarget?,
+        key: Long? = null,
+        mayOpen: (() -> Boolean)? = null,
+    ) {
         closeProgress(id)
         val notifications = server()
         if (notifications != null) {
@@ -191,11 +248,15 @@ internal class LinuxNotifications(
                     LinuxNotificationText.hints(category, urgency = urgency, percent = null),
                     DEFAULT_EXPIRY,
                 )
-            }.onSuccess { serverId -> if (open != null) targets[serverId.toLong()] = open }
+            }.onSuccess { serverId ->
+                if (open != null) targets[serverId.toLong()] = open
+                if (mayOpen != null) gates[serverId.toLong()] = mayOpen
+                keep(key, serverId)
+            }
                 .onFailure { Logger.w(TAG, "completion notification refused: ${it.message}") }
             return
         }
-        notifySend()?.send(title, body, category, "normal", null, replaces = null)
+        keepTool(key, notifySend()?.send(title, body, category, "normal", null, replaces = null))
     }
 
     private fun closeProgress(id: Long) {
@@ -212,6 +273,10 @@ internal class LinuxNotifications(
     }
 
     override fun notice(title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
+        postNotice(title, body, onPress, buttons, key = null)
+    }
+
+    private fun postNotice(title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>, key: Long?) {
         val notifications = server()
         if (notifications != null) {
             // "default" is a press on the body, which every server with actions offers; each
@@ -231,11 +296,12 @@ internal class LinuxNotifications(
             }.onSuccess { serverId ->
                 if (onPress != null) presses[serverId.toLong()] = onPress
                 if (buttons.isNotEmpty() && serverActions) buttonPresses[serverId.toLong()] = buttons
+                keep(key, serverId)
             }
                 .onFailure { Logger.w(TAG, "notice refused: ${it.message}") }
-            return@post
+            return
         }
-        notifySend()?.send(title, body.orEmpty(), LinuxNotificationText.CATEGORY_NOTICE, "normal", null, replaces = null)
+        keepTool(key, notifySend()?.send(title, body.orEmpty(), LinuxNotificationText.CATEGORY_NOTICE, "normal", null, replaces = null))
     }
 
     override fun dockProgress(fraction: Float?) = post {
@@ -295,6 +361,8 @@ internal class LinuxNotifications(
                             return@addSigHandler
                         }
                         val target = targets[signal.id.toLong()] ?: return@addSigHandler
+                        // A stale result of a profile locked or left since (HX88): it opens nothing.
+                        if (gates[signal.id.toLong()]?.let { runCatching(it).getOrDefault(false) } == false) return@addSigHandler
                         open(target)
                     }
                 }

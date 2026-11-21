@@ -561,6 +561,12 @@ Found while bringing the port over; fixed ones are listed under the next heading
   stand-in has fails `apple-ci.yml`'s Linux job before merge. Linking the framework, the Xcode
   build and the Swift tests run only when the repository variable `APPLE_MAC_CI` is `true`, and a Mac
   build is still needed before a release.
+- **`:ios:compileKotlinIosArm64` fails on Linux (2026-11-21), outside the profiles.** `:core` and
+  `:ui` compile again (HX88 B2 fixed AccountStore's lock, `Path`, `URI.rawUserInfo` and the region
+  name). Left, from other work that reached Android's player and data without stand-ins: 46 errors
+  in `PlayerMorePanel.kt` and `PlayerActivity.kt` (`PlayerListTarget`), `UpdateDexMetadata.kt`
+  (`ZipFile`), `AudioPolicy.kt` and `LevelLenientVideoRenderer.kt` (Media3 renderer capabilities),
+  `PlayerActivity.kt` (`PcmOnlyOutputProvider`, `hwFit`). Exclude or stand them in before an iOS build.
 - **The source change after a release is a push or a pull request.** With `APPLE_SOURCE_PUSH` not
   `true`, or a push the branch rules refuse, the workflow opens a pull request (`gh pr create`),
   which needs the setting "Allow GitHub Actions to create and approve pull requests"; the source is

@@ -60,7 +60,10 @@ import com.tmplayer.desktop.ui.idleCursor
 import com.tmplayer.desktop.ui.trackFocusVisibility
 import com.tmplayer.ui.theme.rememberUiScale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
 import java.util.Locale
 import kotlin.system.exitProcess
 
@@ -170,6 +173,16 @@ fun main(args: Array<String>) {
         // And the chats opened most recently, so a cold start opens one of them at once (PageQueries).
         com.tmplayer.data.PageQueries.store = com.tmplayer.data.ChatGridDisk(java.io.File(DesktopPaths.dataDir, "chat-grids.json"))
         Background.scope.launch { runCatching { com.tmplayer.data.PageQueries.preload() } }
+        // Every store that keeps a profile's data is open now (HX88, review LOW 1): the first sweep
+        // of a removed profile's folders may clear its keys and cache files from all of them.
+        DesktopServices.watched
+        DesktopServices.bookmarks
+        com.tmplayer.data.Accounts.storesRegistered()
+        // A profile's PIN (HX88): locked again on a switch, the app lock and a long absence (the
+        // window minimised or hidden for more than a minute, WindowPresence).
+        com.tmplayer.data.ProfileUnlock.install()
+        // The system's notifications and media controls follow the open profile's lock (HX88).
+        com.tmplayer.desktop.os.ProfileOutside.follow(Background.scope)
         // What an earlier run was in the middle of comes back paused, once there is an account to
         // ask TDLib about.
         // A storage move a crash or a kill cut short is finished first: it needs the settings store
@@ -202,9 +215,12 @@ fun main(args: Array<String>) {
         if (System.getProperty("tmplayer.lowend") == "true") {
             com.tmplayer.data.DeviceFitOverride.forced = com.tmplayer.data.DeviceFit(shortOfMemory = false, shortOfStorage = true)
         }
+        // Each time a profile's client is signed in (the launch, a switch, a sign in after Add
+        // account, HX88): its own queue, paused. Restore is safe to run twice.
         Background.scope.launch {
-            Td.awaitAuthorizedSession()
-            DesktopServices.downloads.restore()
+            Td.auth.map { it == com.tmplayer.data.AuthState.Ready }.distinctUntilChanged().collect { ready ->
+                if (ready) runCatching { DesktopServices.downloads.restore() }
+            }
         }
         // "Remove after watching", for the life of the process: the grid, the player's button and the
         // player reaching the end all write the one watched list this reads.
@@ -241,11 +257,25 @@ fun main(args: Array<String>) {
         application(exitProcessOnExit = false) {
             val windowState = remember { WindowMemory.load() }
             LaunchedEffect(windowState) { WindowMemory.follow(windowState) }
-            val shell = remember {
+            // The window's state is the open profile's (HX88): a switch builds it again, so no page,
+            // chat, player or search of one profile is ever drawn for the next. With one profile it
+            // is made once, as before. Full screen is the window's, and carries over.
+            val profiles = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
+            val openProfile by remember(profiles) {
+                profiles?.switcher?.profiles?.map { it.activeId } ?: kotlinx.coroutines.flow.flowOf(null)
+            }.collectAsState(initial = profiles?.switcher?.profiles?.value?.activeId)
+            val lastShell = remember { arrayOfNulls<ShellState>(1) }
+            val shell = remember(openProfile) {
                 ShellState(settings, DesktopServices.downloads, DesktopServices.watched, bookmarks = DesktopServices.bookmarks).also {
-                    if (openOnChats) it.go(com.tmplayer.desktop.ui.Destination.Chats)
+                    val before = lastShell[0]
+                    if (before == null && openOnChats) it.go(com.tmplayer.desktop.ui.Destination.Chats)
+                    if (before != null) it.fullscreen = before.fullscreen
+                    lastShell[0] = it
+
                 }
             }
+            // For what outlives a switch (the trailers' notices, a notification's press): the shell now.
+            val shellNow = androidx.compose.runtime.rememberUpdatedState(shell)
             // In-app trailers (private/TRAILERS-PLAN.md, T4): nothing is looked at, downloaded or
             // started until a trailer is pressed; the fallback lines show as the window's notices.
             val trailerScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -253,7 +283,7 @@ fun main(args: Array<String>) {
                 com.tmplayer.desktop.trailer.DesktopTrailers(
                     engine = com.tmplayer.desktop.trailer.CefTrailerEngine(places = DesktopPaths::browserPlaces),
                     scope = trailerScope,
-                    notify = { shell.notices.tryEmit(it) },
+                    notify = { shellNow.value.notices.tryEmit(it) },
                     isOnline = { DesktopConnectivity.status.value != com.tmplayer.data.NetworkStatus.Offline },
                 )
             }
@@ -310,6 +340,9 @@ fun main(args: Array<String>) {
                     UndecoratedFrame.restoreCaptionStyles(window)
                     UndecoratedFrame.holdToWorkArea(window)
                 }
+                // Minimised or hidden for more than a minute, the open profile asks its PIN again
+                // when the window is back (HX88); a window that only lost the focus is still shown.
+                DisposableEffect(window) { onDispose(com.tmplayer.desktop.profiles.WindowPresence.live.follow(window)) }
                 // AWT's focus kept on Compose's content rather than the frame around it, and the
                 // player told when a text field is being typed into (WindowKeyFocus, PlayerKeyRoute).
                 DisposableEffect(window) {
@@ -357,12 +390,13 @@ fun main(args: Array<String>) {
                 shell.minimize = if (undecorated) ({ windowState.isMinimized = true }) else null
                 // Transfers show outside the window too, once there is a window for the taskbar bar.
                 LaunchedEffect(Unit) {
-                    DesktopStorage.closePlayer = { shell.closePlayer() }
+                    DesktopStorage.closePlayer = { shellNow.value.closePlayer() }
                     DesktopTransferNotifier.raise = { java.awt.EventQueue.invokeLater { raise() } }
                     DesktopStorage.notifier = DesktopTransferNotifier.create({ window }) {
                         java.awt.EventQueue.invokeLater {
                             raise()
-                            shell.go(com.tmplayer.desktop.ui.Destination.Downloads)
+                            shellNow.value.go(com.tmplayer.desktop.ui.Destination.Downloads)
+
                         }
                     }
                 }
@@ -474,10 +508,17 @@ fun main(args: Array<String>) {
                                 }
                                 }
                             }
-                            // The trailer's consent, download and sheet, over the detail page.
-                            com.tmplayer.desktop.trailer.DesktopTrailerHost(trailers, window)
-                            // "Wrong title?" and the question after a rename (N1): over the page, so it outlives the pane whose rename asked it.
-                            com.tmplayer.ui.components.TitleReportHost()
+                            // Over the page as before, but only while the open profile's shell is what
+                            // shows (HX88): never over its PIN or the picker, and keyed on the open
+                            // profile, so a trailer or a report never carries over a switch.
+                            if (com.tmplayer.ui.lock.profileShellShown(profiles)) {
+                                androidx.compose.runtime.key(openProfile) {
+                                    // The trailer's consent, download and sheet, over the detail page.
+                                    com.tmplayer.desktop.trailer.DesktopTrailerHost(trailers, window)
+                                    // "Wrong title?" and the question after a rename (N1): over the page, so it outlives the pane whose rename asked it.
+                                    com.tmplayer.ui.components.TitleReportHost()
+                                }
+                            }
                             // Nothing on screen with a page header (sign in, the PIN pad): the
                             // buttons on their own, top right. The player has its own in its bar.
                             if (!shell.playerUp || recovery.failure != null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))

@@ -1,6 +1,7 @@
 package com.tmplayer.desktop
 
 import androidx.compose.ui.platform.IosAppContext
+import com.tmplayer.data.AccountDirs
 import com.tmplayer.data.AndroidPaths
 import com.tmplayer.data.DiskInfo
 import java.io.File
@@ -11,5 +12,12 @@ import java.io.File
  */
 object DesktopPaths {
     val downloadsDir: File get() = AndroidPaths(IosAppContext).downloadsDir
+
+    /**
+     * The downloads folder of the profile on [folder] (HX88): the app's own for the profile adopted
+     * in place (null), `downloads-<folder>` beside it for another, as on Android and the desktop.
+     */
+    fun downloadsDirFor(folder: String?): File = folder?.let { AccountDirs.beside(downloadsDir, it) } ?: downloadsDir
+
     fun disk(): DiskInfo = AndroidPaths(IosAppContext).disk()
 }

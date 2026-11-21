@@ -194,7 +194,7 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
             "AndroidTransferNotifier", "AndroidUpdates", "AppNotices", "AutoUpdater", "BackgroundChecks",
             "CrashExits", "CrashReports", "DownloadRelocationService", "DownloadService", "FolderExport",
             "NoticeActions", "SelfInstaller", "TvArt", "TvArtProvider", "TvChannelsPublisher", "UpdatedReceiver",
-            "WatchNextPublisher", "AppLocales", "LegacyApiCompat", "NetworkMonitor",
+            "WatchNextPublisher", "AppLocales", "LegacyApiCompat", "NetworkMonitor", "ProfileNotifications",
         ).forEach { exclude("com/tmplayer/data/$it.kt") }
     }
     // The build flavour without Google's services, the one iOS matches (no Cast, no SMS consent).

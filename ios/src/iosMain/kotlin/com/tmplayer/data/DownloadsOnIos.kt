@@ -6,6 +6,9 @@ import com.tmplayer.desktop.DesktopDownloadRunner
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+
 import kotlinx.coroutines.launch
 import platform.UIKit.UIApplication
 import platform.UIKit.UIBackgroundTaskIdentifier
@@ -35,7 +38,9 @@ object IosDownloads {
         val settings = SettingsStore(context)
         val made = DesktopDownloadRunner(
             settings = settings,
-            downloadsDir = { AndroidPaths(context).downloadsDir },
+            // The owner's own folder (HX88, invariant 4): the profile adopted in place keeps the
+            // app's downloads folder, another profile has `downloads-<folder>` beside it.
+            downloadsDir = { folder -> com.tmplayer.desktop.DesktopPaths.downloadsDirFor(folder) },
             cacheDisk = { AndroidPaths(context).disk() },
             connectivity = NetworkMonitor,
         )
@@ -67,10 +72,15 @@ object IosDownloads {
             actions.trySend(action)
         }
         // What an earlier run left, once signed in: the unfinished part paused, finished files moved.
+        // Again each time a profile's client is signed in (a switch, Add account, HX88): its own
+        // queue. Restore is safe to run twice.
         com.tmplayer.App.backgroundScope.launch {
-            Td.awaitAuthorizedSession()
-            runCatching { currentQueue(settings) }.onFailure { Logger.w(TAG, "could not check the queue's files", it) }
-            runCatching { made.restore() }.onFailure { Logger.w(TAG, "restore failed", it) }
+            Td.auth.map { it == AuthState.Ready }.distinctUntilChanged().collect { ready ->
+                if (!ready) return@collect
+                val owner = Accounts.stamp
+                runCatching { currentQueue(settings, owner) }.onFailure { Logger.w(TAG, "could not check the queue's files", it) }
+                runCatching { made.restore() }.onFailure { Logger.w(TAG, "restore failed", it) }
+            }
         }
     }
 
@@ -102,11 +112,12 @@ object IosDownloads {
     }
 
     /** The queue an earlier run left, its files checked by [currentFileOf] before it is restored. */
-    private suspend fun currentQueue(settings: SettingsStore) {
+    private suspend fun currentQueue(settings: SettingsStore, owner: AccountStamp) {
         val queue = settings.downloadQueueNow()
         if (queue.isEmpty()) return
         val current = queue.map { currentFileOf(it) }
-        if (current != queue) settings.saveDownloadQueue(current)
+        // For the profile whose queue it read, dropped if another is open by now (HX88).
+        if (current != queue) settings.saveDownloadQueue(current, owner = owner)
     }
 
     /** The app is being put away: keep fetching for the time iOS allows, if anything is fetching. */

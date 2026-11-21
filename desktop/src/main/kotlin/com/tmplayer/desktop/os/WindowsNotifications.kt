@@ -38,7 +38,7 @@ import java.util.concurrent.Executors
 internal class WindowsNotifications(
     private val window: () -> Window?,
     private val onOpenDownloads: () -> Unit = {},
-) : TransferNotifier, DockProgress, DesktopNotices {
+) : TransferNotifier, DockProgress, DesktopNotices, KeyedResults {
 
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "tmplayer-toast").apply { isDaemon = true }
@@ -118,6 +118,43 @@ internal class WindowsNotifications(
     override fun cancel(id: Long) = post { forget(id) }
 
     /**
+     * A result kept under [key] (HX88, review P2): tagged, so [dismiss] takes it out of the Action
+     * Center, and where `tmplayer:` links reach the app its press goes through them, so [mayOpen]
+     * is asked before a file or folder opens. Without the link (a development run) the file's own
+     * URI is the press, as before.
+     */
+    override fun result(key: Long, id: Long, title: String, body: String, open: OpenTarget?, failed: Boolean, mayOpen: () -> Boolean) = post {
+        forget(id)
+        val launch = when {
+            failed -> null
+            pressable && (open is OpenTarget.File || open is OpenTarget.Folder) -> ToastPresses.register {
+                if (runCatching(mayOpen).getOrDefault(false)) openTarget(open)
+            }
+            else -> WindowsToast.launchUri(open)
+                ?: if (open == OpenTarget.DownloadsScreen && pressable) ToastPresses.register(onOpenDownloads) else null
+        }
+        run(WindowsToast.showDone(WindowsToast.doneXml(title, body, launch), tag = keyTag(key)))
+    }
+
+    override fun keyedNotice(key: Long, title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
+        if (toastsOff) return@post
+        if (input == null) start()
+        val launch = if (onPress != null && pressable) ToastPresses.register(onPress) else null
+        val actions = if (pressable) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
+        run(WindowsToast.showDone(WindowsToast.doneXml(title, body.orEmpty(), launch, actions), tag = keyTag(key)))
+    }
+
+    override fun dismiss(key: Long) = post { run(WindowsToast.remove(keyTag(key))) }
+
+    private fun openTarget(open: OpenTarget) {
+        when (open) {
+            is OpenTarget.File -> OpenExternal.reveal(java.io.File(open.path))
+            is OpenTarget.Folder -> OpenExternal.open(java.io.File(open.path))
+            OpenTarget.DownloadsScreen -> runCatching(onOpenDownloads)
+        }
+    }
+
+    /**
      * A one-off notice. Its press reaches the app through a `tmplayer:` link ([ToastPresses]); where
      * the link could not be registered the toast only informs.
      */
@@ -152,6 +189,8 @@ internal class WindowsNotifications(
     }
 
     private fun tag(id: Long) = "t$id"
+
+    private fun keyTag(key: Long) = "r$key"
 
     private fun post(block: () -> Unit) {
         runCatching {
@@ -312,9 +351,15 @@ internal object WindowsToast {
             "\$d.Values['valueString'] = ${ps(valueText)}; " +
             "[void]\$n.Update(\$d, ${ps(tag)}, ${ps(GROUP)})"
 
-    fun showDone(xml: String): String =
+    /** A finished toast; with a [tag] it can be taken out of the Action Center later ([remove]). */
+    fun showDone(xml: String, tag: String? = null): String = if (tag == null) {
         "\$x = New-Object Windows.Data.Xml.Dom.XmlDocument; \$x.LoadXml(${ps(xml)}); " +
             "\$n.Show([Windows.UI.Notifications.ToastNotification]::new(\$x))"
+    } else {
+        "\$x = New-Object Windows.Data.Xml.Dom.XmlDocument; \$x.LoadXml(${ps(xml)}); " +
+            "\$t = [Windows.UI.Notifications.ToastNotification]::new(\$x); " +
+            "\$t.Tag = ${ps(tag)}; \$t.Group = ${ps(GROUP)}; \$n.Show(\$t)"
+    }
 
     fun remove(tag: String): String =
         "[Windows.UI.Notifications.ToastNotificationManager]::History.Remove(${ps(tag)}, ${ps(GROUP)}, ${ps(APP_ID)})"

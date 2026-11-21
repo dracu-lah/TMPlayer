@@ -171,7 +171,7 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
         ),
         onChange = {
             scope.launch {
-                val picked = FolderPicker.pick(s.storagePickTitle, root ?: DesktopPaths.downloadsDir.parentFile)
+                val picked = FolderPicker.pick(s.storagePickTitle, root ?: DesktopPaths.profileDownloadsDir.parentFile)
                     ?: return@launch
                 dialog = check(state, picked)
             }
@@ -221,7 +221,7 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
             scope.launch { settings.setLowStorageMode(on) }
         }
     }
-    Action(s.storageScan, s.storageScanDetail(DesktopPaths.downloadsDir.path), TmIcons.Search, end = RowEnd.None) {
+    Action(s.storageScan, s.storageScanDetail(DesktopPaths.profileDownloadsDir.path), TmIcons.Search, end = RowEnd.None) {
         scope.launch {
             val found = DownloadIndex.scan(settings)
             if (found.isEmpty()) {
@@ -522,9 +522,10 @@ private fun setLimit(state: ShellState, bytes: Long) {
 private suspend fun check(state: ShellState, picked: File?): StorageDialog = withContext(Dispatchers.IO) {
     val settings = state.settings
     val currentRoot = DesktopStorage.relocation.currentRoot()
-    val current = DesktopPaths.layout(currentRoot)
+    // The open profile's folders (HX88): a move carries its cache and downloads only.
+    val current = DesktopPaths.layoutFor(currentRoot, com.tmplayer.data.Accounts.active.folder)
     val records = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
-    val target = DesktopPaths.layout(picked)
+    val target = DesktopPaths.layoutFor(picked, com.tmplayer.data.Accounts.active.folder)
     val moving = StorageRelocationPlan.toMove(records, target.downloadsDir)
     val downloadsBytes = moving.sumOf { File(it.localPath.orEmpty()).length() }
     val crossingBytes = bytesAcrossDrives(moving, target.downloadsDir)
@@ -577,7 +578,7 @@ private suspend fun check(state: ShellState, picked: File?): StorageDialog = wit
 
 /** The question for moving the downloads that sit outside the Downloads folder, or why it cannot be asked. */
 private suspend fun checkRest(state: ShellState): StorageDialog = withContext(Dispatchers.IO) {
-    val target = DesktopPaths.layout(DesktopStorage.relocation.currentRoot())
+    val target = DesktopPaths.layoutFor(DesktopStorage.relocation.currentRoot(), com.tmplayer.data.Accounts.active.folder)
     val records = runCatching { state.settings.downloadsNow() }.getOrDefault(emptyList())
     val moving = StorageRelocationPlan.toMove(records, target.downloadsDir)
     if (moving.isEmpty()) return@withContext StorageDialog.Report(listOf(L.storageMoveNoDownloads(target.downloadsDir.path)))
@@ -650,8 +651,8 @@ internal suspend fun measureStorage(state: ShellState): StorageFigures = withCon
     val unfinishedBytes = unfinished.sumOf { it.downloadedBytes }
     val posters = runCatching { com.tmplayer.online.OnlineMetadata.current?.imageBytes() ?: 0L }.getOrDefault(0L)
     val tdTotal = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
-    val home = DiskInfo.of(DesktopPaths.downloadsDir.let { dir -> generateSequence(dir) { it.parentFile }.firstOrNull { it.exists() } ?: dir })
-    val dirs = listOf(DesktopPaths.downloadsDir, DesktopPaths.layout().cacheDir)
+    val home = DiskInfo.of(DesktopPaths.profileDownloadsDir.let { dir -> generateSequence(dir) { it.parentFile }.firstOrNull { it.exists() } ?: dir })
+    val dirs = listOf(DesktopPaths.profileDownloadsDir, DesktopPaths.layoutFor(DesktopPaths.storageRoot, com.tmplayer.data.Accounts.active.folder).cacheDir)
     val drives = dirs.map { volumeOf(it) }.distinct().map { (label, dir) ->
         val disk = DiskInfo.of(dir)
         L.storageDriveFree(StorageRelocationPlan.size(disk.freeBytes), StorageRelocationPlan.size(disk.totalBytes), label)

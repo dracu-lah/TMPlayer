@@ -92,7 +92,7 @@ class DesktopStorageTest {
         val dir = File(tmp, "Downloads/TMPlayer")
         val migration = DownloadMigration(
             settings,
-            downloadsDir = { dir },
+            downloadsDir = { _ -> dir },
             files = files,
             availability = { if (it == 12) LocalFileAvailability.Complete else LocalFileAvailability.Partial },
             isOpen = { false },
@@ -116,7 +116,7 @@ class DesktopStorageTest {
         settings.noteDownload(item(20, 3), "c")
         val migration = DownloadMigration(
             settings,
-            downloadsDir = { File(tmp, "dl") },
+            downloadsDir = { _ -> File(tmp, "dl") },
             files = FakeFiles(mapOf(20 to whole.path)),
             availability = { LocalFileAvailability.Complete },
             isOpen = { true },
@@ -124,6 +124,74 @@ class DesktopStorageTest {
         assertEquals(1, migration.run()!!.left)
         assertTrue(whole.isFile)
         assertFalse(settings.downloadsMigratedNow())
+    }
+
+    @Test
+    fun `a migration whose profile was left moves nothing more and tells TDLib nothing`() = runBlocking {
+        val cache = File(tmp, "cache/videos").apply { mkdirs() }
+        val one = File(cache, "30.mkv").apply { writeBytes(ByteArray(4)) }
+        val two = File(cache, "31.mkv").apply { writeBytes(ByteArray(4)) }
+        settings.noteDownload(item(30, 4), "c")
+        settings.noteDownload(item(31, 4), "c")
+        val paths = mapOf(30 to one.path, 31 to two.path)
+        val a = com.tmplayer.data.AccountStamp(1L, null)
+        var open = true
+        val deleted = mutableListOf<Int>()
+        // The switch comes as the first file is done: it landed, the next one stays.
+        val files = object : TdFiles {
+            override suspend fun currentFileId(chatId: Long, messageId: Long, storedFileId: Int) = storedFileId
+            override suspend fun deleteFile(fileId: Int) {
+                deleted += fileId
+                open = false
+            }
+            override suspend fun localDownloadedBytes(fileId: Int) = 0L
+            override suspend fun localPathAnyway(fileId: Int) = paths[fileId]
+        }
+        val dirs = mutableListOf<String?>()
+        val migration = DownloadMigration(
+            settings,
+            downloadsDir = { folder -> dirs += folder; File(tmp, "dl") },
+            files = files,
+            availability = { LocalFileAvailability.Complete },
+            isOpen = { false },
+            owner = { a },
+            mayAct = { it == a && open },
+        )
+
+        val outcome = migration.run()!!
+
+        assertEquals(listOf<String?>(null), dirs)
+        assertEquals(1, outcome.moved)
+        assertEquals(1, outcome.left)
+        assertEquals(1, File(tmp, "dl").list()!!.size)
+        // The one that landed is recorded; the other is where it was, TDLib told nothing of it.
+        assertTrue(one.isFile != two.isFile)
+        assertEquals(1, deleted.size)
+        assertFalse(settings.downloadsMigratedNow())
+
+        // Not open from the start: nothing at all.
+        open = false
+        assertNull(migration.run())
+    }
+
+    @Test
+    fun `remove after saving deletes nothing once the profile is no longer open`() = runBlocking {
+        val a = com.tmplayer.data.AccountStamp(1L, null)
+        val records = (1L..3L).associate { id ->
+            "-1:$id" to com.tmplayer.data.ResumeRecord(-1, id, id.toInt(), "Film $id", "c", 4, 0, 0, 0, 0, "/d/$id.mkv")
+        }
+        val outcome = com.tmplayer.data.FolderCopy.Outcome(folder = "USB", copied = 3, verifiedKeys = records.keys.toList())
+        val deleted = mutableListOf<Long>()
+        var open = true
+        val after = DesktopFolderExport.removeSaved(outcome, records, a, mayAct = { it == a && open }) { record ->
+            deleted += record.messageId
+            // A switch once the first original is gone.
+            open = false
+            true
+        }
+        assertEquals(listOf(1L), deleted)
+        assertEquals(1, after.moved)
+        assertEquals(2, after.notMoved)
     }
 
     // ---- room before play ---------------------------------------------------------------------

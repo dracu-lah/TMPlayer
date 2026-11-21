@@ -31,7 +31,7 @@ generate public ../../../ui/src/iosStandIns/kotlin com.tmplayer.ui.about com.tmp
   com.tmplayer.ui.online com.tmplayer.ui.player com.tmplayer.ui.settings com.tmplayer.ui.theme
 
 # :ios's packages that neither has; nothing builds on :ios, so internal is enough.
-generate internal ../../../ios/src/iosStandIns/kotlin com.tmplayer com.tmplayer.ui.downloads com.tmplayer.ui.update \
+generate internal ../../../ios/src/iosStandIns/kotlin com.tmplayer com.tmplayer.ui.downloads com.tmplayer.ui.profiles com.tmplayer.ui.update \
   com.tmplayer.desktop com.tmplayer.desktop.player
 
 # The Android key event members :app's screens read, only :ios has them.

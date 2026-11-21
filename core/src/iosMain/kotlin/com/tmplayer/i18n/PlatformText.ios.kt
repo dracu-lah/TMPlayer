@@ -65,6 +65,11 @@ actual class TmLocale(val tag: String) {
     /** This language named in [inLocale], as java.util.Locale.getDisplayLanguage does. */
     fun getDisplayLanguage(inLocale: TmLocale): String = PlatformText.languageName(language, inLocale).ifEmpty { tag }
 
+    /** This locale's region named in [inLocale], as java.util.Locale.getDisplayCountry does; empty when it has none. */
+    fun getDisplayCountry(inLocale: TmLocale): String =
+        if (country.isEmpty()) "" else PlatformText.regionName(tag, inLocale) ?: country
+
+
     /** java.util.Locale's constants and factories, for the shared code that names them. */
     companion object {
         val ROOT = TmLocale("und")

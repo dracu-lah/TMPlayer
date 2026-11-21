@@ -624,6 +624,14 @@ class ShellState(
     var minimize: (() -> Unit)? = null
 
     /**
+     * Whether this shell is what the window shows (HX88, review P3): false while Who's watching?
+     * or the open profile's PIN is drawn in its place. The window's shortcuts then leave the shell
+     * alone: only the window's own keys (quit, minimise, full screen) still work.
+     */
+    @Volatile
+    var shellShown: Boolean = true
+
+    /**
      * Shortcuts that work wherever focus is, even inside a text field: Ctrl+F (Cmd+F) to search
      * the page, Ctrl+K (Cmd+K) to open or close the search across every chat, Ctrl+, (Cmd+,) for
      * Settings, Ctrl+J (Cmd+J) for Downloads, Ctrl+Shift+A (Cmd+Shift+A) for Choose chats, Ctrl+Q (Cmd+Q) to quit. The command key is the OS's own, as
@@ -633,6 +641,7 @@ class ShellState(
     fun onPreviewKey(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown || playerUp) return false
         val command = (if (OsInfo.isMac) event.isMetaPressed else event.isCtrlPressed) && !event.isAltPressed
+        if (!shellShown) return windowKey(event, command)
         return when {
             command && event.key == Key.Q && quit != null -> {
                 quit?.invoke()
@@ -693,6 +702,28 @@ class ShellState(
         }
     }
 
+    /** The window's own keys, the only ones heard while the shell is hidden behind the gate. */
+    private fun windowKey(event: KeyEvent, command: Boolean): Boolean = when {
+        command && event.key == Key.Q && quit != null -> {
+            quit?.invoke()
+            true
+        }
+        OsInfo.isMac && command && event.key == Key.W && quit != null -> {
+            quit?.invoke()
+            true
+        }
+        OsInfo.isMac && command && event.key == Key.M && minimize != null -> {
+            minimize?.invoke()
+            true
+        }
+        (event.key == Key.F11 && !event.isAltPressed && !event.isCtrlPressed && !event.isMetaPressed) ||
+            (OsInfo.isMac && event.isCtrlPressed && event.isMetaPressed && event.key == Key.F) -> {
+            fullscreen = !fullscreen
+            true
+        }
+        else -> false
+    }
+
     /**
      * Whether something sits over the page that Esc should close before it does anything to the
      * window: the profile menu, the search palette, a detail pane or a modal page (Settings).
@@ -718,6 +749,9 @@ class ShellState(
             }
             return backStack.handleBack()
         }
+        // Behind the gate (HX88, review P3): Back above is the gate's own (its panels hold the back
+        // stack's top while the shell's pages are not drawn); nothing else of the hidden shell moves.
+        if (!shellShown) return false
         if (BigScreen.on && !playerUp && event.type == KeyEventType.KeyDown) {
             val plain = !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed && !event.isShiftPressed
             val direction = when (event.key) {

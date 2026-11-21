@@ -132,21 +132,9 @@ fun DesktopShell(
     val network by DesktopConnectivity.status.collectAsState()
     val telegramConnected by Td.connected.collectAsState()
     val offline = com.tmplayer.ui.browse.rememberSettledOffline(network == NetworkStatus.Offline && !telegramConnected)
-    var offlineDownloads by remember { mutableStateOf<List<com.tmplayer.data.ResumeRecord>>(emptyList()) }
-    var offlineRead by remember { mutableStateOf(false) }
-    LaunchedEffect(offline) {
-        offlineRead = false
-        offlineDownloads = if (offline) {
-            com.tmplayer.data.runCatchingCancellable {
-                state.settings.downloadsNow().filter { com.tmplayer.desktop.DownloadIndex.state(it) == com.tmplayer.desktop.DownloadIndex.FileState.Present }
-            }.getOrDefault(emptyList())
-        } else {
-            emptyList()
-        }
-        offlineRead = true
-    }
-    val offlineHome = remember(offline, offlineDownloads, offlineRead) {
-        com.tmplayer.data.OfflineHome(offline, offlineDownloads, settled = !offline || offlineRead)
+    // Keyed on the open profile's shell (HX88, review D3): a switch never shows the last one's.
+    val offlineHome = rememberOfflineHome(offline, owner = state) {
+        state.settings.downloadsNow().filter { com.tmplayer.desktop.DownloadIndex.state(it) == com.tmplayer.desktop.DownloadIndex.FileState.Present }
     }
     CompositionLocalProvider(
         com.tmplayer.ui.browse.LocalOfflineHome provides offlineHome,
@@ -157,8 +145,6 @@ fun DesktopShell(
         // The big-screen mode's dialogs take the remote as they open and walk with the arrows.
         com.tmplayer.ui.components.LocalRemoteArrows provides BigScreen.on,
     ) {
-        // "Add to a list" (HX43) from any menu or pane: the picker opens over the window.
-        com.tmplayer.ui.browse.ListPickerHost(state.watched.lists, onMessage = { state.notices.tryEmit(it) }, onOpenList = { state.openLists(it) }) {
         Surface(
             Modifier
                 .fillMaxSize()
@@ -169,6 +155,22 @@ fun DesktopShell(
             color = if (LocalVideoBehindPage.current && state.playerUp) androidx.compose.ui.graphics.Color.Transparent else Tone.background,
         ) {
             val auth by Td.auth.collectAsState()
+            // The profiles (HX88): Who's watching? at launch with two or more, the open profile's
+            // PIN when it has one, then everything below keyed on the open profile. With one
+            // profile and no PIN the gate draws this window's content and nothing else.
+            val profiles = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
+            LaunchedEffect(profiles) { com.tmplayer.desktop.profiles.DesktopProfiles.messages.collect { toasts.showSnackbar(it) } }
+            val shellShown = com.tmplayer.ui.lock.profileShellShown(profiles)
+            // The window's keys act on the shell only while it is what shows (HX88, review P3).
+            androidx.compose.runtime.SideEffect { state.shellShown = shellShown }
+            Box(Modifier.fillMaxSize()) {
+            GatedShell(
+                profiles,
+                signInStep = Setup.isSignInStep(auth),
+                lists = state.watched.lists,
+                onMessage = { state.notices.tryEmit(it) },
+                onOpenList = { state.openLists(it) },
+            ) {
             Box(Modifier.fillMaxSize()) {
                 // The QR code stays up for a moment after it is scanned, marked "Scanned".
                 val shownAuth = com.tmplayer.ui.auth.rememberScanHold(auth)
@@ -183,6 +185,9 @@ fun DesktopShell(
                         // after the next sign in.
                         state.closePlayer()
                         runCatching { Td.clearMediaCache() }
+                        // Telegram ended the session: the database it signs in to next is a new
+                        // one (HX88), so nothing stored with this one's file ids is resumed on it.
+                        runCatching { Td.renewDatabaseMarker() }
                         runCatching { state.settings.clearColdStartSnapshots() }
                     }
                     if (Setup.isSignInStep(auth)) {
@@ -190,7 +195,11 @@ fun DesktopShell(
                         if (!Td.sessionEnded.value) runCatching { state.settings.armSetup() }
                         // The account is gone, however it went (signed out from Telegram's
                         // Devices list is the way back from a forgotten PIN): so is its lock.
-                        runCatching { state.settings.clearAppLock() }
+                        // Unless other profiles share the computer (HX88): the lock is the
+                        // device's, and a new profile's sign in, or one profile's ended login,
+                        // is not theirs.
+                        val others = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.profiles?.size ?: 1
+                        if (others <= 1) runCatching { state.settings.clearAppLock() }
                     }
                 }
                 val appLock by state.settings.appLock.collectAsState(initial = null)
@@ -267,13 +276,69 @@ fun DesktopShell(
                 }
                 if (com.tmplayer.ui.connect.ProxyScreenState.open) CoverWindowControls()
                 com.tmplayer.ui.connect.ProxyScreenHost()
+            }
+            }
                 // At the foot, centred just over the floating bar or a chat's bar, as a desktop
                 // app's messages sit: the top of a window is Back, the chat's name and the window's
                 // own buttons, which a message there covered.
-                TopMessageHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = maxOf(NavBarClearance, ChatBarClearance), start = 24.dp, end = 24.dp))
+                // Only while the open profile's shell is what shows (HX88): never over its PIN or
+                // the picker. The flow's own lines wait until then.
+                if (shellShown) {
+                    TopMessageHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = maxOf(NavBarClearance, ChatBarClearance), start = 24.dp, end = 24.dp))
+                }
             }
+
         }
+    }
+}
+
+/**
+ * The profiles' gate around the window's content, and what must live inside it (HX88, review P1):
+ * "Add to a list" (HX43), opened from any menu or pane, is held under the gate, which draws its
+ * content only while the open profile's shell shows and keys it on that profile. A lock (the window
+ * away more than a minute) or a switch takes an open picker down with it, so the video's title and
+ * the locked profile's list names are never drawn over the PIN pad, and nothing writes to them.
+ */
+@Composable
+internal fun GatedShell(
+    profiles: com.tmplayer.ui.lock.ProfileFlow?,
+    signInStep: Boolean,
+    lists: com.tmplayer.data.ListsStore,
+    onMessage: (String) -> Unit,
+    onOpenList: (String) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    com.tmplayer.desktop.profiles.DesktopProfilesGate(profiles, signInStep = signInStep) {
+        com.tmplayer.ui.browse.ListPickerHost(lists, onMessage = onMessage, onOpenList = onOpenList, content = content)
+    }
+}
+
+/**
+ * What Home shows while offline: the downloads whose file is really there, read for the open
+ * profile's shell ([owner]) and forgotten the moment it changes (HX88, review D3), so a switch while
+ * offline never shows the last profile's downloads, a PIN profile's titles included. [settled]
+ * stays false until the new profile's own read is in.
+ */
+@Composable
+internal fun rememberOfflineHome(
+    offline: Boolean,
+    owner: Any?,
+    read: suspend () -> List<com.tmplayer.data.ResumeRecord>,
+): com.tmplayer.data.OfflineHome {
+    var offlineDownloads by remember(owner) { mutableStateOf<List<com.tmplayer.data.ResumeRecord>>(emptyList()) }
+    var offlineRead by remember(owner) { mutableStateOf(false) }
+    val reader by androidx.compose.runtime.rememberUpdatedState(read)
+    LaunchedEffect(offline, owner) {
+        offlineRead = false
+        offlineDownloads = if (offline) {
+            com.tmplayer.data.runCatchingCancellable { reader() }.getOrDefault(emptyList())
+        } else {
+            emptyList()
         }
+        offlineRead = true
+    }
+    return remember(offline, offlineDownloads, offlineRead) {
+        com.tmplayer.data.OfflineHome(offline, offlineDownloads, settled = !offline || offlineRead)
     }
 }
 

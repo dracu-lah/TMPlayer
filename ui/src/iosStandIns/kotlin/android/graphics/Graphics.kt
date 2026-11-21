@@ -602,6 +602,13 @@ class Path() {
 
 /** Where a View draws, Android's, over a Skia canvas. */
 class Canvas(internal val skia: org.jetbrains.skia.Canvas) {
+    /**
+     * Android's canvas over [bitmap]. Here a picture of its size that is drawn on and let go: the
+     * one caller (the player's neutral media icon, HX88) needs no pixels back on iOS, where Now
+     * Playing shows no artwork while a PIN profile is hidden.
+     */
+    constructor(bitmap: Bitmap) : this(org.jetbrains.skia.Surface.makeRasterN32Premul(bitmap.width.coerceAtLeast(1), bitmap.height.coerceAtLeast(1)).canvas)
+
     fun save(): Int = skia.save()
 
     fun saveLayerAlpha(left: Float, top: Float, right: Float, bottom: Float, alpha: Int): Int =

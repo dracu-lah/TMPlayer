@@ -10,6 +10,11 @@ class PackageManager private constructor() {
     fun canRequestPackageInstalls(): Boolean = false
     fun getPackageInfo(packageName: String, flags: Int): PackageInfo = PackageInfo(packageName)
     fun getLaunchIntentForPackage(packageName: String): Intent? = null
+
+    /** The app's icon, Android's; on iOS one that draws nothing (the system shows the app's own). */
+    fun getApplicationIcon(info: ApplicationInfo): android.graphics.drawable.Drawable = object : android.graphics.drawable.Drawable() {
+        override fun draw(canvas: android.graphics.Canvas) = Unit
+    }
     val packageInstaller: PackageInstaller get() = PackageInstaller()
 
     class NameNotFoundException(message: String? = null) : Exception(message)
@@ -82,6 +87,9 @@ class ActivityInfo {
 class ApplicationInfo internal constructor() {
     /** Where an Android app's native libraries are unpacked; iOS keeps them in the app's frameworks, so there is no such folder. */
     val nativeLibraryDir: String? get() = null
+
+    /** The app's icon resource, Android's; iOS has no resource ids for it (0, none). */
+    val icon: Int get() = 0
 
     fun loadLabel(pm: PackageManager): CharSequence =
         (platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleDisplayName") as? String)

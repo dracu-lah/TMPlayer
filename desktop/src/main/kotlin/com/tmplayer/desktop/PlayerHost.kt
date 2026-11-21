@@ -30,6 +30,10 @@ import javax.swing.SwingUtilities
 
 private const val MINI_AFTER_FULLSCREEN_MS = 500L
 
+/** How long a switch waits for a closed player to let go of its files. */
+private const val PLAYER_LET_GO_MS = 5_000L
+
+
 /**
  * The player as the shell shows it, tied to the OS: the screen stays awake while a video plays,
  * and the desktop's media controls (MPRIS on Linux, SMTC on Windows) see the title and drive the
@@ -82,6 +86,21 @@ fun PlayerHost(
         }
     }
 
+    // Before a profile switch, a sign out or Remove all accounts (HX88): the player closes, which
+    // saves its place as the profile it opened under (PlayerScreen's dispose), and the switch
+    // waits for it to let go of its files. It also counts as something playing, asked about first.
+    val closeForSwitch by rememberUpdatedState(onClose)
+    DisposableEffect(Unit) {
+        val hook: suspend () -> Unit = {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { closeForSwitch() }
+            kotlinx.coroutines.withTimeoutOrNull(PLAYER_LET_GO_MS) {
+                while (com.tmplayer.desktop.player.ActiveStreams.openIds().isNotEmpty()) delay(50)
+            }
+        }
+        com.tmplayer.data.BeforeSwitch.addPlayer(hook) { com.tmplayer.i18n.L.profilesWaitingPlayer }
+        onDispose { com.tmplayer.data.BeforeSwitch.removePlayer(hook) }
+    }
+
     // The mini player shrinks this window; whatever closes the player puts it back.
     val windowMini = remember(awtWindow) { awtWindow?.let(::MiniPlayerWindow) }
     DisposableEffect(windowMini) { onDispose { windowMini?.leave() } }
@@ -123,14 +142,19 @@ fun PlayerHost(
         onFreeUpSpace = onFreeUpSpace,
     )
 
+    // The profile the player opened under (HX88): its title shows only while that profile is the open one.
+    val openedFor = remember { com.tmplayer.data.Accounts.stamp }
     LaunchedEffect(engine, playing) {
         val e = engine ?: return@LaunchedEffect
+
         val name = playing.fileName.ifBlank { playing.title }
         val title = MediaName.parse(name).title.ifBlank { name }
-        // Through a cast too: the OS media controls follow the TV while it plays.
-        e.stateUpdates().collect { s ->
+        // Through a cast too: the OS media controls follow the TV while it plays. A PIN profile
+        // hidden (the window minimised, or locked) shows the app's name only there (HX88), and the
+        // title comes back the moment it shows again.
+        kotlinx.coroutines.flow.combine(e.stateUpdates(), com.tmplayer.data.ProfileUnlock.hidden()) { s, hidden -> s to hidden }.collect { (s, hidden) ->
             if (s.playing && s.opened && !s.ended) keepAwake.acquire() else keepAwake.release()
-            session.update(title, s.durationMs, s.positionMs, s.playing && !s.ended)
+            session.update(com.tmplayer.desktop.os.ProfileOutside.mediaTitle(title, hidden, owner = openedFor), s.durationMs, s.positionMs, s.playing && !s.ended)
         }
     }
 }

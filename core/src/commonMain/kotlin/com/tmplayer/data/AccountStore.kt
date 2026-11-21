@@ -346,13 +346,16 @@ object Accounts {
     /** The stamp moves first, then the stores' folder, then the old profile's work is cancelled and the listeners hear it. */
     private fun publish(list: AccountList) {
         val next = list.active?.folder
-        val before: CoroutineScope
-        synchronized(this) {
+        // The value of the lock's block, not a val set inside it: Kotlin/Native's lock has no
+        // contract that says the block runs once (the iOS build, B2).
+        val before: CoroutineScope = synchronized(this) {
             if (current.folder == next && folder.value == next) return
-            before = scope
+            val was = scope
             current = AccountStamp(current.generation + 1, next)
             scope = newScope(current)
+            was
         }
+
         folder.value = next
         before.cancel()
         val each = synchronized(listeners) { listeners.toList() }
