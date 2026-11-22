@@ -79,8 +79,10 @@ export function RenameSheet() {
         void write(what === 'reset' ? null : cleanTitle(value()))
     }
 
+    // The close event comes a task after Escape shuts the dialog: by then Enter on the button may have opened it
+    // again (the browser gave the focus back at once), and that late event must not shut the new sheet.
     return (
-        <dialog class="confirm rename-sheet" ref={dialog} aria-labelledby="rename-title" onClose={() => target() && close()} onClick={(e) => e.target === dialog && close()}>
+        <dialog class="confirm rename-sheet" ref={dialog} aria-labelledby="rename-title" onClose={() => !dialog.open && target() && close()} onClick={(e) => e.target === dialog && close()}>
             <Show when={target()}>
                 <form onSubmit={save}>
                     <h2 id="rename-title">{t('grid.rename_title')}</h2>
