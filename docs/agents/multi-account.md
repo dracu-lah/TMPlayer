@@ -354,7 +354,10 @@ with no lock, renew before the drop, no second drop, `ifRows` ignoring the count
 written without its marker are all caught. The first run missed four of them (the merge across a
 switch, the second drop, the restored queue's tag, the lock), which the seams and tests above
 now catch. One is an equivalent mutant: swapping the order of `restored + _active.value`
-changes nothing, since `restore` already leaves out the ids that are in memory. Not modelled:
+changes nothing, since `restore` already leaves out the ids that are in memory. That makes all 14
+named: 13 caught, 1 equivalent. Two more (2026-11-23), both caught by `DatabaseMarkerTest`: the merge
+without its own `restoredFor` check (two restores in flight) and `restore` writing outside
+`persistQueue`. Not modelled:
 the service's own scope, its conflated writer channel and the `NonCancellable` completion paths
 (they call the same `persistQueue`), TDLib's answers, and the clock (nothing in this path reads
 one, so there is nothing to fake).

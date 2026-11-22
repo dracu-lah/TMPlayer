@@ -112,7 +112,7 @@ class DownloadQueueModelTest {
         )
 
         /** The service's own write (`DownloadService.persistNow` runs this same call). */
-        suspend fun persist(afterSnapshot: suspend () -> Unit = {}) = OfflineDownloads.persistQueue(settings, afterSnapshot)
+        suspend fun persist(afterSnapshot: suspend () -> Unit = {}) = OfflineDownloads.persistQueue(settings, afterSnapshot = afterSnapshot)
 
         suspend fun storedOf(p: Int): Pair<List<DownloadRequest>, String?> {
             val view = scoped.everyProfileNow()[profiles[p].folder] ?: return emptyList<DownloadRequest>() to null

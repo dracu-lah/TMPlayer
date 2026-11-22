@@ -108,6 +108,52 @@ class DatabaseMarkerTest {
     }
 
     @Test
+    fun `two restores in flight merge once, so the second cannot bring back what was cancelled after the first`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "samedatabase")
+        // The first restore has read the stored queue and waits before it merges; a second one runs
+        // whole in that gap (the screen composing again), and the viewer cancels the row after it.
+        OfflineDownloads.afterStoredRead = {
+            OfflineDownloads.afterStoredRead = null
+            OfflineDownloads.restore(settings, database = "samedatabase")
+            assertEquals(setOf(41), OfflineDownloads.active.value.keys)
+            OfflineDownloads.forget(41)
+        }
+        try {
+            OfflineDownloads.restore(settings, database = "samedatabase")
+        } finally {
+            OfflineDownloads.afterStoredRead = null
+        }
+        assertTrue("the first restore's late merge brought a cancelled download back", OfflineDownloads.active.value.isEmpty())
+    }
+
+    @Test
+    fun `restore writes the merged queue under the persist lock, never alongside another write`() = runBlocking {
+        settings.saveDownloadQueue(listOf(request), database = "samedatabase")
+        OfflineDownloads.restore(settings, database = "samedatabase")
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        // A write holds the lock after its snapshot (rows of this set of rows).
+        val held = launch(Dispatchers.Default) {
+            OfflineDownloads.persistQueue(settings, database = "samedatabase") {
+                entered.complete(Unit)
+                gate.await()
+            }
+        }
+        entered.await()
+        // A new set of rows: a row asked at once, and the restore for it, whose write must wait for the lock.
+        OfflineDownloads.newDatabase()
+        val extra = request.copy(fileId = 42, messageId = 8L)
+        OfflineDownloads.note(OfflineDownloads.Progress(extra, 0, extra.sizeBytes, OfflineDownloads.Stage.Queued))
+        val restored = launch(Dispatchers.Default) { OfflineDownloads.restore(settings, database = "samedatabase") }
+        delay(400)
+        assertEquals("restore wrote while another write held the lock", setOf(41), settings.downloadQueueNow().map { it.fileId }.toSet())
+        gate.complete(Unit)
+        held.join()
+        restored.join()
+        assertEquals(setOf(41, 42), settings.downloadQueueNow().map { it.fileId }.toSet())
+    }
+
+    @Test
     fun `the same database's queue comes back`() = runBlocking {
         settings.saveDownloadQueue(listOf(request), database = "samedatabase")
         OfflineDownloads.restore(settings, database = "samedatabase")
