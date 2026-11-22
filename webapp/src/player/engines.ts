@@ -4,7 +4,9 @@ import {
     Conversion,
     CustomSource,
     EncodedPacketSink,
+    AdtsInputFormat,
     Input,
+    Mp3InputFormat,
     Mp4InputFormat,
     MpegTsInputFormat,
     Mp4OutputFormat,
@@ -162,6 +164,15 @@ export async function probe(file: MediaFile, durationHint: number): Promise<Prob
         input.dispose()
         if (e instanceof UnsupportedInputFormatError) throw new Unplayable({ kind: 'format', format: await sniff(file) })
         throw e
+    }
+    // mediabunny 1.66 finds MPEG audio frames deep in a VOB and opens it as an MP3 (or ADTS) file
+    // with no picture: a header of a video container it does not read goes to libav.js as before.
+    if (format instanceof Mp3InputFormat || format instanceof AdtsInputFormat) {
+        const header = await sniff(file)
+        if (header !== 'unknown') {
+            input.dispose()
+            throw new Unplayable({ kind: 'format', format: header })
+        }
     }
     file.searched = format instanceof MpegTsInputFormat
     const video = await input.getPrimaryVideoTrack()
@@ -372,12 +383,13 @@ export function pictureForLibav(p: Probe, why: Why): boolean {
 }
 
 /**
- * An H.264 file whose sound mediabunny cannot name (TrueHD, MLP, ALAC, WMA, RealAudio, MPEG Layer
+ * An H.264 file whose sound mediabunny cannot decode (TrueHD, MLP, ALAC, WMA, RealAudio, MPEG Layer
  * II in Matroska) and none of whose tracks plays: libav.js reads it, copies the picture and decodes
  * the sound. Asked after `playableSound` found nothing.
  */
 export function soundForLibav(p: Probe): boolean {
-    return p.video?.codec === 'avc' && p.audios.some((a) => !a.codec && soundDecoderFor(a.internalCodecId) !== null)
+    // Whether mediabunny names the codec or not: since 1.66 it names TrueHD, which it still cannot decode.
+    return p.video?.codec === 'avc' && p.audios.some((a) => soundDecoderFor(a.internalCodecId) !== null)
 }
 
 /** A sound track as the menu shows it: mediabunny's, or one libav.js reads (libav.ts). */
