@@ -19,6 +19,12 @@ import platform.VideoToolbox.VTIsHardwareDecodeSupported
 /** Android's `MediaCodecInfo.CodecProfileLevel`: a profile and the highest level it decodes. */
 class CodecProfileLevel(val profile: Int, val level: Int)
 
+/** What a decoder says it takes, Android's `CodecCapabilities`: only the sound's channel limit is named. */
+class DecoderCapabilities(val audioCapabilities: DecoderAudioCapabilities? = null)
+
+/** Android's `AudioCapabilities`: the most channels a sound decoder takes. */
+class DecoderAudioCapabilities(val maxInputChannelCount: Int)
+
 /** One decoder, Media3's. */
 class MediaCodecInfo(
     val name: String,
@@ -31,6 +37,8 @@ class MediaCodecInfo(
     val tunneling: Boolean = false,
     /** The profiles and levels the decoder lists; VideoToolbox's are not read, so none. */
     val profileLevels: Array<CodecProfileLevel> = emptyArray(),
+    /** What the decoder says it takes; VideoToolbox and the engine's decoders say nothing, so none. */
+    val capabilities: DecoderCapabilities? = null,
 ) {
     fun isFormatSupported(format: Format): Boolean = format.sampleMimeType == mimeType
 
@@ -60,6 +68,10 @@ object MediaCodecUtil {
         val videoToolbox = MediaCodecInfo("VideoToolbox", mimeType, mimeType, hardwareAccelerated = true, softwareOnly = false, vendor = true)
         return if (hardware) listOf(videoToolbox, software) else listOf(software)
     }
+
+    /** Media3's other type a decoder may take a format as (E-AC-3 JOC as E-AC-3); no decoder is listed that way here, so none. */
+    @Suppress("UNUSED_PARAMETER")
+    fun getAlternativeCodecMimeType(format: Format): String? = null
 
     fun getDecoderInfo(mimeType: String, secure: Boolean, tunneling: Boolean): MediaCodecInfo? =
         getDecoderInfos(mimeType, secure, tunneling).firstOrNull()

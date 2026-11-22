@@ -253,11 +253,15 @@ object StutterReport {
         val softwareBy: String = "none",
         val processBits: Int = 0,
         val hwDecoders: String = "",
+        /** How the device's hardware decoder fits the picture (upstream's `rated`, `level`, `rate`, `none`); iOS does not read it, so `unknown`. */
+        val hwFit: String = UNKNOWN,
         val playsSame: Int = -1,
         val playsAll: Int = -1,
     )
 
     const val UNKNOWN_VERDICT = "unknown"
+
+    const val UNKNOWN = "unknown"
 
     /** Upstream's wording of what put a video on a software decoder; nothing is reported from iOS. */
     fun softwareByOf(software: Boolean, switched: Boolean, ladderHop: Boolean, plan: Boolean, setting: Boolean): String = when {
