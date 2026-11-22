@@ -391,7 +391,13 @@ class StorageRelocation(
      * The caches the other profiles had at the old root (HX88, review D2): the root moves for every
      * profile, so theirs would otherwise stay there for good, never swept or purged. None of their
      * clients runs while another profile is open, and TDLib fetches again whatever it misses. Never
-     * anything the new layout of any profile uses.
+     * anything the new layout of any profile uses, and never a profile's downloads folder.
+     *
+     * Decided (HX88 low, 2026-11-23): this stays a delete, not a keep. A cache left at the old root
+     * is unreachable (the profile's client starts over the new cache folder, and TDLib does not
+     * know files it did not put there), so nothing would ever sweep or purge it, and a move made to
+     * empty the old drive would leave it full. Losing it costs a refetch of what the profile
+     * watched, never a download. See `other profiles' caches go with the old root` in the test.
      */
     private suspend fun deleteOtherCaches(oldRoot: File?, root: File?, openFolder: String?, to: StorageLayout) {
         for (folder in profileFolders().distinct()) {

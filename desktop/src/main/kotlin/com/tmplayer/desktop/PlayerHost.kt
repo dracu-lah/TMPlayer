@@ -142,6 +142,12 @@ fun PlayerHost(
         onFreeUpSpace = onFreeUpSpace,
     )
 
+    // The profile locks (a PIN profile minimised for a minute, a switch): the video pauses.
+    LaunchedEffect(engine) {
+        val e = engine ?: return@LaunchedEffect
+        pauseWhenLocked(com.tmplayer.data.ProfileUnlock.unlockedId) { e.pause() }
+    }
+
     // The profile the player opened under (HX88): its title shows only while that profile is the open one.
     val openedFor = remember { com.tmplayer.data.Accounts.stamp }
     LaunchedEffect(engine, playing) {

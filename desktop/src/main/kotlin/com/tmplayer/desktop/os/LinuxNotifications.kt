@@ -98,28 +98,19 @@ internal class LinuxNotifications(
     private val progressIds = mutableMapOf<Long, UInt32>()
 
     /**
-     * What pressing a completion notification opens, by the server's id; bounded, oldest out.
-     * Synchronised, since the signal handler reading it runs on one of dbus-java's threads.
+     * What pressing a completion notification opens, and whether its profile still allows it
+     * ([PressEntry]), by the server's id; bounded, oldest out. Synchronised, since the signal
+     * handler reading it runs on one of dbus-java's threads.
      */
-    private val targets: MutableMap<Long, OpenTarget> = java.util.Collections.synchronizedMap(
-        object : LinkedHashMap<Long, OpenTarget>() {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, OpenTarget>?) = size > MAX_TARGETS
-        },
-    )
-
-    /**
-     * Asked before a press on a result opens its file or folder (HX88): false for a result whose
-     * profile is no longer the open, shown one. By the server's id, bounded like [targets].
-     */
-    private val gates: MutableMap<Long, () -> Boolean> = java.util.Collections.synchronizedMap(
-        object : LinkedHashMap<Long, () -> Boolean>() {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, () -> Boolean>?) = size > MAX_TARGETS
+    private val targets: MutableMap<Long, PressEntry> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<Long, PressEntry>() {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, PressEntry>?) = size > MAX_TARGETS
         },
     )
 
     /** What was posted under a key ([KeyedResults]), by the server's id or notify-send's. Worker thread only. */
-    private val keyedIds = LinkedHashMap<Long, UInt32>()
-    private val keyedTool = LinkedHashMap<Long, Long>()
+    private val keyedIds = KeyedServerIds()
+    private val keyedTool = KeyedServerIds()
 
     private val kinds = mutableMapOf<Long, Kind>()
     private var lastDock: Int? = null
@@ -203,28 +194,22 @@ internal class LinuxNotifications(
     }
 
     override fun dismiss(key: Long) = post {
-        keyedIds.remove(key)?.let { serverId ->
-            runCatching { server()?.CloseNotification(serverId) }
-            val at = serverId.toLong()
+        for (at in keyedIds.take(key)) {
+            runCatching { server()?.CloseNotification(UInt32(at)) }
             targets.remove(at)
-            gates.remove(at)
             presses.remove(at)
             buttonPresses.remove(at)
         }
-        keyedTool.remove(key)?.let { toolId -> notifySend()?.takeIf { it.canReplace }?.expire(toolId) }
+        for (toolId in keyedTool.take(key)) notifySend()?.takeIf { it.canReplace }?.expire(toolId)
     }
 
-    /** Keeps [serverId] under [key], bounded: the oldest go first. */
+    /** Keeps [serverId] under [key], bounded ([KeyedServerIds]). */
     private fun keep(key: Long?, serverId: UInt32) {
-        if (key == null) return
-        keyedIds[key] = serverId
-        while (keyedIds.size > MAX_TARGETS) keyedIds.remove(keyedIds.keys.first())
+        if (key != null) keyedIds.add(key, serverId.toLong())
     }
 
     private fun keepTool(key: Long?, toolId: Long?) {
-        if (key == null || toolId == null) return
-        keyedTool[key] = toolId
-        while (keyedTool.size > MAX_TARGETS) keyedTool.remove(keyedTool.keys.first())
+        if (key != null && toolId != null) keyedTool.add(key, toolId)
     }
 
     private fun finish(
@@ -249,8 +234,8 @@ internal class LinuxNotifications(
                     DEFAULT_EXPIRY,
                 )
             }.onSuccess { serverId ->
-                if (open != null) targets[serverId.toLong()] = open
-                if (mayOpen != null) gates[serverId.toLong()] = mayOpen
+                // One entry, so the target and its gate are kept and dropped together (a result is gated).
+                if (open != null) targets[serverId.toLong()] = PressEntry(open, mayOpen, gated = key != null)
                 keep(key, serverId)
             }
                 .onFailure { Logger.w(TAG, "completion notification refused: ${it.message}") }
@@ -360,9 +345,9 @@ internal class LinuxNotifications(
                             runCatching(press)
                             return@addSigHandler
                         }
-                        val target = targets[signal.id.toLong()] ?: return@addSigHandler
-                        // A stale result of a profile locked or left since (HX88): it opens nothing.
-                        if (gates[signal.id.toLong()]?.let { runCatching(it).getOrDefault(false) } == false) return@addSigHandler
+                        // A stale result of a profile locked or left since (HX88) opens nothing, and
+                        // neither does a result whose gate is missing.
+                        val target = targets[signal.id.toLong()]?.targetToOpen() ?: return@addSigHandler
                         open(target)
                     }
                 }

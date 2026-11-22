@@ -38,6 +38,10 @@ import java.util.concurrent.Executors
 internal class WindowsNotifications(
     private val window: () -> Window?,
     private val onOpenDownloads: () -> Unit = {},
+    /** Whether a result's press must ask its profile first ([PressGate]): 2+ profiles or a PIN. */
+    private val gatePresses: () -> Boolean = PressGate::neededNow,
+    /** Starts the PowerShell host; a test hands a fake one, so no real PowerShell ever starts there. */
+    private val launcher: ToastHostLauncher = PowerShellHostLauncher(),
 ) : TransferNotifier, DockProgress, DesktopNotices, KeyedResults {
 
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
@@ -45,7 +49,7 @@ internal class WindowsNotifications(
     }
 
     // Touched only on the worker thread.
-    private var shell: Process? = null
+    private var shell: ToastHost? = null
     private var input: Writer? = null
     private var toastsOff = false
     private val sequence = mutableMapOf<Long, Long>()
@@ -106,7 +110,7 @@ internal class WindowsNotifications(
     override fun complete(id: Long, title: String, body: String, open: OpenTarget?) = post {
         forget(id)
         val launch = WindowsToast.launchUri(open)
-            ?: if (open == OpenTarget.DownloadsScreen && pressable) ToastPresses.register(onOpenDownloads) else null
+            ?: if (open == OpenTarget.DownloadsScreen && canPress()) ToastPresses.register(onOpenDownloads) else null
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body, launch)))
     }
 
@@ -119,32 +123,53 @@ internal class WindowsNotifications(
 
     /**
      * A result kept under [key] (HX88, review P2): tagged, so [dismiss] takes it out of the Action
-     * Center, and where `tmplayer:` links reach the app its press goes through them, so [mayOpen]
-     * is asked before a file or folder opens. Without the link (a development run) the file's own
-     * URI is the press, as before.
+     * Center. Where `tmplayer:` links reach the app, the press goes through such a link and
+     * [mayOpen] is asked at the press, before a file or folder opens (the profile count or a PIN
+     * can change after the toast is posted). Only where no link can be registered (a development
+     * run) and no gate is needed ([gatePresses]) is the file's own URI the press; where a gate is
+     * needed and no link exists, the toast has no press.
      */
     override fun result(key: Long, id: Long, title: String, body: String, open: OpenTarget?, failed: Boolean, mayOpen: () -> Boolean) = post {
         forget(id)
-        val launch = when {
-            failed -> null
-            pressable && (open is OpenTarget.File || open is OpenTarget.Folder) -> ToastPresses.register {
-                if (runCatching(mayOpen).getOrDefault(false)) openTarget(open)
-            }
-            else -> WindowsToast.launchUri(open)
-                ?: if (open == OpenTarget.DownloadsScreen && pressable) ToastPresses.register(onOpenDownloads) else null
-        }
+        val launch = WindowsToast.resultLaunch(
+            open = open,
+            failed = failed,
+            pressable = canPress(),
+            gated = runCatching(gatePresses).getOrDefault(true),
+            mayOpen = mayOpen,
+            openTarget = ::openTarget,
+            onOpenDownloads = onOpenDownloads,
+            register = ToastPresses::register,
+        )
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body, launch), tag = keyTag(key)))
     }
 
     override fun keyedNotice(key: Long, title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
         if (toastsOff) return@post
         if (input == null) start()
-        val launch = if (onPress != null && pressable) ToastPresses.register(onPress) else null
-        val actions = if (pressable) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
+        val canPress = canPress()
+        val launch = if (onPress != null && canPress) ToastPresses.register(onPress) else null
+        val actions = if (canPress) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body.orEmpty(), launch, actions), tag = keyTag(key)))
     }
 
     override fun dismiss(key: Long) = post { run(WindowsToast.remove(keyTag(key))) }
+
+    /**
+     * Whether a toast can carry a press. [pressable] is only known once the host has started
+     * ([start] registers the scheme), so it is started here first: read before, it would say no
+     * for the first toast of a run. False while toasts are off.
+     */
+    private fun canPress(): Boolean {
+        if (toastsOff) return false
+        if (input == null) start()
+        return !toastsOff && pressable
+    }
+
+    /** Waits until every call made so far has run, for tests. */
+    internal fun flush() {
+        runCatching { worker.submit {}.get(FLUSH_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    }
 
     private fun openTarget(open: OpenTarget) {
         when (open) {
@@ -161,8 +186,9 @@ internal class WindowsNotifications(
     override fun notice(title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
         if (toastsOff) return@post
         if (input == null) start()
-        val launch = if (onPress != null && pressable) ToastPresses.register(onPress) else null
-        val actions = if (pressable) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
+        val canPress = canPress()
+        val launch = if (onPress != null && canPress) ToastPresses.register(onPress) else null
+        val actions = if (canPress) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body.orEmpty(), launch, actions)))
     }
 
@@ -202,7 +228,7 @@ internal class WindowsNotifications(
     private fun run(line: String) {
         if (toastsOff) return
         val writer = input ?: start() ?: return
-        val alive = shell?.isAlive == true
+        val alive = shell?.isAlive() == true
         if (!alive || runCatching {
                 writer.write(line)
                 writer.write("\r\n")
@@ -211,20 +237,22 @@ internal class WindowsNotifications(
         ) {
             Logger.w(TAG, "the toast host stopped; toasts are off for this session")
             toastsOff = true
-            runCatching { shell?.destroy() }
+            runCatching { shell?.stop() }
         }
     }
 
     private fun start(): Writer? {
-        registerAppId()
-        pressable = registerScheme()
+        val host = runCatching { launcher.launch() }
+            .onFailure { Logger.w(TAG, "no PowerShell for toasts: ${it.message}") }
+            .getOrNull()
+        if (host == null) {
+            toastsOff = true
+            return null
+        }
+        pressable = host.pressable
         return runCatching {
-            val p = ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-NoLogo", "-Command", "-")
-                .redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .start()
-            shell = p
-            val w = p.outputStream.bufferedWriter(Charsets.UTF_8)
+            shell = host
+            val w = host.input
             input = w
             WindowsToast.preamble().forEach { line ->
                 w.write(line)
@@ -235,7 +263,39 @@ internal class WindowsNotifications(
         }.onFailure {
             Logger.w(TAG, "no PowerShell for toasts: ${it.message}")
             toastsOff = true
+            runCatching { host.stop() }
         }.getOrNull()
+    }
+
+    private companion object {
+        const val TAG = "WindowsNotifications"
+        const val FLUSH_WAIT_MS = 5_000L
+    }
+}
+
+/** A running toast host: the stream script lines go to, and whether `tmplayer:` links reach the app. */
+internal class ToastHost(
+    val input: Writer,
+    val isAlive: () -> Boolean,
+    val stop: () -> Unit,
+    val pressable: Boolean,
+)
+
+/** Starts the toast host; null (or a throw) means no toasts for the session. */
+internal fun interface ToastHostLauncher {
+    fun launch(): ToastHost?
+}
+
+/** The real host: one hidden `powershell.exe`, after the app id and the link scheme are registered. */
+internal class PowerShellHostLauncher : ToastHostLauncher {
+    override fun launch(): ToastHost? {
+        registerAppId()
+        val pressable = registerScheme()
+        val p = ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-NoLogo", "-Command", "-")
+            .redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .start()
+        return ToastHost(p.outputStream.bufferedWriter(Charsets.UTF_8), { p.isAlive }, { p.destroy() }, pressable)
     }
 
     /** `HKCU\Software\Classes\AppUserModelId\TMPlayer.Desktop`, so Windows shows this app's toasts. */
@@ -334,6 +394,37 @@ internal object WindowsToast {
         is OpenTarget.File -> File(open.path).parentFile?.toURI()?.toString()
         is OpenTarget.Folder -> File(open.path).toURI().toString()
         OpenTarget.DownloadsScreen, null -> null
+    }
+
+    /**
+     * The launch link of a result's toast. A file or folder goes through an in-memory `tmplayer:`
+     * link whenever [pressable]: it asks [mayOpen] first, so a toast posted while there was one
+     * profile and no PIN cannot open under another profile or while locked after it is added or
+     * set (the gate is read at the press, not at the post). Without that scheme the plain `file:`
+     * URI is used only where no gate is [gated] (2+ profiles or a PIN); a gated result then has no
+     * link, so the toast is not pressable. A failure has no press. [pressable] must be read after
+     * the host started.
+     */
+    fun resultLaunch(
+        open: OpenTarget?,
+        failed: Boolean,
+        pressable: Boolean,
+        gated: Boolean,
+        mayOpen: () -> Boolean,
+        openTarget: (OpenTarget) -> Unit,
+        onOpenDownloads: () -> Unit,
+        register: (() -> Unit) -> String,
+    ): String? = when {
+        failed -> null
+        open is OpenTarget.File || open is OpenTarget.Folder -> when {
+            pressable -> register {
+                if (runCatching(mayOpen).getOrDefault(false)) openTarget(open)
+            }
+            gated -> null
+            else -> launchUri(open)
+        }
+        open == OpenTarget.DownloadsScreen && pressable -> register(onOpenDownloads)
+        else -> null
     }
 
     fun showProgress(tag: String, xml: String, status: String, value: Double, valueText: String): String =
