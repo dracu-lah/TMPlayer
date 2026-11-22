@@ -10,11 +10,13 @@ const MEDIA = fileURLToPath(new URL('./media/', import.meta.url))
 /**
  * Every test but the chats gate's own starts on an account that has already answered which chats
  * it watches ('all', every chat), as the tests were written before choosing was required; the
- * `unanswered` case leaves it open so the gate (App.tsx) shows. Written before the app reads its
+ * `unanswered` case leaves it open so the gate (App.tsx) shows. Since HX86 'all' is the picker's
+ * "All chats" switch on, its ticks disabled: the `picked` case answers with no chats picked instead,
+ * for the tests that tick rows in the picker. Written before the app reads its
  * settings: IndexedDB runs this read-write transaction before the app's later read of the store.
  * A browser that refuses storage (app.spec.ts) is left to meet the gate.
  */
-const ANSWERED = `(function(){try{if(/(?:^|;\\s*)e2e=[^;]*unanswered/.test(document.cookie))return;var o=indexedDB.open('tmplayer-app');o.onupgradeneeded=function(){o.result.createObjectStore('kv')};o.onsuccess=function(){var s=o.result.transaction('kv','readwrite').objectStore('kv'),g=s.get('addedMode');g.onsuccess=function(){if(g.result===undefined)s.put('all','addedMode')};s.transaction.oncomplete=function(){o.result.close()}}}catch(e){}})()`
+const ANSWERED = `(function(){try{if(/(?:^|;\\s*)e2e=[^;]*unanswered/.test(document.cookie))return;var o=indexedDB.open('tmplayer-app');o.onupgradeneeded=function(){o.result.createObjectStore('kv')};o.onsuccess=function(){var s=o.result.transaction('kv','readwrite').objectStore('kv'),g=s.get('addedMode'),m=/(?:^|;\\s*)e2e=[^;]*\\bpicked\\b/.test(document.cookie)?'picked':'all';g.onsuccess=function(){if(g.result===undefined)s.put(m,'addedMode')};s.transaction.oncomplete=function(){o.result.close()}}}catch(e){}})()`
 
 /** One account's Saved Messages per test (the `cloud:<key>` flag): the messages that hold a sync file. */
 interface CloudMessage {

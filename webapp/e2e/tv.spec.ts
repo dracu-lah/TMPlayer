@@ -167,7 +167,8 @@ for (const size of [
         })
 
         test('Choose chats on 3,000 chats: the remote reaches Select all, the rows, a star and Done, OK ticks, and Back asks before it discards', async ({ page, context }) => {
-            await fakeCase(context, 'huge')
+            // Chats picked (none yet), not All chats: with the switch on every tick is disabled (HX86).
+            await fakeCase(context, 'huge', 'picked')
             await page.goto('/__e2e/sizes')
             await page.evaluate(() => localStorage.setItem('tmplayer-layout', 'tv'))
             await page.goto('/added-chats')

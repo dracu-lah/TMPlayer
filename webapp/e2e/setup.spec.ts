@@ -18,6 +18,9 @@ test('signing in opens the chats gate, with no Back and no way past it without a
     await expect(page.getByRole('heading', { name: 'Which chats have your videos?' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0)
     await expect(page.getByRole('checkbox', { name: 'Test Clips' })).toBeVisible()
+    // A fresh visit starts with Saved Messages ticked (HX86); with that taken off nothing is chosen and Done waits.
+    await expect(page.getByRole('checkbox', { name: 'Saved Messages' })).toBeChecked()
+    await page.getByRole('checkbox', { name: 'Saved Messages' }).uncheck()
     await expect(page.getByRole('button', { name: 'Choose at least one chat' })).toBeDisabled()
     await page.getByRole('checkbox', { name: 'Test Clips' }).check()
     await page.getByRole('button', { name: 'Done' }).click()

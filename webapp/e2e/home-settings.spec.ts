@@ -27,7 +27,10 @@ test('every row off leaves Home saying so, with the way to Home settings', async
     await expect(page.getByRole('switch', { name: /^Recently added/ })).toHaveAttribute('aria-checked', 'false')
 })
 
-test('Recently added follows the chats added in Add chats, with no picker of its own in Settings > Home', async ({ page }) => {
+test('Recently added follows the chats added in Add chats, with no picker of its own in Settings > Home', async ({ page, context }) => {
+    // Chats picked (none yet), not All chats: with the switch on the ticks are disabled (HX86). Cleared first, as the
+    // beforeEach's page already answered for this browser.
+    await page.evaluate(() => new Promise<void>((resolve) => { const o = indexedDB.open('tmplayer-app'); o.onsuccess = () => { const tx = o.result.transaction('kv', 'readwrite'); tx.objectStore('kv').put('picked', 'addedMode'); tx.oncomplete = () => (o.result.close(), resolve()) } }))
     await page.goto('/settings/home')
     await expect(page.getByText(/^Recently added and the carousel show the newest videos of the chats you added/)).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Chosen chats' })).toHaveCount(0)
