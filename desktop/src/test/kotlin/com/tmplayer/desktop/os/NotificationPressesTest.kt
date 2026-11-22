@@ -2,6 +2,7 @@ package com.tmplayer.desktop.os
 
 import com.tmplayer.data.AccountList
 import com.tmplayer.data.Profile
+import com.tmplayer.platform.TransferNotifier
 import com.tmplayer.platform.TransferNotifier.OpenTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -75,12 +76,16 @@ class NotificationPressesTest {
         fun launch(open: OpenTarget?, failed: Boolean, pressable: Boolean, gated: Boolean, allow: Boolean = true) =
             WindowsToast.resultLaunch(open, failed, pressable, gated, { asked++; allow }, { opened = it }, {}, register)
 
-        // One profile, no PIN: the file's own link, nothing in memory.
-        assertEquals(WindowsToast.launchUri(file), launch(file, false, pressable = true, gated = false))
+        // No scheme and no gate needed: the file's own link, nothing in memory.
+        assertEquals(WindowsToast.launchUri(file), launch(file, false, pressable = false, gated = false))
         assertTrue(registered.isEmpty())
-        // Not started or no scheme: never a keyed link, and nothing is asked or opened.
-        assertEquals(WindowsToast.launchUri(file), launch(file, false, pressable = false, gated = true))
+        // No scheme but a gate needed (2+ profiles or a PIN): no link at all, so no press.
+        assertNull(launch(file, false, pressable = false, gated = true))
         assertTrue(registered.isEmpty() && asked == 0 && opened == null)
+        // With the scheme the keyed link is used even when no gate is needed at the post: the gate
+        // is asked at the press, so a profile added or a PIN set later cannot open a stale file.
+        assertEquals("tmplayer:press/1", launch(file, false, pressable = true, gated = false))
+        registered.clear()
         // Failures have no press.
         assertNull(launch(null, true, pressable = true, gated = true))
         // Gated: the keyed link, which asks first.
@@ -93,13 +98,48 @@ class NotificationPressesTest {
         assertEquals(file, opened)
     }
 
+    /** A fake toast host: records every script line, never starts a process. */
+    private class FakeHost(pressable: Boolean) {
+        val sent = java.io.StringWriter()
+        val host = ToastHost(sent, { true }, {}, pressable)
+        val lines: List<String> get() = sent.toString().split("\r\n").filter { it.isNotBlank() }
+    }
+
+    private fun notifier(host: FakeHost?, gated: Boolean, pressed: () -> Unit = {}) =
+        WindowsNotifications(
+            window = { null },
+            gatePresses = { gated },
+            launcher = { host?.host ?: error("no host") },
+        ).also { it.result(1, 1, "Done", "Episode", file, failed = false) { pressed(); true } }
+
     @Test
-    fun `the Windows notifier answers a result before any start without throwing or pressing`() {
+    fun `the Windows notifier posts a result with the keyed link, the file link or none, through a fake host`() {
         var asked = 0
-        val notifier = WindowsNotifications(window = { null }, gatePresses = { true })
-        notifier.result(1, 1, "Done", "Episode", OpenTarget.File("/nope/Episode.mkv"), failed = false) { asked++; true }
-        notifier.result(2, 2, "Failed", "Episode", null, failed = true) { asked++; true }
+        val link = "activationType=\"protocol\" launch=\"tmplayer:"
+        val fileLink = "launch=\"" + WindowsToast.xml(WindowsToast.launchUri(file)!!)
+
+        val pressableHost = FakeHost(pressable = true)
+        notifier(pressableHost, gated = false) { asked++ }.flush()
+        val keyed = pressableHost.lines.single { "ToastNotification" in it && "Episode" in it }
+        assertTrue(keyed, link in keyed)
+        assertEquals("nothing is pressed by posting", 0, asked)
+
+        val noSchemeUngated = FakeHost(pressable = false)
+        notifier(noSchemeUngated, gated = false).flush()
+        assertTrue(fileLink in noSchemeUngated.lines.single { "Episode" in it })
+
+        val noSchemeGated = FakeHost(pressable = false)
+        notifier(noSchemeGated, gated = true).flush()
+        val unpressable = noSchemeGated.lines.single { "Episode" in it }
+        assertFalse(unpressable, "launch=" in unpressable)
+    }
+
+    @Test
+    fun `the Windows notifier survives a host that cannot start, and stays quiet`() {
+        val notifier = WindowsNotifications(window = { null }, gatePresses = { true }, launcher = { error("no PowerShell") })
+        notifier.result(1, 1, "Done", "Episode", file, failed = false) { true }
+        notifier.result(2, 2, "Failed", "Episode", null, failed = true) { true }
         notifier.flush()
-        assertEquals(0, asked)
+        assertFalse(TransferNotifier.Capability.ProgressBar in notifier.capabilities)
     }
 }
