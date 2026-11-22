@@ -26,12 +26,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Registered through `META-INF/services/org.robolectric.pluginapi.TestEnvironmentLifecyclePlugin`.
  * Only for classes in the native graphics mode, where the library is loaded for them anyway; costs
- * one tiny decode per sandbox, and does nothing when that is not possible.
+ * one tiny decode per sandbox, and when that is not possible it prints one line to System.err
+ * and goes on (the tests then behave as they did before).
  */
 class NativeJniWarmUp : TestEnvironmentLifecyclePlugin {
 
     override fun onSetupApplicationState() {
-        runCatching {
+        try {
             if (ConfigurationRegistry.get(GraphicsMode.Mode::class.java) != GraphicsMode.Mode.NATIVE) return
             if (!done.compareAndSet(false, true)) return
             DefaultNativeRuntimeLoader.injectAndLoad()
@@ -42,6 +43,9 @@ class NativeJniWarmUp : TestEnvironmentLifecyclePlugin {
             } finally {
                 file.delete()
             }
+        } catch (failed: Throwable) {
+            // Never fails a test, but says so: without the warm-up the intermittent abort is back.
+            System.err.println("NativeJniWarmUp: the warm-up decode did not run (${failed.javaClass.simpleName}: ${failed.message})")
         }
     }
 
