@@ -18,7 +18,12 @@ posters line 105 clicked a Library link that `1e330ba` (WB20) folded into Home a
 opens that page now.
 
 The rename spec's TV walk pressed Down before Right: it passed only when the chat's row below
-Play had not loaded yet. It now walks Right along Play's line.
+Play had not loaded yet. It now walks Right along Play's line. Its second open was flaky too, a
+code race: Escape's close event comes a task late, after Enter had opened the sheet again, and shut
+it (RenameSheet.tsx now ignores a close event while the dialog is open).
+
+feedback line 228 read the stored draft as soon as the dialog lost `[open]`, before its close
+event (which keeps the words) ran: spec timing, it polls now.
 
 WebKit does not start on this machine (`browserType.launch` fails), so the `webkit` and
 `webkit-iphone` projects are left to the nightly run.

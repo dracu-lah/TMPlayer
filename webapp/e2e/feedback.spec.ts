@@ -247,7 +247,8 @@ test.describe('the form', () => {
         await dialog(page).locator('textarea').fill('It stops again')
         await page.keyboard.press('Escape')
         await expect(dialog(page)).toHaveCount(0)
-        expect(JSON.parse((await stored(page))!).message).toBe('It stops again')
+        // The dialog loses [open] at once and its close event, which keeps the words, comes a task later.
+        await expect.poll(async () => JSON.parse((await stored(page)) ?? '{}').message).toBe('It stops again')
     })
 
     test('a draft that waits for a connection opens on Kept for later after a reload', async ({ page }) => {
