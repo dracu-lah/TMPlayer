@@ -14,6 +14,9 @@ looked older than it was. Against origin/main (`e674f78`), which passes, they ca
 | chats (3), choose-chats (2), home-settings line 30, tv and scale picker walks | `fe87972` (HX86: the stored mode `all` is the All chats switch on, ticks disabled) | the `picked` case in vite.e2e.ts for the tests that tick rows; the TV starts in the search while the switch is off; Left from a star is its row |
 | setup line 14 | `fe87972` (a fresh visit starts with Saved Messages ticked) | the spec takes the tick off first |
 
+posters line 105 clicked a Library link that `1e330ba` (WB20) folded into Home and library; it
+opens that page now.
+
 The rename spec's TV walk pressed Down before Right: it passed only when the chat's row below
 Play had not loaded yet. It now walks Right along Play's line.
 
