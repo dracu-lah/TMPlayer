@@ -90,6 +90,28 @@ class StorageRelocationTest {
     }
 
     @Test
+    fun `other profiles' caches go with the old root but their downloads and the new layouts stay`() = runBlocking {
+        val other = StorageRelocation(
+            settings, prefs, host, ::layout, { notifier },
+            owner = { com.tmplayer.data.AccountStamp(0, null) },
+            mayAct = { true },
+            profileFolders = { listOf(null, "p2") },
+        )
+        val theirs = defaults.forProfile("p2")
+        File(theirs.cacheDir, "videos").mkdirs()
+        File(theirs.cacheDir, "videos/theirs.mp4").writeText("cache")
+        File(theirs.downloadsDir, "Saved.mkv").apply { parentFile.mkdirs() }.writeText("their download")
+        File(defaults.cacheDir, "videos").mkdirs()
+        File(defaults.cacheDir, "videos/mine.mp4").writeText("cache")
+
+        other.move(newRoot, moveDownloads = false)
+
+        assertFalse("their old cache is not kept: nothing could ever sweep it", theirs.cacheDir.exists())
+        assertFalse(defaults.cacheDir.exists())
+        assertTrue("their downloads are not a cache", File(theirs.downloadsDir, "Saved.mkv").isFile)
+    }
+
+    @Test
     fun `reset to the default folders brings the downloads back`() = runBlocking {
         download(1)
         relocation.move(newRoot)
