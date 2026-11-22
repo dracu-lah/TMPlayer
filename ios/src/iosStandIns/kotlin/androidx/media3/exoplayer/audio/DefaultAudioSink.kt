@@ -22,11 +22,39 @@ interface AudioRendererEventListener {
     fun onAudioUnderrun(bufferSize: Int, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {}
 }
 
-/** Where an audio sink writes, Media3's. */
-interface AudioOutputProvider
+/**
+ * Where an audio sink writes, Media3's. Only the question the player's wrapper overrides is here
+ * ([getFormatSupport]); no sound goes through it on iOS, where the engine plays it.
+ */
+interface AudioOutputProvider {
+    /** What an output is asked about: the format to play. */
+    class FormatConfig(val format: androidx.media3.common.Format)
+
+    /** The answer. Only the two the player's code names; an output that plays nothing supports nothing. */
+    class FormatSupport private constructor(val supportLevel: Int) {
+        companion object {
+            const val SUPPORT_LEVEL_UNSUPPORTED = 0
+            const val SUPPORT_LEVEL_DIRECTLY = 1
+            val UNSUPPORTED = FormatSupport(SUPPORT_LEVEL_UNSUPPORTED)
+            val SUPPORTED_DIRECTLY = FormatSupport(SUPPORT_LEVEL_DIRECTLY)
+        }
+    }
+
+    fun getFormatSupport(formatConfig: FormatConfig): FormatSupport
+}
+
+/** Media3's output that hands every call to another. */
+open class ForwardingAudioOutputProvider(private val output: AudioOutputProvider) : AudioOutputProvider {
+    override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.FormatSupport =
+        output.getFormatSupport(formatConfig)
+}
 
 /** Media3's AudioTrack output, its buffer sizes kept as set. */
 class AudioTrackAudioOutputProvider private constructor(val bufferSizeProvider: DefaultAudioSink.AudioTrackBufferSizeProvider) : AudioOutputProvider {
+    /** There is no AudioTrack on iOS, so no format is supported through it. */
+    override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.FormatSupport =
+        AudioOutputProvider.FormatSupport.UNSUPPORTED
+
     class Builder(@Suppress("UNUSED_PARAMETER") context: android.content.Context) {
         private var sizes: DefaultAudioSink.AudioTrackBufferSizeProvider = DefaultAudioSink.AudioTrackBufferSizeProvider.DEFAULT
 

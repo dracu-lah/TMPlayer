@@ -48,6 +48,7 @@ interface RendererCapabilities {
         const val DECODER_SUPPORT_PRIMARY = 1 shl 7
         const val DECODER_SUPPORT_FALLBACK = 0
         const val HARDWARE_ACCELERATION_SUPPORTED = 1 shl 6
+        const val HARDWARE_ACCELERATION_SUPPORT_MASK = 0b1 shl 6
         const val HARDWARE_ACCELERATION_NOT_SUPPORTED = 0
         const val TUNNELING_NOT_SUPPORTED = 0
 
@@ -56,6 +57,9 @@ interface RendererCapabilities {
         fun create(formatSupport: Int, adaptiveSupport: Int, tunnelingSupport: Int): Int = formatSupport or adaptiveSupport or tunnelingSupport
 
         fun getFormatSupport(supportFlags: Int): Int = supportFlags and 0b111
+
+        /** The hardware bit of [supportFlags]; no stand-in renderer sets it, so on iOS it reads not supported. */
+        fun getHardwareAccelerationSupport(supportFlags: Int): Int = supportFlags and HARDWARE_ACCELERATION_SUPPORT_MASK
     }
 }
 

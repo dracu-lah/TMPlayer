@@ -195,6 +195,8 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
             "CrashExits", "CrashReports", "DownloadRelocationService", "DownloadService", "FolderExport",
             "NoticeActions", "SelfInstaller", "TvArt", "TvArtProvider", "TvChannelsPublisher", "UpdatedReceiver",
             "WatchNextPublisher", "AppLocales", "LegacyApiCompat", "NetworkMonitor", "ProfileNotifications",
+            // The update's baseline profile (java.util.zip), read only by SelfInstaller.
+            "UpdateDexMetadata",
         ).forEach { exclude("com/tmplayer/data/$it.kt") }
     }
     // The build flavour without Google's services, the one iOS matches (no Cast, no SMS consent).
@@ -291,6 +293,8 @@ val androidPlayerForIos = tasks.register<Sync>("androidPlayerForIos") {
             // PlayerCast: no casting on iOS (maintainer, 2026-11-12); src/iosMain/.../PlayerCastOnIos.kt answers "not available".
             // PlaybackService, an Android foreground service, has an iOS version (src/iosMain/.../PlaybackServiceOnIos.kt).
             "PlayerActivity", "PlayerEpisodes", "PlayerMorePanel", "PlayerSheets", "Stereo3dEffect",
+            // Audio passthrough off (its wrapper over the output) and the More options' "Add to a list" page.
+            "PcmOnlyOutputProvider", "PlayerListsSheet",
             // Batch 5 (TMPlayer, 2026-11-17): the player files written after the port's base (1.28.5),
             // brought in when the port joined TMPlayer (docs/IOS.md).
             // Left out, with iOS versions in src/iosMain/.../player/*OnIos.kt: the external player apps and their
