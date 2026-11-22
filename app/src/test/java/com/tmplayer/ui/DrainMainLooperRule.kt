@@ -71,13 +71,23 @@ class DrainMainLooperRule : TestWatcher() {
      * [MAX_TASKS] tasks, so a loop costs a bounded few thousand and the class goes on.
      */
     private fun drain(looper: org.robolectric.shadows.ShadowLooper, rounds: Int, stepMs: Long) {
+        var capped = false
         repeat(rounds) {
-            var ran = 0
-            while (!looper.isIdle && ran++ < MAX_TASKS) looper.runOneTask()
+            capped = runTasks(looper) || capped
             ShadowSystemClock.advanceBy(Duration.ofMillis(stepMs))
         }
+        capped = runTasks(looper) || capped
+        if (capped) System.err.println("DrainMainLooperRule: gave up after $MAX_TASKS tasks in a round, the looper still had work (a screen that recomposes without end?)")
+    }
+
+    /** Runs up to [MAX_TASKS] ready tasks; true when it stopped at the cap with work left. */
+    private fun runTasks(looper: org.robolectric.shadows.ShadowLooper): Boolean {
         var ran = 0
-        while (!looper.isIdle && ran++ < MAX_TASKS) looper.runOneTask()
+        while (!looper.isIdle && ran < MAX_TASKS) {
+            looper.runOneTask()
+            ran++
+        }
+        return ran >= MAX_TASKS && !looper.isIdle
     }
 
     private companion object {

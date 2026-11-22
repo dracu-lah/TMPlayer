@@ -66,6 +66,9 @@ object OfflineDownloads {
     /** For tests: runs in [restore] after the stored queue was read and before it is merged, where a switch or a new database can land. */
     internal var afterStoredRead: (suspend () -> Unit)? = null
 
+    /** For tests: runs in [restore] after its merge and before its write, where a switch and the next profile's restore can land. */
+    internal var afterMerge: (suspend () -> Unit)? = null
+
     /** The rows dropped again without telling the runner, which [newDatabase] already did ([Td.renewDatabaseMarker]). */
     internal fun dropRowsQuietly() = dropRows()
 
@@ -130,15 +133,26 @@ object OfflineDownloads {
      *   rather than tagged with the next database's marker ([SettingsStore.saveDownloadQueue]).
      *
      * The service's writer and its completion paths call this, and so does the queue model test:
-     * [afterSnapshot] is its hook for what happens between the snapshot and the write.
+     * [afterSnapshot] is its hook for what happens between the snapshot and the write. [database] is
+     * the marker to tag the queue with (the store's own profile's by default); [restore] hands the
+     * one it merged under, so its write is as guarded as every other. [onlyFor] is the profile and
+     * set of rows the caller merged and marked: a snapshot taken under the lock that is another's
+     * (a switch landed and the next profile's restore merged first) is not written, so its rows
+     * are never tagged with this caller's marker.
      */
-    suspend fun persistQueue(settings: SettingsStore, afterSnapshot: suspend () -> Unit = {}) {
+    suspend fun persistQueue(
+        settings: SettingsStore,
+        database: String? = DATABASE_OF_STORE,
+        onlyFor: Pair<AccountStamp, Long>? = null,
+        afterSnapshot: suspend () -> Unit = {},
+    ) {
         persistLock.withLock {
             val (owner, queued, generation) = persistSnapshot()
             afterSnapshot()
             if (owner == null) return@withLock
+            if (onlyFor != null && (owner != onlyFor.first || generation != onlyFor.second)) return@withLock
             try {
-                settings.saveDownloadQueue(queued, owner = owner, rowsGeneration = generation)
+                settings.saveDownloadQueue(queued, owner = owner, database = database, rowsGeneration = generation)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (failed: Exception) {
@@ -432,14 +446,22 @@ object OfflineDownloads {
         afterStoredRead?.invoke()
         val merged = synchronized(this) {
             // Another profile or database opened while this read: its rows are not these.
-            if (Accounts.stamp != owner || rowsGeneration != generation) return@synchronized null
+            if (Accounts.stamp != owner || rowsGeneration != generation) return@synchronized false
+            // A second restore of the same rows got here first (both passed the check above while
+            // they read the store): its merge stands, and this one would bring back what the
+            // viewer cancelled since.
+            if (restoredFor == owner to generation) return@synchronized false
             // What is in memory now wins over what was stored under the same id.
             _active.value = restored + _active.value
             rowsOwner = owner
             restoredFor = owner to generation
-            ordered.map { it.request }
-        } ?: return
-        runCatching { settings.saveDownloadQueue(merged, owner = owner, database = marker) }
+            true
+        }
+        if (!merged) return
+        // Through the one write path: under the lock, from the rows as they are now, and dropped when
+        // they went meanwhile (a switch or a session end after the merge).
+        afterMerge?.invoke()
+        persistQueue(settings, database = marker, onlyFor = owner to generation)
     }
 
     // ---- called by the runner ---------------------------------------------------------------
