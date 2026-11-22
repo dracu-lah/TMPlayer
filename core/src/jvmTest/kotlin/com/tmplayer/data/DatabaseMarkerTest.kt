@@ -127,6 +127,33 @@ class DatabaseMarkerTest {
     }
 
     @Test
+    fun `a restore whose profile was switched away before its write never writes the next profile's rows under its marker`() = runBlocking {
+        val bookB = testBook(File(dir, "book-b").apply { mkdirs() })
+        bookB.update { it.copy(profiles = it.profiles + Profile("b", "b"), activeId = "b") }
+        val other = request.copy(fileId = 42, messageId = 8L)
+        // Profile A's restore has merged and not written yet; the viewer switches to B, whose own
+        // restore merges and writes first. A's write then finds B's rows under B's generation.
+        OfflineDownloads.afterMerge = {
+            OfflineDownloads.afterMerge = null
+            OfflineDownloads.dropRowsQuietly()
+            Accounts.resetForTest(bookB)
+            OfflineDownloads.note(OfflineDownloads.Progress(other, 0, other.sizeBytes, OfflineDownloads.Stage.Queued))
+            OfflineDownloads.restore(settings, database = "bdatabase")
+        }
+        try {
+            settings.saveDownloadQueue(listOf(request), database = "adatabase")
+            OfflineDownloads.restore(settings, database = "adatabase")
+            // B is the open profile (the queue is stored for each profile): its queue is B's rows
+            // under B's marker, not written over by A's late write.
+            assertEquals("B's queue was tagged with A's database", "bdatabase", settings.downloadQueueDatabaseNow())
+            assertEquals(setOf(42), settings.downloadQueueNow().map { it.fileId }.toSet())
+        } finally {
+            OfflineDownloads.afterMerge = null
+            Accounts.resetForTest(null)
+        }
+    }
+
+    @Test
     fun `restore writes the merged queue under the persist lock, never alongside another write`() = runBlocking {
         settings.saveDownloadQueue(listOf(request), database = "samedatabase")
         OfflineDownloads.restore(settings, database = "samedatabase")
