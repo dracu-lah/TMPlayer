@@ -38,6 +38,8 @@ import java.util.concurrent.Executors
 internal class WindowsNotifications(
     private val window: () -> Window?,
     private val onOpenDownloads: () -> Unit = {},
+    /** Whether a result's press must ask its profile first ([PressGate]): 2+ profiles or a PIN. */
+    private val gatePresses: () -> Boolean = PressGate::neededNow,
 ) : TransferNotifier, DockProgress, DesktopNotices, KeyedResults {
 
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
@@ -106,7 +108,7 @@ internal class WindowsNotifications(
     override fun complete(id: Long, title: String, body: String, open: OpenTarget?) = post {
         forget(id)
         val launch = WindowsToast.launchUri(open)
-            ?: if (open == OpenTarget.DownloadsScreen && pressable) ToastPresses.register(onOpenDownloads) else null
+            ?: if (open == OpenTarget.DownloadsScreen && canPress()) ToastPresses.register(onOpenDownloads) else null
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body, launch)))
     }
 
@@ -119,32 +121,52 @@ internal class WindowsNotifications(
 
     /**
      * A result kept under [key] (HX88, review P2): tagged, so [dismiss] takes it out of the Action
-     * Center, and where `tmplayer:` links reach the app its press goes through them, so [mayOpen]
-     * is asked before a file or folder opens. Without the link (a development run) the file's own
-     * URI is the press, as before.
+     * Center. Where `tmplayer:` links reach the app and the press must ask its profile first
+     * ([gatePresses]: two or more profiles, or a PIN), the press goes through such a link and
+     * [mayOpen] is asked before a file or folder opens. Otherwise (one profile, no PIN, or no link
+     * in a development run) the file's own URI is the press, which still works after the app quit.
      */
     override fun result(key: Long, id: Long, title: String, body: String, open: OpenTarget?, failed: Boolean, mayOpen: () -> Boolean) = post {
         forget(id)
-        val launch = when {
-            failed -> null
-            pressable && (open is OpenTarget.File || open is OpenTarget.Folder) -> ToastPresses.register {
-                if (runCatching(mayOpen).getOrDefault(false)) openTarget(open)
-            }
-            else -> WindowsToast.launchUri(open)
-                ?: if (open == OpenTarget.DownloadsScreen && pressable) ToastPresses.register(onOpenDownloads) else null
-        }
+        val launch = WindowsToast.resultLaunch(
+            open = open,
+            failed = failed,
+            pressable = canPress(),
+            gated = runCatching(gatePresses).getOrDefault(true),
+            mayOpen = mayOpen,
+            openTarget = ::openTarget,
+            onOpenDownloads = onOpenDownloads,
+            register = ToastPresses::register,
+        )
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body, launch), tag = keyTag(key)))
     }
 
     override fun keyedNotice(key: Long, title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
         if (toastsOff) return@post
         if (input == null) start()
-        val launch = if (onPress != null && pressable) ToastPresses.register(onPress) else null
-        val actions = if (pressable) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
+        val canPress = canPress()
+        val launch = if (onPress != null && canPress) ToastPresses.register(onPress) else null
+        val actions = if (canPress) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body.orEmpty(), launch, actions), tag = keyTag(key)))
     }
 
     override fun dismiss(key: Long) = post { run(WindowsToast.remove(keyTag(key))) }
+
+    /**
+     * Whether a toast can carry a press. [pressable] is only known once the host has started
+     * ([start] registers the scheme), so it is started here first: read before, it would say no
+     * for the first toast of a run. False while toasts are off.
+     */
+    private fun canPress(): Boolean {
+        if (toastsOff) return false
+        if (input == null) start()
+        return !toastsOff && pressable
+    }
+
+    /** Waits until every call made so far has run, for tests. */
+    internal fun flush() {
+        runCatching { worker.submit {}.get(FLUSH_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    }
 
     private fun openTarget(open: OpenTarget) {
         when (open) {
@@ -161,8 +183,9 @@ internal class WindowsNotifications(
     override fun notice(title: String, body: String?, onPress: (() -> Unit)?, buttons: List<NoticeButton>) = post {
         if (toastsOff) return@post
         if (input == null) start()
-        val launch = if (onPress != null && pressable) ToastPresses.register(onPress) else null
-        val actions = if (pressable) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
+        val canPress = canPress()
+        val launch = if (onPress != null && canPress) ToastPresses.register(onPress) else null
+        val actions = if (canPress) buttons.map { it.label to ToastPresses.register(it.onPress) } else emptyList()
         run(WindowsToast.showDone(WindowsToast.doneXml(title, body.orEmpty(), launch, actions)))
     }
 
@@ -274,6 +297,7 @@ internal class WindowsNotifications(
 
     private companion object {
         const val TAG = "WindowsNotifications"
+        const val FLUSH_WAIT_MS = 5_000L
     }
 }
 
@@ -334,6 +358,30 @@ internal object WindowsToast {
         is OpenTarget.File -> File(open.path).parentFile?.toURI()?.toString()
         is OpenTarget.Folder -> File(open.path).toURI().toString()
         OpenTarget.DownloadsScreen, null -> null
+    }
+
+    /**
+     * The launch link of a result's toast. A file or folder goes through an in-memory `tmplayer:`
+     * link only when [pressable] and [gated] (it asks [mayOpen] first, and the link dies with the
+     * app); otherwise it is the plain `file:` URI. A failure has no press. [pressable] must be read
+     * after the host started.
+     */
+    fun resultLaunch(
+        open: OpenTarget?,
+        failed: Boolean,
+        pressable: Boolean,
+        gated: Boolean,
+        mayOpen: () -> Boolean,
+        openTarget: (OpenTarget) -> Unit,
+        onOpenDownloads: () -> Unit,
+        register: (() -> Unit) -> String,
+    ): String? = when {
+        failed -> null
+        pressable && gated && (open is OpenTarget.File || open is OpenTarget.Folder) -> register {
+            if (open != null && runCatching(mayOpen).getOrDefault(false)) openTarget(open)
+        }
+        else -> launchUri(open)
+            ?: if (open == OpenTarget.DownloadsScreen && pressable) register(onOpenDownloads) else null
     }
 
     fun showProgress(tag: String, xml: String, status: String, value: Double, valueText: String): String =
