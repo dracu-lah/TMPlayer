@@ -692,6 +692,7 @@ test('locked under a playing video: no key plays, opens or skips it, and nothing
     await openClips(page)
     await openCard(page, 'Native Clip')
     await playsPast(page, 1)
+    const watchPath = new URL(page.url()).pathname
     expect(await page.evaluate(() => Object.values((window as unknown as { __media: Record<string, unknown> }).__media).some((h) => typeof h === 'function'))).toBe(true)
     await showTab(page, 'hidden')
     await page.clock.fastForward(61_000)
@@ -719,6 +720,21 @@ test('locked under a playing video: no key plays, opens or skips it, and nothing
     await expect(picker(page)).toBeVisible()
     // The page behind is inert and hidden from screen readers.
     expect(await page.locator('main.page').evaluate((m) => m.hasAttribute('inert'))).toBe(true)
+    // The bar that mounted after the lock (the player left) and an element added later are shielded too.
+    await expect(page.locator('nav.nav')).toHaveAttribute('inert', /.*/)
+    await page.evaluate(() => {
+        document.body.appendChild(document.createElement('aside')).id = 'late-chrome'
+    })
+    await expect(page.locator('#late-chrome')).toHaveAttribute('inert', /.*/)
+    await expect(page.locator('#late-chrome')).toHaveAttribute('aria-hidden', 'true')
+    // A browser Forward to /watch while locked renders no player and plays nothing: it goes to the lock.
+    await page.evaluate((path) => {
+        history.pushState({}, '', path)
+        dispatchEvent(new PopStateEvent('popstate', { state: {} }))
+    }, watchPath)
+    await expect(page).not.toHaveURL(/\/watch\//)
+    await expect(page.locator('video, audio, .media-container')).toHaveCount(0)
+    expect(await state()).toEqual(locked)
     // A dialog that opens late (an answer coming back after the lock) does not open.
     expect(
         await page.evaluate(() => {
