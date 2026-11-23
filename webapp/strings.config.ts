@@ -265,6 +265,8 @@ export const PAGE_STRINGS = [
     'metadata.trailer_unavailable',
     'metadata.trailers_in_app',
     'metadata.trailers_in_app_detail',
+    'nav.account',
+    'nav.account_menu',
     'nav.chats',
     'nav.downloads',
     'nav.settings',

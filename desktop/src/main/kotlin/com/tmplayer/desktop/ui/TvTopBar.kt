@@ -172,7 +172,10 @@ internal fun TvTopBar(
                 chosen = current == null && !state.paletteOpen,
                 open = state.profileOpen,
                 badge = if (update != null) Tone.caution else null,
-                label = s.navProfile,
+                // "<name>, @<username>", as the Android TV bar says it; "Account" while none is known.
+                label = account?.name?.takeIf { it.isNotBlank() }?.let { name ->
+                    account.username.takeIf { it.isNotBlank() }?.let { "$name, @$it" } ?: name
+                } ?: s.navAccount,
                 onClick = { state.profileOpen = !state.profileOpen },
                 modifier = Modifier
                     .focusRequester(bar.picture)

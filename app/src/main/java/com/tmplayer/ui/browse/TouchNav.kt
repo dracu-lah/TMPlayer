@@ -172,6 +172,12 @@ internal class TouchNav(
     val onUpdate: () -> Unit,
     /** Switch profile (HX88): the picker, with two profiles or more on the device; null hides the row. */
     val onSwitchProfile: (() -> Unit)? = null,
+    /**
+     * The profile open now (WP-01): its saved photo and name stand in for the account's picture and
+     * name while Telegram has not answered yet, or never will (offline), so the bar says who is
+     * signed in from the first frame. Null where there is no profile list (a preview).
+     */
+    val profile: com.tmplayer.data.Profile? = null,
 )
 
 /**

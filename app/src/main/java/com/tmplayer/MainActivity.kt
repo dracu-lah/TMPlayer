@@ -2030,6 +2030,7 @@ private fun Root() {
             },
             onUpdate = { showUpdate = true },
             onSwitchProfile = profileFlow?.takeIf { severalProfiles }?.let { flow -> { flow.ask() } },
+            profile = profileList?.active,
         )
 
         // The television's top bar over Downloads, as it is over the browser's pages. Settings has

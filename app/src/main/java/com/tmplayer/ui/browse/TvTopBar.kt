@@ -5,6 +5,7 @@ import com.tmplayer.ui.theme.focusScale
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -112,15 +118,16 @@ internal object TvBarSignals {
 /**
  * The bar: the account's picture at the start, which opens the account's menu (Favourites, History,
  * Watch later, Settings, Refresh where the page has something to fetch again ([onRefresh]), and
- * Update when there is one); then Search, and the tabs Home, Chats and Downloads (R2: a place of
- * its own, with the number running); and at the end the app's mark and name, which take no focus.
+ * Update when there is one), with the account's first name beside it at rest (WP-01); then Search,
+ * and the tabs Home, Chats and Downloads (R2: a place of its own, with the number running); and at
+ * the end the app's mark, which takes no focus (its name is left out to pay for the first name).
  *
  * Nothing is behind it: every page but Home starts below it and is clipped at its foot, and Home's
  * carousel picture melts into the page at its top; once Home's rows scroll up under the bar, the
  * page's ground fills in behind it ([solid]).
  *
- * The page being shown is marked by its filled icon (the account's picture by a thin ring in the
- * accent) whether or not the remote is on the bar; the item the remote is on fills and grows. [overArt] says Home runs up under the bar.
+ * The page being shown is marked by its filled icon (the account's picture by a short accent line
+ * under it, the tabs' selected indicator, never a second ring) whether or not the remote is on the bar; the item the remote is on fills and grows. [overArt] says Home runs up under the bar.
  */
 @Composable
 internal fun TvTopBar(
@@ -160,17 +167,26 @@ internal fun TvTopBar(
 ) {
     val s = LocalStrings.current
     var profileOpen by remember { mutableStateOf(false) }
+    // Who is signed in: Telegram's name once it is known, else the profile's own (saved on this
+    // device, so it is there offline and while Telegram connects).
+    val shownName = nav.account?.name?.takeIf { it.isNotBlank() } ?: nav.profile?.shownName?.takeIf { it.isNotBlank() }
+    val description = profileDescription(
+        name = shownName,
+        username = nav.account?.username,
+        fallback = s.navAccount,
+        updateWaiting = if (nav.updateVersion != null) s.navUpdateWaiting else null,
+    )
     val ground = Tone.background
     val homeFocus = remember { FocusRequester() }
     val chatsFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
-    val profileFocus = remember { FocusRequester() }
+    val ownProfileFocus = remember { FocusRequester() }
     val downloadsFocus = remember { FocusRequester() }
     // Which item the shared requester sits on; every other one keeps its own.
     val target = if (searchOpen) null else current
     fun focusOf(tab: TvBarTab, own: FocusRequester) = if (target == tab) currentFocus else own
     val searchRequester = if (searchOpen) currentFocus else searchFocus
-    val profileRequester = if (!searchOpen && current == null) currentFocus else profileFocus
+    val profileRequester = if (!searchOpen && current == null) currentFocus else ownProfileFocus
 
     Box(
         modifier
@@ -202,10 +218,13 @@ internal fun TvTopBar(
         ) {
             ProfileButton(
                 account = nav.account,
+                profile = nav.profile,
+                firstName = FirstName.of(shownName),
                 chosen = inProfile && !searchOpen && !downloadsShown,
                 // An update waiting; the running downloads count on the Downloads tab now.
                 badge = if (nav.updateVersion != null) Tone.caution else null,
-                label = nav.account?.name ?: s.browseTabHistory,
+                description = description,
+                onClickLabel = s.navAccountMenu,
                 onClick = { profileOpen = true },
                 open = profileOpen,
                 modifier = Modifier
@@ -213,9 +232,11 @@ internal fun TvTopBar(
                     .tvReturnPoint(profileRequester)
                     .then(if (profileFocus != null) Modifier.focusRequester(profileFocus) else Modifier),
             )
-            Spacer(Modifier.width(18.dp))
+            // The row's own FocusClearance of padding keeps a tab's focus scale and ring from being
+            // cut at the row's ends; the spacer gives it back, so the tabs stand where they did.
+            Spacer(Modifier.width(18.dp - Tv.FocusClearance))
             Row(
-                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = Tv.FocusClearance),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -245,11 +266,15 @@ internal fun TvTopBar(
                 }
             }
             Spacer(Modifier.width(18.dp))
-            // The app's own mark and its name, the way a television's home screen signs itself:
-            // the mark at the picture's size.
-            com.tmplayer.ui.components.BrandLockup(
-                size = com.tmplayer.ui.components.BrandSize(CLUSTER_ITEM, BRAND_NAME_TYPE, 12.dp),
-                layout = com.tmplayer.ui.components.BrandLayout.Row,
+            // The app's own mark at the picture's size, the way a television's home screen signs
+            // itself. The name is left out: its width pays for the account's first name (WP-01).
+            Image(
+                com.tmplayer.ui.components.AppLogo.Mark,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(CLUSTER_ITEM)
+                    .clip(RoundedCornerShape(CLUSTER_ITEM * com.tmplayer.ui.components.TILE_CORNER))
+                    .clearAndSetSemantics { contentDescription = com.tmplayer.ui.components.BRAND_NAME },
             )
         }
     }
@@ -263,7 +288,7 @@ internal fun TvTopBar(
             }
         }
         TvMenu(
-            title = nav.account?.name.orEmpty(),
+            title = shownName ?: s.navAccount,
             // "Your viewing" under the name, as the phone's and the desktop's menus head theirs;
             // the rows below go to each list.
             subtitle = listOfNotNull(
@@ -296,15 +321,25 @@ internal fun TvTopBar(
 /** How many frames, about a second and a half at 60 Hz, a page opened from the bar leaves the remote on it. */
 private const val BAR_HOLD_FRAMES = 90
 
-/** The account's picture's focus ring, and the gap between it and the picture. */
-private val RING_WIDTH = 3.dp
-private val RING_GAP = 3.dp
+/**
+ * The account's picture's focus ring and its halo, both inside the 48 dp rect: the ring starts at
+ * the picture's own edge (20 dp, or 21 dp once it has grown 5 percent under focus) and runs 2.5 dp
+ * out, then the page's own ground as a 0.5 dp halo, ending at 23.5 dp at most.
+ */
+private val RING_WIDTH = 2.5.dp
+private val HALO_WIDTH = 0.5.dp
+
+/** The picture's growth under focus: from a 20 dp to a 21 dp radius, to meet the ring. Nothing outgrows the 48 dp rect. */
+private const val PROFILE_FOCUS_SCALE = 1.05f
 
 /** The height of a tab's pill and the size of the account's picture, so the bar reads as one line. */
 private val CLUSTER_ITEM = 40.dp
 
-/** The app's name beside its mark at the bar's end, read from a sofa. */
-private val BRAND_NAME_TYPE = 22.sp
+/** The focus rect of the account's picture (the avatar role's 48 dp): the 40 dp picture stands centred in it. */
+private val PROFILE_RECT = CLUSTER_ITEM + 8.dp
+
+/** The widest the first name at rest is drawn: longer ends in an ellipsis. */
+private val FIRST_NAME_MAX = 120.dp
 
 /** One of the tabs: its icon and name in a pill, the icon filled while its page is shown. */
 @Composable
@@ -392,14 +427,27 @@ private fun BarTab(
     }
 }
 
-/** The account's picture, first in the bar: opens the account's menu. Ringed while one of its pages is shown. */
+/**
+ * The account's picture and first name, first in the bar: opens the account's menu. The focus rect
+ * is 48 dp ([PROFILE_RECT]) with the 40 dp picture centred, and the ring and halo are drawn inside
+ * it (the avatar role of [com.tmplayer.ui.theme.FocusRole]); the page shown from here is marked by
+ * a short accent line under the picture, the selected indicator a chosen tab carries, never a
+ * second ring. The first name is there at rest and its width never changes with focus, so the tabs
+ * beside it never move.
+ */
 @Composable
 private fun ProfileButton(
     account: com.tmplayer.data.Account?,
+    profile: com.tmplayer.data.Profile?,
+    /** The first word of the name at rest, or null when no name is known at all. */
+    firstName: String?,
     chosen: Boolean,
-    /** A dot on the picture: a download running (accent) or an update waiting (amber). */
+    /** A dot on the picture: an update waiting (amber). */
     badge: Color?,
-    label: String,
+    /** What a screen reader says: "<name>, @<username>", with the update waiting after it. */
+    description: String,
+    /** What OK does, said after "Double tap to": "open the account menu". */
+    onClickLabel: String,
     onClick: () -> Unit,
     /** The account's menu is open over the bar: the picture stays marked as the item in use. */
     open: Boolean,
@@ -414,51 +462,108 @@ private fun ProfileButton(
         when {
             still -> 1f
             pressed -> Motion.PressScale
-            lit -> focusScale
+            lit -> PROFILE_FOCUS_SCALE
             else -> 1f
         },
         Motion.standard(Motion.Fast),
         label = "barProfileScale",
     )
-    // A ring in the accent a little way out from the picture, with a thin halo of the page's own
-    // ground outside it, so it reads over a pale page, a dark one and the carousel's picture.
+    // A ring in the accent round the picture, with a thin halo of the page's own ground outside
+    // it, so it reads over a pale page, a dark one and the carousel's picture. Both are drawn
+    // inside the 48 dp rect, which itself never scales, so no frame leaves the bar's safe area.
     val ring by animateFloatAsState(if (lit) 1f else 0f, Motion.standard(Motion.Fast), label = "barProfileRing")
     val accent = Tone.accent
     val ground = Tone.background
-    Box(modifier, contentAlignment = Alignment.Center) {
+    Row(
+        modifier
+            .height(PROFILE_RECT)
+            .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
+            .semantics { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             Modifier
-                .size(CLUSTER_ITEM)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
+                .size(PROFILE_RECT)
                 .drawBehind {
-                    val picture = size.minDimension / 2f
+                    val center = Offset(size.width / 2f, size.height / 2f)
                     if (ring > 0f) {
                         val width = RING_WIDTH.toPx()
-                        val gap = RING_GAP.toPx()
-                        drawCircle(ground.copy(alpha = 0.7f * ring), radius = picture + gap + width + 1.dp.toPx(), style = Stroke(2.dp.toPx()))
-                        drawCircle(accent.copy(alpha = ring), radius = picture + gap + width / 2f, style = Stroke(width))
-                    } else if (chosen) {
-                        drawCircle(accent, radius = picture + 1.dp.toPx(), style = Stroke(2.dp.toPx()))
+                        // The picture's edge as it is now, so no gap shows, with reduced motion either.
+                        val inner = CLUSTER_ITEM.toPx() / 2f * scale
+                        val halo = HALO_WIDTH.toPx()
+                        drawCircle(ground.copy(alpha = 0.7f * ring), radius = inner + width + halo / 2f, center = center, style = Stroke(halo))
+                        drawCircle(accent.copy(alpha = ring), radius = inner + width / 2f, center = center, style = Stroke(width))
                     }
-                }
-                .clip(CircleShape)
-                .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClickLabel = label, onClick = onClick),
+                    if (chosen) {
+                        // The selected indicator: a short line in the accent under the picture.
+                        val line = 3.dp.toPx()
+                        val length = 24.dp.toPx()
+                        drawRoundRect(
+                            accent,
+                            topLeft = Offset(center.x - length / 2f, size.height - line),
+                            size = androidx.compose.ui.geometry.Size(length, line),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(line / 2f, line / 2f),
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
         ) {
-            AccountPicture(account)
-        }
-        if (badge != null) {
             Box(
                 Modifier
-                    .align(Alignment.TopEnd)
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(badge),
-            )
+                    .size(CLUSTER_ITEM)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .clip(CircleShape),
+            ) { AccountPicture(account, profile) }
+            if (badge != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 1.dp, end = 1.dp)
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(badge)
+                        .testTag("tv-bar-update-dot"),
+                )
+            }
+        }
+        if (firstName != null) {
+            // Read once, in the button's description: the chip is for the eye.
+            Box(Modifier.clearAndSetSemantics { }) {
+                Text(
+                    firstName,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Tone.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = FIRST_NAME_MAX).padding(start = 8.dp, end = 4.dp).testTag("tv-bar-first-name"),
+                )
+            }
         }
     }
+}
+
+/** The first word of a name, for the chip at rest. */
+internal object FirstName {
+    fun of(name: String?): String? = name?.trim()?.split(WHITESPACE)?.firstOrNull()?.takeIf { it.isNotEmpty() }
+
+    private val WHITESPACE = Regex("\\s+")
+}
+
+/**
+ * What a screen reader says for the account's button: "<name>, @<username>" (the username only
+ * when there is one), the [fallback] ("Account") while no name is known, and the [updateWaiting]
+ * words after it while one is given. The amber dot itself stays a picture.
+ */
+internal fun profileDescription(name: String?, username: String?, fallback: String, updateWaiting: String?): String {
+    val known = name?.takeIf { it.isNotBlank() }
+    return listOfNotNull(
+        known ?: fallback,
+        username?.takeIf { known != null && it.isNotBlank() }?.let { "@$it" },
+        updateWaiting,
+    ).joinToString(", ")
 }
 
 /**

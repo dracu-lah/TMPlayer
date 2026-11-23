@@ -126,6 +126,9 @@ export function TvBar() {
     const location = useLocation()
     const place = () => placeOf(location.pathname)
     const initial = () => initialOf(me()?.name)
+    // The first word of the name at rest beside the picture, as the app's bar writes it (WP-01).
+    const firstName = () => (me()?.name ?? '').trim().split(/\s+/)[0] ?? ''
+    const label = () => (me()?.name?.trim() ? `${me()?.name?.trim()}, ${t('nav.account_menu')}` : t('nav.account'))
     const [scrolled, setScrolled] = createSignal(scrollY > 0)
     const onScroll = () => {
         const s = scrollY > innerHeight * 0.25
@@ -142,8 +145,8 @@ export function TvBar() {
                 <A
                     class="tv-picture"
                     href="/settings"
-                    aria-label={t('nav.you')}
-                    title={t('nav.you')}
+                    aria-label={label()}
+                    title={label()}
                     aria-current={place() === '/settings' ? 'page' : undefined}
                     style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}
                 >
@@ -151,6 +154,12 @@ export function TvBar() {
                         {initial()}
                     </Show>
                 </A>
+                {/* Read once, in the picture's label: the chip is for the eye. */}
+                <Show when={firstName()}>
+                    <span class="tv-picture-name" aria-hidden="true">
+                        {firstName()}
+                    </span>
+                </Show>
                 <nav class="tv-tabs" aria-label="TMPlayer">
                     <For each={TABS}>
                         {(tab) => (

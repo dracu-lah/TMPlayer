@@ -385,7 +385,14 @@ private fun AddTile(size: Dp, enabled: Boolean, modifier: Modifier, onClick: () 
  * initial on its name's colour ([NameArtTile]).
  */
 @Composable
-fun ProfileAvatar(name: String, photo: String?, size: Dp, modifier: Modifier = Modifier) {
+fun ProfileAvatar(
+    name: String,
+    photo: String?,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    /** The letter's size when it should not scale with [size] (the TV bar's 40 dp picture, 22 sp); unspecified scales it. */
+    letterSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+) {
     val px = with(LocalDensity.current) { size.roundToPx() }.coerceAtLeast(1)
     val picture by produceState<ImageBitmap?>(null, photo, px) {
         if (photo == null) return@produceState
@@ -402,7 +409,14 @@ fun ProfileAvatar(name: String, photo: String?, size: Dp, modifier: Modifier = M
             NameArtTile(name) {
                 DrawnLetter(
                     NameInitial.of(name).orEmpty(),
-                    MaterialTheme.typography.headlineMedium.copy(color = NameArt.onLetter, fontSize = MaterialTheme.typography.headlineMedium.fontSize * (size.value / 96f)),
+                    MaterialTheme.typography.headlineMedium.copy(
+                        color = NameArt.onLetter,
+                        fontSize = if (letterSize != androidx.compose.ui.unit.TextUnit.Unspecified) {
+                            letterSize
+                        } else {
+                            MaterialTheme.typography.headlineMedium.fontSize * (size.value / 96f)
+                        },
+                    ),
                 )
             }
         }

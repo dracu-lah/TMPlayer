@@ -110,7 +110,7 @@ class BigScreenKeysTest {
 
     private fun poster(n: Int) = hasText("Video $n") and hasClickAction()
     private fun tab(label: String) = hasContentDescription(label) and hasClickAction()
-    private val picture get() = hasContentDescription(L.navProfile) and hasClickAction()
+    private val picture get() = hasContentDescription(L.navAccount) and hasClickAction()
 
     /** The window as Main.kt and DesktopShell put it together, the page's Back as Browse has it. */
     @Composable

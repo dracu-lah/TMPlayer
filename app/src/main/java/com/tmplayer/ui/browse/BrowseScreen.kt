@@ -101,6 +101,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -1883,21 +1884,41 @@ enum class RailReturn { Downloads, Settings, Profile, ChooseChats }
 private const val RETURN_HOLD_FRAMES = 90
 
 /**
- * The signed in account's picture, first on the television's top bar: Telegram's picture when
- * there is one, the initials of the name while it loads or when there is none.
+ * The signed in account's picture, first on the television's top bar. In this order: Telegram's
+ * picture once it is there; else the profile's saved photo; else the first letter of the name on
+ * the profile's own colour (never an empty disc while the account loads, WP-01); and only when no
+ * name is known at all, the person glyph.
  */
 @Composable
-internal fun AccountPicture(account: Account?) {
-    Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(Tone.surfaceHigh)) {
-        if (account != null) {
-            MediaPreview(
+internal fun AccountPicture(account: Account?, profile: com.tmplayer.data.Profile?) {
+    val name = account?.name?.takeIf { it.isNotBlank() } ?: profile?.shownName?.takeIf { it.isNotBlank() }
+    val saved = profile?.photo
+    Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(Tone.surfaceHigh), contentAlignment = Alignment.Center) {
+        val telegram = account != null && (account.photoFileId > 0 || account.miniThumbnail?.isNotEmpty() == true)
+        when {
+            // Telegram's own picture; its stand-in (before it decodes, or if it never arrives) is
+            // the saved photo or the letter.
+            telegram && account != null -> com.tmplayer.ui.components.MediaArt(
                 miniThumbnail = account.miniThumbnail,
                 thumbnailFileId = account.photoFileId,
-                fallbackLabel = account.name,
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
+                fallback = { SavedOrLetter(name.orEmpty(), saved) },
             )
+            name != null -> SavedOrLetter(name, saved)
+            else -> Icon(TmIcons.Account, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(Avatar.Compact * 0.6f))
         }
     }
+}
+
+/**
+ * The profile's saved photo, else the first letter of [name] on the colour its name hashes to, at
+ * the bar's 40 dp, also when the saved file is gone. The letter is 22 sp: the picker's own letter
+ * scales with its disc and is about 12 sp here, and the old headline size touched the disc's edge
+ * (U-TV-05). It is drawn, not a text node, so a screen reader never reads it after the name.
+ */
+@Composable
+private fun SavedOrLetter(name: String, saved: String?) {
+    com.tmplayer.ui.lock.ProfileAvatar(name, saved, Avatar.Compact, letterSize = 22.sp)
 }
 
 // ---- content ---------------------------------------------------------------------------------

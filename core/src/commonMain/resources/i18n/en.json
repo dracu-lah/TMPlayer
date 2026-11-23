@@ -1814,6 +1814,8 @@
     "unreadable": "That MSone subtitle couldn't be read. Try another one"
   },
   "nav": {
+    "account": "Account",
+    "account_menu": "open the account menu",
     "chats": "Chats",
     "downloads": "Downloads",
     "favourites": "Favourites",
@@ -1827,6 +1829,7 @@
     "telegram": "Telegram",
     "unfold": "Unfold",
     "update": "Update",
+    "update_waiting": "an update is ready",
     "watch": "Watch",
     "you": "You"
   },

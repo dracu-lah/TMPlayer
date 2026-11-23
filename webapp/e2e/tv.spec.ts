@@ -75,6 +75,9 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+            // The picture says who is signed in (WP-01): its accessible name, and the first name at rest beside it.
+            await expect(page.locator('.tv-picture')).toHaveAttribute('aria-label', 'Dana Test, open the account menu')
+            await expect(page.locator('.tv-picture-name')).toHaveText('Dana')
             await expect.poll(() => focused(page)).toContain('card|/video/')
             await expect(page.locator('.tv-hero')).toHaveCount(0)
             await press(page, 'ArrowDown', 2)
@@ -137,6 +140,45 @@ for (const size of [
             await press(page, 'Backspace')
             await expect(page).toHaveURL(/\/chats$/)
             await expect.poll(() => focused(page)).toBe(row)
+        })
+
+        test('The bar on Chats with the longest name: picture, 120 dp name, tabs, Choose chats, fullscreen and the brand all fit, none over another', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
+            await page.goto('/chats')
+            await expect(page.locator('.tv-picture-name')).toHaveText('Dana')
+            // The widest first name the chip can hold: 64 letters, which the 120 dp cap cuts with an ellipsis.
+            await page.evaluate(() => {
+                const chip = document.querySelector('.tv-picture-name')
+                if (chip) chip.textContent = 'W'.repeat(64)
+            })
+            const boxes = await page.evaluate(() => {
+                const rect = (el: Element | null) => {
+                    const r = el?.getBoundingClientRect()
+                    return r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null
+                }
+                const dp = innerWidth / 960
+                const tabs = [...document.querySelectorAll('.tv-tab')].map(rect)
+                const nav = document.querySelector('.tv-tabs') as HTMLElement | null
+                return {
+                    dp,
+                    width: innerWidth,
+                    picture: rect(document.querySelector('.tv-picture')),
+                    chip: rect(document.querySelector('.tv-picture-name')),
+                    tabs,
+                    navOverflows: nav ? nav.scrollWidth > nav.clientWidth + 1 : false,
+                    choose: rect(document.querySelector('.tv-choose')),
+                    fullscreen: rect(document.querySelector('.tv-fullscreen')),
+                    brand: rect(document.querySelector('.tv-brand')),
+                }
+            })
+            const { picture, chip, choose, brand, fullscreen } = boxes
+            expect(picture && chip && choose && brand && fullscreen).toBeTruthy()
+            expect(chip!.right - chip!.left).toBeLessThanOrEqual(120 * boxes.dp + 1)
+            // Left to right: picture, name, every tab, Choose chats, fullscreen, brand, each ending before the next starts.
+            const order = [picture, chip, ...boxes.tabs, choose, fullscreen, brand].filter(Boolean) as { left: number; right: number }[]
+            for (let i = 1; i < order.length; i++) expect(order[i].left, `item ${i} starts after item ${i - 1} ends`).toBeGreaterThanOrEqual(order[i - 1].right - 1)
+            expect(boxes.navOverflows).toBe(false)
+            expect(brand!.right).toBeLessThanOrEqual(boxes.width)
         })
 
         test('Choose chats: the bar holds a button on Chats only, OK opens the picker on its page, Back returns the remote to the button', async ({ page, context }) => {
