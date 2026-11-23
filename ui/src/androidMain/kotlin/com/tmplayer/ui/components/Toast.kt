@@ -16,6 +16,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -88,8 +90,8 @@ private fun systemToast(context: Context, message: String) {
 /**
  * [rememberToast] with one action on the pill, for a change that is easy to make by mistake (a
  * chat hidden from its menu): "Undo" beside the words on a touch screen, held a little longer.
- * Under a remote the pill takes no focus, so a caller there says in the words where the change
- * is undone instead, and the action is not drawn.
+ * Under a remote the action is a pill the remote can walk to (it takes no focus on its own, so a
+ * message never steals the viewer's place), held 12 s, and Back closes the message.
  */
 @Composable
 fun rememberActionToast(): (message: String, action: String, onAction: () -> Unit) -> Unit {
@@ -103,7 +105,7 @@ fun rememberActionToast(): (message: String, action: String, onAction: () -> Uni
     }
 }
 
-private class TopMessage(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
+internal class TopMessage(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
 
 private object TopMessages {
     val flow = MutableSharedFlow<TopMessage>(extraBufferCapacity = 8)
@@ -139,9 +141,13 @@ fun BoxScope.TopMessageHost(
     }
     LaunchedEffect(serial) {
         val message = shown ?: return@LaunchedEffect
-        delay(if (message.action != null && touch) SHOWN_WITH_ACTION_MS else SHOWN_MS)
+        delay(toastDurationMs(message.text, message.action != null, touch))
         shown = null
     }
+    // A remote has no swipe to send a message away: Back closes it (the next Back leaves as usual).
+    // Composed only while a message shows, so it is the newest handler and wins over the screen's:
+    // registered once at start-up it would sit under every handler a screen adds later.
+    if (!touch && shown != null && !suppressed) com.tmplayer.ui.nav.BackHandler(enabled = true) { shown = null }
     // It drops in from the top on a soft spring, grows the last bit from its top edge as it lands,
     // and goes back up the way it came; with less motion asked for it only fades.
     val still = rememberLessMotion()
@@ -175,20 +181,30 @@ fun BoxScope.TopMessageHost(
         ) {
             // A newer message replacing one on screen cross-fades into it, the pill staying put.
             Crossfade(targetState = last, animationSpec = Motion.standard(Motion.Fast), label = "topMessage") { message ->
-                val action = message.action?.takeIf { touch }
+                val action = message.action
                 val onAction = message.onAction
                 if (action == null || onAction == null) {
                     Text(message.text, style = MaterialTheme.typography.bodyMedium, color = Tone.text, textAlign = TextAlign.Center)
                 } else {
                     androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(message.text, style = MaterialTheme.typography.bodyMedium, color = Tone.text, modifier = Modifier.weight(1f, fill = false))
-                        androidx.compose.material3.TextButton(
-                            onClick = {
+                        if (touch) {
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    onAction()
+                                    shown = null
+                                },
+                                modifier = Modifier.padding(start = 8.dp),
+                            ) { Text(action, color = Tone.accent, style = MaterialTheme.typography.labelLarge) }
+                        } else {
+                            // The remote reaches it like any button (Up from the top bar, or Down
+                            // from nothing: it sits in the focus order at the top of the screen), and
+                            // it takes no focus on its own, so a message never steals the viewer's place.
+                            ToastAction(action) {
                                 onAction()
                                 shown = null
-                            },
-                            modifier = Modifier.padding(start = 8.dp),
-                        ) { Text(action, color = Tone.accent, style = MaterialTheme.typography.labelLarge) }
+                            }
+                        }
                     }
                 }
             }
@@ -196,7 +212,40 @@ fun BoxScope.TopMessageHost(
     }
 }
 
+/**
+ * How long a message stays. A touch screen reads it at arm's length in a moment; a television is read
+ * from the sofa, so a message there stays for its length (a short one 4 s, a long one up to 9 s) and
+ * a line with an action holds 12 s, so the remote has time to walk to the action (2026-11-23).
+ */
+fun toastDurationMs(text: String, hasAction: Boolean, touch: Boolean): Long = when {
+    hasAction -> if (touch) SHOWN_WITH_ACTION_MS else SHOWN_WITH_ACTION_TV_MS
+    touch -> SHOWN_MS
+    else -> (TV_BASE_MS + text.length * TV_PER_CHAR_MS).coerceIn(SHOWN_TV_MIN_MS, SHOWN_TV_MAX_MS)
+}
+
+/** The action of a message on a television: a pill that fills under the remote, as every pill does. */
+@Composable
+private fun ToastAction(label: String, onClick: () -> Unit) {
+    val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    Box(
+        Modifier
+            .padding(start = 12.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (focused) Tone.focusFill else Tone.accent.copy(alpha = 0.22f))
+            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 6.dp),
+    ) {
+        Text(label, color = if (focused) Tone.onFocusFill else Tone.accent, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
 private const val SHOWN_MS = 2_500L
+private const val SHOWN_WITH_ACTION_TV_MS = 12_000L
+private const val SHOWN_TV_MIN_MS = 4_000L
+private const val SHOWN_TV_MAX_MS = 9_000L
+private const val TV_BASE_MS = 2_000L
+private const val TV_PER_CHAR_MS = 60L
 /**
  * A line with Undo stays long enough to reach for it: five seconds was gone before a viewer who
  * read it first got there (2026-10-27), and Gmail and Google Photos hold theirs about as long as this.
