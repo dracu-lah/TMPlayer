@@ -309,6 +309,8 @@ val androidPlayerForIos = tasks.register<Sync>("androidPlayerForIos") {
             "PlaybackTestSession", "RemedyFacts", "RemedyRunner", "SessionFacts", "SpeedLabelDrawable", "StalledSheet",
             "SubtitleCueFit", "SubtitleOfferChip", "TdReadCounters", "TraceFile", "TraceSampler", "TrackKeys", "TunnelingSupport",
             "VlcBackend", "VlcOptions",
+            // The remote key helper (what each key means in the player), pure Kotlin over KeyEvent.
+            "PlayerRemoteKeys",
         )
             .forEach { include("com/tmplayer/player/$it.kt") }
     }
