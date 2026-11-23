@@ -13,14 +13,26 @@ const SHEETS = [
     { file: '../player/player-tv.css', unit: '--u' },
 ]
 
-/** Every font-size declaration of a sheet with its multiplier of the app's dp (NaN when it is not written in --dp or --u). */
+const SIZE = /calc\(\s*var\(--(?:dp|u)(?:\s*,\s*[^)]*)?\)\s*\*\s*([0-9.]+)\s*\)/
+
+/**
+ * Every font-size declaration of a sheet, and every `font` shorthand that is not just a keyword
+ * (`font: inherit` carries no size), with its multiplier of the app's dp (NaN when the size is not
+ * written in --dp or --u, or the shorthand has none).
+ */
 function sizes(css: string): { at: number; value: string; dp: number }[] {
     const clean = css.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))
     const out: { at: number; value: string; dp: number }[] = []
     for (const m of clean.matchAll(/(?<![-\w])font-size\s*:\s*([^;}]+)/g)) {
         const value = m[1]!.trim()
-        const calc = value.match(/^calc\(\s*var\(--(?:dp|u)(?:\s*,\s*[^)]*)?\)\s*\*\s*([0-9.]+)\s*\)$/)
+        const calc = value.match(new RegExp(`^${SIZE.source}$`))
         out.push({ at: clean.slice(0, m.index).split('\n').length, value, dp: calc ? parseFloat(calc[1]!) : NaN })
+    }
+    for (const m of clean.matchAll(/(?<![-\w])font\s*:\s*([^;}]+)/g)) {
+        const value = m[1]!.trim()
+        if (/^(inherit|initial|unset|revert)$/.test(value)) continue
+        const calc = value.match(SIZE)
+        out.push({ at: clean.slice(0, m.index).split('\n').length, value: `font: ${value}`, dp: calc ? parseFloat(calc[1]!) : NaN })
     }
     return out
 }
@@ -75,6 +87,20 @@ test('every other sheet holds its TV rules to the floor as well', () => {
         }
     }
     assert.deepEqual(bad, [])
+})
+
+test('a TV rule that overrides a phone rule with a small size is caught, whichever way it is written', () => {
+    const css = `
+        .tag { font-size: 16px; }
+        html[data-form=tv] .tag { font-size: calc(var(--dp) * 11); }
+        .pc-note { font: 500 15px/20px sans-serif; }
+        .pc[data-variant="tv"] .pc-note { font: 500 calc(var(--u) * 12)/1.2 sans-serif; }
+        html[data-form=tv] .other { font: 12px sans-serif; }
+        html[data-form=tv] .fine { font: inherit; font-size: calc(var(--dp) * 14); }
+        @media (max-width: 600px) { html[data-form=tv] .wide { font-size: calc(var(--dp) * 13); } }
+    `
+    const small = tvRuleSizes(css).filter((s) => !(s.dp >= FLOOR)).map((s) => s.selector)
+    assert.deepEqual(small, ['html[data-form=tv] .tag', '.pc[data-variant="tv"] .pc-note', 'html[data-form=tv] .other', 'html[data-form=tv] .wide'])
 })
 
 test('the checker reads both units and refuses a literal size', () => {

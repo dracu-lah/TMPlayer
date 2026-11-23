@@ -80,6 +80,13 @@ class TvUxPlayerRowTest {
         if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i), out)
     }
 
+    /** Every view that can be drawn later: not gone, so a time that has no text yet and an invisible caption count. */
+    private fun walkNotGone(v: View, out: MutableList<View>) {
+        if (v.visibility == View.GONE) return
+        out += v
+        if (v is ViewGroup) for (i in 0 until v.childCount) walkNotGone(v.getChildAt(i), out)
+    }
+
     private fun name(v: View): String {
         val info = v.createAccessibilityNodeInfo()
         val words = info.contentDescription?.toString()?.takeIf { it.isNotBlank() } ?: info.text?.toString()?.takeIf { it.isNotBlank() }
@@ -121,6 +128,14 @@ class TvUxPlayerRowTest {
                         if (scale > FocusStyle.TvScale + 0.005f) add("focusSizeStable", n, "drawn at scale $scale focused, more than the design scale ${FocusStyle.TvScale}")
                     }
                 }
+            }
+            // WP-04 review: a text with no words yet (the times before the first tick) sets its size
+            // in the layout all the same, and the seek figure and the labels are set in code.
+            val names = mutableSetOf<String>()
+            for (t in mutableListOf<View>().also { walkNotGone(root, it) }.filterIsInstance<TextView>()) {
+                val sp = t.textSize / density
+                val id = runCatching { t.resources.getResourceEntryName(t.id) }.getOrNull() ?: "unnamed ${t.javaClass.simpleName}"
+                if (sp + 0.05f < 14f && names.add(id)) add("textFloor@Default,${"%.1f".format(font)}", "view $id", "laid out at ${"%.1f".format(sp)} sp of the screen, want 14.0")
             }
             for (t in all.filterIsInstance<TextView>()) {
                 if (t.text.isNullOrBlank()) continue

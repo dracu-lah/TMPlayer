@@ -407,7 +407,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textColor="#B8FFFFFF"
-                android:textSize="13sp" />
+                android:textSize="@dimen/player_text_small" />
 
             <TextView
                 android:id="@+id/times_duration"
@@ -419,7 +419,7 @@
                 android:gravity="end"
                 android:paddingStart="8dp"
                 android:textColor="#B8FFFFFF"
-                android:textSize="13sp" />
+                android:textSize="@dimen/player_text_small" />
         </LinearLayout>
 
         <com.tmplayer.player.FineTimeBar

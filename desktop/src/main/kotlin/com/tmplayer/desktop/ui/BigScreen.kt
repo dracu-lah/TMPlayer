@@ -76,6 +76,13 @@ object BigScreen {
  * multiplying that, but never less than the [MIN_WIDTH] by [MIN_HEIGHT] the desktop's layouts are
  * made for, and never smaller than the desktop's own. A 1920 by 1080 television at 100 per cent is
  * 1.6 at Default and 1.8 (1067 by 600) at Larger and Largest; a 4K one at 100 per cent twice that.
+ *
+ * Audit against the Android TV text floor (WP-04, 14 sp on a 960 by 540 dp screen, 28 px at 1080p):
+ * the desktop keeps the phone type scale, whose smallest style is 11 sp, so on a 1920 by 1080
+ * television at Default it draws at 11 x 1.6 = 17.6 px, about 8.8 dp of the 960 by 540 screen. That
+ * is under the TV's floor, because this room is 1200 by 675 dp (a desktop's density, more text per
+ * screen than a TV app). Not changed here: raising it means a big-screen type scale of its own,
+ * which is a separate piece of work.
  */
 object TvScale {
     const val ROOM_WIDTH = 1200f
