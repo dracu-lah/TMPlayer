@@ -91,7 +91,14 @@ fun interface SoapTransport {
  * answers a redirect is sending the call somewhere TMPlayer did not choose), and a body cap on
  * what is read back. Never throws: every failure is a [SoapResult.Failed].
  */
-class SoapClient(private val timeoutMs: Int = 5_000) : SoapTransport {
+class SoapClient(
+    private val timeoutMs: Int = 5_000,
+    /**
+     * Hears every call as sent and answered: the URL, the request headers and envelope, then the
+     * status (-1 for none) and the body. For the real-renderer check's record; null everywhere else.
+     */
+    private val trace: ((url: String, request: String, status: Int, response: String) -> Unit)? = null,
+) : SoapTransport {
 
     override fun call(service: DlnaService, action: String, args: List<Pair<String, String>>): SoapResult {
         val payload = try {
@@ -111,18 +118,23 @@ class SoapClient(private val timeoutMs: Int = 5_000) : SoapTransport {
                 setFixedLengthStreamingMode(payload.size)
                 setRequestProperty("Content-Type", "text/xml; charset=\"utf-8\"")
                 setRequestProperty("SOAPAction", Soap.actionHeader(service.type, action))
-                setRequestProperty("User-Agent", "TMPlayer")
+                setRequestProperty("User-Agent", Ssdp.USER_AGENT)
                 setRequestProperty("Connection", "close")
             }
             connection.outputStream.use { it.write(payload) }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.use { readCapped(it) }
+            val body = stream?.use { readCapped(it, connection.contentType) }
+            trace?.let { hear ->
+                val headers = connection.headerFields.entries.filter { it.key != null }.joinToString("\n") { "${it.key}: ${it.value.joinToString(", ")}" }
+                runCatching { hear(service.controlUrl, request(service, action, payload), status, "${connection.getHeaderField(0)}\n$headers\n\n${body.orEmpty()}") }
+            }
             Soap.parse(status, body)
         } catch (e: TooBig) {
             SoapResult.Failed("The answer was too large")
         } catch (e: IOException) {
             Logger.i(TAG, "$action failed: ${e.message}")
+            trace?.let { hear -> runCatching { hear(service.controlUrl, request(service, action, payload), -1, "No answer: ${e.message}") } }
             SoapResult.Failed(e.message ?: "No answer")
         } catch (e: Exception) {
             SoapResult.Failed(e.message ?: "Bad call")
@@ -131,9 +143,13 @@ class SoapClient(private val timeoutMs: Int = 5_000) : SoapTransport {
         }
     }
 
+    private fun request(service: DlnaService, action: String, payload: ByteArray): String =
+        "POST ${service.controlUrl} HTTP/1.1\nContent-Type: text/xml; charset=\"utf-8\"\nSOAPAction: ${Soap.actionHeader(service.type, action)}\n" +
+            "User-Agent: ${Ssdp.USER_AGENT}\nConnection: close\nContent-Length: ${payload.size}\n\n${String(payload, Charsets.UTF_8)}"
+
     private class TooBig : IOException()
 
-    private fun readCapped(input: java.io.InputStream): String {
+    private fun readCapped(input: java.io.InputStream, contentType: String?): String {
         val out = ByteArrayOutputStream()
         val buffer = ByteArray(8 * 1024)
         while (true) {
@@ -142,7 +158,7 @@ class SoapClient(private val timeoutMs: Int = 5_000) : SoapTransport {
             out.write(buffer, 0, n)
             if (out.size() > Xml.SOAP_MAX) throw TooBig()
         }
-        return out.toString(Charsets.UTF_8.name())
+        return Xml.decode(out.toByteArray(), contentType)
     }
 
     private companion object {

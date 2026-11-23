@@ -291,6 +291,8 @@ class GarbageInputTest {
             survive("Soap.parse", text) { Soap.parse(200, text); Soap.parse(500, text); Soap.parse(0, text) }
             survive("Soap.envelope", text) { Soap.parse(200, Soap.envelope("urn:x", "Act", listOf("Arg" to text))) }
             survive("Didl.parse", text) { Didl.parse(text) }
+            survive("Didl.fallbacks", text) { Didl.fallbacks(text); Didl.fallbacks(Didl.item(text, text, text, DlnaFeatures())) }
+            survive("Xml.decode", text) { com.tmplayer.cast.dlna.Xml.decode(text.toByteArray(), text); com.tmplayer.cast.dlna.Xml.decode(text.toByteArray(Charsets.UTF_16LE), null) }
             survive("Didl.item", text) { Didl.parse(Didl.item(text, text, text, DlnaFeatures(profile = text), subtitleUrl = text, durationMs = text.length.toLong())) }
             survive("SinkCaps.parse", text) { SinkCaps.parse(text) }
             survive("SinkCaps.plan", text) {
@@ -309,6 +311,7 @@ class GarbageInputTest {
             }
         }
         for (b in bytes) survive("Ssdp.parse bytes", b.toList()) { Ssdp.parse(b) }
+        for (b in bytes) survive("Xml.decode bytes", b.toList()) { com.tmplayer.cast.dlna.Xml.decode(b, "text/xml; charset=nonsense") }
         assertNoFailures()
     }
 

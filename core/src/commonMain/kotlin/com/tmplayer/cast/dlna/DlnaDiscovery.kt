@@ -381,7 +381,7 @@ class DlnaDiscovery(
                     readTimeout = timeoutMs
                     instanceFollowRedirects = false
                     useCaches = false
-                    setRequestProperty("User-Agent", "TMPlayer")
+                    setRequestProperty("User-Agent", Ssdp.USER_AGENT)
                     setRequestProperty("Connection", "close")
                 }
                 val code = connection.responseCode
@@ -396,7 +396,7 @@ class DlnaDiscovery(
                         if (out.size() > Xml.DESCRIPTION_MAX) return Fetch.TooBig
                     }
                 }
-                Fetch.Text(out.toString(Charsets.UTF_8.name()))
+                Fetch.Text(Xml.decode(out.toByteArray(), connection.contentType))
             } catch (e: Exception) {
                 Fetch.Failed
             } finally {

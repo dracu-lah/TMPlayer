@@ -38,8 +38,11 @@ internal object Xml {
         override fun fatalError(e: SAXParseException) = throw e
     }
 
-    fun parse(text: String?, maxChars: Int): Document? {
-        if (text == null || text.length > maxChars || text.isBlank()) return null
+    fun parse(raw: String?, maxChars: Int): Document? {
+        if (raw == null || raw.length > maxChars || raw.isBlank()) return null
+        // A byte order mark or a blank line before `<?xml` is a fatal error to the parser, and
+        // both come from real devices' web servers: they carry no meaning, so they go.
+        val text = raw.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
         if (text.contains("<!DOCTYPE", ignoreCase = true) || text.contains("<!ENTITY", ignoreCase = true)) return null
         return try {
             val factory = DocumentBuilderFactory.newInstance()
@@ -71,7 +74,33 @@ internal object Xml {
         "http://apache.org/xml/features/nonvalidating/load-external-dtd" to false,
     )
 
-    /** Characters XML 1.0 cannot carry at all; a title with one would make the whole DIDL unreadable. */
+    /**
+     * [bytes] as text, in the charset the document itself names: a byte order mark first, then the
+     * `encoding` of its `<?xml` line, then the HTTP [contentType]'s charset, else UTF-8. A description
+     * in ISO-8859-1 read as UTF-8 turns every accented letter of the TV's name into a replacement mark.
+     */
+    fun decode(bytes: ByteArray, contentType: String? = null): String {
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
+            return String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) return String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+        if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) return String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+        val head = String(bytes, 0, minOf(bytes.size, 200), Charsets.ISO_8859_1)
+        val named = PROLOG_ENCODING.find(head)?.groupValues?.get(1)
+            ?: contentType?.let { CONTENT_CHARSET.find(it)?.groupValues?.get(1) }
+        val charset = named?.let { runCatching { java.nio.charset.Charset.forName(it.trim('"', '\'')) }.getOrNull() } ?: Charsets.UTF_8
+        return String(bytes, charset)
+    }
+
+    private val PROLOG_ENCODING = Regex("""^\s*<\?xml[^>]*\sencoding\s*=\s*["']([A-Za-z0-9._-]{1,40})["']""")
+    private val CONTENT_CHARSET = Regex("""charset\s*=\s*("?[A-Za-z0-9._-]{1,40}"?)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Characters XML 1.0 cannot carry at all are dropped; a title with one would make the whole
+     * DIDL unreadable. An apostrophe stays as it is: every attribute here is in double quotes, so
+     * it needs no escape, and some TVs read the DIDL with an HTML decoder that knows no `&apos;`
+     * and showed it in the title.
+     */
     fun escape(s: String): String {
         val sb = StringBuilder(s.length + 16)
         var i = 0
@@ -82,7 +111,6 @@ internal object Xml {
                 c == '<' -> sb.append("&lt;")
                 c == '>' -> sb.append("&gt;")
                 c == '"' -> sb.append("&quot;")
-                c == '\'' -> sb.append("&apos;")
                 c == '\t' || c == '\n' || c == '\r' -> sb.append(c)
                 c.code < 0x20 -> Unit
                 Character.isHighSurrogate(c) && i + 1 < s.length && Character.isLowSurrogate(s[i + 1]) -> {

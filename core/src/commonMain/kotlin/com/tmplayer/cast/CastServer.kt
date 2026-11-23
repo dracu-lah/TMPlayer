@@ -44,6 +44,8 @@ class CastServer(
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
     /** Hears how fast the receiver takes bytes of a file sent as it is, for the transcode's bitrate ([LinkEstimator]). */
     private val meter: LinkMeter? = null,
+    /** Hears each request as `METHOD /path` with its Range and DLNA headers; the real-renderer check's log. */
+    private val onRequest: ((InetAddress, String) -> Unit)? = null,
 ) {
 
     /** This session's secret: the first segment of every path. */
@@ -189,6 +191,7 @@ class CastServer(
                 val request = HttpRequest.read(input) ?: break
                 served.incrementAndGet()
                 lastActivityMs = clock()
+                onRequest?.let { hear -> runCatching { hear(socket.inetAddress, describe(request)) } }
                 val keepOpen = respond(socket, request, output)
                 output.flush()
                 if (!keepOpen || request.wantsClose) break
@@ -330,7 +333,7 @@ class CastServer(
 
     /**
      * The DLNA headers of an answer for a resource published with [DlnaServing]: the transfer mode
-     * (echoing what the renderer asked for), the content features when it asks for them, and the
+     * (echoing what the renderer asked for), the content features always, and the
      * subtitle's address for Samsung's `getCaptionInfo.sec`.
      */
     private fun dlnaHeaders(serving: DlnaServing?, request: HttpRequest, resource: CastResource): Map<String, String> {
@@ -339,11 +342,18 @@ class CastServer(
         val asked = request.header("transferMode.dlna.org")?.trim()
         out["transferMode.dlna.org"] = TRANSFER_MODES.firstOrNull { it.equals(asked, ignoreCase = true) }
             ?: if (serving.interactive) "Interactive" else "Streaming"
-        if (request.header("getcontentFeatures.dlna.org")?.trim() == "1") out["contentFeatures.dlna.org"] = serving.features
+        // Sent whether or not it was asked for (as MiniDLNA does): a TV that never asks still reads
+        // it to learn that the file takes byte ranges, and one that asks gets the same value.
+        out["contentFeatures.dlna.org"] = serving.features
         if (request.header("getCaptionInfo.sec")?.trim() == "1" && serving.captionName != null) {
             out["CaptionInfo.sec"] = urlFor(serving.captionName)
         }
         return out
+    }
+
+    private fun describe(r: HttpRequest): String = buildString {
+        append(r.method).append(' ').append(r.path.substringAfter("/$token", r.path))
+        for (h in LOGGED_HEADERS) r.header(h)?.let { append(" | ").append(h).append(": ").append(it.take(120)) }
     }
 
     private fun notFound(out: OutputStream): Boolean {
@@ -373,6 +383,7 @@ class CastServer(
         private const val SEND_BUFFER = 64 * 1024
         private const val REFUSE_READ_MS = 300
         private val TRANSFER_MODES = listOf("Streaming", "Interactive", "Background")
+        private val LOGGED_HEADERS = listOf("range", "user-agent", "transferMode.dlna.org", "getcontentFeatures.dlna.org", "TimeSeekRange.dlna.org", "connection")
 
         /** Reads of one resource at once, beyond which the oldest is closed. */
         const val MAX_STREAMS = 3

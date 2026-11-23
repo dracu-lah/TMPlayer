@@ -72,16 +72,54 @@ object Didl {
             res.append("<res protocolInfo=\"http-get:*:text/srt:*\">").append(Xml.escape(subtitleUrl)).append("</res>")
             res.append("<sec:CaptionInfoEx sec:type=\"srt\">").append(Xml.escape(subtitleUrl)).append("</sec:CaptionInfoEx>")
         }
+        // Only the namespaces the document uses (no dlna:, and sec: only with a subtitle): less for
+        // a strict renderer's DIDL parser to object to, and nothing it needs is lost.
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
-            "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\" " +
-            "xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\" " +
-            "xmlns:sec=\"http://www.sec.co.kr/\">" +
+            "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"" +
+            (if (subtitleUrl != null) " xmlns:sec=\"http://www.sec.co.kr/\"" else "") + ">" +
             "<item id=\"1\" parentID=\"0\" restricted=\"1\">" +
-            "<dc:title>${Xml.escape(title.take(MAX_TITLE))}</dc:title>" +
+            "<dc:title>${Xml.escape(title(title))}</dc:title>" +
             "<upnp:class>object.item.videoItem</upnp:class>" +
             res +
             "</item></DIDL-Lite>"
+    }
+
+    /**
+     * What to send when a renderer turns [didl] down as metadata it cannot take (UPnP 714, 402,
+     * 501, 720, or a fault with no code): the same title and address with the plainest
+     * `protocolInfo` there is (`http-get:*:<mime>:*`, no DLNA flags, no subtitle, and for Matroska
+     * the `video/x-mkv` some TVs list instead), then no metadata at all, which every renderer must
+     * take. Only the empty one when [didl] does not parse.
+     */
+    fun fallbacks(didl: String): List<String> {
+        val parsed = parse(didl) ?: return listOf("")
+        val res = parsed.resources.firstOrNull() ?: return listOf("")
+        val mime = res.protocolInfo.split(':').getOrNull(2)?.takeIf { it.isNotBlank() } ?: "video/mp4"
+        val plainMime = if (mime.equals("video/x-matroska", ignoreCase = true)) "video/x-mkv" else mime
+        val plain = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
+            "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
+            "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
+            "<item id=\"1\" parentID=\"0\" restricted=\"1\">" +
+            "<dc:title>${Xml.escape(title(parsed.title ?: "Video"))}</dc:title>" +
+            "<upnp:class>object.item.videoItem</upnp:class>" +
+            "<res protocolInfo=\"http-get:*:${cleanMime(plainMime)}:*\">${Xml.escape(res.url)}</res>" +
+            "</item></DIDL-Lite>"
+        return listOf(plain, "")
+    }
+
+    /**
+     * The title as a renderer can show it: at most [MAX_TITLE] characters, never ending on half of a
+     * surrogate pair, and with no `&`, `<` or `>`. Rygel (0.42 and 45, the real-renderer check of
+     * 2026-11-23) unescapes the metadata once more than SOAP asks and then fails to parse a title
+     * with `&` in it ("xmlParseEntityRef: no name"), so however well it is escaped, a markup
+     * character in a title is a bet on the renderer. `&` becomes `+`, the brackets round ones.
+     */
+    private fun title(raw: String): String {
+        val t = raw.replace('&', '+').replace('<', '(').replace('>', ')')
+        if (t.length <= MAX_TITLE) return t
+        val cut = if (Character.isHighSurrogate(t[MAX_TITLE - 1])) MAX_TITLE - 1 else MAX_TITLE
+        return t.substring(0, cut)
     }
 
     /** The first item of [didl], or null when it is not DIDL-Lite. */

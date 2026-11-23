@@ -50,10 +50,11 @@ data class DeviceDescription(
                 val type = service.childText("serviceType") ?: continue
                 val control = service.childText("controlURL")?.let { resolve(base, origin, it) } ?: continue
                 val s = DlnaService(type, control)
+                val id = service.childText("serviceId").orEmpty()
                 when {
-                    type.contains(":service:AVTransport:", ignoreCase = true) -> if (av == null) av = s
-                    type.contains(":service:RenderingControl:", ignoreCase = true) -> if (rc == null) rc = s
-                    type.contains(":service:ConnectionManager:", ignoreCase = true) -> if (cm == null) cm = s
+                    names(type, id, "AVTransport") -> if (av == null) av = s
+                    names(type, id, "RenderingControl") -> if (rc == null) rc = s
+                    names(type, id, "ConnectionManager") -> if (cm == null) cm = s
                 }
             }
             av ?: return null
@@ -71,6 +72,22 @@ data class DeviceDescription(
         }
 
         private const val MAX_TEXT = 120
+
+        /**
+         * Whether a service is [name]: by its type at any version (`...:service:AVTransport:1` to
+         * `:3`, or written with no version at all), else by its `serviceId` (`urn:upnp-org:serviceId:AVTransport`)
+         * for a TV that puts a vendor type there. The SOAP calls go to the type it gave either way.
+         */
+        private fun names(type: String, serviceId: String, name: String): Boolean {
+            val t = type.trim()
+            val marker = ":service:$name"
+            val at = t.indexOf(marker, ignoreCase = true)
+            if (at >= 0) {
+                val rest = t.substring(at + marker.length)
+                if (rest.isEmpty() || rest.startsWith(":")) return true
+            }
+            return serviceId.trim().endsWith(":serviceId:$name", ignoreCase = true)
+        }
         private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
 
         private fun String?.isHttp(): Boolean = this != null && (equals("http", true) || equals("https", true))

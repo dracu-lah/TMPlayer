@@ -52,6 +52,13 @@ object Ssdp {
     /** What every search round asks for: renderers by name, and everything for the TVs that answer only that. */
     val SEARCH_TARGETS: List<String> = listOf(MEDIA_RENDERER, ALL)
 
+    /**
+     * The `USER-AGENT` of the search and the `User-Agent` of every description and SOAP request, in
+     * the `product/version UPnP/1.1 product/version` form UPnP 1.1 asks for, so a strict renderer
+     * that checks the header sees a UPnP client (a bare `TMPlayer` was not that form).
+     */
+    const val USER_AGENT = "TMPlayer/1 UPnP/1.1 DLNADOC/1.50"
+
     /** Seconds a device stays in the list after its last word when it names no max-age (UPnP's usual 1800). */
     const val DEFAULT_MAX_AGE_SECONDS = 1800
 
@@ -65,7 +72,7 @@ object Ssdp {
             "MAN: \"ssdp:discover\"\r\n" +
             "MX: ${mx.coerceIn(1, 5)}\r\n" +
             "ST: ${target.filter { it.code in 0x20..0x7E }}\r\n" +
-            "USER-AGENT: TMPlayer\r\n\r\n").toByteArray(Charsets.US_ASCII)
+            "USER-AGENT: $USER_AGENT\r\n\r\n").toByteArray(Charsets.US_ASCII)
 
     fun parse(bytes: ByteArray, length: Int = bytes.size): SsdpMessage? {
         if (length <= 0 || length > MAX_DATAGRAM) return null

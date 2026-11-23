@@ -72,7 +72,8 @@ class CastServerDlnaTest {
         publish()
         val plain = request("/${server.token}/video.mp4", "GET", "Range: bytes=0-9")
         assertEquals("Streaming", plain.headers["transfermode.dlna.org"])
-        assertNull("not asked, not sent", plain.headers["contentfeatures.dlna.org"])
+        // A TV that never asks still reads it to learn the file takes ranges.
+        assertEquals("sent unasked", features.features, plain.headers["contentfeatures.dlna.org"])
         assertNull(plain.headers["captioninfo.sec"])
 
         val asked = request("/${server.token}/video.mp4", "HEAD", "getcontentFeatures.dlna.org: 1", "getCaptionInfo.sec: 1", "transferMode.dlna.org: Background")
