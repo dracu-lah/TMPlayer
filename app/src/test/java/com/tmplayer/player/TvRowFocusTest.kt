@@ -163,7 +163,7 @@ class TvRowFocusTest {
      * WP-04 (engineer correction 19): the type floor makes the words under the row's icons 14 sp and
      * the system font may be 1.3 on top. `fitRow` and `giveUp` drop buttons silently on a phone when
      * text grows; the television's row must give none up: the five buttons stay shown, each with
-     * room, and the whole row stays inside the 960 dp screen. WP-05 reruns this with its margins.
+     * room, and the whole row stays inside the 960 dp screen and its 48 dp safe sides (WP-05).
      */
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
@@ -181,8 +181,9 @@ class TvRowFocusTest {
                 assertTrue("button $id is shown", button.isShown)
                 assertTrue("button $id has room (${button.width} x ${button.height} px)", button.width > 0 && button.height > 0)
                 val at = IntArray(2).also { button.getLocationInWindow(it) }
-                assertTrue("button $id starts inside the screen", at[0] >= 0)
-                assertTrue("button $id ends inside the screen", at[0] + button.width <= root.width)
+                // WP-05: inside the 48 dp sides of the safe area, with the wider margins.
+                assertTrue("button $id starts inside the 48 dp side (${at[0] / density} dp)", at[0] >= 48 * density)
+                assertTrue("button $id ends inside the 48 dp side", at[0] + button.width <= root.width - 48 * density)
             }
             // The words under the icons are the floor's 14 sp, grown by the 1.3 font.
             val word = root.findViewById<android.widget.TextView>(R.id.label_speed)

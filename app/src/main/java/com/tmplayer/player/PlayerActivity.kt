@@ -9366,37 +9366,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * On a phone the transport row is taller than the television's, and the Skip intro pill and
      * the next-up card, which sit a fixed height off the bottom, landed on the timebar and the
      * total time in landscape. While the row is up they climb just clear of its top line, and
-     * settle back once it goes. A television keeps them where they are: its row was measured
-     * around them, and the remote never reaches them while it is up.
+     * settle back once it goes. A television lifts them the same way (WP-05): its row grows
+     * upward with the system font, and the "Back to" chip comes up after a scrub on the bar.
      */
     private fun liftCornerOffers() {
-        // The "Back to" chip climbs on a television too: it comes up after a scrub on the bar,
-        // with the row up, in the corner the row's title sits in.
-        val tv = FormFactor.isTv(this)
         val cluster = findViewById<View>(R.id.controls_cluster)
         val root = findViewById<View>(R.id.player_root)
-        val offers = if (tv) listOfNotNull(undoChip?.view, suggestChip?.view) else listOfNotNull(skipPill?.view, nextUpCard?.view, undoChip?.view, suggestChip?.view)
+        // WP-05: a television lifts every offer too. Its cluster stands 27 dp off the bottom and
+        // grows upward with the system font, so a fixed height over it overlapped it at 1.3.
+        val offers = listOfNotNull(skipPill?.view, nextUpCard?.view, undoChip?.view, suggestChip?.view)
         offers.forEach { offer ->
             // After the next layout, so an offer that has only just been shown has a height.
             offer.doOnPreDraw {
-                val origin = IntArray(2)
-                val at = IntArray(2)
-                root.getLocationInWindow(origin)
-                var rowTop = Int.MAX_VALUE
-                if (controlsUp) {
-                    (cluster as? android.view.ViewGroup)?.let { group ->
-                        for (i in 0 until group.childCount) {
-                            val child = group.getChildAt(i)
-                            if (child.visibility != View.VISIBLE || child.height == 0) continue
-                            child.getLocationInWindow(at)
-                            rowTop = minOf(rowTop, at[1] - origin[1] - child.translationY.toInt())
-                        }
-                    }
-                }
-                val gap = (8 * resources.displayMetrics.density).toInt()
-                offer.getLocationInWindow(at)
-                val bottom = at[1] - origin[1] - offer.translationY.toInt() + offer.height
-                val lift = if (rowTop == Int.MAX_VALUE) 0 else (bottom + gap - rowTop).coerceAtLeast(0)
+                val lift = NextUpCard.liftOverRow(root, cluster, offer, controlsUp)
                 offer.animate()
                     .translationY(-lift.toFloat())
                     .setDuration(SUBTITLE_LIFT_MS)

@@ -20,7 +20,23 @@
     <dimen name="player_title_size">20sp</dimen>
     <!-- The status sheet's meta and format lines. The television's is 14sp (values-television): nothing on a TV is under it. -->
     <dimen name="player_text_small">13sp</dimen>
-    <dimen name="player_chip_margin">16dp</dimen>
+    <!--
+      The safe area of the controls: the sides and the top and bottom the cluster, the clock and the
+      corner chips keep to. A phone's are the figures the layout always had (the system bars add
+      their own insets); the television's are 48 dp across and 27 dp down, 5 percent of 1080p
+      (values-television).
+    -->
+    <dimen name="player_safe_h">24dp</dimen>
+    <dimen name="player_safe_v">12dp</dimen>
+    <dimen name="player_clock_top">16dp</dimen>
+    <!-- The corner chips: 16dp on a phone (the top bar sits over them); the television's are the safe area. -->
+    <dimen name="player_chip_margin_h">16dp</dimen>
+    <!-- Next up, skip and the other offers: the distance from the edge and from the screen's bottom (over the cluster). -->
+    <dimen name="player_offer_margin">24dp</dimen>
+    <dimen name="player_offer_bottom">110dp</dimen>
+    <!-- The status sheet's top and bottom padding. -->
+    <dimen name="player_sheet_v">16dp</dimen>
+    <dimen name="player_chip_margin_v">16dp</dimen>
     <!-- Clear of the transport row, which on a phone is Media3's and about 70dp tall. -->
     <dimen name="player_subtitle_bottom">32dp</dimen>
     <!--

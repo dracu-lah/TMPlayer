@@ -132,18 +132,44 @@ class NextUpCard(
 
     companion object {
         /**
-         * Clear of the screen edge, before the system's own insets are added. In dp, so the offers
+         * Clear of the screen edge, before the system's own insets are added: 24 dp on a phone and
+         * the television's 48 dp safe area (`player_offer_margin`, WP-05). In dp, so the offers
          * stand the same distance in on every screen: these were raw pixels, which put them 24 dp
          * in on a 2x television and 16 dp on a 3x phone.
          */
-        private const val MARGIN_DP = 24f
+        fun marginPx(view: android.view.View): Int = view.resources.getDimensionPixelSize(R.dimen.player_offer_margin)
 
-        /** Clear of the transport row's cluster: the 2x television's figure, as dp. */
-        private const val BOTTOM_DP = 110f
+        /**
+         * Clear of the transport row's cluster (`player_offer_bottom`): the 2x television's figure
+         * as dp, 15 dp more on a television where the cluster stands in the 27 dp safe area.
+         */
+        fun bottomPx(view: android.view.View): Int = view.resources.getDimensionPixelSize(R.dimen.player_offer_bottom)
 
-        fun marginPx(view: android.view.View): Int = (MARGIN_DP * view.resources.displayMetrics.density).toInt()
-
-        fun bottomPx(view: android.view.View): Int = (BOTTOM_DP * view.resources.displayMetrics.density).toInt()
+        /**
+         * How far [offer] has to climb to clear the raised row: its bottom plus an 8 dp gap, over
+         * the top of the highest child of [cluster] that is drawn. Zero while the row is down or
+         * the offer already stands clear, so a row that grew at font 1.3 never covers it.
+         */
+        fun liftOverRow(root: android.view.View, cluster: android.view.View, offer: android.view.View, controlsUp: Boolean): Int {
+            if (!controlsUp) return 0
+            val origin = IntArray(2)
+            val at = IntArray(2)
+            root.getLocationInWindow(origin)
+            var rowTop = Int.MAX_VALUE
+            (cluster as? android.view.ViewGroup)?.let { group ->
+                for (i in 0 until group.childCount) {
+                    val child = group.getChildAt(i)
+                    if (child.visibility != android.view.View.VISIBLE || child.height == 0) continue
+                    child.getLocationInWindow(at)
+                    rowTop = minOf(rowTop, at[1] - origin[1] - child.translationY.toInt())
+                }
+            }
+            if (rowTop == Int.MAX_VALUE) return 0
+            val gap = (8 * root.resources.displayMetrics.density).toInt()
+            offer.getLocationInWindow(at)
+            val bottom = at[1] - origin[1] - offer.translationY.toInt() + offer.height
+            return (bottom + gap - rowTop).coerceAtLeast(0)
+        }
     }
 }
 

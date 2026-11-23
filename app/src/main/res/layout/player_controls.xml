@@ -66,8 +66,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginStart="@dimen/player_safe_h"
+        android:layout_marginTop="@dimen/player_clock_top"
         android:textColor="#E6FFFFFF"
         android:textSize="15sp"
         android:visibility="gone" />
@@ -365,9 +365,9 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:paddingLeft="24dp"
-        android:paddingRight="24dp"
-        android:paddingBottom="12dp">
+        android:paddingLeft="@dimen/player_safe_h"
+        android:paddingRight="@dimen/player_safe_h"
+        android:paddingBottom="@dimen/player_safe_v">
 
         <TextView
             android:id="@+id/controls_title"

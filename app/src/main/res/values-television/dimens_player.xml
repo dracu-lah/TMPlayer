@@ -12,7 +12,17 @@
     <dimen name="player_title_size">26sp</dimen>
     <!-- Small text is 14sp on a television, the type floor (TvTypeScale); the phone keeps 13sp in values. -->
     <dimen name="player_text_small">14sp</dimen>
-    <dimen name="player_chip_margin">32dp</dimen>
+    <!-- 5 percent of a 1080p screen: 48 dp across and 27 dp down (WP-05), the title safe area. -->
+    <dimen name="player_safe_h">48dp</dimen>
+    <dimen name="player_safe_v">27dp</dimen>
+    <dimen name="player_clock_top">27dp</dimen>
+    <dimen name="player_chip_margin_h">48dp</dimen>
+    <!-- Next up, skip and the other offers: the distance from the edge and from the screen's bottom (over the cluster). -->
+    <dimen name="player_offer_margin">48dp</dimen>
+    <dimen name="player_offer_bottom">125dp</dimen>
+    <!-- The status sheet's top and bottom padding. -->
+    <dimen name="player_sheet_v">27dp</dimen>
+    <dimen name="player_chip_margin_v">27dp</dimen>
     <dimen name="player_subtitle_bottom">48dp</dimen>
     <dimen name="player_timebar_touch">26dp</dimen>
     <!-- Space over the scrub bar. A phone's 48dp touch strip already carries its own air. -->

@@ -19,8 +19,8 @@
         <item name="playbackProgressPrimaryColor">@color/accent</item>
         <item name="playbackControlsIconHighlightColor">@color/accent</item>
         <item name="playbackControlsActionIcons">@style/TMPlayer.Leanback.ActionIcons</item>
-        <item name="playbackPaddingStart">@dimen/player_chip_margin</item>
-        <item name="playbackPaddingEnd">@dimen/player_chip_margin</item>
+        <item name="playbackPaddingStart">@dimen/player_safe_h</item>
+        <item name="playbackPaddingEnd">@dimen/player_safe_h</item>
     </style>
 
     <!--

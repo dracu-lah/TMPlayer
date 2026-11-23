@@ -101,9 +101,9 @@
             android:gravity="center"
             android:orientation="vertical"
             android:paddingLeft="@dimen/player_sheet_side"
-            android:paddingTop="16dp"
+            android:paddingTop="@dimen/player_sheet_v"
             android:paddingRight="@dimen/player_sheet_side"
-            android:paddingBottom="16dp">
+            android:paddingBottom="@dimen/player_sheet_v">
 
             <!-- The picture side: the poster and, under it, the name of what it is. -->
             <LinearLayout
@@ -417,7 +417,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_margin="@dimen/player_chip_margin"
+        android:layout_marginLeft="@dimen/player_chip_margin_h"
+        android:layout_marginTop="@dimen/player_chip_margin_v"
+        android:layout_marginRight="@dimen/player_chip_margin_h"
+        android:layout_marginBottom="@dimen/player_chip_margin_v"
         android:gravity="end"
         android:orientation="vertical">
 

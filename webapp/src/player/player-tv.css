@@ -21,9 +21,9 @@
 .pc[data-variant="tv"] .pc-scrim.top { height: calc(var(--u) * 120); }
 .pc[data-variant="tv"] .pc-scrim.bottom { height: calc(var(--u) * 300); }
 
-/* The wall clock, top left (controls_clock: 15 sp, 24 dp in, 16 dp down). */
+/* The wall clock, top left (controls_clock: 15 sp, 48 dp in, 27 dp down, the safe area). */
 .pc-clock {
-  position: absolute; left: calc(var(--u) * 24); top: calc(var(--u) * 16); font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20);
+  position: absolute; left: calc(var(--u) * 48); top: calc(var(--u) * 27); font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20);
   color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 calc(var(--u) * 6) rgba(0, 0, 0, .6);
 }
 
@@ -46,8 +46,8 @@
   background-color: #fff; color: var(--on-focus); outline: none; box-shadow: none;
 }
 
-/* The foot: 24 dp in from the sides, 12 dp up; the name, its second line, the bar, the row. */
-.pc[data-variant="tv"] .pc-bottom { padding: 0 calc(var(--u) * 24) calc(var(--u) * 12); }
+/* The foot: 48 dp in from the sides, 27 dp up (5 percent of 1080p, the safe area); the name, its second line, the bar, the row. */
+.pc[data-variant="tv"] .pc-bottom { padding: 0 calc(var(--u) * 48) calc(var(--u) * 27); }
 .pc-cluster-title { font-size: calc(var(--u) * 24); line-height: calc(var(--u) * 30); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-cluster-sub { margin-top: calc(var(--u) * 2); font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); color: rgba(255, 255, 255, .72); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -95,15 +95,15 @@
 .pc[data-variant="tv"] .pc-scrub-target { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
 
 /* The offers over the bare picture: the resume offer and the next episode's card hold the remote as a white pill. */
-.pc[data-variant="tv"] .pc-offer { bottom: calc(var(--u) * 140); min-height: calc(var(--u) * 48); font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-offer { bottom: calc(var(--u) * 155); min-height: calc(var(--u) * 48); font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
 .pc[data-variant="tv"] .pc-offer button, .pc[data-variant="tv"] .pc-next button { min-height: calc(var(--u) * 44); padding: 0 calc(var(--u) * 16); border-radius: 999px; font-size: calc(var(--u) * 16); }
 .pc[data-variant="tv"] .pc-offer button { background: #fff; color: var(--on-focus); }
-.pc[data-variant="tv"] .pc-next { right: calc(var(--u) * 24); bottom: calc(var(--u) * 12 + var(--u) * 150); max-width: calc(var(--u) * 340); padding: calc(var(--u) * 16) calc(var(--u) * 14) calc(var(--u) * 14) calc(var(--u) * 20); }
+.pc[data-variant="tv"] .pc-next { right: calc(var(--u) * 48); bottom: calc(var(--u) * 27 + var(--u) * 150); max-width: calc(var(--u) * 340); padding: calc(var(--u) * 16) calc(var(--u) * 14) calc(var(--u) * 14) calc(var(--u) * 20); }
 /* The way back and the skip offer sit above the bar's row (never focused: Up and OK are theirs), the chips under the clock. */
-.pc[data-variant="tv"] .pc-corner { bottom: calc(var(--u) * 12 + var(--u) * 150); min-height: calc(var(--u) * 48); padding: calc(var(--u) * 10) calc(var(--u) * 22); font-size: calc(var(--u) * 18); line-height: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-corner { bottom: calc(var(--u) * 27 + var(--u) * 150); min-height: calc(var(--u) * 48); padding: calc(var(--u) * 10) calc(var(--u) * 22); font-size: calc(var(--u) * 18); line-height: calc(var(--u) * 24); }
 .pc[data-variant="tv"] .pc-corner small { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 18); }
-.pc[data-variant="tv"] .pc-corner.back { left: calc(var(--u) * 24); }
-.pc[data-variant="tv"] .pc-corner.skip { right: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-corner.back { left: calc(var(--u) * 48); }
+.pc[data-variant="tv"] .pc-corner.skip { right: calc(var(--u) * 48); }
 .pc[data-variant="tv"] .pc-chipline { top: calc(var(--u) * 64); min-height: calc(var(--u) * 34); font-size: calc(var(--u) * 15); }
 .pc[data-variant="tv"] .pc-count { font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20); }
 .pc[data-variant="tv"] .pc-next p { font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 22); }
@@ -145,7 +145,7 @@
 }
 .pc[data-variant="tv"] .pc-episode:focus .pc-episode-code, .pc[data-variant="tv"] .pc-episode:focus .pc-episode-facts,
 .pc[data-variant="tv"] .pc-season:focus small { color: rgba(14, 15, 19, .7); }
-.pc[data-variant="tv"] .pc-details { font-size: calc(var(--u) * 15); line-height: 1.35; width: min(calc(var(--u) * 340), calc(100% - 32px)); top: calc(var(--u) * 40); }
+.pc[data-variant="tv"] .pc-details { font-size: calc(var(--u) * 15); line-height: 1.35; left: calc(var(--u) * 48); width: min(calc(var(--u) * 340), calc(100% - var(--u) * 96)); top: calc(var(--u) * 40); }
 .pc[data-variant="tv"] .pc-details p { line-height: 1.35; }
 .pc[data-variant="tv"] .pc-details .pc-details-hint { font-size: calc(var(--u) * 14); }
 .pc[data-variant="tv"] .pc-details-btn { min-height: calc(var(--u) * 44); padding: 0 calc(var(--u) * 20); }
