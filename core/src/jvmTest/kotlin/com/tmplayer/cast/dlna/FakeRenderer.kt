@@ -85,6 +85,9 @@ class FakeRenderer(
     @Volatile var fetchedSubtitle: String? = null
     val setUris = CopyOnWriteArrayList<String>()
 
+    /** The CurrentURIMetaData of each SetAVTransportURI, in order. */
+    val setDidls = CopyOnWriteArrayList<String>()
+
     @Volatile private var closed = false
 
     /** False once [powerOff] ran: a connection that still got through is dropped unanswered. */
@@ -316,6 +319,7 @@ $rc
 
     private fun setUri(newUri: String, newDidl: String): Triple<Int, String, ByteArray> {
         setUris += newUri
+        setDidls += newDidl
         if (busyOnce) {
             busyOnce = false
             return fault(701, "Transition not available")

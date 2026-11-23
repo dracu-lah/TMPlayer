@@ -91,6 +91,10 @@ class DlnaPlayback(
     private var playedOnce = false
     private var stoppedByUs = false
     private var pausedByUs = false
+    private var playAskedAtMs = -1L
+
+    /** The TV has played (or paused) this video at least once since it was loaded. */
+    val started: Boolean get() = playedOnce
 
     /** A new video was loaded, to start at [startMs]. */
     fun loaded(startMs: Long, nowMs: Long) {
@@ -99,6 +103,7 @@ class DlnaPlayback(
         playedOnce = false
         stoppedByUs = false
         pausedByUs = false
+        playAskedAtMs = -1
         seekTarget = -1
     }
 
@@ -125,9 +130,10 @@ class DlnaPlayback(
         pausedByUs = true
     }
 
-    /** TMPlayer sent Play. */
-    fun playedHere() {
+    /** TMPlayer sent Play (and the TV took it) at [nowMs]. */
+    fun playedHere(nowMs: Long) {
         pausedByUs = false
+        if (playAskedAtMs < 0) playAskedAtMs = nowMs
     }
 
     /**
@@ -145,6 +151,12 @@ class DlnaPlayback(
         val moving = state == "PLAYING"
         place = believe(rawPositionMs, moving, state == "STOPPED" || state == "NO_MEDIA_PRESENT", nowMs)
         if (moving || state == "PAUSED_PLAYBACK" || state == "PAUSED_RECORDING") playedOnce = true
+        val stopped = state == "STOPPED" || state == "NO_MEDIA_PRESENT"
+        // Told to play, never played, and still stopped: the TV could not fetch or open the video. A
+        // TV still opening it says TRANSITIONING, which waits as long as it takes.
+        if (stopped && !playedOnce && !stoppedByUs && playAskedAtMs >= 0 && nowMs - playAskedAtMs >= NEVER_STARTED_MS) {
+            return media(ReceiverState.Idle, IdleReason.Error, nowMs)
+        }
         return when (state) {
             "PLAYING" -> media(ReceiverState.Playing, null, nowMs)
             "PAUSED_PLAYBACK", "PAUSED_RECORDING" -> media(ReceiverState.Paused, null, nowMs)
@@ -205,5 +217,6 @@ class DlnaPlayback(
         const val SEEK_TOLERANCE_MS = 3_000L
         const val SEEK_PATIENCE_MS = 8_000L
         const val BACKWARD_MS = 2_000L
+        const val NEVER_STARTED_MS = 10_000L
     }
 }

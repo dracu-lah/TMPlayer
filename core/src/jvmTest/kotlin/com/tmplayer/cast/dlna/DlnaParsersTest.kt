@@ -138,7 +138,7 @@ class DlnaParsersTest {
         val url = "http://192.168.1.2:8000/tok/video.mp4?start=5&x=a%26b"
         val didl = Didl.item(title, url, "video/mp4", DlnaFeatures(), subtitleUrl = "http://192.168.1.2:8000/tok/subtitle.srt&", durationMs = 3_723_004, sizeBytes = 99)
         val item = Didl.parse(didl)!!
-        assertEquals("Tom & Jerry <1> \"x\" 'y'  😀", item.title)
+        assertEquals("markup characters are replaced, not escaped (Rygel unescapes once too often)", "Tom + Jerry (1) \"x\" 'y'  😀", item.title)
         assertEquals(url, item.resources[0].url)
         assertTrue(item.resources[0].protocolInfo.startsWith("http-get:*:video/mp4:DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000"))
         assertEquals("http://192.168.1.2:8000/tok/subtitle.srt&", item.resources[1].url)
@@ -287,7 +287,7 @@ class DlnaParsersTest {
         val m = p.update("STOPPED", "OK", 30_500, null, 31_000)
         assertEquals(ReceiverState.Paused, m.state)
         assertEquals(30_500L, m.positionMs)
-        p.playedHere()
+        p.playedHere(31_500)
         assertEquals(ReceiverState.Idle, p.update("STOPPED", "OK", 0, null, 32_000).state)
         // An error is an error even then.
         p.pausedHere()

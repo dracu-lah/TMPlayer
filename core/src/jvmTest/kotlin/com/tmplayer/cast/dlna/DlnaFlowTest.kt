@@ -349,7 +349,7 @@ class DlnaFlowTest {
         assertEquals("bytes 0-99/300000", fake.getContentRange)
         assertEquals(srt, fake.fetchedSubtitle)
         val item = Didl.parse(fake.didl)!!
-        assertEquals("A & B", item.title)
+        assertEquals("an & reaches no renderer (Rygel unescapes once too often)", "A + B", item.title)
         assertTrue(item.resources.any { it.protocolInfo == "http-get:*:text/srt:*" })
         assertEquals("PLAYING", fake.state)
 
@@ -383,8 +383,14 @@ class DlnaFlowTest {
         val refused = c.open(video("video/x-matroska"), 0) { }
         assertEquals(DlnaLoad.Refused(LoadRefusal.BadType, 714, "Illegal MIME-type"), refused)
         assertTrue("the server stays up for the next route", c.server.running)
+        // Turned down three ways before the refusal stands: full metadata, the plainest (with the
+        // video/x-mkv some TVs list), and none at all.
+        assertEquals(3, fake.setDidls.size)
+        assertTrue(fake.setDidls[0].contains("DLNA.ORG_OP="))
+        assertTrue(fake.setDidls[1].contains("http-get:*:video/x-mkv:*"))
+        assertEquals("", fake.setDidls[2])
         assertEquals(DlnaLoad.Loaded, c.open(video("video/mp4"), 0) { })
-        assertEquals(2, fake.setUris.size)
+        assertEquals(4, fake.setUris.size)
         assertEquals("PLAYING", fake.state)
     }
 
