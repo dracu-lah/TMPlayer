@@ -72,6 +72,17 @@ if [ "$mode" != named ]; then
 fi
 if [ "$mode" = list ]; then printf '%s\n' "${want[@]}"; exit 0; fi
 
+# A pass already recorded for this exact commit (same groups, no tracked change since) is not run
+# again. This is what lets `scripts/ci-local.sh && git push` work: git holds the SSH connection to
+# GitHub open while the pre-push hook runs, GitHub drops it after a few idle minutes ("Connection
+# to github.com closed by remote host"), so a long test run inside the hook loses the push.
+if [ "$mode" != list ] && [ -f "$LOGDIR/$(git rev-parse HEAD).txt" ] \
+   && git diff --quiet HEAD -- . ':!design' ':!private' \
+   && grep -qxF "groups: ${want[*]}" <(cut -d' ' -f2- "$LOGDIR/$(git rev-parse HEAD).txt"); then
+  echo "ci-local: already passed for $(git rev-parse --short HEAD) (${want[*]}), not run again"
+  exit 0
+fi
+
 passed=(); failed=()
 run() { # name, command...
   local name=$1; shift
