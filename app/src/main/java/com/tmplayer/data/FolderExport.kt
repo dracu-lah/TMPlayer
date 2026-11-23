@@ -22,6 +22,7 @@ import com.tmplayer.i18n.L
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -618,11 +619,27 @@ class FolderExportService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Android 15 gives data sync services a shared 6 hour allowance and calls this when it is
+     * spent; the service has to stop within seconds or the system ends the app with an error. The
+     * copy is cancelled (the loop removes the part copy at its next buffer), as Cancel does.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "The system's time for this foreground service is up, stopping (type $fgsType)")
+        FolderExport.cancel()
+        runCatching { stopForegroundRemoving() }
+        stopSelf()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // The system taking the service down mid copy: the loop stops at its next buffer and
         // removes the part copy, rather than writing on with nothing to show it.
         if (FolderExport.copying) FolderExport.cancel()
+        // And nothing it launched outlives it: the wait for a profile switch (stopOnSwitch) would
+        // otherwise hold this destroyed service for good. The copy itself runs on FolderExport's
+        // own flag, so this only ends the notification side.
+        scope.cancel()
     }
 
     private fun notification(progress: FolderCopy.Progress?): Notification {

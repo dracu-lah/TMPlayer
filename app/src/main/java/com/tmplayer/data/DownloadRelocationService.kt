@@ -67,6 +67,18 @@ class DownloadRelocationService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Android 15 gives data sync services a shared 6 hour allowance and calls this when it is
+     * spent; the service has to stop within seconds or the system ends the app with an error. The
+     * move is stopped with its own Cancel (the files already in place stay where they are).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        android.util.Log.w(TAG, "The system's time for this foreground service is up, stopping (type $fgsType)")
+        DownloadRelocation.cancel()
+        runCatching { stopForegroundRemoving() }
+        stopSelf()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
