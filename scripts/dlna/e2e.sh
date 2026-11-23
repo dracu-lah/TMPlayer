@@ -58,7 +58,11 @@ started_containers=()
 host_pid=""
 cleanup() {
   for c in "${started_containers[@]}"; do podman rm -f "$c" >/dev/null 2>&1 || true; done
-  if [ -n "$host_pid" ]; then kill "$host_pid" 2>/dev/null || true; wait "$host_pid" 2>/dev/null || true; fi
+  if [ -n "$host_pid" ]; then
+    # dbus-run-session does not take its child down with it: the rygel with this run's config goes by name.
+    pkill -f "^rygel -c $work/host-rygel/rygel.conf" 2>/dev/null || true
+    kill "$host_pid" 2>/dev/null || true; wait "$host_pid" 2>/dev/null || true
+  fi
   rm -rf "$work"
 }
 trap cleanup EXIT INT TERM
