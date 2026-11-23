@@ -2109,6 +2109,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         statusOpenWith?.text = L.playerOpenInAnotherApp
         statusBack?.text = L.playerGoBack
         statusLogs = PlayerErrorSheet.addSendLogs(statusOpenWith)
+        // On a television Send logs is the last button, below Go back, so the first D-pad press
+        // lands on the answer and the report is the quiet last stop.
+        if (FormFactor.isTv(this)) {
+            statusLogs?.let { logs ->
+                (logs.parent as? android.view.ViewGroup)?.let { column ->
+                    column.removeView(logs)
+                    column.addView(logs)
+                }
+            }
+        }
         statusCopy = findViewById<android.widget.Button>(R.id.status_copy).apply {
             text = L.playerCopyDetails
             setOnClickListener { copyErrorDetails() }
@@ -7023,6 +7033,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             endRemoteHold()
             return true
         }
+        // Info let go before its long press (which reports a stutter, below): what is playing.
+        // On release, since the press could still become the hold.
+        if (event.keyCode == KeyEvent.KEYCODE_INFO && event.action == KeyEvent.ACTION_UP && FormFactor.isTv(this)) {
+            if (RemoteKeys.isInfoTap(event.keyCode, event.downTime, event.eventTime, event.isCanceled, android.view.ViewConfiguration.getLongPressTimeout().toLong()) &&
+                statusOverlay.visibility != View.VISIBLE && sheets?.isOpen != true && !detailsOpen && player != null
+            ) {
+                showPlaybackDetails()
+            }
+            return true
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         // The quiet line about software decoding goes with the next press, which still does what
         // it does: the line asks nothing, so it never holds a key back.
@@ -7099,24 +7119,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             return true
         }
 
-        // The next-up card on a television: left, right and OK stay on its one button,
-        // Back puts it away. Up and down still raise the row below.
+        // The next-up card on a television does not take the remote as it appears: OK stays pause
+        // and resume and Left and Right seek over the bare picture. Right or Down walks onto it,
+        // then OK is "Play now"; Left, Up or Down walks off. Back puts it away.
         if (nextUpHasTheRemote()) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-                -> {
-                    if (nextUpCard?.view?.hasFocus() != true) {
-                        nextUpCard?.play?.requestFocus()
-                        return true
-                    }
-                    return super.dispatchKeyEvent(event)
-                }
-                KeyEvent.KEYCODE_BACK -> {
-                    nextUpDismissed = true
-                    hideNextUp()
+            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                nextUpDismissed = true
+                hideNextUp()
+                return true
+            }
+            when (RemoteKeys.nextUpKey(event.keyCode, nextUpEngaged)) {
+                RemoteKeys.NextUpKey.Engage -> {
+                    nextUpEngaged = true
+                    nextUpCard?.play?.requestFocus()
                     return true
                 }
+                RemoteKeys.NextUpKey.Pass -> return super.dispatchKeyEvent(event)
+                RemoteKeys.NextUpKey.Release -> nextUpEngaged = false
+                RemoteKeys.NextUpKey.Ignore -> Unit
             }
         }
 
@@ -7184,8 +7204,22 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (playing?.playWhenReady == true) togglePlayback()
                 return true
             }
-            KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                if (stepEpisode(forward = event.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT)) return true
+            // Next, previous, skip and the channel keys step the episode; with none to go to the key
+            // says so rather than doing nothing. Once per press, so a held key is not a binge.
+            KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD,
+            KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_CHANNEL_DOWN,
+            -> {
+                val forward = RemoteKeys.episodeStep(event.keyCode) ?: return super.dispatchKeyEvent(event)
+                if (event.repeatCount == 0 && !stepEpisode(forward)) {
+                    showGestureFeedback(if (forward) L.playerNoNextEpisode else L.playerNoPreviousEpisode)
+                }
+                return true
+            }
+            // Stop saves the place and leaves, as Back does, with no question asked.
+            KeyEvent.KEYCODE_MEDIA_STOP -> {
+                if (event.repeatCount == 0) leaveByBack()
+                return true
             }
             // Back peels the overlays off in the order they were put on: the row first, and only
             // then is the film what Back was aimed at.
@@ -9086,7 +9120,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                             // The card and the pill share a corner; the card is the offer then.
                             hideSkipPill()
                             liftCornerOffers()
-                            if (FormFactor.isTv(this@PlayerActivity) && !controlsUp) nextUpCard?.play?.requestFocus()
                         }
                     } else if (left > lead && nextUpCard?.isShown == true) {
                         // Seeked back out of the last half minute: the offer goes, and comes back.
@@ -9208,7 +9241,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         return rawX >= at[0] && rawX < at[0] + pill.width && rawY >= at[1] && rawY < at[1] + pill.height
     }
 
+    /** The remote has walked onto the next-up card ([RemoteKeys.nextUpKey]); false means OK is pause. */
+    private var nextUpEngaged = false
+
     private fun hideNextUp() {
+        nextUpEngaged = false
         // Focus left on a gone view is focus nowhere; the next press would land on nothing.
         if (nextUpCard?.hide() == true) controls?.focusRow()
     }
@@ -9316,8 +9353,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         setSystemBarsHidden(!visible)
         // The centre disc carries its own spinner while the row is up, so the bare one stands down.
         feedback?.controlsShown(visible)
-        // The row going away hands the remote back to the next-up card, if that is up.
-        if (!visible && nextUpHasTheRemote()) nextUpCard?.play?.requestFocus()
+        // The card never takes the remote by itself (Right or Down walks onto it); the row
+        // taking focus walks it off.
+        if (visible) nextUpEngaged = false
         liftSubtitles()
         liftCornerOffers()
         updateDownloadChip()
@@ -10092,7 +10130,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         statusOpenWith?.visibility = View.GONE
         // Last and quietest: the logs to send with a report of it, and the details to copy.
         statusLogs?.visibility = View.VISIBLE
-        statusCopy?.visibility = View.VISIBLE
+        // A television has no clipboard to paste from: Send logs is the way to report there.
+        statusCopy?.visibility = if (FormFactor.isTv(this)) View.GONE else View.VISIBLE
         statusBack?.apply {
             visibility = View.VISIBLE
             if (!retryable) {
