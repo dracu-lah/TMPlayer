@@ -1,5 +1,12 @@
 // Which chats TMPlayer shows videos from: the chats picker with the archive (HX27, HX32), over the fake Telegram.
 import { expect, test } from '@playwright/test'
+import { fakeCase } from './helpers'
+
+// 'picked' (vite.e2e.ts): an answered account with no chats picked, as the test server's default 'all' is the
+// All chats switch on since HX86, every tick disabled.
+test.beforeEach(async ({ context }) => {
+    await fakeCase(context, 'picked')
+})
 
 test('the picker reads the archive, and its filter lists only archived chats', async ({ page }) => {
     await page.goto('/added-chats')

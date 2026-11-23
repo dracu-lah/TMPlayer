@@ -110,8 +110,8 @@ test('the Settings switch turns lookups off at once, and stays off after a reloa
     await page.goto('/')
     await page.locator('[data-you]').click()
     await page.getByRole('menuitem', { name: 'Settings' }).click()
-    // Settings is a list of pages; Posters is on Library.
-    await page.getByRole('link', { name: /^Library/ }).click()
+    // Settings is a list of pages; Posters is on Home and library (one page since WB20).
+    await page.getByRole('link', { name: /^Home and library/ }).click()
     await expect(page.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
     await expect(page.getByLabel('TMDB').first()).toBeVisible()
     const posters = page.getByRole('switch', { name: /^Posters/ })

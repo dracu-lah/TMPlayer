@@ -305,12 +305,21 @@ export function AddChats() {
     const wantsMore = () => whole() && loaded() && !refused() && (spent(), allowance(), plan.wantsMore(list().length))
 
     // The TV's remote moves by where things stand, and Done floats at the foot of the page, so no arrow reaches it from the rows:
-    // Right from a star goes to it, and Left, Up or Down from it back to the row the remote was on.
+    // Right from a star goes to it, and Left, Up or Down from it back to the row the remote was on. Left from a star is its
+    // own row's tick: a row under the floating Done (a 720 p screen, the All chats switch above) would otherwise find Done nearer.
     let lastRow: HTMLElement | null = null
     let doneButton!: HTMLButtonElement
     const toDone = (el: HTMLElement) =>
         el.addEventListener('tvmove', (e) => {
-            if ((e as CustomEvent).detail !== 'right' || doneButton.disabled) return
+            const dir = (e as CustomEvent).detail
+            if (dir === 'left') {
+                const tick = el.closest('.chat-row')?.querySelector<HTMLInputElement>('.chat-tick')
+                if (!tick || tick.disabled) return
+                e.preventDefault()
+                tick.focus()
+                return
+            }
+            if (dir !== 'right' || doneButton.disabled) return
             e.preventDefault()
             doneButton.focus()
         })
@@ -411,7 +420,7 @@ export function AddChats() {
                 <h1 class="page-title">{t('setup.which_title')}</h1>
                 <p class="muted picker-blurb">{t('setup.which_body')}</p>
             </Show>
-            <button type="button" role="switch" class="picker-all" aria-checked={allChats()} onClick={flipAll} data-tv-first>
+            <button type="button" role="switch" class="picker-all" aria-checked={allChats()} onClick={flipAll} data-tv-first={allChats() ? '' : undefined}>
                 <span class="picker-all-text">
                     <span class="picker-all-title">{t('picker.all_chats_switch')}</span>
                     <span class="muted small">{allChats() ? t('picker.all_chats_on') : t('picker.all_chats_detail')}</span>
@@ -420,8 +429,8 @@ export function AddChats() {
             </button>
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
-                {/* The TV's remote starts here, as the apps' picker does; the field stays read only until OK. */}
-                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => { touched = true; setText(e.currentTarget.value) }} />
+                {/* The TV's remote starts here, the field read only until OK; on the switch above instead while All chats is on, as in the apps (every row is disabled then). */}
+                <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => { touched = true; setText(e.currentTarget.value) }} data-tv-first={allChats() ? undefined : ''} />
             </label>
             <div class="picker-actions">
                 <div class="picker-scopes" role="group" aria-label={t('picker.choose_chats')}>

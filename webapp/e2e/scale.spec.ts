@@ -227,7 +227,8 @@ for (const form of FORMS) {
         })
 
         test('the picker stops counting for the visit when Telegram refuses, and says so', async ({ context, page }) => {
-            await fakeCase(context, 'huge', 'countflood')
+            // Chats picked (none yet), not All chats, so the last step can tick one (HX86).
+            await fakeCase(context, 'huge', 'countflood', 'picked')
             await page.goto('/added-chats')
             await expect(page.locator('.chat-tick').first()).toBeVisible({ timeout: 20_000 })
             await expect(page.getByText(/asked TMPlayer to slow down/)).toBeVisible({ timeout: 20_000 })

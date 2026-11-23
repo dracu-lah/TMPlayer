@@ -208,7 +208,8 @@ test.describe('on the TV', () => {
         const before = await titleOf(page)
         await expect(page.locator('.detail-play')).toBeFocused()
         const button = rename(page)
-        await page.keyboard.press('ArrowDown')
+        // The round buttons share Play's line: Right walks them. Down leaves the line for the chat's row
+        // below once More from has loaded, so it is not pressed (it passed only when that row was late).
         for (let i = 0; i < 12 && !(await button.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowRight')
         await expect(button).toBeFocused()
         await page.keyboard.press('Enter')

@@ -2,6 +2,7 @@
 // TV's is walked in tv.spec.ts). Home has none: it is on Chats and in Settings. It goes where the
 // Settings row goes, /added-chats.
 import { expect, test, type Page } from '@playwright/test'
+import { fakeCase } from './helpers'
 
 test('Home has no Choose chats button', async ({ page }) => {
     await page.goto('/')
@@ -63,6 +64,11 @@ for (const [name, path] of [['Chats', '/chats']] as const) {
 // The picker by keyboard (WB22): Tab reaches the search, every filter, Select all, then the rows' ticks and stars in
 // order, Space ticks, and a search that matches nothing says so instead of leaving a blank page.
 test.describe('the picker by keyboard', () => {
+    // 'picked' (vite.e2e.ts): an answered account with no chats picked, as the test server's default 'all' is the
+    // All chats switch on since HX86, every tick disabled.
+    test.beforeEach(async ({ context }) => {
+        await fakeCase(context, 'picked')
+    })
     const activeName = (page: Page) =>
         page.evaluate(() => {
             const a = document.activeElement as HTMLElement | null
@@ -102,6 +108,9 @@ test.describe('the picker by keyboard', () => {
 // The All chats switch (HX86): at the top above the search, off by default; on, every chat counts, the ticks and
 // Select all are disabled (and kept), the foot says so, and off brings the ticks back.
 test.describe('the All chats switch', () => {
+    test.beforeEach(async ({ context }) => {
+        await fakeCase(context, 'picked')
+    })
     test('is off at first, disables the ticks while on, and gives them back when off', async ({ page }) => {
         await page.goto('/added-chats')
         const clips = page.getByRole('checkbox', { name: 'Test Clips' })
