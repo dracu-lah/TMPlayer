@@ -24,4 +24,6 @@ Not here, and why:
 - **Samsung, LG, Sony TVs:** nobody on the project owns one. Phase 4 needs someone who does to run
   `scripts/dlna/capture.py` and send the folder; their quirks are not guessed at in the tests.
 
-Reproduce: `scripts/dlna/Containerfile.gmrender` and `scripts/dlna/Containerfile.rygel`.
+Reproduce: `scripts/dlna/Containerfile.gmrender` and `scripts/dlna/Containerfile.rygel`. The
+real-renderer check, `scripts/dlna/e2e.sh`, starts both (and the host's own Rygel when installed)
+and runs TMPlayer's client against them; its record goes to `core/build/dlna-e2e/`, not here.
