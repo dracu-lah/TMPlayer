@@ -6,7 +6,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +90,10 @@ class SubMakerTranslator(
         while (true) {
             // Nothing is asked in the background, and the time it takes does not count.
             if (!foreground.value) foreground.first { it }
+            // A Cancel that landed while this ran (before the wait, or with the app already in the
+            // foreground, so the wait never suspended) must not still ask the addon: a cancelled
+            // job reaches no suspension point of its own before the request goes out.
+            currentCoroutineContext().ensureActive()
             var wait = pollMs
             var busy = false
             when (val answer = api.fetch(url, SubtitleText.MAX_BYTES)) {
