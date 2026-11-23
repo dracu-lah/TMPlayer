@@ -587,8 +587,8 @@ class ChatRepository(private val td: TdlClient) {
      * searched on its own instead.
      *
      * The cost is kept to a page: [AllChatsSearch.CHATS_PER_PAGE] chats per page,
-     * [CHATS_AT_ONCE] of them in flight, two calls each (videos, and documents for the ones sent
-     * as files). Load more reaches the next chats rather than deeper into the ones already read,
+     * [CHATS_AT_ONCE] of them in flight, three calls each (videos, documents for the ones sent
+     * as files, and photos, whose captions lead to an album's videos; none for a blank query). Load more reaches the next chats rather than deeper into the ones already read,
      * so a chat with hundreds of matches offers its newest here and the rest in the chat itself.
      * [added] is in the order the viewer added the chats, which is the order they are searched.
      */
@@ -856,7 +856,7 @@ class ChatRepository(private val td: TdlClient) {
     companion object {
         const val PAGE_SIZE = 40
 
-        /** Added chats searched side by side in [searchAddedChats]: two calls each, so six in flight. */
+        /** Added chats searched side by side in [searchAddedChats]: three calls each, so nine in flight. */
         const val CHATS_AT_ONCE = 3
 
         /** Per filter, for [recentMedia]: enough to fill a row of ten after screening and dedupe. */
