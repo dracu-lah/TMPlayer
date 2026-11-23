@@ -255,7 +255,7 @@ object ZipArchive {
         val header = source.read(entry.headerOffset, LOCAL_MIN) ?: return null
         if (header.size < LOCAL_MIN || u32(header, 0) != SIG_LOCAL) return null
         val start = entry.headerOffset + LOCAL_MIN + u16(header, 26) + u16(header, 28)
-        if (start < 0 || start + entry.uncompressedSize > source.size) return null
+        if (start < 0 || entry.uncompressedSize > source.size - start) return null
         return start
     }
 
