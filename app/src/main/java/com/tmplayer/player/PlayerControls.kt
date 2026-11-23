@@ -31,9 +31,9 @@ import com.tmplayer.i18n.Translator
  * picture jump on their own, the activity's business; here they matter once the row is up, where
  * a row that opened onto play or pause made scrubbing a two-step trip: Up to the bar, then the
  * arrow. Opening onto the bar means left and right stride it the moment the row appears, with
- * the buttons one press Down away. The bar's stride is [Skip.BAR_MS], deliberately coarser than
- * the bare-picture jumps: whoever opened the row to scrub is travelling, not nudging. The bar
- * folds a burst of presses into one committed seek, which matters here more than in most
+ * the buttons one press Down away. On a TV the bar steps 10 s a press, the bare picture's jump; held,
+ * it ramps up through larger steps ([FineTimeBar]). The bar folds a burst of presses into one
+ * committed seek, which matters here more than in most
  * players: every committed seek moves TDLib's streaming download window, so ten presses landing
  * as one seek is nine downloads not restarted. [okOnTimeBar] gives OK on the focused bar the
  * Netflix meaning, play or pause, unless a scrub is mid-flight, in which case the bar itself
@@ -366,14 +366,15 @@ class PlayerControls(
         setShape(VideoScale.Fit)
         if (!isTv) setUpPhone(root) else setUpTv(root)
 
-        // A press of D-pad left or right on the bar steps the position by this much: coarser than
-        // the bare-picture arrow jumps on purpose, because opening the row to scrub is travelling,
-        // and fixed rather than Media3's twentieth-of-a-film so a press means the same thing on a
-        // short clip as on a long film.
+        // TalkBack's scroll actions on the bar move by this much, fixed rather than Media3's
+        // twentieth of a film, and a phone keyboard strides by it. A TV remote steps 10 s and ramps, one
+        // commit a second after the last key ([FineTimeBar.onKeyDown]).
         timeBar.setKeyTimeIncrement(Skip.BAR_MS)
         // A finger away from the bar scrubs finer; the line over it says how. Phone only: a remote
         // steps the bar with its keys, which never reach the fine scrub.
         if (!isTv) (timeBar as? FineTimeBar)?.onRate = ::showScrubRate
+        // The remote's 10 s steps and ramp are the television's; a keyboard elsewhere keeps the stride.
+        (timeBar as? FineTimeBar)?.remoteSteps = isTv
         // The chapter cuts: see [renderMarks].
         timeBar.setPlayedAdMarkerColor(CHAPTER_CUT)
         // A chapter's name rides after the time: one line, cut short rather than wrapping the row.

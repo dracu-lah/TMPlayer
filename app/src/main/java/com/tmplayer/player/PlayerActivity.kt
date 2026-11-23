@@ -3378,18 +3378,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * total on the side the jump went.
      */
     private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0, fixedStepMs: Long? = null) {
-        val base = fixedStepMs ?: if (forward) Skip.FORWARD_MS else Skip.BACK_MS
+        // A television remote is 10 s both ways; a phone's keyboard keeps Skip's 5 back and 10
+        // forward, and so do Media3's increments and the notification, which read Skip directly.
+        val base = fixedStepMs ?: PlayerRemoteKeys.remoteBaseMs(forward, FormFactor.isTv(this))
         // A held arrow, rewind or fast forward scans in growing steps, a few a second, on every
         // remote: one TDLib seek per key repeat made a held key stall the player on a 1 GB stick.
+        // The larger steps are held to a share of the length, so a short video is not overshot.
         val now = SystemClock.uptimeMillis()
-        val step = if (fixedStepMs == null) PlayerRemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt) else base
+        val duration = playing?.duration ?: 0L
+        val step = if (fixedStepMs == null) PlayerRemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt, duration) else base
         if (step <= 0) return
         lastRemoteJumpAt = now
         skipBy(if (forward) step else -step)
         val zone = if (forward) TapZone.Right else TapZone.Left
         if (jumpRun.tap(zone, SystemClock.uptimeMillis()) == 1) jumpRunSeconds = 0
         jumpRunSeconds += step / 1000
-        feedback?.jump(zone, jumpRunSeconds)
+        feedback?.jump(zone, jumpRunSeconds, PlayerRemoteKeys.pace(step, base))
+    }
+
+    /**
+     * Page Up and Page Down, row up or down: the previous or next chapter where the file has
+     * chapters, else a minute back or forward. Once per press, so a held key is not a run of
+     * seeks on a slow stick.
+     */
+    private fun pageFromRemote(forward: Boolean) {
+        if (chapters.isNotEmpty()) stepChapter(forward) else jumpFromRemote(forward, fixedStepMs = PlayerRemoteKeys.PAGE_JUMP_MS)
     }
 
     /** The remote's next and previous keys; false when the chat has no such episode. */
@@ -6983,8 +6996,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * keys act on the bare picture and walk the row once it is up: the focused views own them
      * then, with one exception carved out below. Left and right over the bare picture jump the
      * way the phone's double tap does, a small seek and a flash of icon and figure on that side
-     * of the frame, without raising the row; the scrub bar, reached through OK, strides by
-     * [Skip.BAR_MS] instead and folds a burst of presses into one committed seek. The exception
+     * of the frame, without raising the row; the scrub bar, reached through OK, steps the same
+     * 10 s ([FineTimeBar]) and folds a burst of presses into one committed seek. Page Up and Page
+     * Down step a chapter, or a minute where the file has none. The exception
      * is OK on the focused bar, which toggles playback rather than doing nothing, unless a scrub
      * is mid-flight, in which case the bar takes the press and commits.
      */
@@ -7214,6 +7228,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (event.repeatCount == 0 && !stepEpisode(forward)) {
                     showGestureFeedback(if (forward) L.playerNoNextEpisode else L.playerNoPreviousEpisode)
                 }
+                return true
+            }
+            // Page Up and Page Down on a television: a chapter, or a minute where there are none
+            // (PlayerRemoteKeys.pageStep). A phone's keyboard passes them on as before.
+            KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_DOWN -> {
+                val forward = PlayerRemoteKeys.pageStep(event.keyCode, FormFactor.isTv(this)) ?: return super.dispatchKeyEvent(event)
+                if (event.repeatCount == 0 && player != null && statusOverlay.visibility != View.VISIBLE) pageFromRemote(forward)
                 return true
             }
             // Stop saves the place and leaves, as Back does, with no question asked.

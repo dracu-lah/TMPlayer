@@ -745,6 +745,9 @@ open class View(context: Context?, attrs: AttributeSet?, @Suppress("UNUSED_PARAM
         animator?.cancel()
     }
 
+    /** A key for a focused View. No remote reaches a View on iOS; here so FineTimeBar's override compiles. */
+    open fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = false
+
     // One Handler for every View, as a window's Views share one on Android, so removeCallbacks
     // takes back what any View posted.
     fun post(action: java.lang.Runnable): Boolean = ViewHandler.post(action)

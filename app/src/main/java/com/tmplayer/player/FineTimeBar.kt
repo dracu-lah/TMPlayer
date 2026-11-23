@@ -1,7 +1,9 @@
 package com.tmplayer.player
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.DefaultTimeBar
@@ -14,7 +16,15 @@ import androidx.media3.ui.DefaultTimeBar
  *
  * The bar is handed every move at its own height, so Media3's own fine scrub (a third, past 50 dp
  * above it) never stacks on top of this one; and at the position the [FineScrub.Tracker] has
- * reached rather than where the finger is. A remote's keys never come here.
+ * reached rather than where the finger is.
+ *
+ * A remote's Left and Right on the focused bar step it by [PlayerRemoteKeys.TV_JUMP_MS], and a held
+ * key ramps the way the bare picture's jump does ([PlayerRemoteKeys.barStepMs]: every fourth repeat,
+ * at most one in 150 ms, growing after two and five seconds, held to a share of the length), with
+ * stale repeats dropped. Media3 still previews each step and commits one seek about a second after
+ * the last key ([onScrubStop][androidx.media3.ui.TimeBar.OnScrubListener.onScrubStop]), so a held
+ * key is never a flood of seeks. The fixed increment set from outside ([setKeyTimeIncrement]) stays
+ * what TalkBack's scroll actions move by.
  */
 @UnstableApi
 class FineTimeBar @JvmOverloads constructor(
@@ -27,6 +37,44 @@ class FineTimeBar @JvmOverloads constructor(
 
     private var tracker: FineScrub.Tracker? = null
     private var lastRate: Float? = null
+
+    /** The increment set from outside, for TalkBack's scroll actions; a key's step is set around it. */
+    private var accessibilityIncrementMs = 0L
+    private var durationMs = 0L
+    private var lastKeyStepAt = 0L
+
+    override fun setKeyTimeIncrement(time: Long) {
+        accessibilityIncrementMs = time
+        super.setKeyTimeIncrement(time)
+    }
+
+    override fun setDuration(duration: Long) {
+        durationMs = duration
+        super.setDuration(duration)
+    }
+
+    /**
+     * True on a television, where Left and Right step 10 s and ramp ([onKeyDown]). Elsewhere (a
+     * phone's or tablet's keyboard) the keys keep Media3's stride by the fixed increment, as before.
+     */
+    var remoteSteps = false
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (!remoteSteps || !isEnabled || (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            return super.onKeyDown(keyCode, event)
+        }
+        val at = SystemClock.uptimeMillis()
+        val step = PlayerRemoteKeys.barStepMs(event.repeatCount, PlayerRemoteKeys.TV_JUMP_MS, event.eventTime, at, lastKeyStepAt, durationMs)
+        // A repeat between steps is still the bar's: passed on, it would walk the focus off the bar.
+        if (step <= 0L) return true
+        lastKeyStepAt = at
+        super.setKeyTimeIncrement(step)
+        return try {
+            super.onKeyDown(keyCode, event)
+        } finally {
+            if (accessibilityIncrementMs > 0L) super.setKeyTimeIncrement(accessibilityIncrementMs)
+        }
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isEnabled) return super.onTouchEvent(event)

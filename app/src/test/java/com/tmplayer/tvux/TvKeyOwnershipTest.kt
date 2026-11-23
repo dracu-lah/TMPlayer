@@ -135,7 +135,7 @@ class TvKeyOwnershipTest {
     }
 
     @Test
-    fun `tile, Left and Right move along the row (tested on tiles only, the player's arrows are WP-18)`() {
+    fun `tile, Left and Right move along the row (the player's arrows are PlayerRemoteKeysTest and FineTimeBarKeysTest)`() {
         showTiles()
         tile("a").performKeyInput { pressKey(Key.DirectionRight) }
         rule.waitForIdle()
@@ -258,7 +258,7 @@ class TvKeyOwnershipTest {
         assertEquals(false, PlayerRemoteKeys.episodeStep(KeyEvent.KEYCODE_CHANNEL_DOWN))
         assertEquals(true, PlayerRemoteKeys.episodeStep(KeyEvent.KEYCODE_MEDIA_NEXT))
         assertEquals(false, PlayerRemoteKeys.episodeStep(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-        assertNull("Page keys are nobody's in the player", PlayerRemoteKeys.episodeStep(KeyEvent.KEYCODE_PAGE_UP))
+        assertNull("Page keys do not step the episode", PlayerRemoteKeys.episodeStep(KeyEvent.KEYCODE_PAGE_UP))
         val step = playerDispatch().substringAfter("KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS,").substringBefore("KeyEvent.KEYCODE_MEDIA_STOP")
         assertTrue("KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_CHANNEL_DOWN" in step)
         assertTrue("PlayerRemoteKeys.episodeStep(event.keyCode)" in step)
@@ -274,12 +274,15 @@ class TvKeyOwnershipTest {
     }
 
     @Test
-    fun `player, Page keys are not bound today`() {
-        val source = text("src/main/java/com/tmplayer/player/PlayerActivity.kt")
-        // The table's "Page: 60 s or chapter" is WP-18. The package that binds it changes this test and the table.
-        for (word in listOf("KEYCODE_PAGE_", "Key.PageUp", "Key.PageDown")) {
-            assertFalse("the player binds $word now: update docs/agents/tv-keys.md and this test", word in source)
-        }
+    fun `player, Page keys step a chapter or a minute, once per press, row up or down`() {
+        assertEquals(true, PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_DOWN, tv = true))
+        assertEquals(false, PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_UP, tv = true))
+        assertNull("a phone keyboard's Page keys pass on", PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_DOWN, tv = false))
+        val page = playerDispatch().substringAfter("KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_DOWN -> {").substringBefore("KeyEvent.KEYCODE_MEDIA_STOP")
+        assertTrue("PlayerRemoteKeys.pageStep(event.keyCode, FormFactor.isTv(this))" in page)
+        assertTrue("once per press", "event.repeatCount == 0" in page)
+        // Not behind the row: the case sits in the dispatch's key switch, before the arrows' row-down check.
+        assertFalse("!controlsUp" in page)
     }
 
     // ---- Back ----

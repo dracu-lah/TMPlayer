@@ -89,14 +89,15 @@ keeps it up to date.
 
 | Key | What it does |
 | --- | --- |
-| **Left / Right** | Jump back 5 / forward 10 seconds, right on the picture with the seconds on that side; keep pressing to add more |
+| **Left / Right** | Jump back or forward 10 seconds, right on the picture with the seconds on that side; keep pressing to add more, or hold to go faster (the pace shows beside the seconds) |
 | **OK** | Play / pause in one press; a pause brings the controls up with a play sign in the middle. **Up / Down** show the controls without pausing |
 | **⏯** (if your remote has it) | Play / pause; paused, the controls stay up with a play sign in the middle |
-| **Left / Right** (on the seek bar) | Travel: 30 seconds a press, presses pile up and land as one seek a moment after the last |
+| **Left / Right** (on the seek bar) | Travel: 10 seconds a press, faster while held; presses pile up and land as one seek a moment after the last |
+| **Page Up / Page Down** (if your remote has them) | The previous or next chapter when the video has chapters, otherwise a minute back or forward |
 | **Down** (controls up) | The button row: subtitles, audio, speed (the presets, then Slower and Faster lines for 0.05x steps), picture shape (each press steps Fit, Crop, Stretch), and More at the end. More holds the lock, the previous and next chapter of a video that has chapters, picture in picture, start over, volume boost, sleep timer and the rest |
 | **0 - 9** (if your remote has them) | Jump to that tenth of the video; 5 is halfway |
 | **Up** (after a long jump) | Back to where you were before it, while the "Back to" sign is up in the corner |
-| **⏪ / ⏩** (if your remote has them) | Jump back 5 / forward 10 seconds |
+| **⏪ / ⏩** (if your remote has them) | Jump back or forward 10 seconds, faster while held; hold ⏩ to play faster until you let go |
 | **⏮ / ⏭** (if your remote has them) | The previous or next episode, when the chat has one; also in the More menu |
 | **Hold OK** (controls up) | Open the video in another app |
 | **Back** | Close what is on top: the controls, then the player; the position is remembered |

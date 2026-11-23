@@ -30,9 +30,9 @@ the same change.
 | Back | leaves to Home or exits (today) | to the bar or the top first in long grids (WP-12) | top first, then leave (WP-12) | pane to rail, rail out (WP-07) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
 | Search | TV search (today, WP-22 everywhere) | TV search (WP-22) | TV search (WP-22) | nothing | nothing | nothing | nothing | the bar's Search tab |
 | CC, Audio | nothing | nothing | nothing | nothing | CC toggles, second press opens (WP-19); Audio opens picker (today) | same | nothing | the row's subtitle and audio buttons |
-| Page, Channel | nothing | screenful (WP-12) | screenful (WP-12) | section jump (WP-75) | Page: 60 s or chapter (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (WP-89) |
+| Page, Channel | nothing | screenful (WP-12) | screenful (WP-12) | section jump (WP-75) | Page: chapter, or 60 s without chapters, once per press (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (WP-89) |
 | Play/Pause, Stop | nothing | nothing | nothing | nothing | toggle (today); Stop leaves (today) | same | still work under the panel (WP-19) | OK on the play button |
-| Left, Right hold | move (today, tested on tiles only) | move, stale repeats dropped (WP-13) | same | same (WP-07) | 10 s, live ramp (WP-18) | bar: ramped scrub, one commit (WP-18) | move | n/a |
+| Left, Right hold | move (today, tested on tiles only) | move, stale repeats dropped (WP-13) | same | same (WP-07) | 10 s, live ramp, gated (WP-18) | bar: 10 s, ramped scrub, stale repeats dropped, one commit (WP-18) | move | n/a |
 
 ## What the code does today, beyond the table
 
@@ -45,15 +45,22 @@ Found while pinning the table (WP-69):
   every key to their own view.
 - **Stop, Channel and Media Next, Previous and Skip.** Stop saves the place and leaves like Back.
   Channel up and down, Next, Previous and Skip step the video (`PlayerRemoteKeys.episodeStep`), once
-  per press. Page keys are bound nowhere in the player.
+  per press. Page Up and Page Down step a chapter, or a minute without
+  chapters, once per press, on a TV only (`PlayerRemoteKeys.pageStep`, WP-18).
 - **Info.** A short Info (released before the long press) shows the details; a held Info reports a
   stutter.
 - **Menu elsewhere.** Besides the tile (`Holdable.kt`) and the player: the profile picker's tiles
   (options, on key up), the Add chats rows (star), and `MainActivity.onKeyUp`, which opens the
   profile picker for a Menu nobody took when the device has two or more profiles. That last one is
   the fallback WP-02 replaces with the account menu.
-- **Left and Right.** The table's "move (today)" is tested on tiles. The player's arrows over the
-  bare picture jump and on the bar stride today; their ramps are WP-18, so those cells carry no test.
+- **Left and Right.** The table's "move (today)" is tested on tiles. In the player (WP-18) a TV
+  remote jumps 10 s both ways over the bare picture (`PlayerRemoteKeys.remoteBaseMs`; a phone's
+  keyboard keeps 5 back and 10 forward, and `Skip.BACK_MS` still feeds Media3 and the
+  notification), a held key ramps through `RemoteQuirks.holdStepMs` (x1, x3 after 2 s, x6 after
+  5 s, capped at a 200th of the length, 10 s to 120 s) behind the 150 ms gate, and the pace shows
+  beside the total, to one decimal. On a TV's focused bar `FineTimeBar.onKeyDown` takes the same
+  steps, drops stale
+  repeats, and Media3 commits one seek a second after the last key (`FineTimeBarKeysTest`).
 
 ## Who may claim a key today
 
@@ -65,5 +72,5 @@ the key fails the test: add it here with its context first.
 | Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt` |
 | Info | `Holdable.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (short Info), `PlaybackMarks.kt` (held) |
 | Search | `BrowseScreen.kt`, `SearchKeyGuard.kt` (swallows it on a phone) |
-| Page, Channel | `AddChatsScreen.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel only) |
+| Page, Channel | `AddChatsScreen.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel steps the video, Page a chapter or a minute) |
 | Stop | `PlayerActivity.kt`, `PlayerRemoteKeys.kt` |

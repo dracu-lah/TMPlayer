@@ -431,6 +431,7 @@ object RemoteKeys {
         L.playerKeySeekBar to L.playerKeySeekBarDoes,
         L.playerKeyDown to L.playerKeyDownDoes,
         L.playerKeyTime to L.playerKeyTimeDoes,
+        L.playerKeyPage to L.playerKeyPageDoes,
         L.playerKeyDigits to L.playerKeyDigitsDoes,
         L.playerKeyUpJump to L.playerKeyUpJumpDoes,
         L.playerKeyRewind to L.playerKeyRewindDoes,

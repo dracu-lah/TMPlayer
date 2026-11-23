@@ -80,4 +80,28 @@ class FireOsTest {
         assertEquals(base * 6, RemoteQuirks.holdStepMs(100, base))
         assertEquals(0L, RemoteQuirks.holdStepMs(101, base))
     }
+
+    @Test
+    fun `the held steps are capped by the video's length, and an unknown length keeps them`() {
+        val base = 10_000L
+        val twentyMinutes = 20 * 60_000L
+        val twoHours = 120 * 60_000L
+        val tenHours = 600 * 60_000L
+        // A tap is always the plain step, whatever the length.
+        assertEquals(base, RemoteQuirks.holdStepMs(0, base, twentyMinutes))
+        // 20 minutes: a 200th is 6 s, held to the 10 s floor, so a hold never jumps past the base.
+        assertEquals(base, RemoteQuirks.holdStepMs(40, base, twentyMinutes))
+        assertEquals(base, RemoteQuirks.holdStepMs(100, base, twentyMinutes))
+        // 2 hours: a 200th is 36 s, so the x3 step (30 s) passes and the x6 one (60 s) stops at 36.
+        assertEquals(30_000L, RemoteQuirks.holdStepMs(40, base, twoHours))
+        assertEquals(36_000L, RemoteQuirks.holdStepMs(100, base, twoHours))
+        // 10 hours: the cap is 120 s, above the x6 step.
+        assertEquals(60_000L, RemoteQuirks.holdStepMs(100, base, tenHours))
+        assertEquals(120_000L, RemoteQuirks.holdCapMs(tenHours))
+        // Unknown: 0 or Media3's TIME_UNSET keeps today's steps.
+        assertEquals(base * 6, RemoteQuirks.holdStepMs(100, base, 0L))
+        assertEquals(base * 6, RemoteQuirks.holdStepMs(100, base, Long.MIN_VALUE + 1))
+        // Skipped repeats stay skipped.
+        assertEquals(0L, RemoteQuirks.holdStepMs(101, base, twoHours))
+    }
 }

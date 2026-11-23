@@ -219,12 +219,14 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
     /**
      * A key's jump, from a remote or a keyboard: the double tap's half-moon, chevrons and running
-     * total on the side the jump went, as if the tap had landed in the middle of that side.
+     * total on the side the jump went, as if the tap had landed in the middle of that side. A held
+     * key's [pace] (how many plain steps this one was, to one decimal) shows after the
+     * total as the glyph and figure, so the viewer sees the scan speed up.
      */
-    fun jump(zone: TapZone, totalSeconds: Long) {
+    fun jump(zone: TapZone, totalSeconds: Long, pace: Float = 1f) {
         val sideCentre = root.width * TapZone.SIDE_FRACTION / 2f
         val x = if (zone == TapZone.Left) sideCentre else root.width - sideCentre
-        ripple.step(zone, totalSeconds, x, root.height / 2f)
+        ripple.step(zone, totalSeconds, x, root.height / 2f, pace)
     }
 
     // ---- hold --------------------------------------------------------------------------------
@@ -358,6 +360,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
         private var zone = TapZone.Right
         private var seconds = 0L
+        private var pace = 1f
         private var tapX = 0f
         private var tapY = 0f
         private var tappedAt = 0L
@@ -369,9 +372,10 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             }.start()
         }
 
-        fun step(side: TapZone, totalSeconds: Long, x: Float, y: Float) {
+        fun step(side: TapZone, totalSeconds: Long, x: Float, y: Float, pace: Float = 1f) {
             zone = side
             seconds = totalSeconds
+            this.pace = pace
             tapX = x
             tapY = y
             tappedAt = SystemClock.uptimeMillis()
@@ -431,7 +435,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             val cy = h / 2f - 14f * density
             val size = 9f * density
             val phase = ticker?.animatedValue as? Float ?: 0f
-            val text = L.playerSeekSeconds(seconds)
+            val text = seekLabel(seconds, pace, left)
             val baseline = cy + size + 22f * density
             val halfWidth = maxOf(label.measureText(text), size * 4.2f) / 2f + 16f * density
             plateRect.set(cx - halfWidth, cy - size / 2f - 12f * density, cx + halfWidth, baseline + label.descent() + 10f * density)
@@ -723,4 +727,17 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         const val SCRUB_LINGER_MS = 400L
         const val SIDE_MARGIN_DP = 40f
     }
+}
+
+/**
+ * The figure under a jump's chevrons: the run's total, and for a held key past its first stretch
+ * the pace after it, the glyph pointing the way the jump goes and the figure as the speed menu
+ * writes it ("40 seconds   ▶▶ 3x"). The timeline runs left to right in every language, so back is
+ * always the left-pointing glyph.
+ */
+internal fun seekLabel(seconds: Long, pace: Float, back: Boolean): String {
+    val total = L.playerSeekSeconds(seconds)
+    if (pace <= 1f) return total
+    val glyph = if (back) "◀◀" else "▶▶"
+    return "$total   $glyph ${TouchPrefs.holdLabel(pace)}"
 }

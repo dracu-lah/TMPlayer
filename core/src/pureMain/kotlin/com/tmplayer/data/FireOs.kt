@@ -131,15 +131,29 @@ data class RemoteQuirks(
          * The first press is the ordinary [baseMs] jump. Held, it scans: [baseMs] five times a
          * second, then three times that after two seconds, then six times after five, so a held key
          * crosses a film in seconds while a tap still lands where it always did.
+         *
+         * With the video's [durationMs] known, the larger steps are held to [holdCapMs] of it, so a
+         * hold on a 20 minute video stays at the plain step instead of overshooting by minutes a
+         * second, while a two hour one still reaches 36 s. An unknown length (0, or Media3's
+         * negative TIME_UNSET for a live or unfinished stream) keeps the steps uncapped.
          */
-        fun holdStepMs(repeatCount: Int, baseMs: Long): Long {
+        fun holdStepMs(repeatCount: Int, baseMs: Long, durationMs: Long = 0L): Long {
             if (repeatCount <= 0) return baseMs
             if (repeatCount % HOLD_EVERY != 0) return 0L
-            return when {
+            val step = when {
                 repeatCount >= HOLD_LARGE_FROM -> baseMs * 6
                 repeatCount >= HOLD_MEDIUM_FROM -> baseMs * 3
                 else -> baseMs
             }
+            if (durationMs <= 0L || step <= baseMs) return step
+            return minOf(step, maxOf(holdCapMs(durationMs), baseMs))
         }
+
+        /** The most a held step moves on a video [durationMs] long: a 200th of it, from 10 s to 120 s. */
+        fun holdCapMs(durationMs: Long): Long = (durationMs / HOLD_CAP_SHARE).coerceIn(HOLD_CAP_MIN_MS, HOLD_CAP_MAX_MS)
+
+        private const val HOLD_CAP_SHARE = 200L
+        private const val HOLD_CAP_MIN_MS = 10_000L
+        private const val HOLD_CAP_MAX_MS = 120_000L
     }
 }

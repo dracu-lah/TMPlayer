@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class PlayerRemoteKeysTest {
 
@@ -40,6 +41,107 @@ class PlayerRemoteKeysTest {
         assertEquals(30_000L, PlayerRemoteKeys.jumpStepMs(40, 10_000L, 10_000, 0))
         assertEquals(60_000L, PlayerRemoteKeys.jumpStepMs(100, 10_000L, 10_000, 0))
     }
+
+    @Test
+    fun `a TV remote jumps 10 s both ways while the notification and Media3 keep 5 s back`() {
+        assertEquals(10_000L, PlayerRemoteKeys.remoteBaseMs(forward = false, tv = true))
+        assertEquals(10_000L, PlayerRemoteKeys.remoteBaseMs(forward = true, tv = true))
+        // A phone's keyboard or paired remote is unchanged.
+        assertEquals(Skip.BACK_MS, PlayerRemoteKeys.remoteBaseMs(forward = false, tv = false))
+        assertEquals(Skip.FORWARD_MS, PlayerRemoteKeys.remoteBaseMs(forward = true, tv = false))
+        assertEquals("Skip.BACK_MS is never changed globally", 5_000L, Skip.BACK_MS)
+        val source = File(repo(), "app/src/main/java/com/tmplayer/player/PlayerActivity.kt").readText()
+        assertTrue(".setSeekBackIncrementMs(Skip.BACK_MS)" in source)
+        assertTrue("BackgroundPlayback.notificationButtons(Skip.BACK_MS, Skip.FORWARD_MS)" in source)
+        val jump = source.substringAfter("private fun jumpFromRemote(").substringBefore("\n    }")
+        assertTrue("PlayerRemoteKeys.remoteBaseMs(forward, FormFactor.isTv(this))" in jump)
+    }
+
+    @Test
+    fun `a TV Left tap moves 10 s back from the bare picture`() {
+        val tv = PlayerRemoteKeys.remoteBaseMs(forward = false, tv = true)
+        assertEquals(10_000L, PlayerRemoteKeys.jumpStepMs(0, tv, nowMs = 5_000, lastJumpMs = 4_990, durationMs = 3_600_000))
+    }
+
+    @Test
+    fun `the held steps follow the length, a short video stays at 10 s and a long one grows`() {
+        val twentyMinutes = 20 * 60_000L
+        val twoHours = 120 * 60_000L
+        assertEquals(10_000L, PlayerRemoteKeys.jumpStepMs(100, 10_000L, 10_000, 0, twentyMinutes))
+        assertEquals(36_000L, PlayerRemoteKeys.jumpStepMs(100, 10_000L, 10_000, 0, twoHours))
+        // Still gated: a repeat 100 ms after the last jump waits, whatever the step.
+        assertEquals(0L, PlayerRemoteKeys.jumpStepMs(100, 10_000L, 10_100, 10_000, twoHours))
+        // Unknown length keeps today's steps.
+        assertEquals(60_000L, PlayerRemoteKeys.jumpStepMs(100, 10_000L, 10_000, 0, -1L))
+    }
+
+    @Test
+    fun `a held arrow over the bare picture lands at most one seek in 150 ms`() {
+        // A fake clock: a repeat every 33 ms (the fastest remote) for 10 s.
+        var last = 0L
+        val landed = mutableListOf<Long>()
+        for (repeat in 0..300) {
+            val now = 1_000L + repeat * 33L
+            if (PlayerRemoteKeys.jumpStepMs(repeat, 10_000L, now, last, 120 * 60_000L) > 0) {
+                landed += now
+                last = now
+            }
+        }
+        assertTrue(landed.zipWithNext().all { (a, b) -> b - a >= PlayerRemoteKeys.MIN_REPEAT_JUMP_MS })
+        assertTrue("seeks=${landed.size}", landed.size <= 10_000 / 150 + 1)
+    }
+
+    @Test
+    fun `the bar drops a stale repeat and gates the rest`() {
+        // Fresh: moves.
+        assertEquals(10_000L, PlayerRemoteKeys.barStepMs(4, 10_000L, eventMs = 1_000, nowMs = 1_010, lastStepMs = 0, durationMs = 0))
+        // Made 200 ms ago and only handled now: dropped, so the bar stops where the key was let go.
+        assertEquals(0L, PlayerRemoteKeys.barStepMs(4, 10_000L, eventMs = 1_000, nowMs = 1_200, lastStepMs = 0, durationMs = 0))
+        // The first press is never stale.
+        assertEquals(10_000L, PlayerRemoteKeys.barStepMs(0, 10_000L, eventMs = 0, nowMs = 5_000, lastStepMs = 4_990, durationMs = 0))
+        // Inside the gate: waits.
+        assertEquals(0L, PlayerRemoteKeys.barStepMs(4, 10_000L, eventMs = 1_000, nowMs = 1_000, lastStepMs = 900, durationMs = 0))
+    }
+
+    @Test
+    fun `the pace is how many plain steps a jump was`() {
+        assertEquals(1f, PlayerRemoteKeys.pace(10_000L, 10_000L))
+        assertEquals(3f, PlayerRemoteKeys.pace(30_000L, 10_000L))
+        assertEquals(6f, PlayerRemoteKeys.pace(60_000L, 10_000L))
+        // A step the length capped shows its real figure, not the floor.
+        assertEquals(3.6f, PlayerRemoteKeys.pace(36_000L, 10_000L))
+        assertEquals(1f, PlayerRemoteKeys.pace(60_000L, 0L))
+    }
+
+    @Test
+    fun `Page Down is forward and Page Up back, and nothing else is a page key`() {
+        assertEquals(true, PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_DOWN, tv = true))
+        assertEquals(false, PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_UP, tv = true))
+        assertNull(PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_CHANNEL_UP, tv = true))
+        // A phone's or tablet's keyboard: the player does not take Page keys.
+        assertNull(PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_DOWN, tv = false))
+        assertNull(PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_UP, tv = false))
+        assertEquals(60_000L, PlayerRemoteKeys.PAGE_JUMP_MS)
+        val source = File(repo(), "app/src/main/java/com/tmplayer/player/PlayerActivity.kt").readText()
+        val page = source.substringAfter("private fun pageFromRemote(forward: Boolean) {").substringBefore("\n    }")
+        assertTrue("a file with chapters steps the chapter", "if (chapters.isNotEmpty()) stepChapter(forward)" in page)
+        assertTrue("else a minute", "jumpFromRemote(forward, fixedStepMs = PlayerRemoteKeys.PAGE_JUMP_MS)" in page)
+    }
+
+    @Test
+    fun `the jump's figure shows the pace once the hold grows`() {
+        assertEquals(com.tmplayer.i18n.L.playerSeekSeconds(10), seekLabel(10, 1f, back = false))
+        val held = seekLabel(70, 3f, back = false)
+        assertTrue(held, held.startsWith(com.tmplayer.i18n.L.playerSeekSeconds(70)))
+        assertTrue(held, held.endsWith("▶▶ " + TouchPrefs.holdLabel(3f)))
+        assertTrue(seekLabel(70, 6f, back = true).contains("◀◀ " + TouchPrefs.holdLabel(6f)))
+        val capped = seekLabel(106, PlayerRemoteKeys.pace(36_000L, 10_000L), back = false)
+        assertTrue(capped, capped.endsWith("▶▶ " + TouchPrefs.holdLabel(3.6f)))
+        assertTrue(capped, "3.6" in capped)
+    }
+
+    /** Gradle runs unit tests from the module directory; an IDE may start from the repository. */
+    private fun repo(): File = if (File("app/src/main").exists()) File(".") else File("..")
 
     @Test
     fun `next previous skip and channel keys step the episode`() {
