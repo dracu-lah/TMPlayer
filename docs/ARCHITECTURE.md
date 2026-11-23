@@ -201,7 +201,21 @@ TMPlayer is the control point and serves only the chosen video and its subtitle,
   and listed by every run. The picker shows Cast and DLNA counts apart; the dialog is
   `AddTvDialog` in `ui/shared`. Android 17's local network permission: `docs/BUILDING.md`.
 - **LAN guard.** The session token in the URL plus the renderer's own IP; no PIN, as a TV cannot
-  type one. DLNA streams carry DLNA headers and close after 30 minutes idle (paused).
+  type one. DLNA streams carry DLNA headers (`contentFeatures.dlna.org` always, asked or not) and
+  close after 30 minutes idle (paused). On the phone the filter reads the TV connected now, so a
+  cast moved to another TV on the same server is not turned away.
+- **What real TVs need (2026-11-23).** `DlnaRenderer` sends Stop before a new SetAVTransportURI
+  to a TV that is playing, sends the DIDL again in its plainest form and then none at a 714, 402,
+  501, 720 or a fault with no code (`Didl.fallbacks`), asks a Play again after a 701, seeks in
+  ABS_TIME where REL_TIME gets a 710 or 402, and polls less often while the TV does not answer. A
+  DIDL title carries no `&`, `<` or `>` (Rygel unescapes once too often), declares only the
+  namespaces it uses, and replies are read in the charset they name. A cast that fails names its
+  step (`DlnaFailure`): no answer, refused type, could not open, busy, refused with a code, never
+  came for the video (no request reached the cast server 15 s after Play, whatever state the TV
+  claims), stopped before playing, stopped with an error.
+- **The real-renderer check.** `scripts/dlna/e2e.sh` runs `DlnaRealRendererTest` (core) against
+  gmrender-resurrect and Rygel in containers and the host's own Rygel: every step from discovery
+  to Stop, an MKV, and the two load failures, with every SOAP call and cast server request on file.
 - **Phone (`app/.../cast/`).** `CastSupport` is the interface `PlayerCast`, `CastRemoteScreen` and
   `CastPickerSheet` drive. `MergedCastSupport(google, dlna)` joins the lists (ids `gc:` and
   `dlna:`; Cast wins one row per address). `DlnaCastSupport` discovers only while a picker is
