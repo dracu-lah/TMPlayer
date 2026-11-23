@@ -68,21 +68,46 @@ class UpdateDexMetadataTest {
      */
     @Test
     fun `once dropped the profile stays out of the question that follows`() {
-        val afterFailure = UpdateDexMetadata.next(dm, SessionSteps.Step.Failed)
+        val afterFailure = UpdateDexMetadata.next(dm, SessionSteps.Step.Failed, BAD)
         assertNull("the retry goes without it", afterFailure)
-        assertNull("so does the question after a refused retry", UpdateDexMetadata.next(afterFailure, SessionSteps.Step.SilentRefused))
+        assertNull("so does the question after a refused retry", UpdateDexMetadata.next(afterFailure, SessionSteps.Step.SilentRefused, null))
         // A first session refused for want of a question keeps it: the profile was not the trouble.
-        assertTrue(UpdateDexMetadata.next(dm, SessionSteps.Step.SilentRefused) === dm)
-        assertTrue(UpdateDexMetadata.next(dm, SessionSteps.Step.Installed) === dm)
-        assertNull(UpdateDexMetadata.next(null, SessionSteps.Step.Failed))
+        assertTrue(UpdateDexMetadata.next(dm, SessionSteps.Step.SilentRefused, null) === dm)
+        assertTrue(UpdateDexMetadata.next(dm, SessionSteps.Step.Installed, null) === dm)
+        assertNull(UpdateDexMetadata.next(null, SessionSteps.Step.Failed, BAD))
     }
 
     @Test
-    fun `only a plain failure is tried again without the profile`() {
-        assertTrue(UpdateDexMetadata.retryWithout(SessionSteps.Step.Failed))
+    fun `only a failure that names the profile is tried again without it`() {
+        assertTrue(UpdateDexMetadata.retryWithout(SessionSteps.Step.Failed, BAD))
+        assertTrue(UpdateDexMetadata.retryWithout(SessionSteps.Step.Failed, "Failed to process base.dm"))
         SessionSteps.Step.entries.filter { it != SessionSteps.Step.Failed }.forEach { step ->
-            assertFalse("$step", UpdateDexMetadata.retryWithout(step))
+            assertFalse("$step", UpdateDexMetadata.retryWithout(step, BAD))
         }
         assertEquals("base.dm", UpdateDexMetadata.SESSION_NAME)
+    }
+
+    /**
+     * A second session means a second install prompt: not after the 20 minute wait ending with the
+     * prompt ignored ("update took too long"), no session, no question to show, an unrelated
+     * platform message, or no message at all.
+     */
+    @Test
+    fun `a failure that is not about the profile does not start a second session`() {
+        listOf(
+            null,
+            "",
+            "The update took too long to install",
+            "Unable to create session",
+            "INSTALL_FAILED_INSUFFICIENT_STORAGE: not enough space",
+            "Install pending without a confirmation intent",
+        ).forEach { message ->
+            assertFalse("$message", UpdateDexMetadata.retryWithout(SessionSteps.Step.Failed, message))
+            assertTrue(UpdateDexMetadata.next(dm, SessionSteps.Step.Failed, message) === dm)
+        }
+    }
+
+    private companion object {
+        const val BAD = "INSTALL_FAILED_BAD_DEX_METADATA: Error occurred while parsing the profile"
     }
 }

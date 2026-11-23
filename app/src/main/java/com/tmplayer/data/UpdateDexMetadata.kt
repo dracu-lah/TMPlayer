@@ -53,17 +53,28 @@ object UpdateDexMetadata {
         bytes.size >= 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte() && bytes[2] == 3.toByte() && bytes[3] == 4.toByte()
 
     /**
-     * Whether a session that carried the profile and ended in [step] is tried once more without it:
-     * a failure Android may have had with the profile itself (a bad one is INSTALL_FAILED_BAD_DEX_METADATA,
-     * reported as a plain failure). Not after the viewer said no, a question nobody can answer, a
-     * conflict, no room or an APK this device cannot run: the profile changes none of those.
+     * Whether a session that carried the profile and ended in [step] with [message] is tried once
+     * more without it: only a failure that names the profile (a bad one is
+     * INSTALL_FAILED_BAD_DEX_METADATA, reported as a plain failure with that in its message). Not
+     * after the viewer said no, a question nobody can answer, a conflict, no room or an APK this
+     * device cannot run, and not after a plain failure that has nothing to do with the profile: no
+     * session, no question to show, or the 20 minute wait ending with the install prompt ignored,
+     * where a second session would only put a second prompt in front of the viewer.
      */
-    fun retryWithout(step: SessionSteps.Step): Boolean = step == SessionSteps.Step.Failed
+    fun retryWithout(step: SessionSteps.Step, message: String?): Boolean =
+        step == SessionSteps.Step.Failed && namesProfile(message)
+
+    /** Whether Android's [message] points at the dex metadata (`BAD_DEX_METADATA`, "dex metadata", `base.dm`). */
+    fun namesProfile(message: String?): Boolean {
+        val text = message?.lowercase() ?: return false
+        return text.contains("dex_metadata") || text.contains("dex metadata") || text.contains("dexmetadata") || text.contains(SESSION_NAME)
+    }
 
     /**
-     * The profile the install's next session carries after one carrying [profile] ended in [step]:
-     * none once a session with it failed ([retryWithout]), for the retry and for the question that
-     * may follow it, else the same.
+     * The profile the install's next session carries after one carrying [profile] ended in [step]
+     * with [message]: none once a session with it failed because of it ([retryWithout]), for the
+     * retry and for the question that may follow it, else the same.
      */
-    fun next(profile: ByteArray?, step: SessionSteps.Step): ByteArray? = if (profile != null && retryWithout(step)) null else profile
+    fun next(profile: ByteArray?, step: SessionSteps.Step, message: String?): ByteArray? =
+        if (profile != null && retryWithout(step, message)) null else profile
 }

@@ -196,7 +196,7 @@ object SelfInstaller {
         // A failure the profile may have caused is tried once more without it, and every later
         // session of this install goes without it too: a profile Android could not use must never
         // be what keeps an update out.
-        val after = UpdateDexMetadata.next(profile, outcome.step)
+        val after = UpdateDexMetadata.next(profile, outcome.step, outcome.message)
         if (after !== profile) {
             Logger.w(TAG, "Install with the profile failed (${outcome.message}), trying without it")
             profile = after
