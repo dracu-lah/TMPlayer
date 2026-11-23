@@ -1,0 +1,4 @@
+# WP-02: TV account menu (not built yet).
+# Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
+# screen | rule | node | reason
+accountMenu | render | screen | WP-02 TV account menu (not built yet)

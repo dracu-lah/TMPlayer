@@ -1,0 +1,15 @@
+# WP-05: TV safe area in the player, Android and web TV.
+# Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
+# screen | rule | node | reason
+playerRow | safeArea | 21:00 / 43:54 | WP-05 TV safe area in the player
+playerRow | safeArea | 21:00 | WP-05 TV safe area in the player
+playerRow | safeArea | More | WP-05 TV safe area in the player
+playerRow | safeArea | Subtitles | WP-05 TV safe area in the player
+playerRow | safeArea | unnamed HorizontalScrollView | WP-05 TV safe area in the player
+web:chat | safeArea | Open | WP-05 TV safe area in the player
+web:chats | safeArea | Add to favourites | WP-05 TV safe area in the player
+web:chats | safeArea | G Group 4 | WP-05 TV safe area in the player
+web:chats | safeArea | G Group 5 | WP-05 TV safe area in the player
+web:home | safeArea | Not now | WP-05 TV safe area in the player
+web:home | safeArea | Yes, keep it | WP-05 TV safe area in the player
+web:video | safeArea | Not the same video Keep this file apart from the copies it w | WP-05 TV safe area in the player

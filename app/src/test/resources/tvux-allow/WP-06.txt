@@ -1,0 +1,133 @@
+# WP-06: TV Settings rows: ring, honest roles, rows that keep focus and never shift.
+# Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
+# screen | rule | node | reason
+settings:About | drawnInsideClip | Changelog Every change in every version, on tmplayer.org | WP-06 TV Settings rows
+settings:About | drawnInsideClip | Keep detailed logs More of what the app does is kept in a lo | WP-06 TV Settings rows
+settings:About | drawnInsideClip | Playback test Plays 30 seconds of a video from this device, | WP-06 TV Settings rows
+settings:About | drawnInsideClip | Report a problem A bug report on GitHub with the version and | WP-06 TV Settings rows
+settings:About | drawnInsideClip | Request a feature Tell the developer what you would like TMP | WP-06 TV Settings rows
+settings:About | drawnInsideClip | Save logs Recent app logs in a text file to attach to a bug | WP-06 TV Settings rows
+settings:About | drawnInsideClip | What's new The highlights of version 1.27.0 | WP-06 TV Settings rows
+settings:About | focusSizeStable | Changelog Every change in every version, on tmplayer.org | WP-06 TV Settings rows
+settings:About | focusSizeStable | Keep detailed logs More of what the app does is kept in a lo | WP-06 TV Settings rows
+settings:About | focusSizeStable | Playback test Plays 30 seconds of a video from this device, | WP-06 TV Settings rows
+settings:About | focusSizeStable | Report a problem A bug report on GitHub with the version and | WP-06 TV Settings rows
+settings:About | focusSizeStable | Request a feature Tell the developer what you would like TMP | WP-06 TV Settings rows
+settings:About | focusSizeStable | Save logs Recent app logs in a text file to attach to a bug | WP-06 TV Settings rows
+settings:About | focusSizeStable | What's new The highlights of version 1.27.0 | WP-06 TV Settings rows
+settings:About | safeArea | Back up Save settings, favourites, watched videos and where | WP-06 TV Settings rows
+settings:Account | drawnInsideClip | Add account Up to 3 Telegram accounts on this device, each w | WP-06 TV Settings rows
+settings:Account | drawnInsideClip | Connected devices Where TMPlayer is signed in, and ending th | WP-06 TV Settings rows
+settings:Account | drawnInsideClip | Keep my place on all my devices Off. Nothing is kept in Save | WP-06 TV Settings rows
+settings:Account | drawnInsideClip | Privacy What stays on this TV and which services TMPlayer co | WP-06 TV Settings rows
+settings:Account | drawnInsideClip | Sign out of Telegram | WP-06 TV Settings rows
+settings:Account | drawnInsideClip | Where the file is kept Saved Messages | WP-06 TV Settings rows
+settings:Account | focusSizeStable | Add account Up to 3 Telegram accounts on this device, each w | WP-06 TV Settings rows
+settings:Account | focusSizeStable | Connected devices Where TMPlayer is signed in, and ending th | WP-06 TV Settings rows
+settings:Account | focusSizeStable | Keep my place on all my devices Off. Nothing is kept in Save | WP-06 TV Settings rows
+settings:Account | focusSizeStable | Privacy What stays on this TV and which services TMPlayer co | WP-06 TV Settings rows
+settings:Account | focusSizeStable | Sign out of Telegram | WP-06 TV Settings rows
+settings:Account | focusSizeStable | Where the file is kept Saved Messages | WP-06 TV Settings rows
+settings:Account | safeArea | SIGNED IN | WP-06 TV Settings rows
+settings:Appearance | drawnInsideClip | unnamed node at 48,199 dp | WP-06 TV Settings rows
+settings:Appearance | drawnInsideClip | unnamed node at 48,407 dp | WP-06 TV Settings rows
+settings:Appearance | focusContrast | unnamed node at 48,199 dp | WP-06 TV Settings rows
+settings:Appearance | focusContrast | unnamed node at 48,407 dp | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Amber | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Emerald | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Monochrome | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Orange | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Pink | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Red | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Teal | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Telegram blue | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Violet | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | Your own colour | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | unnamed node at 48,199 dp | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | unnamed node at 48,407 dp | WP-06 TV Settings rows
+settings:Appearance | labelled | unnamed node at 48,199 dp | WP-06 TV Settings rows
+settings:Appearance | labelled | unnamed node at 48,471 dp | WP-06 TV Settings rows
+settings:Appearance | safeArea | System. The letters every screen is set in | WP-06 TV Settings rows
+settings:Appearance | safeArea | unnamed node at 48,471 dp | WP-06 TV Settings rows
+settings:Appearance | targets | Amber | WP-06 TV Settings rows
+settings:Appearance | targets | Emerald | WP-06 TV Settings rows
+settings:Appearance | targets | Monochrome | WP-06 TV Settings rows
+settings:Appearance | targets | Orange | WP-06 TV Settings rows
+settings:Appearance | targets | Pink | WP-06 TV Settings rows
+settings:Appearance | targets | Red | WP-06 TV Settings rows
+settings:Appearance | targets | Teal | WP-06 TV Settings rows
+settings:Appearance | targets | Telegram blue | WP-06 TV Settings rows
+settings:Appearance | targets | Violet | WP-06 TV Settings rows
+settings:Appearance | targets | Your own colour | WP-06 TV Settings rows
+settings:Library | drawnInsideClip | Credits and endings Ask me | WP-06 TV Settings rows
+settings:Library | drawnInsideClip | Intros and openings Ask me | WP-06 TV Settings rows
+settings:Library | drawnInsideClip | Play trailers in TMPlayer YouTube's player loads only when y | WP-06 TV Settings rows
+settings:Library | drawnInsideClip | Recaps Ask me | WP-06 TV Settings rows
+settings:Library | drawnInsideClip | Show posters and overviews Looked up on TMDB, TVmaze and Ani | WP-06 TV Settings rows
+settings:Library | drawnInsideClip | Skip intro buttons Only a title's ids and the episode number | WP-06 TV Settings rows
+settings:Library | focusSizeStable | Credits and endings Ask me | WP-06 TV Settings rows
+settings:Library | focusSizeStable | Intros and openings Ask me | WP-06 TV Settings rows
+settings:Library | focusSizeStable | Play trailers in TMPlayer YouTube's player loads only when y | WP-06 TV Settings rows
+settings:Library | focusSizeStable | Recaps Ask me | WP-06 TV Settings rows
+settings:Library | focusSizeStable | Show posters and overviews Looked up on TMDB, TVmaze and Ani | WP-06 TV Settings rows
+settings:Library | focusSizeStable | Skip intro buttons Only a title's ids and the episode number | WP-06 TV Settings rows
+settings:Notifications | drawnInsideClip | Finished downloads One notification when a video, a whole se | WP-06 TV Settings rows
+settings:Notifications | drawnInsideClip | Missing parts of a video When a part that was missing from a | WP-06 TV Settings rows
+settings:Notifications | drawnInsideClip | New episodes of shows you watch When a show you are watching | WP-06 TV Settings rows
+settings:Notifications | drawnInsideClip | New videos in starred chats A notification when a starred ch | WP-06 TV Settings rows
+settings:Notifications | drawnInsideClip | Sponsor reminders Now and then, never more than once a month | WP-06 TV Settings rows
+settings:Notifications | drawnInsideClip | Update ready When a new version is out while TMPlayer is clo | WP-06 TV Settings rows
+settings:Notifications | focusSizeStable | Finished downloads One notification when a video, a whole se | WP-06 TV Settings rows
+settings:Notifications | focusSizeStable | Missing parts of a video When a part that was missing from a | WP-06 TV Settings rows
+settings:Notifications | focusSizeStable | New episodes of shows you watch When a show you are watching | WP-06 TV Settings rows
+settings:Notifications | focusSizeStable | New videos in starred chats A notification when a starred ch | WP-06 TV Settings rows
+settings:Notifications | focusSizeStable | Sponsor reminders Now and then, never more than once a month | WP-06 TV Settings rows
+settings:Notifications | focusSizeStable | Update ready When a new version is out while TMPlayer is clo | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | Advanced Frame-rate matching, tunneled playback and the stat | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | Decoder Automatic | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | Default player No other video player is installed. Videos op | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | Keep Repeat on for the next video Off: Repeat this video end | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | Open a video's page first OK shows the poster, cast and butt | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | unnamed node at 48,402 dp | WP-06 TV Settings rows
+settings:Playback | drawnInsideClip | unnamed node at 48,476 dp | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | Advanced Frame-rate matching, tunneled playback and the stat | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | Decoder Automatic | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | Default player No other video player is installed. Videos op | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | Keep Repeat on for the next video Off: Repeat this video end | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | Open a video's page first OK shows the poster, cast and butt | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | unnamed node at 48,402 dp | WP-06 TV Settings rows
+settings:Playback | focusSizeStable | unnamed node at 48,476 dp | WP-06 TV Settings rows
+settings:SetupChoices | focusContrast | unnamed node at 62,0 dp | WP-06 TV Settings rows
+settings:SetupChoices | labelled | unnamed node at 62,235 dp | WP-06 TV Settings rows
+settings:SetupChoices | labelled | unnamed node at 62,491 dp | WP-06 TV Settings rows
+settings:SetupChoices | safeArea | Keep video | WP-06 TV Settings rows
+settings:SetupChoices | safeArea | Save space | WP-06 TV Settings rows
+settings:SetupChoices | safeArea | unnamed node at 62,491 dp | WP-06 TV Settings rows
+settings:SetupChoices | targets | Also in Home and library | WP-06 TV Settings rows
+settings:Storage | drawnInsideClip | Download the whole video first Off: it downloads while you w | WP-06 TV Settings rows
+settings:Storage | drawnInsideClip | Remove after watching Delete a download once it is marked wa | WP-06 TV Settings rows
+settings:Storage | drawnInsideClip | Storage location Internal storage | WP-06 TV Settings rows
+settings:Storage | drawnInsideClip | stream-switch | WP-06 TV Settings rows
+settings:Storage | focusContrast | stream-switch | WP-06 TV Settings rows
+settings:Storage | focusSizeStable | Download the whole video first Off: it downloads while you w | WP-06 TV Settings rows
+settings:Storage | focusSizeStable | Remove after watching Delete a download once it is marked wa | WP-06 TV Settings rows
+settings:Storage | focusSizeStable | Storage location Internal storage | WP-06 TV Settings rows
+settings:Storage | focusSizeStable | stream-switch | WP-06 TV Settings rows
+settings:Storage | labelled | stream-switch | WP-06 TV Settings rows
+settings:Subtitles | drawnInsideClip | Downmix to stereo Off: surround sound goes out as it is | WP-06 TV Settings rows
+settings:Subtitles | drawnInsideClip | Preferred audio language Automatic: the video's own default | WP-06 TV Settings rows
+settings:Subtitles | drawnInsideClip | Preferred subtitle language Automatic: the app's language wh | WP-06 TV Settings rows
+settings:Subtitles | drawnInsideClip | Remembered languages Nothing yet. Each series keeps the soun | WP-06 TV Settings rows
+settings:Subtitles | drawnInsideClip | Show subtitles As the video sets it | WP-06 TV Settings rows
+settings:Subtitles | drawnInsideClip | Subtitle style Medium  ·  White  ·  Outline  ·  Bottom | WP-06 TV Settings rows
+settings:Subtitles | focusSizeStable | Downmix to stereo Off: surround sound goes out as it is | WP-06 TV Settings rows
+settings:Subtitles | focusSizeStable | Preferred audio language Automatic: the video's own default | WP-06 TV Settings rows
+settings:Subtitles | focusSizeStable | Preferred subtitle language Automatic: the app's language wh | WP-06 TV Settings rows
+settings:Subtitles | focusSizeStable | Remembered languages Nothing yet. Each series keeps the soun | WP-06 TV Settings rows
+settings:Subtitles | focusSizeStable | Show subtitles As the video sets it | WP-06 TV Settings rows
+settings:Subtitles | focusSizeStable | Subtitle style Medium  ·  White  ·  Outline  ·  Bottom | WP-06 TV Settings rows
+signOutPrompt | focusSizeStable | Cancel | WP-06 TV Settings rows
+signOutPrompt | focusSizeStable | Sign out | WP-06 TV Settings rows
+signOutPrompt | targets | Cancel | WP-06 TV Settings rows
+signOutPrompt | targets | Save my settings backup to my Saved Messages first | WP-06 TV Settings rows
+signOutPrompt | targets | Sign out | WP-06 TV Settings rows

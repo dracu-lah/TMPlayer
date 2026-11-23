@@ -1,0 +1,10 @@
+# WP-15: focus comes back: entry focus, Back to the opener, no traps.
+# Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
+# screen | rule | node | reason
+chatGrid | noTrap | Back to chats | WP-15 focus comes back
+chatList | backReturns | Sort order | WP-15 focus comes back
+details | entryFocus | screen | WP-15 focus comes back
+history | backReturns | Sort order | WP-15 focus comes back
+lists | backReturns | Delete list | WP-15 focus comes back
+lists | entryFocus | screen | WP-15 focus comes back
+profilePicker | backReturns | Manage profiles | WP-15 focus comes back

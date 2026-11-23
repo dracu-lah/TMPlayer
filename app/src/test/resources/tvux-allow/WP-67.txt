@@ -1,0 +1,4 @@
+# WP-67: focus recipe per role, with selected and focused looks; the ring against artwork.
+# Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
+# screen | rule | node | reason
+* | focusContrast | theme ring | WP-67 the standard ring against the worst artwork (FocusContrast.worstAgainstArt), M9
