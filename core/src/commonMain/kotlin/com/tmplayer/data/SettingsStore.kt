@@ -165,6 +165,8 @@ private val KIDS_CHATS = stringSetPreferencesKey("kids_chats")
 
 private val SETUP = stringPreferencesKey("setup")
 private val TOUR = stringPreferencesKey("tour")
+// The one-time hint registry (WP-68): "id=count,id=count", the device's. See HintRegistry.
+private val HINTS_SEEN = stringPreferencesKey("hints_seen")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val HISTORY_SORT = stringPreferencesKey("history_sort")
 private val DOWNLOADS_SORT = stringPreferencesKey("downloads_sort")
@@ -2067,11 +2069,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * the arrows jump and More lists every key on a television. The controls that used to say so
      * are gone from the screen, so it is said once, the first time.
      */
-    suspend fun playerHintSeenNow(): Boolean = prefs.data.first()[PLAYER_HINT_SEEN] ?: false
+    suspend fun playerHintSeenNow(): Boolean = hintSeenNow(HintIds.PLAYER)
 
-    suspend fun markPlayerHintSeen() {
-        prefs.edit { it[PLAYER_HINT_SEEN] = true }
-    }
+    suspend fun markPlayerHintSeen() = markHintSeen(HintIds.PLAYER)
 
     /**
      * Whether the chat list's first-run tip (forward a video to Saved Messages) was put away. It
@@ -2112,11 +2112,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * Whether the television's one-time browse hint (OK opens, hold OK for favourites, Back goes up)
      * has been shown. Marked as it appears, so it is said once even if the app is left mid-way.
      */
-    suspend fun tvBrowseHintSeenNow(): Boolean = prefs.data.first()[TV_BROWSE_HINT_SEEN] ?: false
+    suspend fun tvBrowseHintSeenNow(): Boolean = hintSeenNow(HintIds.TV_BROWSE)
 
-    suspend fun markTvBrowseHintSeen() {
-        prefs.edit { it[TV_BROWSE_HINT_SEEN] = true }
-    }
+    suspend fun markTvBrowseHintSeen() = markHintSeen(HintIds.TV_BROWSE)
 
     /**
      * Which way up the player opens, on a phone.
@@ -2226,10 +2224,56 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /** Whether the one line that says where "Play in TMPlayer" is has been shown (this device only). */
-    suspend fun externalHintSeenNow(): Boolean = prefs.data.first()[EXTERNAL_HINT_SEEN] ?: false
+    suspend fun externalHintSeenNow(): Boolean = hintSeenNow(HintIds.EXTERNAL)
 
-    suspend fun markExternalHintSeen() {
-        prefs.edit { it[EXTERNAL_HINT_SEEN] = true }
+    suspend fun markExternalHintSeen() = markHintSeen(HintIds.EXTERNAL)
+
+    /**
+     * The one-time hint registry (WP-68, this device only): every hint and device fact the hints need,
+     * by id with a count. The three older flags (`player_hint_seen`, `tv_browse_hint_seen`,
+     * `external_hint_seen`) still count as seen when set, so nobody meets them twice. See [HintRegistry].
+     */
+    val hintState: Flow<HintState> = read { hintStateOf(it) }
+
+    /** The ids seen at least once. */
+    val hintsSeen: Flow<Set<String>> = hintState.map { it.seenIds }.distinctUntilChanged()
+
+    /** Whether every hint is off: the tour was skipped twice. */
+    val hintsOff: Flow<Boolean> = hintState.map { it.hintsOff }.distinctUntilChanged()
+
+    suspend fun hintSeenNow(id: String): Boolean = hintCount(id) >= 1
+
+    suspend fun hintCount(id: String): Int = hintStateOf(prefs.data.first()).count(id)
+
+    /** Marked as the hint appears, so it is said once even if the app is left mid-way. */
+    suspend fun markHintSeen(id: String) {
+        prefs.edit { it[HINTS_SEEN] = HintRegistry.encode(HintRegistry.raise(hintStateOf(it), id)) }
+    }
+
+    /** Counts [id] once more and returns the new count (a hint "the first 5 times"). */
+    suspend fun bumpHint(id: String): Int {
+        var count = 0
+        prefs.edit {
+            val next = HintRegistry.bump(hintStateOf(it), id)
+            count = next.count(id)
+            it[HINTS_SEEN] = HintRegistry.encode(next)
+        }
+        return count
+    }
+
+    /** The quick tour was turned down or skipped: counted, so two skips silence every hint, then done as [markTourDone]. */
+    suspend fun markTourSkipped() {
+        bumpHint(HintIds.TOUR_SKIPPED)
+        markTourDone()
+    }
+
+    private fun hintStateOf(p: Preferences): HintState {
+        val legacy = buildSet {
+            if (p[PLAYER_HINT_SEEN] == true) add(HintIds.PLAYER)
+            if (p[TV_BROWSE_HINT_SEEN] == true) add(HintIds.TV_BROWSE)
+            if (p[EXTERNAL_HINT_SEEN] == true) add(HintIds.EXTERNAL)
+        }
+        return HintRegistry.parse(p[HINTS_SEEN], legacy)
     }
 
     /** Automatic, ExoPlayer or VLC. Stored whatever this build can run; [com.tmplayer.player.EngineSelector] decides what it can honour. */

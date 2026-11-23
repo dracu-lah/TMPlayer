@@ -45,6 +45,8 @@ class BackupCoverageTest {
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
         "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",
         "hide_default_groups", "external_hint_seen",
+        // The one-time hint registry (WP-68): hints are per device, so a restore neither silences nor repeats them.
+        "hints_seen",
         // The retired mini player switch (T12): removed on first read, never carried.
         "mini_player",
         // The update check's and the support card's bookkeeping.

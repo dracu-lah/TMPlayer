@@ -40,7 +40,7 @@ object AccountKeys {
      * the player's: shared.
      */
     val DEVICE: Set<String> = setOf(
-        "player_hint_seen", "first_video_tip_dismissed", "tv_browse_hint_seen", "online_meta_notice_dismissed",
+        "player_hint_seen", "first_video_tip_dismissed", "tv_browse_hint_seen", "hints_seen", "online_meta_notice_dismissed",
         "online_meta_invite_seen", "open_last_chat", "download_before_playing", "autoplay_next", "detail_first",
         "series_only_mine", "compact_nav", "downmix_stereo", "volume_boost", "night_mode", "even_volume",
         "player_volume", "skip_silence", "background_audio", "pip_on_leave", "mini_player", "rewind_on_resume_ms",

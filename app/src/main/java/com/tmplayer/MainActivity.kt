@@ -2352,7 +2352,7 @@ private fun Root() {
                 TipsCard(
                     onShow = { scope.launch { runCatching { settings.openTour() } } },
                     // One tap, one answer: the card does not come back (the tour stays in Settings).
-                    onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
+                    onDismiss = { scope.launch { runCatching { settings.markTourSkipped() } } },
                     modifier = cardModifier,
                 )
             },
@@ -2417,7 +2417,7 @@ private fun Root() {
                             TipsCard(
                                 onShow = { scope.launch { runCatching { settings.openTour() } } },
                                 // One tap, one answer: the card does not come back (the tour stays in Settings).
-                                onDismiss = { scope.launch { runCatching { settings.markTourDone() } } },
+                                onDismiss = { scope.launch { runCatching { settings.markTourSkipped() } } },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }

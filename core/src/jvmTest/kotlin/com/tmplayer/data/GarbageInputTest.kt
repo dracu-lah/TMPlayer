@@ -198,6 +198,20 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /** The one-time hint registry's stored string (WP-68): a device key, cut short or written by anything. */
+    @Test
+    fun hintRegistryNeverThrows() {
+        for (text in texts) {
+            survive("HintRegistry", text) {
+                val state = HintRegistry.parse(text, setOf(HintIds.PLAYER))
+                check(state.counts.size <= HintRegistry.MAX_IDS)
+                check(HintRegistry.parse(HintRegistry.encode(HintRegistry.bump(state, text))).counts.size <= HintRegistry.MAX_IDS)
+                HintRegistry.raise(state, text, Int.MAX_VALUE)
+            }
+        }
+        assertNoFailures()
+    }
+
     /** iOS's kept log reads TDLib's own log file back (KeptLog): cut short, or written by anything. */
     @Test
     fun keptLogLinesNeverThrow() {

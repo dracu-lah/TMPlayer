@@ -296,7 +296,7 @@ fun ShellNotices(state: ShellState, modifier: Modifier = Modifier) {
         val scope = rememberCoroutineScope()
         com.tmplayer.ui.onboarding.TipsCard(
             onShow = { scope.launch { runCatching { state.settings.openTour() } } },
-            onDismiss = { scope.launch { runCatching { state.settings.markTourDone() } } },
+            onDismiss = { scope.launch { runCatching { state.settings.markTourSkipped() } } },
             modifier = modifier.widthIn(max = 640.dp),
         )
     }
