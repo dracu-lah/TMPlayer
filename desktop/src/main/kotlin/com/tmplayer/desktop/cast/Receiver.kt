@@ -11,12 +11,11 @@ import com.tmplayer.cast.dlna.DlnaFeatures
 import com.tmplayer.cast.dlna.DlnaLoad
 import com.tmplayer.cast.dlna.DlnaRenderer
 import com.tmplayer.cast.dlna.Didl
-import com.tmplayer.cast.dlna.LoadRefusal
+import com.tmplayer.cast.dlna.DlnaFailure
 import com.tmplayer.cast.dlna.SeekOutcome
 import com.tmplayer.cast.dlna.SoapClient
 import com.tmplayer.cast.dlna.SoapTransport
 import com.tmplayer.cast.dlna.forDlna
-import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -111,6 +110,9 @@ interface Receiver {
 
     /** Who may fetch the video from this computer's server. */
     val allowedClient: ((InetAddress) -> Boolean)?
+
+    /** Hears each request a client makes to this computer's server; null when nobody listens. */
+    val onClientRequest: ((InetAddress) -> Unit)? get() = null
 
     /** Paused with no request for this long closes the cast (DLNA, 30 minutes); null never. */
     val idleLimitMs: Long? get() = null
@@ -230,7 +232,7 @@ class DlnaReceiver(
     soap: SoapTransport = SoapClient(),
 ) : Receiver {
 
-    private val renderer = DlnaRenderer(device, soap)
+    private val renderer = DlnaRenderer(device, soap, watchFetches = true)
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DlnaReceiver"))
 
     @Volatile
@@ -247,6 +249,9 @@ class DlnaReceiver(
 
     /** Only the TV itself may fetch the video. */
     override val allowedClient: (InetAddress) -> Boolean = { it == device.address }
+
+    /** Each request from the TV says it can reach this computer ([DlnaRenderer.noteFetched]). */
+    override val onClientRequest: (InetAddress) -> Unit = { if (it == device.address) renderer.noteFetched() }
     override val idleLimitMs: Long = IDLE_LIMIT_MS
     override val canSeek: Boolean get() = renderer.canSeek
 
@@ -255,7 +260,8 @@ class DlnaReceiver(
 
     @Volatile
     private var refusal: String? = null
-    override val lastError: String? get() = refusal
+    /** Why the last load was turned down, else why the video failed on the TV after it loaded. */
+    override val lastError: String? get() = refusal ?: renderer.failure?.text()
 
     override fun adapt(plan: CastPlan): CastPlan = plan.forDlna()
 
@@ -284,18 +290,15 @@ class DlnaReceiver(
             }
             is DlnaLoad.Refused -> {
                 Logger.w(TAG, "Refused ${r.code} ${r.text}")
-                val why = when (r.reason) {
-                    LoadRefusal.BadType -> L.castRefusedType
-                    LoadRefusal.NotFound -> L.castRefusedOpen
-                    LoadRefusal.Busy -> L.castRefusedBusy
-                    LoadRefusal.Other -> null
-                }
+                val why = DlnaFailure.of(r)?.text()
                 refusal = why
                 ReceiverAnswer.Refused(why)
             }
             is DlnaLoad.Failed -> {
                 Logger.w(TAG, "Load failed: ${r.message}")
-                ReceiverAnswer.Refused()
+                val why = DlnaFailure.of(r)?.text()
+                refusal = why
+                ReceiverAnswer.Refused(why)
             }
         }
     }

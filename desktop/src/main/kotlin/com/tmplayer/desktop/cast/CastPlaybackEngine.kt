@@ -188,7 +188,8 @@ class CastPlaybackEngine(
     private fun ensureServer() {
         if (server?.running == true) return
         val bind = LanAddress.forReceiver(receiver.address) ?: throw IOException(L.castConnectFailed(receiver.name))
-        val s = receiver.allowedClient?.let { CastServer(bind, allowed = it, meter = link.meter) } ?: CastServer(bind, meter = link.meter)
+        val hear = receiver.onClientRequest?.let { f -> { from: java.net.InetAddress, _: String -> f(from) } }
+        val s = receiver.allowedClient?.let { CastServer(bind, allowed = it, meter = link.meter, onRequest = hear) } ?: CastServer(bind, meter = link.meter)
         s.start()
         server = s
         streams = if (receiver.kind == ReceiverKind.Dlna) CastStreams(s, serving = ::dlnaServing, transcodes = transcodes) else CastStreams(s, transcodes = transcodes)

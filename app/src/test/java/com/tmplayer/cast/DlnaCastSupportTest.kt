@@ -174,6 +174,33 @@ class DlnaCastSupportTest {
     }
 
     @Test
+    fun `a load the TV does not answer, or turns down with a code, names that step`() {
+        val quiet = Script(setUri = SoapResult.Failed("Read timed out"))
+        val s = support(quiet)
+        s.connect(id)
+        s.load(load()) { }
+        assertEquals(L.castFailedNoAnswer, s.refusal)
+        quiet.setUri = SoapResult.Fault(500, 718, "Invalid InstanceID")
+        s.load(load()) { }
+        assertEquals(L.castFailedRefusedCode(718), s.refusal)
+    }
+
+    @Test
+    fun `the server lets in the TV connected now, so moving the cast to another TV is not turned away`() {
+        val s = support(Script())
+        s.connect(id)
+        // The player makes its server once, with the access of the first TV.
+        val access = s.serverAccess!!
+        val other = InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 51))
+        listener!!.onFound(DlnaDevice(device().description.copy(udn = "uuid:tv-2", friendlyName = "Bedroom TV"), other, "http://192.168.1.51/description.xml"))
+        s.connect(DlnaCastSupport.ID_PREFIX + "uuid:tv-2")
+        waitFor { (s.session.value as? CastSessionState.Connected)?.name == "Bedroom TV" }
+        assertTrue(access.allowed(other))
+        assertFalse(access.allowed(tv))
+        access.onRequest!!(other)
+    }
+
+    @Test
     fun `a TV that leaves Seek out says so`() {
         val s = support(Script(actions = "Play,Pause,Stop"))
         s.connect(id)

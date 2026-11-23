@@ -6,17 +6,16 @@ import android.util.Log
 import com.tmplayer.cast.dlna.Didl
 import com.tmplayer.cast.dlna.DlnaDevice
 import com.tmplayer.cast.dlna.DlnaDiscovery
+import com.tmplayer.cast.dlna.DlnaFailure
 import com.tmplayer.cast.dlna.DlnaFeatures
 import com.tmplayer.cast.dlna.DlnaLoad
 import com.tmplayer.cast.dlna.DlnaRenderer
-import com.tmplayer.cast.dlna.LoadRefusal
 import com.tmplayer.cast.dlna.ManualAddress
 import com.tmplayer.cast.dlna.ManualTvStore
 import com.tmplayer.cast.dlna.SeekOutcome
 import com.tmplayer.cast.dlna.SinkCaps
 import com.tmplayer.cast.dlna.dlnaServing
 import com.tmplayer.cast.dlna.forDlna
-import com.tmplayer.i18n.L
 import com.tmplayer.platform.JobFailures
 import com.tmplayer.ui.components.SavedTv
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +49,7 @@ class DlnaCastSupport(
     /** Asks the TV at an address who it is; a seam for the tests. */
     private val resolve: (String) -> ManualAddress.Outcome = { ManualAddress.resolve(it) },
     private val discovery: (DlnaDiscovery.Listener) -> DlnaDiscovery = { DlnaDiscovery(it, live = true, manual = { store?.locations().orEmpty() }) },
-    private val rendererFor: (DlnaDevice) -> DlnaRenderer = { DlnaRenderer(it, clock = { SystemClock.elapsedRealtime() }) },
+    private val rendererFor: (DlnaDevice) -> DlnaRenderer = { DlnaRenderer(it, clock = { SystemClock.elapsedRealtime() }, watchFetches = true) },
     dispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
 ) : CastSupport {
 
@@ -99,11 +98,20 @@ class DlnaCastSupport(
 
     override val caps: ReceiverCaps? get() = if (connected != null) sink.caps else null
     override val receiverContainers: Set<Container>? get() = if (connected != null && sink.declared) sink.containers else null
-    override val refusal: String? get() = refused
+    /** Why the last load was turned down, else why the video failed on the TV after it loaded. */
+    override val refusal: String? get() = refused ?: renderer?.failure?.text()
     override val serverAccess: ServerAccess?
         get() {
-            val tv = connected ?: return null
-            return ServerAccess(allowed = { it == tv.address }, serving = { dlnaServing(it) }, idleLimitMs = IDLE_LIMIT_MS)
+            if (connected == null) return null
+            // The TV connected now, not when the server was made: the player keeps one server while
+            // the viewer moves the cast to another TV, which the old TV's address would have turned away.
+            // Each request from it is the word that it can reach this phone ([DlnaRenderer.noteFetched]).
+            return ServerAccess(
+                allowed = { address -> connected?.address == address },
+                serving = { dlnaServing(it) },
+                idleLimitMs = IDLE_LIMIT_MS,
+                onRequest = { address -> if (connected?.address == address) renderer?.noteFetched() },
+            )
         }
 
     override fun adapt(plan: CastPlan): CastPlan = plan.forDlna()
@@ -281,16 +289,12 @@ class DlnaCastSupport(
                 }
                 is DlnaLoad.Refused -> {
                     Log.w(TAG, "Refused ${result.code} ${result.text}")
-                    refused = when (result.reason) {
-                        LoadRefusal.BadType -> L.castRefusedType
-                        LoadRefusal.NotFound -> L.castRefusedOpen
-                        LoadRefusal.Busy -> L.castRefusedBusy
-                        LoadRefusal.Other -> null
-                    }
+                    refused = DlnaFailure.of(result)?.text()
                     false
                 }
                 is DlnaLoad.Failed -> {
                     Log.w(TAG, "Load failed: ${result.message}")
+                    refused = DlnaFailure.of(result)?.text()
                     false
                 }
             }

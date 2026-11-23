@@ -48,10 +48,23 @@ class DlnaCast(
     /** False in tests, which call [DlnaRenderer.pollOnce] themselves. */
     private val autoPoll: Boolean = true,
     private val onClosed: (DlnaClosed) -> Unit = {},
+    /** Hears each request the TV makes to the cast server; for the real-renderer check. */
+    onRequest: ((InetAddress, String) -> Unit)? = null,
 ) : Closeable {
 
-    val server = CastServer(bind, allowed = { it == device.address }, clock = clock)
-    val renderer = DlnaRenderer(device, soap, clock)
+    val renderer = DlnaRenderer(device, soap, clock, watchFetches = true)
+
+    // Each request from the TV is the word that it can reach this device ([DlnaRenderer.noteFetched]).
+    val server = CastServer(
+        bind, allowed = { it == device.address }, clock = clock,
+        onRequest = { from, line ->
+            if (from == device.address) renderer.noteFetched()
+            onRequest?.invoke(from, line)
+        },
+    )
+
+    /** Why the video failed on the TV after it loaded, or null. */
+    val failure: DlnaFailure? get() = renderer.failure
 
     private val closed = AtomicBoolean(false)
     private var video: DlnaVideo? = null

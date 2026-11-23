@@ -100,6 +100,8 @@ class ServerAccess(
     val allowed: (InetAddress) -> Boolean,
     val serving: (CastResource) -> DlnaServing?,
     val idleLimitMs: Long,
+    /** Hears each request a client makes (the TV came for the video: it can reach this phone). */
+    val onRequest: ((InetAddress) -> Unit)? = null,
 )
 
 /**

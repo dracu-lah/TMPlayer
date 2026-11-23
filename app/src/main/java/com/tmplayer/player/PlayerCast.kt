@@ -393,7 +393,11 @@ class PlayerCast(
         val access = support.serverAccess
         if (server?.running == true && serverBind == bind && serverDlna == (access != null)) return
         runCatching { server?.stop() }
-        val s = if (access != null) CastServer(bind, allowed = access.allowed, meter = link.meter) else CastServer(bind, meter = link.meter)
+        val s = if (access != null) {
+            CastServer(bind, allowed = access.allowed, meter = link.meter, onRequest = access.onRequest?.let { hear -> { from, _ -> hear(from) } })
+        } else {
+            CastServer(bind, meter = link.meter)
+        }
         s.start()
         server = s
         serverBind = bind
