@@ -250,7 +250,18 @@ class DlnaCastSupportTest {
     @Test
     fun `the multicast lock is held only while a picker is open`() {
         val platform = Platform()
-        val s = support(Script(), platform)
+        // A live search (loopback), not the helper's empty interface list: with no network the search ends by
+        // itself on its own thread and releases the lock, which raced the first assertion on a loaded machine.
+        val lo = com.tmplayer.cast.LanAddress.Candidate("lo", InetAddress.getLoopbackAddress(), 8)
+        val s = DlnaCastSupport(
+            platform,
+            discovery = { l ->
+                DlnaDiscovery(l, interfaces = { listOf(lo) }, searchTarget = java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), 9), listenForNotify = false, allowLoopback = true)
+            },
+            dispatcher = Dispatchers.Unconfined,
+        )
+        made += s
+        s.startDiscovery()
         assertEquals(1, platform.multicast)
         s.startDiscovery()
         assertEquals(1, platform.multicast)
