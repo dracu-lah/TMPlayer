@@ -9,6 +9,7 @@ import com.tmplayer.ui.settings.LocalSettingsSeek
 import com.tmplayer.ui.settings.SettingsSeek
 import com.tmplayer.ui.components.FastScroller
 import com.tmplayer.ui.settings.seekable
+import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
 import android.content.Intent
 import android.net.Uri
@@ -759,6 +760,7 @@ fun SettingsScreen(
             .fillMaxSize()
             // The heading at the top takes no focus: back on the first row, it comes back whole.
             .keepTopInSight(shownState, enabled = !touch)
+            .dropStaleArrowRepeats()
             .then(
                 if (touch) {
                     Modifier.windowInsetsPadding(

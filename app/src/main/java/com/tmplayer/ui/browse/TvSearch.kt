@@ -1,6 +1,7 @@
 package com.tmplayer.ui.browse
 
 import com.tmplayer.ui.theme.focusScale
+import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -259,7 +260,7 @@ internal fun TvSearchScreen(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(COLUMNS),
                 state = grid,
-                modifier = Modifier.weight(1f).fillMaxWidth().keepTopInSight(grid),
+                modifier = Modifier.weight(1f).fillMaxWidth().keepTopInSight(grid).dropStaleArrowRepeats(),
                 // Under the top bar, which names the page and carries the clock, the field leads.
                 contentPadding = PaddingValues(end = Tv.SafeH, top = 4.dp, bottom = CARD_CLEARANCE),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),

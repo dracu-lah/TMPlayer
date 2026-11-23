@@ -71,7 +71,7 @@ internal fun ListPage(
     val actions = rememberListPageActions(store, onMessage)
     val sides = if (touch) PaddingValues(horizontal = 16.dp) else PaddingValues(horizontal = Tv.SafeH)
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Box(Modifier.fillMaxSize().background(Tone.background).testTag(LIST_PAGE_TAG)) {
+        Box(Modifier.fillMaxSize().background(Tone.background).dropStaleArrowRepeats().testTag(LIST_PAGE_TAG)) {
             ListPageScaffold(
                 lists = lists,
                 selectedId = selected,

@@ -75,4 +75,24 @@ class StaleRepeatTest {
         press(android.view.KeyEvent.KEYCODE_ENTER, repeat = 3, ageMs = 500)
         assertEquals(4, received)
     }
+
+    /** The shared modifier in :ui (what the shared lists use) drops the same repeats as :app's forwarder. */
+    @Test
+    fun theSharedModifierDropsTheSameRepeatsAsTheForwarder() {
+        var received = 0
+        rule.setContent {
+            Box(Modifier.dropStaleRepeats()) {
+                Box(Modifier.size(20.dp).testTag("item").onKeyEvent { if (it.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) received++; true }.focusable())
+            }
+        }
+        rule.onNodeWithTag("item").requestFocus()
+        press(android.view.KeyEvent.KEYCODE_DPAD_DOWN, repeat = 0, ageMs = 0)
+        press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, repeat = 1, ageMs = 10)
+        assertEquals(2, received)
+        press(android.view.KeyEvent.KEYCODE_DPAD_DOWN, repeat = 4, ageMs = 500)
+        press(android.view.KeyEvent.KEYCODE_DPAD_LEFT, repeat = 4, ageMs = 500)
+        assertEquals(2, received)
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER, repeat = 4, ageMs = 500)
+        assertEquals(3, received)
+    }
 }

@@ -3,6 +3,7 @@ package com.tmplayer.ui.browse
 import com.tmplayer.ui.theme.focusEdge
 import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.FastScroller
+import com.tmplayer.ui.components.dropStaleRepeats
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -1409,7 +1410,7 @@ fun SeriesPanel(
         // The page's ground, and the band's way back, for the moment the caches are asked.
         if (firstPaint) HeroStaysWhole(list) { LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize().keepTopInSight(list, enabled = tv),
+            modifier = Modifier.fillMaxSize().keepTopInSight(list, enabled = tv).dropStaleRepeats(),
             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 6.dp),
         ) {

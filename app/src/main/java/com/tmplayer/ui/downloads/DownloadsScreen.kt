@@ -1,5 +1,6 @@
 package com.tmplayer.ui.downloads
 
+import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
 import androidx.compose.foundation.BorderStroke
 import com.tmplayer.ui.theme.Danger
@@ -1361,7 +1362,7 @@ fun DownloadsScreen(
                     val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().dropStaleArrowRepeats(),
                         contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp + LocalBottomChrome.current),
                         content = body,
                     )
@@ -2358,7 +2359,7 @@ private fun PhoneDownloads(
                     val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().dropStaleArrowRepeats(),
                         contentPadding = PaddingValues(start = gutter, end = gutter, bottom = bottom),
                         content = body,
                     )
@@ -2529,7 +2530,7 @@ private fun TvDownloads(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().keepTopInSight(listState),
+                modifier = Modifier.fillMaxSize().keepTopInSight(listState).dropStaleArrowRepeats(),
                 contentPadding = PaddingValues(bottom = Tv.SafeV),
                 content = body,
             )

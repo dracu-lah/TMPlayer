@@ -696,12 +696,14 @@ class TvUxChecklist(
 
     /** heldDown: a held Down whose repeats are stale moves the remote once, not once per repeat. */
     fun heldDown(repeats: Int = 6) {
-        var last = focused().firstOrNull()?.let { nameOf(it) } ?: return
-        val from = last
+        val start = focused().firstOrNull() ?: return
+        val from = nameOf(start)
+        var last = start.id
         var moves = 0
-        // Counted press by press, since a list that scrolls keeps the focused item in one place.
+        // Counted press by press, by the node itself: a list that scrolls moves the focused item
+        // under the remote, which changes an unnamed node's name (it carries its place) and is no move.
         held(KeyEvent.KEYCODE_DPAD_DOWN, repeats) {
-            val now = focused().firstOrNull()?.let { nameOf(it) }
+            val now = focused().firstOrNull()?.id
             if (now != null && now != last) { moves++; last = now }
         }
         if (moves > 1) add("heldDown", "screen", "a held Down with $repeats stale repeats moved the remote $moves times from '$from', want once")

@@ -328,7 +328,7 @@ internal val SCREENS: List<Screen> = listOf(
         }
     }),
     Screen("downloads", column = TILE, longList = true, content = { { DownloadsScreen(onPlay = {}, onBack = {}) } }),
-    Screen("tvSearch", column = TILE, content = {
+    Screen("tvSearch", column = TILE, longList = true, content = {
         val groups = (1L..15L).map { ResultGroup(key = "g$it", copies = listOf(media(it, "Night Harbour Part $it"))) }
         val state = GlobalSearchState(query = GlobalSearch.parse("night harbour"), groups = groups);
         {

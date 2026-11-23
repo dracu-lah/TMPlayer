@@ -57,6 +57,7 @@ import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.components.EdgeStep
 import com.tmplayer.ui.components.MediaArt
 import com.tmplayer.ui.components.ProgressLine
+import com.tmplayer.ui.components.dropStaleRepeats
 import com.tmplayer.ui.components.TileBadgeInset
 import com.tmplayer.ui.components.rememberCover
 import com.tmplayer.ui.icons.TmIcons
@@ -172,7 +173,7 @@ fun SeasonsSection(
             Text(s.detailNotInChatHint, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         }
 
-        Column(Modifier.widthIn(max = listMax), verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp)) {
+        Column(Modifier.widthIn(max = listMax).dropStaleRepeats(), verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp)) {
             episodes.forEach { episode ->
                 GuideRow(
                     episode = episode,

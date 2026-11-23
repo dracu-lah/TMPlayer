@@ -1122,6 +1122,8 @@ internal fun BrowseScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(top = if (underBar) 0.dp else TV_BAR_HEIGHT, end = if (homeShown) 0.dp else Tv.SafeH)
+                    // A held arrow from a header pill or a row would run down the whole page otherwise.
+                    .dropStaleArrowRepeats()
                     // Up from Home's top row to the bar brings Home back to its top, the carousel whole.
                     .underTvBar(pageFocus, barFocus, onUpToBar = { if (homeShown) TvBarSignals.homeToTop.tryEmit(Unit) }),
             ) {
