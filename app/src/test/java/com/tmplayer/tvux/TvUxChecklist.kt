@@ -517,14 +517,39 @@ class TvUxChecklist(
             val margin = max(dp(16f), 0.25f * max(restRect.width, restRect.height))
             val region = restRect.inflate(margin).intersect(Rect(0f, 0f, screenW, screenH))
             // The neighbour changes too (it gave up the focus). Its rect is left out with a margin for
-            // a neighbour that grows; where that margin would reach the node itself (two full width
-            // rows or two pills side by side), only the neighbour's own rect and 1 dp round it are, so
-            // the node's growth into the gap between them is still read (WP-03: with no skip at all
-            // the neighbour's fill swap was read as the node's growth).
+            // a neighbour that grows. Where that margin would reach the node itself (two full width
+            // rows or two pills side by side) nothing is left out: the frame is read against a
+            // neutral one instead, with the remote on a node far from the region (WP-03), so the
+            // neighbour's fill swap is no change and a growth into its rect still is one.
             val otherRect = layoutRect(other)
             val skip = otherRect.inflate(max(dp(6f), 0.1f * max(other.size.width, other.size.height).toFloat())).takeUnless { it.overlaps(restRect) }
-                ?: otherRect.inflate(dp(1f)).takeUnless { it.overlaps(restRect) }
-            val drawn = drawnChange(rest, focusedFrame, region, skip)
+            var baseline = rest
+            var skipNow = skip
+            if (skip == null) {
+                // A node that is not the neighbour and not beside the node: only its own fill swap
+                // differs between the two frames, and its rect is left out.
+                // One that is not beside the node when there is one; else the nearest that is: its own
+                // rect is left out, so a growth into it is read on the node's other sides alone.
+                val spare = focusables().filter { it.id != node.id && it.id != other.id }
+                val far = (spare.filter { !layoutRect(it).overlaps(restRect.inflate(dp(16f))) }.ifEmpty { spare.filter { !layoutRect(it).overlaps(restRect.inflate(dp(1f))) } })
+                    .minByOrNull { (it.boundsInRoot.center - node.boundsInRoot.center).getDistance() }
+                if (far != null && focus(far)) {
+                    val still = current(node)?.let { layoutRect(it) }
+                    if (still != null && (still.center - restRect.center).getDistance() <= tol) {
+                        baseline = frame()
+                        skipNow = layoutRect(current(far) ?: far).inflate(dp(1f))
+                    }
+                }
+                if (baseline === rest) {
+                    // No neutral frame (a pair alone on the screen, or a list that moved): leave out the
+                    // neighbour's own rect and 1 dp round it. A growth is symmetric, so what it adds on
+                    // the node's other sides still shows; one only towards the neighbour would not.
+                    skipNow = otherRect.inflate(dp(1f)).takeUnless { it.overlaps(restRect) }
+                }
+                // Put the remote back where the next check expects it.
+                current(node)?.let { if (!focus(it)) skipped += "${nameOf(it)}: refused the focus back after the neutral frame" }
+            }
+            val drawn = drawnChange(baseline, focusedFrame, region, skipNow)
             if (drawn != null) {
                 val full = restRect.width >= screenW * 0.9f
                 val scale = if (full) 1f else FocusStyle.TvScale

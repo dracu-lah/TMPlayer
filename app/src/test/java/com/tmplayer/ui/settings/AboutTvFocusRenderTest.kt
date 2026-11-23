@@ -26,6 +26,7 @@ import com.tmplayer.i18n.L
 import com.tmplayer.tvux.Frame
 import com.tmplayer.tvux.TvUxChecklist
 import com.tmplayer.tvux.drawnChange
+import com.tmplayer.tvux.edgeContrast
 import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.about.SupportCard
 import com.tmplayer.ui.components.TmButton
@@ -163,9 +164,11 @@ class AboutTvFocusRenderTest {
     }
 
     private fun assertRing(ux: TvUxChecklist, name: String, m: Pair2) {
-        val (ring, fill, restPixel) = ringAndFill(ux, m)
+        val (ring, fill, _) = ringAndFill(ux, m)
         assertTrue("$name: ring $ring against the fill $fill is ${contrastRatio(ring, fill)}:1", contrastRatio(ring, fill) >= FocusContrast.Minimum)
-        assertTrue("$name: the ring is drawn where the rest frame has $restPixel", contrastRatio(ring, restPixel) > 1.2f || contrastRatio(ring, fill) >= FocusContrast.Minimum)
+        // The whole edge says "focused" against the rest frame, the outer line and ring included.
+        val edge = edgeContrast(m.rest, m.focused, m.restRect, step = ux.density * 2f, outside = ux.density * 3f, inside = ux.density * 4f)
+        assertTrue("$name: the focused edge against rest is $edge:1", edge >= FocusContrast.Minimum)
     }
 
     private fun assertNoRing(ux: TvUxChecklist, name: String, m: Pair2) {

@@ -23,7 +23,7 @@ class TvButtonImportGuardTest {
         "Chip", "AssistChip", "FilterChip", "InputChip", "SuggestionChip", "Tab", "TabRow", "NavigationDrawerItem",
     )
 
-    private val usage = Regex("""androidx\.tv\.material3\.(${clickables.joinToString("|")})\b""")
+    private val usage = Regex("""androidx\.tv\.material3\.(${clickables.joinToString("|")}|\*)(?![A-Za-z0-9_])""")
 
     private fun sources(): List<File> {
         val roots = listOf(File("src/main"), File("../ui/src"), File("../desktop/src"))
@@ -55,6 +55,7 @@ class TvButtonImportGuardTest {
         assertTrue(offences("import androidx.tv.material3.Button").isNotEmpty())
         assertTrue(offences("        androidx.tv.material3.Button(").isNotEmpty())
         assertTrue(offences("import androidx.tv.material3.Card").isNotEmpty())
+        assertTrue("a wildcard import brings every clickable in", offences("import androidx.tv.material3.*").isNotEmpty())
         assertTrue("ButtonDefaults only names colours", offences("import androidx.tv.material3.ButtonDefaults").isEmpty())
         assertTrue("Text is not a clickable", offences("import androidx.tv.material3.Text").isEmpty())
         val unscaled = callsOf("TvButton(onClick = a, modifier = b, content = { })", "TvButton")

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -141,6 +142,59 @@ class TvUxSelfTest {
         assertTrue("findings: ${ux.findings}", "focusSizeStable" to "Grows" in ux.rules())
         // Its layout did not change: only the drawn rect says it grew.
         assertTrue(ux.findings.filter { it.node == "Grows" && it.rule == "focusSizeStable" }.all { it.detail.startsWith("drawn") })
+    }
+
+    @Test
+    fun `tightly stacked full width buttons at a real 1_1 scale fail focusSizeStable`() {
+        // The neighbour's margin reaches the node here, so the check reads against a neutral frame:
+        // the growth into the 8 dp gap and over the neighbour must not be taken for its fill swap.
+        val ux = show(padded = false) {
+            Column(Modifier.padding(vertical = 100.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button("Top", scale = 1.1f, modifier = Modifier.fillMaxWidth())
+                Button("Middle", scale = 1.1f, modifier = Modifier.fillMaxWidth())
+                Button("Bottom", scale = 1.1f, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        ux.focusWalk()
+        assertTrue("findings: ${ux.findings} skipped ${ux.skipped}", ux.findings.any { it.rule == "focusSizeStable" && it.node == "Middle" })
+    }
+
+    @Test
+    fun `tightly stacked full width buttons that only swap their fill pass focusSizeStable`() {
+        val ux = show(padded = false) {
+            Column(Modifier.padding(vertical = 100.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button("Top", modifier = Modifier.fillMaxWidth())
+                Button("Middle", modifier = Modifier.fillMaxWidth())
+                Button("Bottom", modifier = Modifier.fillMaxWidth())
+            }
+        }
+        ux.focusWalk()
+        assertTrue("findings: ${ux.findings} skipped ${ux.skipped}", ux.findings.none { it.rule == "focusSizeStable" || it.rule == "drawnInsideClip" })
+    }
+
+    @Test
+    fun `a pair alone on the screen at a real 1_1 scale fails and one that only swaps its fill passes`() {
+        fun pair(scale: Float) = show(padded = false) {
+            Column(Modifier.padding(vertical = 100.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button("First", scale = scale, modifier = Modifier.fillMaxWidth())
+                Button("Second", scale = scale, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        val grows = pair(1.1f)
+        grows.focusWalk()
+        assertTrue("findings: ${grows.findings} skipped ${grows.skipped}", grows.findings.any { it.rule == "focusSizeStable" && it.node == "First" })
+    }
+
+    @Test
+    fun `a pair alone on the screen that only swaps its fill passes focusSizeStable`() {
+        val ux = show(padded = false) {
+            Column(Modifier.padding(vertical = 100.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button("First", modifier = Modifier.fillMaxWidth())
+                Button("Second", modifier = Modifier.fillMaxWidth())
+            }
+        }
+        ux.focusWalk()
+        assertTrue("findings: ${ux.findings} skipped ${ux.skipped}", ux.findings.none { it.rule == "focusSizeStable" || it.rule == "drawnInsideClip" })
     }
 
     @Test
