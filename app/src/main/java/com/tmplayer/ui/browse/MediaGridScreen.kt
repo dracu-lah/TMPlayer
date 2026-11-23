@@ -1076,9 +1076,15 @@ fun MediaGridScreen(
             // A new first item (a search answer, a refresh) asks for focus again, or the remote is
             // left with nowhere to go. Only on a remote: on a phone this would highlight a card
             // nobody pointed at. Not while the search is being typed into: the answer is what
-            // changed the first item.
-            LaunchedEffect(list.items.firstOrNull()?.id, touch) {
-                if (!touch && !typingNow) runCatching { firstItem.requestFocus() }
+            // changed the first item. And not while the remote is already somewhere in the grid:
+            // a video arriving in the chat put a new first item above a viewer at row 20 and
+            // sent the remote back to row 1. A search or a sort change reshapes the whole
+            // listing, so that one takes the remote wherever it stood.
+            var shapedBy by remember { mutableStateOf(query to sort) }
+            LaunchedEffect(list.items.firstOrNull()?.id, touch, query, sort) {
+                val reshaped = shapedBy != (query to sort)
+                shapedBy = query to sort
+                if (!touch && !typingNow && (reshaped || !listHasFocus)) runCatching { firstItem.requestFocus() }
             }
             // After the keyboard's Search the results take the remote, as soon as there is one:
             // the text field would otherwise keep it, and Down from there is a guess.
