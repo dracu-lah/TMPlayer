@@ -136,7 +136,7 @@ class TvUxChecklistTest(private val screen: String) {
             TMPlayerTheme {
                 val base = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(base.density, font)) {
-                    UiScaled(scale) {
+                    UiScaled(scale, keepTextSize = true) {
                         Box(Modifier.fillMaxSize().background(Tone.background)) {
                             body()
                             val r = focusRingColor()

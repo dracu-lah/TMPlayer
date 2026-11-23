@@ -6,6 +6,9 @@
  * Copies and Episodes pills and the time as a button. The focus is a solid white fill with the
  * glyph turned dark (bg_control_button, bg_tv_focus_pill), and the focused icon names itself in a
  * chip over it (focusTip). Nothing moves on hover.
+ *
+ * Unit: --u, every size in this sheet. tv/tv.css writes the same dp as --dp. No text is under 14
+ * dp (src/screens/tvTextFloor.test.ts reads both sheets in either unit).
  */
 .player[data-variant="tv"] { --u: var(--dp, 1.33px); --bar-played: #2aabee; --on-focus: #0e0f13; }
 
@@ -132,10 +135,10 @@
 .pc[data-variant="tv"] .pc-episodes-side { width: calc(var(--u) * 220); }
 .pc[data-variant="tv"] .pc-step-line { min-height: calc(var(--u) * 44); font-size: calc(var(--u) * 15); }
 .pc[data-variant="tv"] .pc-season { font-size: calc(var(--u) * 15); }
-.pc[data-variant="tv"] .pc-season small { font-size: calc(var(--u) * 12); }
-.pc[data-variant="tv"] .pc-episode-code { font-size: calc(var(--u) * 13); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-season small { font-size: calc(var(--u) * 14); }
+.pc[data-variant="tv"] .pc-episode-code { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 18); }
 .pc[data-variant="tv"] .pc-episode-name { font-size: calc(var(--u) * 17); line-height: calc(var(--u) * 24); }
-.pc[data-variant="tv"] .pc-episode-facts { font-size: calc(var(--u) * 13); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-episode-facts { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 18); }
 .pc[data-variant="tv"] .pc-sheet-close:hover, .pc[data-variant="tv"] .pc-step-line:hover, .pc[data-variant="tv"] .pc-episode:hover { background: none; }
 .pc[data-variant="tv"] .pc-sheet-close:focus, .pc[data-variant="tv"] .pc-step-line:focus, .pc[data-variant="tv"] .pc-season:focus, .pc[data-variant="tv"] .pc-episode:focus {
   background: #fff; color: var(--on-focus); border-color: #fff; outline: none;
@@ -144,7 +147,7 @@
 .pc[data-variant="tv"] .pc-season:focus small { color: rgba(14, 15, 19, .7); }
 .pc[data-variant="tv"] .pc-details { font-size: calc(var(--u) * 15); line-height: 1.35; width: min(calc(var(--u) * 340), calc(100% - 32px)); top: calc(var(--u) * 40); }
 .pc[data-variant="tv"] .pc-details p { line-height: 1.35; }
-.pc[data-variant="tv"] .pc-details .pc-details-hint { font-size: calc(var(--u) * 11); }
+.pc[data-variant="tv"] .pc-details .pc-details-hint { font-size: calc(var(--u) * 14); }
 .pc[data-variant="tv"] .pc-details-btn { min-height: calc(var(--u) * 44); padding: 0 calc(var(--u) * 20); }
 .pc[data-variant="tv"] .pc-details-btn:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }
 
@@ -157,7 +160,7 @@
 .player[data-variant="tv"] .pc-sheet-button:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }
 
 /* MSone's sheet: a room's sizes, the row or link under the remote filled white. */
-.pc[data-variant="tv"] .pc-entry-detail { font-size: calc(var(--u) * 13); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-entry-detail { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 18); }
 .pc[data-variant="tv"] .pc-entry:focus .pc-entry-detail { color: rgba(14, 15, 19, .65); }
 .pc[data-variant="tv"] .pc-msone-wait, .pc[data-variant="tv"] .pc-msone-state p { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
 .pc[data-variant="tv"] .pc-msone-name { font-size: calc(var(--u) * 17); line-height: calc(var(--u) * 24); }

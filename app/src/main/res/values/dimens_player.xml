@@ -18,6 +18,8 @@
     <dimen name="player_poster_width">208dp</dimen>
     <dimen name="player_poster_height">117dp</dimen>
     <dimen name="player_title_size">20sp</dimen>
+    <!-- The status sheet's meta and format lines. The television's is 14sp (values-television): nothing on a TV is under it. -->
+    <dimen name="player_text_small">13sp</dimen>
     <dimen name="player_chip_margin">16dp</dimen>
     <!-- Clear of the transport row, which on a phone is Media3's and about 70dp tall. -->
     <dimen name="player_subtitle_bottom">32dp</dimen>

@@ -203,7 +203,7 @@
                 android:ellipsize="end"
                 android:maxWidth="720dp"
                 android:textColor="#9A9AA5"
-                android:textSize="13sp"
+                android:textSize="@dimen/player_text_small"
                 android:visibility="gone" />
 
             <TextView
@@ -229,7 +229,7 @@
                 android:gravity="center"
                 android:maxWidth="720dp"
                 android:textColor="#80808C"
-                android:textSize="13sp"
+                android:textSize="@dimen/player_text_small"
                 android:textIsSelectable="false"
                 android:visibility="gone" />
 

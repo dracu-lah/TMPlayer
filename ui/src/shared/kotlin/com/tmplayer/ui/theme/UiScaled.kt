@@ -21,14 +21,20 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The font scale is passed through untouched. An sp is already a dp times the font scale, so the
  * system's own text size still applies on top of the interface size, once, rather than twice.
  *
+ * On a television ([keepTextSize], passed in because `ui/src/shared` cannot ask Android) a size
+ * below Default shrinks spacing, not text: the font scale is divided by the factor, so 14 sp is
+ * 14 sp of the screen at Smaller as at Default and the type floor holds at every size (WP-04). Larger
+ * sizes grow the text with the rest. The phone and the desktop are unchanged.
+ *
  * Always the same provider, even at [UiScale.Default], so changing the size recomposes the tree in
  * place instead of throwing its state away.
  */
 @Composable
-fun UiScaled(scale: UiScale, content: @Composable () -> Unit) {
+fun UiScaled(scale: UiScale, keepTextSize: Boolean = false, content: @Composable () -> Unit) {
     val base = LocalDensity.current
-    val scaled = remember(base.density, base.fontScale, scale) {
-        Density(base.density * scale.factor, base.fontScale)
+    val scaled = remember(base.density, base.fontScale, scale, keepTextSize) {
+        val f = scale.factor
+        Density(base.density * f, if (keepTextSize && f < 1f) base.fontScale / f else base.fontScale)
     }
     CompositionLocalProvider(LocalDensity provides scaled, content = content)
 }

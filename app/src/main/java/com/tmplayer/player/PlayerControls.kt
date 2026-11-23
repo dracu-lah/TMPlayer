@@ -877,7 +877,7 @@ class PlayerControls(
         for (id in listOf(R.id.center_seek_back_text, R.id.center_seek_forward_text)) {
             root.findViewById<TextView>(id).apply {
                 text = L.messages.formatter.number(SKIP_SECONDS)
-                setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, SEEK_FIGURE_DP * resources.displayMetrics.density)
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (if (isTv) SEEK_FIGURE_TV_DP else SEEK_FIGURE_DP) * resources.displayMetrics.density)
             }
         }
         val words = mapOf(
@@ -898,7 +898,7 @@ class PlayerControls(
     fun setLabelsShown(show: Boolean) {
         labelsShown = show
         val metrics = container.resources.displayMetrics
-        val px = ControlLabels.textPx(metrics.density, container.resources.configuration.fontScale)
+        val px = ControlLabels.textPx(metrics.density, container.resources.configuration.fontScale, isTv)
         for (word in labelViews.values) {
             word.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px)
             word.visibility = if (show) View.VISIBLE else View.GONE
@@ -1407,6 +1407,9 @@ class PlayerControls(
 
         /** The figure inside the skip buttons' arrow, in dp (not sp: it must stay inside the circle). */
         const val SEEK_FIGURE_DP = 10f
+
+        /** The same on a television, where nothing is under 14 (the circle is 48 dp, the figure two digits). */
+        const val SEEK_FIGURE_TV_DP = 14f
 
         /** [fitRow]'s last step: both pills as their glyphs alone and speed gone. */
         const val LAST_ROW_STEP = 4

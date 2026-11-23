@@ -6,6 +6,9 @@
  * Tv.SafeH 48 and SafeV 27 keep everything inside the overscan; the focus is a fill or a ring
  * in the accent, drawn whenever the remote was the last thing used ([data-tv-keys]); nothing moves
  * on hover.
+ *
+ * Unit: --dp, every size in this sheet. player/player-tv.css writes the same dp as --u. No text is
+ * under 14 dp (src/screens/tvTextFloor.test.ts reads both sheets in either unit).
  */
 html[data-form=tv] {
   --dp: min(calc(100vw / 960), calc(100vh / 540));
@@ -26,7 +29,7 @@ html[data-form=tv][data-theme=light] {
   --on-focus-fill: var(--on-accent-container);
 }
 html[data-form=tv] body { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
-html[data-form=tv] .small { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .small { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
 
 /* The focus: off until a key (a mouse press takes it away), then a ring on anything without a look of its own. */
 html[data-form=tv] :focus, html[data-form=tv] :focus-visible { outline: none; }
@@ -212,7 +215,7 @@ html[data-form=tv] .card-art { border-radius: calc(var(--dp) * 12); }
 html[data-form=tv] .card-mark .icon { width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); }
 html[data-form=tv] .card-progress { height: calc(var(--dp) * 3); left: calc(var(--dp) * 8); right: calc(var(--dp) * 8); }
 html[data-form=tv] .card-name { margin-top: calc(var(--dp) * 6); min-height: calc(var(--dp) * 36); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
-html[data-form=tv] .card-facts { margin-top: calc(var(--dp) * 6); font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .card-facts { margin-top: calc(var(--dp) * 6); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv] .card:hover .card-art { transform: none; }
 html[data-form=tv] .card:hover .card-facts { color: var(--muted); }
 html[data-form=tv][data-tv-keys] .card:focus { outline: none; }
@@ -249,7 +252,7 @@ html[data-form=tv][data-tv-keys] .star.on:focus { color: var(--on-focus-fill); }
 html[data-form=tv] .picker-actions { gap: calc(var(--dp) * 10); margin-bottom: calc(var(--dp) * 6); }
 html[data-form=tv] .picker-actions > .link { order: -1; margin-inline-start: 0; }
 html[data-form=tv] .picker-scopes { gap: calc(var(--dp) * 6); }
-html[data-form=tv] .picker-scopes .history-tab { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 4) calc(var(--dp) * 12); }
+html[data-form=tv] .picker-scopes .history-tab { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 4) calc(var(--dp) * 12); }
 html[data-form=tv][data-tv-keys] .picker-scopes .history-tab:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; transform: scale(var(--focus-scale)); }
 html[data-form=tv] .picker-count-more { gap: calc(var(--dp) * 4) calc(var(--dp) * 12); margin-bottom: calc(var(--dp) * 6); }
 html[data-form=tv] .picker-count-more > .link { order: -1; }
@@ -259,7 +262,7 @@ html[data-form=tv][data-tv-keys] .pick-chat:has(.chat-tick:focus) { background: 
 html[data-form=tv][data-tv-keys] .pick-chat:has(.chat-tick:focus) .muted { color: inherit; }
 html[data-form=tv][data-tv-keys] .pick-chat .chat-tick:focus { outline: none; }
 html[data-form=tv] .select-bar.picker-bar { width: auto; min-width: calc(var(--dp) * 280); max-width: calc(100vw - var(--tv-safe-h) * 2); bottom: calc(var(--dp) * 24); gap: calc(var(--dp) * 12); padding: calc(var(--dp) * 4) calc(var(--dp) * 4) calc(var(--dp) * 4) calc(var(--dp) * 14); border-radius: calc(var(--dp) * 16); }
-html[data-form=tv] .picker-bar .select-count { font-size: calc(var(--dp) * 12); white-space: nowrap; }
+html[data-form=tv] .picker-bar .select-count { font-size: calc(var(--dp) * 14); white-space: nowrap; }
 html[data-form=tv] .picker-bar button.primary { padding: calc(var(--dp) * 8) calc(var(--dp) * 16); font-size: calc(var(--dp) * 14); }
 
 /* ---- A page's own bar (a chat's): Back, the title and its buttons ---- */
@@ -269,7 +272,7 @@ html[data-form=tv] .title-pill { height: calc(var(--dp) * 48); font-size: calc(v
 html[data-form=tv] .avatar.compact { width: calc(var(--dp) * 38); height: calc(var(--dp) * 38); font-size: calc(var(--dp) * 16); }
 html[data-form=tv] .bar-actions { gap: calc(var(--dp) * 8); }
 html[data-form=tv] .pop-menu { min-width: calc(var(--dp) * 240); padding: calc(var(--dp) * 6); top: calc(100% + var(--dp) * 8); border-radius: calc(var(--dp) * 16); }
-html[data-form=tv] .pop-title { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); padding: calc(var(--dp) * 8) calc(var(--dp) * 12) calc(var(--dp) * 4); }
+html[data-form=tv] .pop-title { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 8) calc(var(--dp) * 12) calc(var(--dp) * 4); }
 html[data-form=tv] .pop-menu button { min-height: calc(var(--dp) * 40); padding: 0 calc(var(--dp) * 12); font-size: calc(var(--dp) * 14); border-radius: calc(var(--dp) * 8); }
 html[data-form=tv] .pop-menu button:hover { background: none; }
 html[data-form=tv][data-tv-keys] .pop-menu button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
@@ -325,7 +328,7 @@ html[data-form=tv] .update-notice { width: min(calc(var(--dp) * 480), calc(100vw
 html[data-form=tv] .update-notice p, html[data-form=tv] .offline-line { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
 html[data-form=tv] .sponsored-title { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 24); }
 html[data-form=tv] .sponsored-body { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
-html[data-form=tv] .sponsored-label { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .sponsored-label { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv] .report-options button { font-size: calc(var(--dp) * 14); padding: calc(var(--dp) * 12) calc(var(--dp) * 8); }
 html[data-form=tv][data-tv-keys] .report-options button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
 html[data-form=tv] .other-tab h1 { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); }
@@ -437,9 +440,18 @@ html[data-form=tv] .detail-rounds { justify-content: flex-start; gap: calc(var(-
 html[data-form=tv] .detail-round { width: calc(var(--dp) * 76); gap: calc(var(--dp) * 6); }
 html[data-form=tv] .detail-round-disc { width: calc(var(--dp) * 52); height: calc(var(--dp) * 52); }
 html[data-form=tv] .detail-round-disc .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
-html[data-form=tv] .detail-round-label { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .detail-round-label { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv][data-tv-keys] .detail-round:focus { outline: none; }
 html[data-form=tv][data-tv-keys] .detail-round:focus .detail-round-disc { background: var(--focus-fill); color: var(--on-focus-fill); }
 html[data-form=tv] .detail-section { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 24); }
 html[data-form=tv] .detail-about, html[data-form=tv] .detail-versions, html[data-form=tv] .detail-cast { max-width: calc(var(--dp) * 720); }
 html[data-form=tv] .detail-about dl { grid-template-columns: calc(var(--dp) * 120) minmax(0, 1fr); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+
+/* Text the phone sheet sizes in px and the TV page reuses as it is: the same floor (WP-04). */
+html[data-form=tv] .card-format { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 2) calc(var(--dp) * 8); }
+html[data-form=tv] .keep-place-text h2 { font-size: calc(var(--dp) * 20); line-height: calc(var(--dp) * 26); }
+html[data-form=tv] .keep-place-text p { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .history-tab { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .empty-state p { max-width: calc(var(--dp) * 420); font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+html[data-form=tv] .downloads-card-title { font-size: calc(var(--dp) * 20); line-height: calc(var(--dp) * 28); }
+html[data-form=tv] .empty-state .button { font-size: calc(var(--dp) * 16); }

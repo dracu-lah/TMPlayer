@@ -54,7 +54,8 @@ class SkipPill(
     /** The remote's half of the offer; a phone's pill is its own button and needs no instruction. */
     private val hint = TextView(context).apply {
         setTextColor(context.getColor(R.color.accent))
-        textSize = 13f
+        // 14 sp: the television's type floor (this hint only shows there).
+        textSize = 14f
         maxLines = 1
         text = L.playerSkipOkHint
         visibility = if (tv) View.VISIBLE else View.GONE

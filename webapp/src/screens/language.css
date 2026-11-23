@@ -21,6 +21,6 @@
 
 html[data-form=tv] .lang-list { grid-template-columns: repeat(4, 1fr); gap: calc(var(--dp) * 8); }
 html[data-form=tv] .lang-option { min-height: calc(var(--dp) * 44); padding: calc(var(--dp) * 8) calc(var(--dp) * 12); font-size: calc(var(--dp) * 14); transition: background-color var(--fast), color var(--fast), transform var(--fast) var(--ease); }
-html[data-form=tv] .lang-option .lang-sub { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .lang-option .lang-sub { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv][data-tv-keys] .lang-option:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); border-color: var(--focus-fill); transform: scale(var(--focus-scale)); }
 html[data-form=tv][data-tv-keys] .lang-option:focus .lang-sub { color: inherit; }

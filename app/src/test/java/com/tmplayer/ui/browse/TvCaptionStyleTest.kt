@@ -1,29 +1,24 @@
 package com.tmplayer.ui.browse
 
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
+import com.tmplayer.ui.theme.TvTypeScale
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** A television's tile captions are at least 14 sp, whatever the 12 sp and 11 sp styles ask for. */
+/**
+ * A television's tile captions are at least 14 sp. TileCaption no longer raises a small style
+ * itself (WP-04): the television's type scale carries the floor, so this now tests the scale for
+ * the two styles a caption is set in (labelMedium for a wide tile, labelSmall for a poster).
+ */
 class TvCaptionStyleTest {
-    private fun sp(v: Float) = TextUnit(v, TextUnitType.Sp)
 
     @Test
-    fun smallStylesAreRaised() {
-        for (size in listOf(11f, 12f, 13.9f)) {
-            val raised = tvCaptionStyle(TextStyle(fontSize = sp(size), lineHeight = sp(16f)))
-            assertEquals(14f, raised.fontSize.value, 0f)
-            assertEquals(18f, raised.lineHeight.value, 0f)
+    fun captionStylesAreAtLeast14SpOnTheTelevisionsScale() {
+        val tv = TvTypeScale.tvTypography()
+        val m3 = TvTypeScale.tvM3Typography()
+        for (style in listOf(tv.labelMedium, tv.labelSmall, m3.labelMedium, m3.labelSmall)) {
+            assertTrue("a caption of ${style.fontSize.value} sp", style.fontSize.value >= 14f)
         }
-        assertEquals(14f, tvCaptionStyle(TextStyle()).fontSize.value, 0f)
-    }
-
-    @Test
-    fun largeStylesAreLeftAlone() {
-        val big = TextStyle(fontSize = sp(16f), lineHeight = sp(22f))
-        assertSame(big, tvCaptionStyle(big))
+        assertEquals(14f, TvTypeScale.FLOOR_SP, 0f)
     }
 }

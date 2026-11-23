@@ -29,10 +29,10 @@ settings:Account | focusSizeStable | Privacy What stays on this TV and which ser
 settings:Account | focusSizeStable | Sign out of Telegram | WP-06 TV Settings rows
 settings:Account | focusSizeStable | Where the file is kept Saved Messages | WP-06 TV Settings rows
 settings:Account | safeArea | SIGNED IN | WP-06 TV Settings rows
-settings:Appearance | drawnInsideClip | unnamed node at 48,199 dp | WP-06 TV Settings rows
-settings:Appearance | drawnInsideClip | unnamed node at 48,407 dp | WP-06 TV Settings rows
-settings:Appearance | focusContrast | unnamed node at 48,199 dp | WP-06 TV Settings rows
-settings:Appearance | focusContrast | unnamed node at 48,407 dp | WP-06 TV Settings rows
+settings:Appearance | drawnInsideClip | unnamed node at 48,201 dp | WP-06 TV Settings rows
+settings:Appearance | drawnInsideClip | unnamed node at 48,402 dp | WP-06 TV Settings rows
+settings:Appearance | focusContrast | unnamed node at 48,201 dp | WP-06 TV Settings rows
+settings:Appearance | focusContrast | unnamed node at 48,402 dp | WP-06 TV Settings rows
 settings:Appearance | focusSizeStable | Amber | WP-06 TV Settings rows
 settings:Appearance | focusSizeStable | Emerald | WP-06 TV Settings rows
 settings:Appearance | focusSizeStable | Monochrome | WP-06 TV Settings rows
@@ -43,12 +43,12 @@ settings:Appearance | focusSizeStable | Teal | WP-06 TV Settings rows
 settings:Appearance | focusSizeStable | Telegram blue | WP-06 TV Settings rows
 settings:Appearance | focusSizeStable | Violet | WP-06 TV Settings rows
 settings:Appearance | focusSizeStable | Your own colour | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | unnamed node at 48,199 dp | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | unnamed node at 48,407 dp | WP-06 TV Settings rows
-settings:Appearance | labelled | unnamed node at 48,199 dp | WP-06 TV Settings rows
-settings:Appearance | labelled | unnamed node at 48,471 dp | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | unnamed node at 48,201 dp | WP-06 TV Settings rows
+settings:Appearance | focusSizeStable | unnamed node at 48,402 dp | WP-06 TV Settings rows
+settings:Appearance | labelled | unnamed node at 48,201 dp | WP-06 TV Settings rows
+settings:Appearance | labelled | unnamed node at 48,475 dp | WP-06 TV Settings rows
 settings:Appearance | safeArea | System. The letters every screen is set in | WP-06 TV Settings rows
-settings:Appearance | safeArea | unnamed node at 48,471 dp | WP-06 TV Settings rows
+settings:Appearance | safeArea | unnamed node at 48,475 dp | WP-06 TV Settings rows
 settings:Appearance | targets | Amber | WP-06 TV Settings rows
 settings:Appearance | targets | Emerald | WP-06 TV Settings rows
 settings:Appearance | targets | Monochrome | WP-06 TV Settings rows
@@ -98,11 +98,11 @@ settings:Playback | focusSizeStable | Open a video's page first OK shows the pos
 settings:Playback | focusSizeStable | unnamed node at 48,402 dp | WP-06 TV Settings rows
 settings:Playback | focusSizeStable | unnamed node at 48,476 dp | WP-06 TV Settings rows
 settings:SetupChoices | focusContrast | unnamed node at 62,0 dp | WP-06 TV Settings rows
-settings:SetupChoices | labelled | unnamed node at 62,235 dp | WP-06 TV Settings rows
-settings:SetupChoices | labelled | unnamed node at 62,491 dp | WP-06 TV Settings rows
+settings:SetupChoices | labelled | unnamed node at 62,257 dp | WP-06 TV Settings rows
+settings:SetupChoices | labelled | unnamed node at 62,513 dp | WP-06 TV Settings rows
 settings:SetupChoices | safeArea | Keep video | WP-06 TV Settings rows
 settings:SetupChoices | safeArea | Save space | WP-06 TV Settings rows
-settings:SetupChoices | safeArea | unnamed node at 62,491 dp | WP-06 TV Settings rows
+settings:SetupChoices | safeArea | unnamed node at 62,513 dp | WP-06 TV Settings rows
 settings:SetupChoices | targets | Also in Home and library | WP-06 TV Settings rows
 settings:Storage | drawnInsideClip | Download the whole video first Off: it downloads while you w | WP-06 TV Settings rows
 settings:Storage | drawnInsideClip | Remove after watching Delete a download once it is marked wa | WP-06 TV Settings rows
@@ -131,3 +131,6 @@ signOutPrompt | focusSizeStable | Sign out | WP-06 TV Settings rows
 signOutPrompt | targets | Cancel | WP-06 TV Settings rows
 signOutPrompt | targets | Save my settings backup to my Saved Messages first | WP-06 TV Settings rows
 signOutPrompt | targets | Sign out | WP-06 TV Settings rows
+about | safeArea | YOUR DATA AND THE LAW | WP-06 WP-04 gave the rows their 15 sp text, so a scrolling list now shows a row in the bottom margin; WP-06 owns the rows
+settings:Notifications | safeArea | Sponsor reminders Now and then, never more than once a month | WP-06 same, a scrolling row in the bottom margin
+settings:Storage | safeArea | Download the whole video first Off: it downloads while you w | WP-06 same, a scrolling row in the bottom margin

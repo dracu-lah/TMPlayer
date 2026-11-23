@@ -158,4 +158,37 @@ class TvRowFocusTest {
         assertTrue("focus stays on the row", now != null && now !== next)
         assertNull(played)
     }
+
+    /**
+     * WP-04 (engineer correction 19): the type floor makes the words under the row's icons 14 sp and
+     * the system font may be 1.3 on top. `fitRow` and `giveUp` drop buttons silently on a phone when
+     * text grows; the television's row must give none up: the five buttons stay shown, each with
+     * room, and the whole row stays inside the 960 dp screen. WP-05 reruns this with its margins.
+     */
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `no button of the television row is given up at 960 dp and font 1_3`() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+        try {
+            val (controls, root) = row()
+            controls.setLabelsShown(true)
+            controls.show()
+            repeat(10) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+            val density = root.resources.displayMetrics.density
+            assertEquals(960f, root.width / density, 1f)
+            for (id in listOf(R.id.control_subtitles, R.id.control_audio, R.id.control_speed, R.id.control_shape, R.id.control_tv_more)) {
+                val button = root.findViewById<View>(id)
+                assertTrue("button $id is shown", button.isShown)
+                assertTrue("button $id has room (${button.width} x ${button.height} px)", button.width > 0 && button.height > 0)
+                val at = IntArray(2).also { button.getLocationInWindow(it) }
+                assertTrue("button $id starts inside the screen", at[0] >= 0)
+                assertTrue("button $id ends inside the screen", at[0] + button.width <= root.width)
+            }
+            // The words under the icons are the floor's 14 sp, grown by the 1.3 font.
+            val word = root.findViewById<android.widget.TextView>(R.id.label_speed)
+            assertEquals(14f * 1.3f * density, word.textSize, 0.5f)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
 }

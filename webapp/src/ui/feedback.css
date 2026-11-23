@@ -61,7 +61,7 @@ html[data-form=tv] .fb-qr { width: calc(var(--dp) * 220); gap: calc(var(--dp) * 
 html[data-form=tv] .fb-qr-code { width: calc(var(--dp) * 220); height: calc(var(--dp) * 220); border-radius: calc(var(--dp) * 12); }
 html[data-form=tv] .fb-code { font-size: calc(var(--dp) * 36); line-height: calc(var(--dp) * 44); }
 html[data-form=tv] .fb-ways-row .link { min-height: calc(var(--dp) * 40); }
-html[data-form=tv] .fb-line dt { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .fb-line dt { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 /* Left aligned, so Down from the fields (which fill the left of the window) reaches the buttons by the remote's geometry. */
 html[data-form=tv] .feedback .confirm-buttons { justify-content: flex-start; }
 /* A field the remote has stopped on but not opened yet (read only until OK) reads as waiting. */

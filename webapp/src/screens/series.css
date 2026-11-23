@@ -35,12 +35,12 @@
 /* The TV scales by its density (tv.css --dp): the rows in step with the cards and chips around them, the focus ring the TV's own. */
 html[data-form=tv] .episode-text { gap: calc(var(--dp) * 2); }
 html[data-form=tv] .episode-text .episode-name { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
-html[data-form=tv] .episode-facts { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
-html[data-form=tv] .gap-tag { font-size: calc(var(--dp) * 11); line-height: calc(var(--dp) * 16); padding: 0 calc(var(--dp) * 8); }
-html[data-form=tv] .episode-overview { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .episode-facts { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
+html[data-form=tv] .gap-tag { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); padding: 0 calc(var(--dp) * 8); }
+html[data-form=tv] .episode-overview { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv] .episode-still { width: calc(var(--dp) * 176); border-radius: calc(var(--dp) * 8); }
 html[data-form=tv] .episode-list .episode.gap { gap: calc(var(--dp) * 16); padding: calc(var(--dp) * 12); }
-html[data-form=tv] .episode-list .episode.gap .episode-code { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .episode-list .episode.gap .episode-code { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv] .episode-list .episode.gap:focus-visible { outline: calc(var(--dp) * 3) solid var(--accent); outline-offset: calc(var(--dp) * 2); }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.Typography as M3Typography
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -102,32 +103,102 @@ private fun tvColors(scheme: ColorScheme, dark: Boolean) = if (dark) {
  * tv-material's.
  */
 private fun tvDisplaySmall() =
-    TextStyle(fontSize = 36.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+    TextStyle(fontSize = TvTypeScale.displaySmall.sp.sp, lineHeight = 40.sp, fontWeight = TvTypeScale.displaySmall.weight, letterSpacing = (-0.5).sp)
 
 /**
- * 10-foot UI, sized against the screen this actually runs on.
+ * The television's type scale, the one place its sizes are written (WP-04). Both theme systems the
+ * television carries are built from it, so they cannot drift: tv-material's [Typography] for the
+ * television's own screens ([tvTypography]) and Material 3's for the shared ones
+ * ([tvM3Typography]). Nothing is under [FLOOR_SP]: read from a sofa, 12 sp and 11 sp are a desk's
+ * sizes. A tile caption, a row's second line, a badge and a pill are all at least 14 sp, body text
+ * 15 sp or more, and a title is a visible step above body. An interface size below Default shrinks
+ * spacing, not these ([UiScaled]).
  *
- * A 1080p TV at density 320 is only 960 x 540 dp, far less room than the pixel count suggests.
- * Type is large enough to read from a sofa but small enough that a heading plus a search row does
- * not consume half the height and push content off the bottom edge.
+ * A 1080p TV at density 320 is only 960 x 540 dp, far less room than the pixel count suggests, so a
+ * row that no longer fits is cut with `maxLines` and an ellipsis, never given a smaller style.
+ * No line heights are set here: the defaults stay, so a row grows only by its text.
  *
  * No style carries a colour. A colour baked in here wins over [LocalContentColor], so a button
  * would paint its label in the surface colour instead of its own content colour. Anything that
  * wants muted text asks [Tone] for it at the call site.
  */
-private val typography = Typography(
-    displaySmall = tvDisplaySmall(),
-    headlineLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium),
-    bodyLarge = TextStyle(fontSize = 15.sp),
-    bodyMedium = TextStyle(fontSize = 13.sp),
-    // Defined rather than left to inherit: TV Material's default bodySmall is 12sp, a desk size,
-    // and the places that use it carry text worth reading from a sofa.
-    bodySmall = TextStyle(fontSize = 13.sp),
-    labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-)
+internal object TvTypeScale {
+    /** The smallest any style may be, in sp. */
+    const val FLOOR_SP = 14f
+
+    /** One style of the scale: its size in sp and its weight. */
+    class Step(val sp: Float, val weight: FontWeight)
+
+    val displayLarge = Step(57f, FontWeight.Normal)
+    val displayMedium = Step(45f, FontWeight.Normal)
+    val displaySmall = Step(36f, FontWeight.Bold)
+    val headlineLarge = Step(32f, FontWeight.Bold)
+    val headlineMedium = Step(26f, FontWeight.SemiBold)
+    val headlineSmall = Step(24f, FontWeight.Normal)
+    val titleLarge = Step(22f, FontWeight.SemiBold)
+    val titleMedium = Step(18f, FontWeight.Medium)
+    val titleSmall = Step(15f, FontWeight.Medium)
+    val bodyLarge = Step(16f, FontWeight.Normal)
+    val bodyMedium = Step(15f, FontWeight.Normal)
+    val bodySmall = Step(14f, FontWeight.Normal)
+    val labelLarge = Step(15f, FontWeight.Medium)
+    val labelMedium = Step(14f, FontWeight.Medium)
+    val labelSmall = Step(14f, FontWeight.Medium)
+
+    /** Every style by its role's name, for the tests and for anything that walks the scale. */
+    val all: Map<String, Step> = linkedMapOf(
+        "displayLarge" to displayLarge, "displayMedium" to displayMedium, "displaySmall" to displaySmall,
+        "headlineLarge" to headlineLarge, "headlineMedium" to headlineMedium, "headlineSmall" to headlineSmall,
+        "titleLarge" to titleLarge, "titleMedium" to titleMedium, "titleSmall" to titleSmall,
+        "bodyLarge" to bodyLarge, "bodyMedium" to bodyMedium, "bodySmall" to bodySmall,
+        "labelLarge" to labelLarge, "labelMedium" to labelMedium, "labelSmall" to labelSmall,
+    )
+
+    /** The scale as tv-material's styles: size and weight only. */
+    fun tvTypography(): Typography {
+        fun Step.style() = TextStyle(fontSize = sp.sp, fontWeight = weight)
+        val base = Typography()
+        return Typography(
+            displayLarge = base.displayLarge.copy(fontSize = displayLarge.sp.sp, fontWeight = displayLarge.weight),
+            displayMedium = base.displayMedium.copy(fontSize = displayMedium.sp.sp, fontWeight = displayMedium.weight),
+            displaySmall = tvDisplaySmall(),
+            headlineLarge = headlineLarge.style(),
+            headlineMedium = headlineMedium.style(),
+            headlineSmall = base.headlineSmall.copy(fontSize = headlineSmall.sp.sp, fontWeight = headlineSmall.weight),
+            titleLarge = titleLarge.style(),
+            titleMedium = titleMedium.style(),
+            titleSmall = base.titleSmall.copy(fontSize = titleSmall.sp.sp, fontWeight = titleSmall.weight),
+            bodyLarge = bodyLarge.style(),
+            bodyMedium = bodyMedium.style(),
+            bodySmall = bodySmall.style(),
+            labelLarge = labelLarge.style(),
+            labelMedium = labelMedium.style(),
+            labelSmall = labelSmall.style(),
+        )
+    }
+
+    /** The scale as Material 3's styles for the shared screens: [base]'s line heights and spacing, this size and weight. */
+    fun tvM3Typography(base: M3Typography = M3Typography()): M3Typography {
+        fun TextStyle.at(step: Step) = copy(fontSize = step.sp.sp, fontWeight = step.weight)
+        return base.copy(
+            displayLarge = base.displayLarge.at(displayLarge),
+            displayMedium = base.displayMedium.at(displayMedium),
+            displaySmall = tvDisplaySmall(),
+            headlineLarge = base.headlineLarge.at(headlineLarge),
+            headlineMedium = base.headlineMedium.at(headlineMedium),
+            headlineSmall = base.headlineSmall.at(headlineSmall),
+            titleLarge = base.titleLarge.at(titleLarge),
+            titleMedium = base.titleMedium.at(titleMedium),
+            titleSmall = base.titleSmall.at(titleSmall),
+            bodyLarge = base.bodyLarge.at(bodyLarge),
+            bodyMedium = base.bodyMedium.at(bodyMedium),
+            bodySmall = base.bodySmall.at(bodySmall),
+            labelLarge = base.labelLarge.at(labelLarge),
+            labelMedium = base.labelMedium.at(labelMedium),
+            labelSmall = base.labelSmall.at(labelSmall),
+        )
+    }
+}
 
 /**
  * Buttons the user can actually read: a calm raised surface at rest, accent when focused.
@@ -246,12 +317,12 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
         typography = if (touch) {
             TmTouchTypography
         } else {
-            M3MaterialTheme.typography.copy(displaySmall = tvDisplaySmall())
+            TvTypeScale.tvM3Typography()
         }.withFamily(family),
     ) {
         MaterialTheme(
             colorScheme = tvColors(scheme, dark),
-            typography = (if (touch) phoneTypography else typography).withTvFamily(family),
+            typography = (if (touch) phoneTypography else TvTypeScale.tvTypography()).withTvFamily(family),
         ) {
             CompositionLocalProvider(
                 // Without this the root content colour is undefined and every unstyled Text
@@ -265,7 +336,7 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
                     if (touch) FocusStyle.Standard else FocusStyle.tv(focusContrast)
                 },
             ) {
-                UiScaled(scale) { ProvideStrings(content) }
+                UiScaled(scale, keepTextSize = !touch) { ProvideStrings(content) }
             }
         }
     }

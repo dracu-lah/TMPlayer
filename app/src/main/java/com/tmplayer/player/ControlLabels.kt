@@ -36,8 +36,12 @@ object ControlLabels {
     /** The count after one more opening, never above [SESSIONS]. */
     fun after(seen: Int): Int = (seen + 1).coerceAtMost(SESSIONS)
 
-    /** The words' size in pixels: [TEXT_SP] at the system font scale, held at [MAX_FONT_SCALE]. */
-    fun textPx(density: Float, fontScale: Float): Float = TEXT_SP * density * fontScale.coerceIn(1f, MAX_FONT_SCALE)
+    /** The words' size in sp on a television, where nothing is under 14 (WP-04). */
+    const val TV_TEXT_SP = 14f
+
+    /** The words' size in pixels: [TEXT_SP] ([TV_TEXT_SP] on a television) at the system font scale, held at [MAX_FONT_SCALE]. */
+    fun textPx(density: Float, fontScale: Float, tv: Boolean = false): Float =
+        (if (tv) TV_TEXT_SP else TEXT_SP) * density * fontScale.coerceIn(1f, MAX_FONT_SCALE)
 
     /**
      * Counts this opening of the player and says whether it shows the words. Call once per player
