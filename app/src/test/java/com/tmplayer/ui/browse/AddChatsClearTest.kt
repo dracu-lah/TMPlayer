@@ -170,17 +170,17 @@ class AddChatsClearTest {
 
         val typing = AddChatsViewModel(counts = null, write = {})
         val field = open(tv = true, typing, typingField = true)
-        // The same walk as the Search entry's test: Left to the rail, Down to Search, OK into the field.
+        // The same walk as the Search entry's test: Left to the rail, Down to Search, OK onto the keys.
         press(field, KeyEvent.KEYCODE_DPAD_LEFT)
         repeat(5) { press(field, KeyEvent.KEYCODE_DPAD_DOWN) }
         press(field, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertEquals(listOf("search probe"), focusedWords(field))
+        assertEquals("the remote lands on the keyboard's first key", listOf("A"), focusedWords(field))
         nodes(field).first { words(it).contains("search probe") }.config.getOrNull(SemanticsActions.OnClick)!!.action!!.invoke()
         idle()
         assertEquals("abc", typing.state.value.query)
         assertNull("still no cross with words in", clearControl(field))
         back(field)
-        assertEquals("Back from the field empties the words", "", typing.state.value.query)
+        assertEquals("Back from the keys empties the words", "", typing.state.value.query)
         typing.stop()
     }
 }

@@ -321,6 +321,10 @@ fun AddChatsScreen(
     val railNow = { folderId?.let { folderFocus.getOrPut(it) { FocusRequester() } } ?: railFocus.getValue(state.scope) }
     val railSearchFocus = remember { FocusRequester() }
     var inSearch by remember { mutableStateOf(false) }
+    // The television's own keyboard in the right-hand panel while the words are being typed: the
+    // system keyboard covered the list it was typing for. The remote is on one of its keys.
+    var inKeys by remember { mutableStateOf(false) }
+    val keyFocus = remember { FocusRequester() }
     var searching by rememberSaveable { mutableStateOf(state.query.isNotBlank()) }
     // The row the remote last stood on, overall and per scope, for Left from the panel and Right from the rail.
     var lastRow by remember { mutableStateOf<Long?>(null) }
@@ -416,7 +420,8 @@ fun AddChatsScreen(
         scope.launch {
             withFrameNanos { }
             withFrameNanos { }
-            runCatching { searchFocus.requestFocus() }
+            // The television types on its own keys; the field stays for the system keyboard (OK on it).
+            runCatching { if (tv) keyFocus.requestFocus() else searchFocus.requestFocus() }
         }
     }
     fun backToRow() {
@@ -557,7 +562,7 @@ fun AddChatsScreen(
             asking != null -> asking = null
             // Back empties the search words first (rule 2: clear, then close), and a remote only
             // from the field: from a row it climbs to the top, as below.
-            typed.isNotEmpty() && (!tv || inSearch) -> onType("")
+            typed.isNotEmpty() && (!tv || inSearch || inKeys) -> onType("")
             // On the television Back from the list or the foot goes up to the filters first, so
             // the top of a long list is one press away; Back there leaves.
             tv && (onRow != null || inFoot || inSearch || onBandButton || onSwitch) -> toTop()
@@ -1204,13 +1209,16 @@ fun AddChatsScreen(
                             .onPreviewKeyEvent { event ->
                                 when {
                                     event.type != KeyEventType.KeyDown -> false
-                                    event.key == start -> {
+                                    // On the keys, Left and Right walk the key grid and Left from its first
+                                    // column finds the list by position.
+                                    event.key == start && !inKeys -> {
                                         backToRow()
                                         true
                                     }
                                     // Done is the one control here: Up and Down stay on it, and never
                                     // drop into whichever row a focus search finds beside it (HX86).
-                                    event.key == Key.DirectionDown || event.key == Key.DirectionUp -> true
+                                    // The keys below it are walked by Up and Down like any grid.
+                                    event.key == Key.DirectionDown || event.key == Key.DirectionUp -> !inKeys
                                     else -> false
                                 }
                             },
@@ -1236,10 +1244,26 @@ fun AddChatsScreen(
                             failure()
                             doneButton()
                             escape()
-                            if (required) {
+                            // The keys need the room the hint takes while the words are being typed.
+                            if (required && !(tv && (searching || state.query.isNotBlank()))) {
                                 Text(s.setupWhichBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
                             }
-                            if (shown.isNotEmpty()) {
+                            // The words are typed on the keys beside the list, which stays in view.
+                            val keysUp = tv && (searching || state.query.isNotBlank())
+                            if (keysUp) {
+                                com.tmplayer.ui.components.TvKeyboard(
+                                    text = typed,
+                                    onText = onType,
+                                    onSearch = toFirstRow,
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { inKeys = it.hasFocus },
+                                    firstKey = keyFocus,
+                                    // The panel is short: keys of 40 dp, and no typed line, since the
+                                    // search box over the list shows the words.
+                                    keyHeight = 40.dp,
+                                    showText = false,
+                                )
+                            }
+                            if (shown.isNotEmpty() && !keysUp) {
                                 Text(s.pickerTvKeys, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                             }
                         }

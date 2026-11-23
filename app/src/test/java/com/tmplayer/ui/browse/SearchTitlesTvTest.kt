@@ -154,7 +154,25 @@ class SearchTitlesTvTest {
         rule.onNodeWithTag("title-${notIn.onlineKey}").performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
         rule.mainClock.advanceTimeBy(500)
-        rule.onAllNodes(androidx.compose.ui.test.hasContentDescription(GlobalSearch.titleOf(current.shown[0])) and androidx.compose.ui.test.isFocused()).assertCountEquals(1)
+        // The count row (with Add more chats) sits between the titles and the posters, and in the
+        // narrower pane beside the keyboard the first Down can land on it; Down again is a poster,
+        // whichever column it is in (the grid is three across).
+        val names = current.shown.map { GlobalSearch.titleOf(it) }
+        fun focusedNames() = rule.onAllNodes(androidx.compose.ui.test.isFocused()).fetchSemanticsNodes().flatMap { node ->
+            if (androidx.compose.ui.semantics.SemanticsProperties.ContentDescription in node.config) {
+                node.config[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription]
+            } else {
+                emptyList()
+            }
+        }
+        repeat(2) {
+            if (focusedNames().none { it in names }) {
+                rule.onAllNodes(androidx.compose.ui.test.isFocused())[0].performKeyInput { pressKey(Key.DirectionDown) }
+                rule.waitForIdle()
+                rule.mainClock.advanceTimeBy(500)
+            }
+        }
+        assertTrue("a poster is focused, was ${focusedNames()}", focusedNames().any { it in names })
     }
 
     @Test

@@ -247,14 +247,15 @@ class AddChatsTvKeysTest {
     }
 
     @Test
-    fun `the Search entry opens the field and the keyboard's Search puts the remote on a row`() {
+    fun `the Search entry puts the remote on the keys and the keyboard's Search puts it on a row`() {
         val model = AddChatsViewModel(counts = null, write = {})
         val activity = open(model, chats = CHATS, search = true)
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT)
         repeat(5) { press(activity, KeyEvent.KEYCODE_DPAD_DOWN) }
         assertTrue(focusedWords(activity).contains("Search"))
         press(activity, KeyEvent.KEYCODE_DPAD_CENTER)
-        assertEquals("OK on Search puts the remote in the field", listOf("search probe"), focusedWords(activity))
+        assertEquals("OK on Search puts the remote on the first key", listOf("A"), focusedWords(activity))
+        save("add-chats-tv-search-keys.png", draw(activity))
         click(activity, "search probe")
         idle()
         assertEquals(listOf("Saved Messages"), focusedTitle(activity))

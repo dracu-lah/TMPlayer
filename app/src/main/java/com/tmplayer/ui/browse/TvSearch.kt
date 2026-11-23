@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,6 +82,7 @@ import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Motion
+import com.tmplayer.ui.components.TvKeyboard
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.rememberReducedMotion
@@ -164,6 +166,7 @@ internal fun TvSearchScreen(
     )
     val micFocus = remember { FocusRequester() }
     val fieldFocus = remember { FocusRequester() }
+    val firstKey = remember { FocusRequester() }
     // "Look up titles again" pressed: its row stays while TMDB is asked, so the remote is not left
     // on nothing, and once the answer is in the remote goes somewhere on purpose: the first title,
     // the pill again if it failed again, else the field.
@@ -190,14 +193,16 @@ internal fun TvSearchScreen(
         onText("")
         onFilters(SearchFilters())
         onSort(SearchSort.BestMatch)
-        runCatching { fieldFocus.requestFocus() }
+        // From a poster the field is scrolled out of the list and cannot take the remote: the
+        // keys beside the list always can, so the remote is never left on nothing.
+        if (!runCatching { fieldFocus.requestFocus() }.getOrDefault(false)) runCatching { firstKey.requestFocus() }
     }
     // Back with words in the field clears them first; the next Back leaves as it always did.
     com.tmplayer.ui.nav.BackHandler(enabled = text.isNotEmpty(), onBack = clear)
     // A frame first: the field is an item of the results' list now, composed as the list is laid out.
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        runCatching { if (voice != null) micFocus.requestFocus() else fieldFocus.requestFocus() }
+        runCatching { if (voice != null) micFocus.requestFocus() else firstKey.requestFocus() }
     }
 
     // The viewer's own chats only (HX62): no username is looked up on Telegram.
@@ -236,7 +241,20 @@ internal fun TvSearchScreen(
     // The states every result tile reads, collected once for the page rather than per tile.
     val tileShared = com.tmplayer.ui.components.rememberTileShared()
     androidx.compose.runtime.CompositionLocalProvider(com.tmplayer.ui.components.LocalTileShared provides tileShared) {
-    Column(Modifier.fillMaxSize().padding(start = TV_START, bottom = Tv.SafeV)) {
+    Row(Modifier.fillMaxSize().padding(start = TV_START, bottom = Tv.SafeV)) {
+        // The keyboard is a column of its own beside the results, not the system's keyboard over
+        // them: half the screen was lost to it on a television, and the results it was typing for
+        // could not be seen (user, 2026-11-23). The results fill in here as each letter lands.
+        TvKeyboard(
+            text = text,
+            onText = onText,
+            onSearch = { onSubmit(text) },
+            modifier = Modifier.width(KEYBOARD_WIDTH).padding(top = 4.dp),
+            firstKey = firstKey,
+            // Another script or voice typing: the system keyboard, as OK on the field opens it.
+            onSystemKeyboard = { keyboardRequests++ },
+        )
+        Column(Modifier.weight(1f).fillMaxHeight().padding(start = 24.dp)) {
         WholeCardInView(grid) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(COLUMNS),
@@ -483,7 +501,10 @@ internal fun TvSearchScreen(
                                 if (state.canSearchOthers) {
                                     TvPill(s.searchOtherChats, TmIcons.Search, chosen = true, modifier = Modifier.testTag("search-other-chats"), onClick = onSearchOthers)
                                 }
-                                TvPill(s.pickerAddMore, TmIcons.PersonAdd, chosen = !state.canSearchOthers, plain = state.canSearchOthers, onClick = onAddChats)
+                                // With All chats on every chat counts: nothing to add, so no way to offer.
+                                if (state.canAddChats) {
+                                    TvPill(s.pickerAddMore, TmIcons.PersonAdd, chosen = !state.canSearchOthers, plain = state.canSearchOthers, onClick = onAddChats)
+                                }
                                 AllChatsSearch.fallbackQuery(state.query.server)?.let { word ->
                                     TvPill(s.searchSearchFor(word), TmIcons.Search, plain = true) { onText(word); onSubmit(word) }
                                 }
@@ -527,6 +548,7 @@ internal fun TvSearchScreen(
         }
         // A fixed height, so the list above never moves as the remote does.
         DetailsStrip(focusedGroup?.takeIf { g -> shown.any { it.key == g.key } }, briefs)
+        }
     }
     }
     // Where to watch (HX41), in the television's own panel: focus starts on Close, and the other
@@ -773,8 +795,11 @@ private fun DetailsStrip(group: ResultGroup?, chats: Map<Long, ChatBrief>) {
     }
 }
 
-/** Five posters across: the television's grid of films and shows. */
-private const val COLUMNS = 5
+/** Three posters across beside the keyboard: the television's grid of films and shows. */
+private const val COLUMNS = 3
+
+/** The keyboard's column: six keys of about 40 dp across, with their gaps. */
+private val KEYBOARD_WIDTH = 288.dp
 
 /** The details strip's height, fixed so the grid never jumps. */
 private val STRIP = 96.dp
