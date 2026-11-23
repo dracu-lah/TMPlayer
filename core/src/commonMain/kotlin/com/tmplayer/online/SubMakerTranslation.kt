@@ -218,6 +218,9 @@ class SubMakerJobs(
         val owner = com.tmplayer.data.Accounts.stamp
         fun mine(): Boolean = owner == com.tmplayer.data.Accounts.stamp
         running[key] = scope.launch(com.tmplayer.data.AccountOwner(owner)) {
+            // This job's own handle: a state it reports after a Cancel (or after the same key was
+            // started again) is dropped, so Cancel's "forget the state" is the last word.
+            val self = coroutineContext[Job]
             try {
                 translator.run(
                     url = url,
@@ -229,7 +232,7 @@ class SubMakerJobs(
                             held = null
                             write(rest, false)?.let { onTrack(it, false) }
                         }
-                        set(key, next)
+                        setBy(self, key, next)
                     },
                     onTrack = track@{ srt, _, final ->
                         if (!mine()) return@track
@@ -241,7 +244,7 @@ class SubMakerJobs(
                                 lastApplied = t
                                 onTrack(file, final)
                             } else if (final) {
-                                set(key, TranslationState.Failed(SubtitleNotice.Unreadable, SubMakerApi.cueCount(srt)))
+                                setBy(self, key, TranslationState.Failed(SubtitleNotice.Unreadable, SubMakerApi.cueCount(srt)))
                             }
                         } else {
                             held = srt
@@ -252,7 +255,7 @@ class SubMakerJobs(
                 throw e
             } catch (e: Exception) {
                 JobFailures.handle("SubMakerTranslation", e)
-                set(key, TranslationState.Failed(SubtitleNotice.Offline, 0))
+                setBy(self, key, TranslationState.Failed(SubtitleNotice.Offline, 0))
             }
         }
         return true
@@ -284,12 +287,24 @@ class SubMakerJobs(
     fun finished(key: String, lines: Int) = set(key, TranslationState.Done(lines))
 
     /** Forgets a finished or failed state, so its line goes. */
+    @Synchronized
     fun clear(key: String) {
         if (state.value[key]?.active == false) state.value = state.value - key
     }
 
+    @Synchronized
     private fun set(key: String, value: TranslationState) {
         state.value = state.value + (key to value)
+    }
+
+    /**
+     * [set] for a job: [cancel] ends the job first and forgets the state second, both under this
+     * lock, so a state set here after that sees the job inactive and is dropped (a late report
+     * used to bring the cancelled line back).
+     */
+    @Synchronized
+    private fun setBy(job: Job?, key: String, value: TranslationState) {
+        if (job == null || job.isActive) set(key, value)
     }
 
     companion object {
