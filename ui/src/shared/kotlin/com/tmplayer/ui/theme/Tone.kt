@@ -62,16 +62,12 @@ object Tone {
      */
     val focusFill: Color
         @Composable @ReadOnlyComposable get() =
-            if (LocalDarkTheme.current) M3.colorScheme.primary else M3.colorScheme.primaryContainer
+            FocusPalette.fill(M3.colorScheme, LocalDarkTheme.current)
 
     /** What to write on [focusFill]. */
     val onFocusFill: Color
         @Composable @ReadOnlyComposable get() =
-            if (LocalDarkTheme.current) {
-                M3.colorScheme.onPrimary
-            } else {
-                M3.colorScheme.onPrimaryContainer
-            }
+            FocusPalette.onFill(M3.colorScheme, LocalDarkTheme.current)
 
     /**
      * The colour every long gradient fades into: the background itself, at full alpha, so a
