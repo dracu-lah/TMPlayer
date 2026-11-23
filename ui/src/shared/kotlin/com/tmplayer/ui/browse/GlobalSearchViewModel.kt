@@ -215,6 +215,11 @@ data class GlobalSearchState(
      * screen says so ([GlobalSearchState.everyChatNote]).
      */
     val addedOnly: Boolean = false,
+    /**
+     * "All chats" is on: every chat counts, so there is nothing to add and no screen offers to
+     * (the "Add more chats" button and the note that points to it stay away).
+     */
+    val allChatsOn: Boolean = false,
     /** The one-off "Search my other chats" is on for these words: the whole account, not the added chats. */
     val everyChat: Boolean = false,
     /** The films and shows TMDB named for the words (HX41), in its ranked order; empty with none. */
@@ -247,7 +252,10 @@ data class GlobalSearchState(
     val canSearchOthers: Boolean get() = addedOnly && !everyChat && !query.isEmpty && !offline
 
     /** The search covered every chat because none was added yet: said above the results, with the way to choose. */
-    val everyChatNote: Boolean get() = !addedOnly && !everyChat && !query.isEmpty && groups.isNotEmpty()
+    val everyChatNote: Boolean get() = !addedOnly && !allChatsOn && !everyChat && !query.isEmpty && groups.isNotEmpty()
+
+    /** "Add more chats" is worth offering: not while every chat already counts. */
+    val canAddChats: Boolean get() = !allChatsOn
 
     /** What the list shows: [groups] through the filters, the kids lock already applied. */
     val shown: List<ResultGroup> by lazy(LazyThreadSafetyMode.PUBLICATION) { GlobalSearch.filter(groups, filters, query) }
@@ -649,6 +657,7 @@ class GlobalSearchViewModel(
                 query = query, filters = now.filters, sort = now.sort,
                 topics = now.topics, topicsSearching = now.topicsSearching, topicsError = now.topicsError, topicsPartial = now.topicsPartial,
                 addedOnly = addedOnlyNow(),
+                allChatsOn = allChatsNow(),
             )
             return
         }
@@ -668,6 +677,7 @@ class GlobalSearchViewModel(
             topicsError = now.topicsError,
             topicsPartial = now.topicsPartial,
             addedOnly = addedOnlyNow(),
+                allChatsOn = allChatsNow(),
             everyChat = everyChat,
             // The titles stay up until the new words' own answer replaces them ([findTitles]).
             titles = now.titles,
@@ -905,6 +915,8 @@ class GlobalSearchViewModel(
 
     /** Whether search reads the added chats alone: the viewer picked chats (HX27), however few. */
     private fun addedOnlyNow(): Boolean = choice.value.mode == com.tmplayer.data.AddedMode.Picked
+
+    private fun allChatsNow(): Boolean = choice.value.mode == com.tmplayer.data.AddedMode.All
 
     /** The online title of [item], when the providers have already been asked about it. */
     private fun onlineNames(item: MediaItem): List<String> {

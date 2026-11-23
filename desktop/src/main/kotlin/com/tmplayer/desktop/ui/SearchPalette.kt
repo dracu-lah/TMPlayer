@@ -611,7 +611,7 @@ private fun buildRows(
             }
             if (!ui.filters.isDefault) add(PaletteRow.Action(s.searchClearFilters) { search.clearFilters() })
             if (ui.canSearchOthers) add(PaletteRow.Action(s.searchOtherChats) { search.searchOtherChats() })
-            add(PaletteRow.Action(s.pickerAddMore) { onAddChats() })
+            if (ui.canAddChats) add(PaletteRow.Action(s.pickerAddMore) { onAddChats() })
             AllChatsSearch.fallbackQuery(query.server)?.let { word ->
                 add(PaletteRow.Action(s.searchSearchFor(word)) { onSearchWord(word) })
             }

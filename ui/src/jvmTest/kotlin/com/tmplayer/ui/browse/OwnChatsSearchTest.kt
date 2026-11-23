@@ -141,6 +141,18 @@ class OwnChatsSearchTest {
     }
 
     @Test
+    fun `with All chats on there is nothing to add, so no note and no add more chats offer`() = runTest(dispatcher) {
+        val search = model(choice = MutableStateFlow(AddedChoice(AddedMode.All)))
+        search.type("harbour")
+        advanceUntilIdle()
+        val state = search.state.value
+        assertTrue(state.allChatsOn)
+        assertFalse(state.canAddChats)
+        assertFalse(state.everyChatNote)
+        assertFalse(state.canSearchOthers)
+    }
+
+    @Test
     fun `with no chat added every chat is searched, said so, and there is no other chats button`() = runTest(dispatcher) {
         val search = model(choice = MutableStateFlow(AddedChoice()))
         search.type("harbour")

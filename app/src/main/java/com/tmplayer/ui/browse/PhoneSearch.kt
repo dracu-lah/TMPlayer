@@ -668,6 +668,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
                     // similar words side by side left the viewer weighing them.
                     EmptySearchWays(
                         canSearchOthers = state.canSearchOthers,
+                        canAddChats = state.canAddChats,
                         word = AllChatsSearch.fallbackQuery(state.query.server),
                         onSearchOthers = onSearchOthers,
                         onAddChats = onAddChats,
@@ -983,11 +984,13 @@ internal fun EmptySearchWays(
     onSearchOthers: () -> Unit,
     onAddChats: () -> Unit,
     onSearchWord: (String) -> Unit,
+    /** False with All chats on: every chat counts, so there is nothing to add. */
+    canAddChats: Boolean = true,
 ) {
     val s = LocalStrings.current
     val ways = buildList {
         if (canSearchOthers) add(s.searchOtherChats to onSearchOthers)
-        add(s.pickerAddMore to onAddChats)
+        if (canAddChats) add(s.pickerAddMore to onAddChats)
         word?.let { add(s.searchSearchFor(it) to { onSearchWord(it) }) }
     }
     ways.forEachIndexed { index, (label, go) ->
