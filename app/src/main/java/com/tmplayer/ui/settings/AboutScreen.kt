@@ -158,16 +158,19 @@ fun AboutScreen(onBack: () -> Unit) {
                         )
                     }
                 }
-                // Buy Me a Coffee first and in its own yellow, then GitHub Sponsors, then the
-                // codes and the page that lists every way to help.
+                // Buy Me a Coffee first, then GitHub Sponsors, then the codes and the page that lists
+                // every way to help. A phone has BMC's own yellow button; a television has the same
+                // row as the others, with the cup on a yellow tile (nothing on a remote grows, WP-03).
                 if (group.support) {
                     item {
-                        CoffeeButton(
-                            onClick = { if (touch) open(About.Link(s.supportBuyCoffee, "", About.COFFEE)) else coffee = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = if (touch) 16.dp else 0.dp, vertical = 8.dp),
-                        )
+                        if (touch) {
+                            CoffeeButton(
+                                onClick = { open(About.Link(s.supportBuyCoffee, "", About.COFFEE)) },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        } else {
+                            CoffeeRow(onClick = { coffee = true })
+                        }
                     }
                     item {
                         ActionRow(

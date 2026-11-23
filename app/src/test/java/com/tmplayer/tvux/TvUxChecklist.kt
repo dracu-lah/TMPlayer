@@ -516,7 +516,14 @@ class TvUxChecklist(
 
             val margin = max(dp(16f), 0.25f * max(restRect.width, restRect.height))
             val region = restRect.inflate(margin).intersect(Rect(0f, 0f, screenW, screenH))
-            val skip = layoutRect(other).inflate(max(dp(6f), 0.1f * max(other.size.width, other.size.height).toFloat())).takeUnless { it.overlaps(restRect) }
+            // The neighbour changes too (it gave up the focus). Its rect is left out with a margin for
+            // a neighbour that grows; where that margin would reach the node itself (two full width
+            // rows or two pills side by side), only the neighbour's own rect and 1 dp round it are, so
+            // the node's growth into the gap between them is still read (WP-03: with no skip at all
+            // the neighbour's fill swap was read as the node's growth).
+            val otherRect = layoutRect(other)
+            val skip = otherRect.inflate(max(dp(6f), 0.1f * max(other.size.width, other.size.height).toFloat())).takeUnless { it.overlaps(restRect) }
+                ?: otherRect.inflate(dp(1f)).takeUnless { it.overlaps(restRect) }
             val drawn = drawnChange(rest, focusedFrame, region, skip)
             if (drawn != null) {
                 val full = restRect.width >= screenW * 0.9f

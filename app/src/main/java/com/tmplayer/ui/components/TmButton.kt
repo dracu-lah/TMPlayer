@@ -1,11 +1,14 @@
 package com.tmplayer.ui.components
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button as TouchButton
 import androidx.compose.material3.ButtonDefaults as TouchButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,6 +18,8 @@ import androidx.compose.material3.MaterialTheme as TouchMaterialTheme
 import androidx.compose.material3.Text as TouchText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -22,14 +27,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button as TvButton
 import androidx.tv.material3.ButtonDefaults as TvButtonDefaults
 import androidx.tv.material3.LocalContentColor as TvContentColor
 import androidx.tv.material3.Text as TvText
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.Danger
+import com.tmplayer.ui.theme.FocusRole
 import com.tmplayer.ui.theme.LocalDarkTheme
+import com.tmplayer.ui.theme.LocalFocusStyle
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.tmButtonColors
 
 /**
@@ -54,12 +63,14 @@ fun TmButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     if (FormFactor.isTv(LocalContext.current)) {
-        TvButton(
+        TvButtonBase(
             onClick = onClick,
             modifier = modifier,
             enabled = enabled && !loading,
             colors = if (destructive) tvDestructiveColors() else tmButtonColors(),
-            content = { TvFace(loading, busyLabel, content) },
+            loading = loading,
+            busyLabel = busyLabel,
+            content = content,
         )
         return
     }
@@ -92,6 +103,63 @@ fun TmButton(
     )
 }
 
+/**
+ * The one TV button every [TmButton] and [TmSecondaryButton] on a television is (WP-03).
+ *
+ * TV Material's button grows 1.1 times under focus, so in a full width list, a dialog or a row of
+ * buttons beside the screen's edge it spilled past its column and was cut. Here it never grows
+ * ([FocusRole.Button]: no scale, a press sinks it to 0.98) and shows focus the way the recipe says:
+ * the fill swap (`Tone.focusFill`, in the colours the callers pass), plus a ring in the Light theme
+ * and under High contrast ([focusRingOnTvButton]). TV Material's own focus border is switched off,
+ * so the only ring is the one [FocusStyle] draws inside the button's bounds.
+ *
+ * Every TV Material clickable goes through here: `TvButtonImportGuardTest` fails on any other.
+ */
+@Composable
+private fun TvButtonBase(
+    onClick: () -> Unit,
+    modifier: Modifier,
+    enabled: Boolean,
+    colors: androidx.tv.material3.ButtonColors,
+    loading: Boolean,
+    busyLabel: String?,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    TvButton(
+        onClick = onClick,
+        modifier = modifier.focusRingOnTvButton(focused),
+        enabled = enabled,
+        interactionSource = interactions,
+        colors = colors,
+        scale = TvButtonDefaults.scale(focusedScale = 1f, pressedScale = PRESSED_SCALE),
+        border = TvButtonDefaults.border(
+            border = Border.None,
+            focusedBorder = Border.None,
+            pressedBorder = Border.None,
+            disabledBorder = Border.None,
+            focusedDisabledBorder = Border.None,
+        ),
+        content = { TvFace(loading, busyLabel, content) },
+    )
+}
+
+/** A pressed TV button sinks a little instead of growing: the answer to the press without a layout change. */
+private const val PRESSED_SCALE = 0.98f
+
+/**
+ * The [FocusRole.Button] ring on a television: [FocusStyle.ring] round the pill, inside its bounds,
+ * in the Light theme (where the pale fill is a 1.24:1 step on the page) and under High contrast
+ * (with its outer line and keyline); nothing in the Dark theme, whose fill carries the focus alone.
+ */
+@Composable
+private fun Modifier.focusRingOnTvButton(focused: Boolean): Modifier {
+    val style = LocalFocusStyle.current
+    val dark = LocalDarkTheme.current
+    return if (focused && FocusRole.Button.recipe.ringShown(style, dark)) focusRing(true, CircleShape) else this
+}
+
 /** The TV button's red, kept here so the destructive press looks the same on both devices. */
 @Composable
 private fun tvDestructiveColors() = TvButtonDefaults.colors(
@@ -116,12 +184,14 @@ fun TmSecondaryButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     if (FormFactor.isTv(LocalContext.current)) {
-        TvButton(
+        TvButtonBase(
             onClick = onClick,
             modifier = modifier,
             enabled = enabled && !loading,
             colors = tmButtonColors(),
-            content = { TvFace(loading, busyLabel, content) },
+            loading = loading,
+            busyLabel = busyLabel,
+            content = content,
         )
         return
     }

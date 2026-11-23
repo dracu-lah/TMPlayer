@@ -307,6 +307,9 @@ class ButtonColors(
 @Immutable
 class ButtonBorder(val border: Border, val focusedBorder: Border, val pressedBorder: Border, val disabledBorder: Border, val focusedDisabledBorder: Border)
 
+@Immutable
+class ButtonScale(val scale: Float, val focusedScale: Float, val pressedScale: Float, val disabledScale: Float, val focusedDisabledScale: Float)
+
 object ButtonDefaults {
     val ContentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 10.dp)
 
@@ -340,6 +343,15 @@ object ButtonDefaults {
         disabledBorder: Border = border,
         focusedDisabledBorder: Border = disabledBorder,
     ): ButtonBorder = ButtonBorder(border, focusedBorder, pressedBorder, disabledBorder, focusedDisabledBorder)
+
+    /** How far the button grows under focus (1.1 in TV Material); the stand-in never grows. */
+    fun scale(
+        scale: Float = 1f,
+        focusedScale: Float = 1.1f,
+        pressedScale: Float = 1f,
+        disabledScale: Float = 1f,
+        focusedDisabledScale: Float = 1f,
+    ): ButtonScale = ButtonScale(scale, focusedScale, pressedScale, disabledScale, focusedDisabledScale)
 }
 
 /** A TV Material button, drawn with its resting colours, shape and border: a television only control. */
@@ -349,16 +361,19 @@ fun Button(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    scale: ButtonScale = ButtonDefaults.scale(),
     shape: ButtonShape = ButtonDefaults.shape(),
     colors: ButtonColors = ButtonDefaults.colors(),
     border: ButtonBorder = ButtonDefaults.border(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    interactionSource: androidx.compose.foundation.interaction.MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     androidx.compose.material3.Surface(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = shape.shape,
         color = if (enabled) colors.containerColor else colors.disabledContainerColor,
         contentColor = if (enabled) colors.contentColor else colors.disabledContentColor,

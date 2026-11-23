@@ -169,6 +169,7 @@ import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.FocusOnOpen
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.SettingIconChip
+import com.tmplayer.ui.components.SettingIconChipSize
 import com.tmplayer.ui.components.SettingsSectionLabel
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TvConfirm
@@ -185,6 +186,7 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.focusRingOnTv
 import com.tmplayer.ui.theme.rememberUiScale
 import com.tmplayer.ui.update.LinkQrDialog
 import com.tmplayer.ui.update.UpdateDialog
@@ -3260,6 +3262,13 @@ internal fun ActionRow(
     tint: Color = Color.Unspecified,
     /** The service the row is about: its badge (HX93) takes the icon chip's place. */
     service: com.tmplayer.ui.components.Service? = null,
+    /**
+     * A leading mark of its own in the chip's place, [markSize] square (the Buy Me a Coffee cup on
+     * its yellow tile, WP-03). The words still start where the chip's would: the gap after it
+     * shrinks by what the mark is wider than the chip.
+     */
+    mark: (@Composable () -> Unit)? = null,
+    markSize: Dp = SettingIconChipSize,
     onClick: () -> Unit,
 ) {
     val iconTint = if (tint == Color.Unspecified) Tone.accent else tint
@@ -3272,10 +3281,10 @@ internal fun ActionRow(
         supporting = {
             M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis)
         },
-        leading = { SettingIconChip(icon, tint = iconTint, service = service) },
+        leading = { if (mark != null) mark() else SettingIconChip(icon, tint = iconTint, service = service) },
     ) { focused ->
-        SettingIconChip(icon, tint = iconTint, inverted = focused, service = service)
-        Spacer(Modifier.size(16.dp))
+        if (mark != null) mark() else SettingIconChip(icon, tint = iconTint, inverted = focused, service = service)
+        Spacer(Modifier.size(16.dp - (markSize - SettingIconChipSize).coerceAtLeast(0.dp)))
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -3458,6 +3467,8 @@ private fun FocusRow(
             // The filled card is how the focused row is found from a sofa.
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
+            // The row role (FocusRole.Row): the fill and the ring, inside the row, no scale.
+            .focusRingOnTv(focused, RoundedCornerShape(Corner.Large))
             .clickable(
                 interactionSource = interactions,
                 indication = null,

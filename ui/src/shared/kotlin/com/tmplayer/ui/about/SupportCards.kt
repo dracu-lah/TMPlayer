@@ -72,6 +72,7 @@ import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.FocusVisibility
+import com.tmplayer.ui.theme.LocalFocusStyle
 import com.tmplayer.ui.theme.LocalOnFloating
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
@@ -124,8 +125,11 @@ fun SupportCard(
     val focused by interactions.collectIsFocusVisibleAsState()
     val hovered by interactions.collectIsHoveredAsState()
     val calm = rememberLessMotion()
+    // A television's remote never grows a card (WP-03): its focus is the fill and the ring. The
+    // pointer's hover, and the keyboard's focus on a desktop, still lift it a little.
+    val tv = LocalFocusStyle.current.tv
     val lift by animateFloatAsState(
-        targetValue = if (!calm && (hovered || focused)) CARD_LIFT else 1f,
+        targetValue = if (!calm && !tv && (hovered || focused)) CARD_LIFT else 1f,
         animationSpec = Motion.standard(Motion.Fast),
         label = "supportCardLift",
     )
