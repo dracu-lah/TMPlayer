@@ -1190,6 +1190,11 @@ fun rememberHomeRows(
         // Stalled: what is there is shown, and the rows still out are left out rather than drawn
         // as placeholders for as long as Telegram takes (user, 2026-10-26).
         val loaded = if (stalled) loaded + home.filter { it.id !in loaded }.associate { it.id to emptyList() } else loaded
+        // Whether the list of where the videos are has really come back, before a stall stands an
+        // empty one in for it: only an answer settles Home. Settled on the stand-in, a slow account
+        // (All chats on) was told "Get your first video in, open Saved Messages" for a few seconds
+        // until its videos arrived (user, 2026-11-23).
+        val recentAnswered = recent != null
         val recent = if (stalled) recent ?: emptyList() else recent
         val inputs = listOf(continueWatching, watchLater, home, favourites, loaded, recent, partial, fresh, corrections, recentMinStarred, autoFill, chatsPending, layout, recentFrom, noneChosen, lists)
         if (value.isNotEmpty() && homeMemo.same(homeMemo.built, inputs)) return@produceState
@@ -1208,7 +1213,7 @@ fun rememberHomeRows(
         // Rows that are there, or a list of where the videos are that has come back: either way
         // what Home shows now is the answer. Starred chats alone need no such list.
         // Starred chats alone need no such list, nor a Home whose Recently added and carousel are off.
-        if (built.isNotEmpty() || recent != null || !autoPick) model.rowsSettled = true
+        if (built.isNotEmpty() || recentAnswered || !autoPick) model.rowsSettled = true
     }
     PrefetchHomeArt(rows, model)
     return rows
