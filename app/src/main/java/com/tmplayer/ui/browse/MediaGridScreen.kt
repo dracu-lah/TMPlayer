@@ -2395,8 +2395,20 @@ internal fun TileCaption(text: String, style: androidx.compose.ui.text.TextStyle
     if (isTouch()) {
         M3Text(text, style = style, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
     } else {
-        androidx.compose.foundation.text.BasicText(text, style = style, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Read from the sofa, 12 sp (labelMedium) and 11 sp (labelSmall) are too small: a
+        // television's captions are at least [TV_CAPTION_MIN].
+        val tvStyle = remember(style) { tvCaptionStyle(style) }
+        androidx.compose.foundation.text.BasicText(text, style = tvStyle, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+}
+
+/** The smallest a tile's caption may be on a television. */
+internal val TV_CAPTION_MIN = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp)
+
+/** [style] raised to [TV_CAPTION_MIN] with room for its line; one already that large is unchanged. */
+internal fun tvCaptionStyle(style: androidx.compose.ui.text.TextStyle): androidx.compose.ui.text.TextStyle {
+    if (style.fontSize.value >= TV_CAPTION_MIN.value) return style
+    return style.copy(fontSize = TV_CAPTION_MIN, lineHeight = androidx.compose.ui.unit.TextUnit(18f, androidx.compose.ui.unit.TextUnitType.Sp))
 }
 
 /**
