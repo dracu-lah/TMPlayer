@@ -22,6 +22,7 @@ Where the rest lives, read when the task touches it:
 | Branches and worktrees tidy-up | [docs/agents/branches.md](docs/agents/branches.md) |
 | Multi-account profiles: what is per account, the single live client, switching | [docs/agents/multi-account.md](docs/agents/multi-account.md) |
 | Local checks before a push, what GitHub CI still runs, nightly | [docs/agents/CI-LOCAL-PLAN.md](docs/agents/CI-LOCAL-PLAN.md) |
+| What each remote key means on TV, per context (read before binding a key) | [docs/agents/tv-keys.md](docs/agents/tv-keys.md) |
 
 ## Token budget and publishing
 

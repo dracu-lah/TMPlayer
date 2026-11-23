@@ -1,0 +1,69 @@
+# TV key ownership
+
+One table says what each remote key means in each TV context, so two screens never claim the same
+key. Written by WP-69 of the UX plan; the test is
+`app/src/test/java/com/tmplayer/tvux/TvKeyOwnershipTest.kt`.
+
+Read it before binding a key on Android TV or Fire TV (web TV keys follow in `webapp/src/tv/remote.ts`
+where they apply). A new binding, or a key that changes meaning, edits its row here and its test in
+the same change.
+
+## How to read it
+
+- A cell marked "today" is what the code does now and a test pins it.
+- A cell naming a WP changes there: that package updates this row and turns the cell into a test.
+- The last column is the fallback for a remote that lacks the key: everything reachable with the
+  arrows and OK alone.
+- "Row down" is the player's transport row hidden, "row up" is it shown.
+- A tile acts on Menu on the key down (`Holdable.kt`); the player acts on it on the key up where the
+  quirk says so (Fire TV), so that a held Menu can still become the handover. A test of a Menu
+  binding sends both the down and the up. A keyboard's Shift+F10 equals Menu on a phone or tablet
+  (`Holdable.kt`).
+
+## The table
+
+| Key | Bar | Tile, chat row, picker tile | Long list, nothing focused | Settings rail and pane | Player, row down | Player, row up | Player panels (More, pickers) | Arrows-and-OK fallback |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Menu | account menu (WP-02) | item options (today) | account menu (WP-02 fallback) | account menu (WP-02 fallback) | player menu where the quirk says so (today) | player menu (today) | closes the panel (today, check) | OK on the picture; long OK on a tile; More button |
+| Info | nothing | item options (today) | nothing | nothing | details on a short Info, report stutter on a held one (today; hint WP-21) | same | nothing | long OK; More, Help (WP-89) |
+| Long OK | picture: account menu (WP-02) | item options (today) | nothing | nothing | chooser after 1.5 s (WP-19) | plain OK (WP-19) | nothing | n/a |
+| Back | leaves to Home or exits (today) | to the bar or the top first in long grids (WP-12) | top first, then leave (WP-12) | pane to rail, rail out (WP-07) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
+| Search | TV search (today, WP-22 everywhere) | TV search (WP-22) | TV search (WP-22) | nothing | nothing | nothing | nothing | the bar's Search tab |
+| CC, Audio | nothing | nothing | nothing | nothing | CC toggles, second press opens (WP-19); Audio opens picker (today) | same | nothing | the row's subtitle and audio buttons |
+| Page, Channel | nothing | screenful (WP-12) | screenful (WP-12) | section jump (WP-75) | Page: 60 s or chapter (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (WP-89) |
+| Play/Pause, Stop | nothing | nothing | nothing | nothing | toggle (today); Stop leaves (today) | same | still work under the panel (WP-19) | OK on the play button |
+| Left, Right hold | move (today, tested on tiles only) | move, stale repeats dropped (WP-13) | same | same (WP-07) | 10 s, live ramp (WP-18) | bar: ramped scrub, one commit (WP-18) | move | n/a |
+
+## What the code does today, beyond the table
+
+Found while pinning the table (WP-69):
+
+- **Held Menu and held OK in the player.** A held Menu, or a held OK with the row up, hands the video
+  to another app (`isLongPressOnTheVideo`, `openInAnotherApp`). A held OK over the bare picture
+  (row down) is nobody's: it is the first press of a scrub. WP-19 changes the held OK.
+- **Panels.** Only the More panel closes on Menu (where the quirk says so); the track pickers hand
+  every key to their own view.
+- **Stop, Channel and Media Next, Previous and Skip.** Stop saves the place and leaves like Back.
+  Channel up and down, Next, Previous and Skip step the video (`PlayerRemoteKeys.episodeStep`), once
+  per press. Page keys are bound nowhere in the player.
+- **Info.** A short Info (released before the long press) shows the details; a held Info reports a
+  stutter.
+- **Menu elsewhere.** Besides the tile (`Holdable.kt`) and the player: the profile picker's tiles
+  (options, on key up), the Add chats rows (star), and `MainActivity.onKeyUp`, which opens the
+  profile picker for a Menu nobody took when the device has two or more profiles. That last one is
+  the fallback WP-02 replaces with the account menu.
+- **Left and Right.** The table's "move (today)" is tested on tiles. The player's arrows over the
+  bare picture jump and on the bar stride today; their ramps are WP-18, so those cells carry no test.
+
+## Who may claim a key today
+
+The test lists, per key, the source files that bind it. A file not on the list that starts binding
+the key fails the test: add it here with its context first.
+
+| Key | Bound in |
+| --- | --- |
+| Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt` |
+| Info | `Holdable.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (short Info), `PlaybackMarks.kt` (held) |
+| Search | `BrowseScreen.kt`, `SearchKeyGuard.kt` (swallows it on a phone) |
+| Page, Channel | `AddChatsScreen.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel only) |
+| Stop | `PlayerActivity.kt`, `PlayerRemoteKeys.kt` |
