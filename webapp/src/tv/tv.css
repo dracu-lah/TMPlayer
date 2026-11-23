@@ -417,7 +417,9 @@ html[data-form=tv] .detail-main > .detail-cast { order: 6; }
 html[data-form=tv] .detail-body > .more-from { order: 7; }
 html[data-form=tv] .detail-head { order: 0; max-width: 55%; gap: calc(var(--dp) * 8); }
 html[data-form=tv] .detail-overview { order: 1; max-width: 55%; }
-html[data-form=tv] .detail-actions { order: 2; flex-direction: row; align-items: flex-start; gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 4); }
+html[data-form=tv] .detail-actions { order: 2; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 4); }
+/* The why-no-poster line takes a line of its own: beside Play it squeezed the round buttons until Rename wrapped under Watched, out of the remote's Right walk along Play's line. */
+html[data-form=tv] .detail-actions > .poster-why { flex: 0 0 100%; margin: 0; }
 html[data-form=tv] .detail-code { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 22); }
 html[data-form=tv] .detail-title { font-size: calc(var(--dp) * 36); line-height: calc(var(--dp) * 44); }
 html[data-form=tv] .detail-facts, html[data-form=tv] .detail-genres, html[data-form=tv] .detail-score, html[data-form=tv] .detail-progress {
