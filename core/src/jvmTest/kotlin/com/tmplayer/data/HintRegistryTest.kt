@@ -97,6 +97,30 @@ class HintRegistryTest {
     }
 
     @Test
+    fun `a skip, a sign out and a second skip silence the hints`() = runBlocking {
+        // The real path: the Tips card is turned down, the person signs out (the tour is offered
+        // again on the next sign in), and skips again. The count lives past the sign out.
+        settings.markTourSkipped()
+        settings.markHintSeen("tile_options")
+        settings.clearEverything()
+        assertEquals(SettingsStore.TourState.Never, settings.tourState.first())
+        assertEquals("only the skip count survives", 0, settings.hintCount("tile_options"))
+        assertEquals(1, settings.hintCount(HintIds.TOUR_SKIPPED))
+        assertFalse(settings.hintsOff.first())
+        settings.markTourSkipped()
+        assertTrue(settings.hintsOff.first())
+        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
+    }
+
+    @Test
+    fun `a skip marks the tour done and counts in one write`() = runBlocking {
+        settings.openTour()
+        settings.markTourSkipped()
+        assertEquals(SettingsStore.TourState.Done, settings.tourState.first())
+        assertEquals(1, settings.hintCount(HintIds.TOUR_SKIPPED))
+    }
+
+    @Test
     fun `garbage in the stored value keeps what is good`() = runBlocking {
         data.edit { it[stringPreferencesKey("hints_seen")] = "a=2,,=3,b=x,c=0,BAD ID=1,d=99999999999,e" + "=1,".repeat(3) }
         val state = settings.hintState.first()

@@ -616,7 +616,10 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             val tourScope = rememberCoroutineScope()
             CoverWindowControls()
             Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
-                com.tmplayer.ui.onboarding.TourOnly(onDone = { tourScope.launch { runCatching { state.settings.markTourDone() } } })
+                com.tmplayer.ui.onboarding.TourOnly(
+                    onDone = { tourScope.launch { runCatching { state.settings.markTourDone() } } },
+                    onSkip = { tourScope.launch { runCatching { state.settings.markTourSkipped() } } },
+                )
             }
         }
         if (SupportReminder.enabled && !setupPending && !gateUp) {

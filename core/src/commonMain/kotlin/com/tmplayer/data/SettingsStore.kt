@@ -629,7 +629,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             } else {
                 emptyList()
             }
+            // How often the tour was skipped is the device's, so a sign out and the tour offered
+            // again do not start the count over: two skips on this device silence the hints (WP-68).
+            val tourSkips = hintStateOf(prefs).count(HintIds.TOUR_SKIPPED)
             prefs.clear()
+            if (tourSkips > 0) prefs[HINTS_SEEN] = HintRegistry.encode(HintRegistry.raise(HintState(), HintIds.TOUR_SKIPPED, tourSkips))
             theme?.let { prefs[THEME_CHOICE] = it }
             pureBlack?.let { prefs[PURE_BLACK] = it }
             accent?.let { prefs[ACCENT] = it }
@@ -2263,8 +2267,10 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /** The quick tour was turned down or skipped: counted, so two skips silence every hint, then done as [markTourDone]. */
     suspend fun markTourSkipped() {
-        bumpHint(HintIds.TOUR_SKIPPED)
-        markTourDone()
+        prefs.edit {
+            it[HINTS_SEEN] = HintRegistry.encode(HintRegistry.bump(hintStateOf(it), HintIds.TOUR_SKIPPED))
+            it[TOUR] = TOUR_DONE
+        }
     }
 
     private fun hintStateOf(p: Preferences): HintState {

@@ -71,6 +71,7 @@ fun TourScreen(
     before: Int = 0,
     groups: List<Int> = listOf(state.pages.size),
     onBackFromFirst: (() -> Unit)? = null,
+    onSkip: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val form = deviceForm()
@@ -83,7 +84,9 @@ fun TourScreen(
 
     val forward: () -> Unit = { if (!state.next()) onDone() }
     val backward: (() -> Unit)? = if (!state.isFirst) ({ state.back() }) else onBackFromFirst
-    BackHandler { backward?.invoke() ?: onDone() }
+    // Leaving before the last page is a skip: [onSkip] says so (the hint registry counts it), else it ends as done.
+    val skip = onSkip ?: onDone
+    BackHandler { backward?.invoke() ?: skip() }
 
     StepFrame(
         group = s.tourLabel,
@@ -91,7 +94,7 @@ fun TourScreen(
         primary = if (state.isLast) s.setupDone else s.setupNext,
         onPrimary = forward,
         onBack = backward,
-        onSkipAll = if (state.isLast) null else onDone,
+        onSkipAll = if (state.isLast) null else skip,
         modifier = modifier,
         primaryFocus = next,
         onPrimaryFocused = { focusedOn = page },
@@ -202,8 +205,8 @@ private const val OUTSIDE = 0.85f
 
 /** The quick tour on its own: taken from the Tips card on Home, or opened from Settings. */
 @Composable
-fun TourOnly(onDone: () -> Unit, modifier: Modifier = Modifier) {
+fun TourOnly(onDone: () -> Unit, modifier: Modifier = Modifier, onSkip: (() -> Unit)? = null) {
     val form = deviceForm()
     val tour = remember(form) { TourProgress(Tour.pages(form)) }
-    TourScreen(tour, onDone = onDone, modifier = modifier)
+    TourScreen(tour, onDone = onDone, modifier = modifier, onSkip = onSkip)
 }

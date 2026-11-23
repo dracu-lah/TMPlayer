@@ -1787,7 +1787,10 @@ private fun Root() {
 
         // The quick tour on its own (CP69): taken from the Tips card on Home, or opened from Settings.
         if (!setupPending && tourState == SettingsStore.TourState.Pending) {
-            TourOnly(onDone = { scope.launch { runCatching { settings.markTourDone() } } })
+            TourOnly(
+                onDone = { scope.launch { runCatching { settings.markTourDone() } } },
+                onSkip = { scope.launch { runCatching { settings.markTourSkipped() } } },
+            )
             return@Box
         }
 

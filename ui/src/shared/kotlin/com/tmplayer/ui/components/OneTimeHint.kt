@@ -38,7 +38,11 @@ class HintSlot {
 
 val LocalHintSlot = staticCompositionLocalOf<HintSlot?> { null }
 
-/** A screen's root calls this once; every [OneTimeHint] inside it shares one slot per visit. */
+/**
+ * A screen's root calls this once; every [OneTimeHint] inside it shares one slot per visit. Every
+ * package that adds a hint must wrap its screen's root in this: without it each [OneTimeHint]
+ * holds a slot of its own and the one-hint-per-screen cap does not apply.
+ */
 @Composable
 fun ProvideHintSlot(content: @Composable () -> Unit) {
     val slot = remember { HintSlot() }
@@ -75,13 +79,19 @@ fun OneTimeHint(
     val own = remember { HintSlot() }
     val slot = LocalHintSlot.current ?: own
     var active by remember { mutableStateOf(false) }
-    val allowed = hintAllowed(state, id, maxShows, inPlayback)
+    // Counted once per visit (this composition), however often focus comes and goes; the same
+    // visit may show it again until it leaves, whatever the count reached.
+    var counted by remember { mutableStateOf(false) }
+    val allowed = counted || hintAllowed(state, id, maxShows, inPlayback)
     LaunchedEffect(visible, allowed) {
         if (!visible) {
             active = false
         } else if (!active && allowed && slot.claim(id)) {
             active = true
-            runCatching { settings.bumpHint(id) }
+            if (!counted) {
+                counted = true
+                runCatching { settings.bumpHint(id) }
+            }
         }
     }
     if (active) {
