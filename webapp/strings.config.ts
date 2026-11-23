@@ -577,6 +577,7 @@ export const PAGE_STRINGS = [
     'settings.sign_out_confirm',
     'settings.sign_out_message',
     'settings.sign_out_title',
+    'settings.sign_out_title_named',
     'settings.signed_in_as',
     'settings.signing_out',
     'settings.theme',

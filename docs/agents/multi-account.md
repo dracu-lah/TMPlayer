@@ -152,6 +152,12 @@ profile" at the moment it writes:
   the open profile only), logs out with `Td.logOut()`, then opens another profile and deletes the
   signed out one's folders. Signing out of the last profile keeps its record, empties its identity
   and leaves the client on the normal sign in.
+- On Android the sign out question, the backup before it and the sign out itself live in one
+  `SignOutHost` at the app shell (`MainActivity`, above Browse and Settings), asked by an event from
+  Settings, the TV's account menu and the phone's "You" popover. It owns the prompts, the two ticks and
+  the backup job, so a backup started from a menu that closes is not cut off; it calls
+  `ProfileFlow.signOutOpen` for the open profile only and names the account in its title. The desktop
+  big screen's menu composes the desktop's `SignOutDialog` outside its popover for the same reason.
 - `remove(id)` forgets a sleeping profile without reaching Telegram: for a profile whose folder is
   missing or broken, or one still being added.
 - `removeAll(wipe)` signs every profile out one by one and leaves one empty profile on the

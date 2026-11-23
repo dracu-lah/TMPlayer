@@ -1,6 +1,11 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +31,7 @@ import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.desktop.DownloadIndex
 import com.tmplayer.ui.i18n.LocalStrings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,15 +53,20 @@ private sealed interface SignOutPhase {
  * It never keeps the viewer from signing out.
  */
 @Composable
-internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
+internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: String? = null) {
     val s = LocalStrings.current
     val settings = state.settings
+    // Signing out is Settings' press: asked from the big screen's menu with a PIN set and Settings shut
+    // (WP-02), the app lock's PIN comes first, and a wrong PIN or Cancel signs nothing out.
+    val lock by settings.appLock.collectAsState(initial = null)
+    var pinGiven by remember { mutableStateOf(false) }
+    val named = name?.takeIf { it.isNotBlank() }
+    val title = if (named != null) s.settingsSignOutTitleNamed(named) else s.signoutTitle
     var alsoDownloads by remember { mutableStateOf(false) }
     var backupFirst by remember { mutableStateOf(true) }
     var phase by remember { mutableStateOf<SignOutPhase>(SignOutPhase.Asking) }
     var saving by remember { mutableStateOf<Job?>(null) }
     var size by remember { mutableLongStateOf(-1L) }
-    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         size = withContext(Dispatchers.IO) { DownloadIndex.bytesOnDisk(runCatching { settings.downloadsNow() }.getOrDefault(emptyList())) }
     }
@@ -89,16 +100,42 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
 
     }
     fun saveThenSignOut() {
+        // A second press while the backup is sent starts nothing more.
+        if (phase == SignOutPhase.Saving) return
         phase = SignOutPhase.Saving
-        saving = scope.launch {
+        // On the process's scope, so the popover or the page closing never cancels the backup half way.
+        saving = com.tmplayer.platform.Background.scope.launch {
             val service = BackupService(settings, state.watched, OnlineMetadata.current?.store, com.tmplayer.desktop.BuildInfo.VERSION, bookmarks = state.bookmarks)
             val result = SignOutBackup.save({ service.export() }, service.fileName(), settings = settings)
+            ensureActive()
             if (result is BackupSend.Failed) phase = SignOutPhase.Failed(result.reason) else signOutNow()
         }
     }
+    // A lock not yet read decides nothing: no question and no pad until the store has answered.
+    val gate = com.tmplayer.data.SignOutGate.of(lock, state.settingsUnlocked, pinGiven)
+    if (gate == com.tmplayer.data.SignOutGate.Wait) return
+    if (gate == com.tmplayer.data.SignOutGate.Pin) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+            androidx.compose.foundation.layout.Box(
+                androidx.compose.ui.Modifier
+                    .width(380.dp)
+                    .height(600.dp)
+                    .background(com.tmplayer.ui.theme.Tone.background),
+            ) {
+                com.tmplayer.ui.lock.PinPad(
+                    settings = settings,
+                    purpose = com.tmplayer.ui.lock.PinPurpose.Check,
+                    title = s.lockEnterForSettings,
+                    onDone = { pinGiven = true },
+                    onCancel = onDismiss,
+                )
+            }
+        }
+        return
+    }
     when (val shown = phase) {
         SignOutPhase.Asking -> ConfirmDialog(
-            title = s.signoutTitle,
+            title = title,
             message = s.signoutBody(DesktopPaths.profileDownloadsDir.path),
             confirmLabel = s.signoutConfirm,
             onDismiss = onDismiss,
@@ -115,7 +152,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
             },
         )
         SignOutPhase.Saving -> ConfirmDialog(
-            title = s.signoutTitle,
+            title = title,
             message = s.signoutBackupSaving,
             confirmLabel = s.signoutBackupAnyway,
             onDismiss = {

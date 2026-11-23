@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -261,6 +262,14 @@ private val NAV = TouchNav(
     onFavourites = {}, onDownloads = {}, onHistory = {}, onUpdate = {},
 )
 
+/** The bar with the account menu's two buttons, as the app shell builds it (WP-02). */
+private val ACCOUNT_NAV = TouchNav(
+    account = null, favoriteCount = 0, downloadCount = 0, updateVersion = null,
+    onHome = {}, onChats = {}, onSearch = {}, onSettings = {},
+    onFavourites = {}, onDownloads = {}, onHistory = {}, onUpdate = {},
+    onSwitchOrAdd = {}, onSignOut = {},
+)
+
 private fun browse(tab: BrowseTab): (Fixtures) -> @Composable () -> Unit = {
     {
         BrowseScreen(
@@ -368,5 +377,46 @@ internal val SCREENS: List<Screen> = listOf(
         },
         content = settings(SettingsPage.Account),
     ),
-    Screen("accountMenu", missing = "the TV account menu is not built yet (WP-02 builds it and adds its content here)", content = null),
+    Screen(
+        "accountMenu",
+        column = null,
+        actions = listOf(L.profilesAdd, L.settingsSignOutConfirm),
+        prepare = { ux ->
+            // The way a remote with a Menu key gets there: Up from Home's rows to the bar, then Menu, which the bar
+            // takes on its release (the picture itself refuses a programmatic focus in this harness; OK on it is
+            // TvAccountMenuTest's).
+            fun onBar() = ux.focused().any { ux.nameOf(it).let { n -> n == L.browseTabHome || n == L.browseTabChats || n == L.commonSearch } }
+            var ups = 0
+            while (!onBar() && ups++ < 8) ux.key(android.view.KeyEvent.KEYCODE_DPAD_UP, 300)
+            ux.key(android.view.KeyEvent.KEYCODE_MENU, 800)
+            // The menu is a window of its own: it takes a few frames to come up on a slow machine.
+            var waits = 0
+            while (ux.nodes().none { ux.nameOf(it) == L.settingsSignOutConfirm } && waits++ < 10) {
+                Thread.sleep(100)
+                ux.settle(300)
+            }
+            if (ux.nodes().none { ux.nameOf(it) == L.settingsSignOutConfirm }) {
+                ux.add("render", "screen", "Menu on the bar opened no menu with Sign out")
+            } else {
+                ux.topWindowOnly = true
+            }
+        },
+        content = {
+            {
+                BrowseScreen(
+                    state = UiState.Content(BrowseData(CHATS)),
+                    favorites = emptySet(),
+                    continueWatching = RECORDS,
+                    onRetry = {},
+                    onOpenChat = {},
+                    onResumeMedia = {},
+                    onOpenSettings = {},
+                    tvNav = ACCOUNT_NAV,
+                    picked = BrowseSection.of(BrowseTab.Home),
+                    homeRows = ROWS,
+                    homeWatch = SeriesWatch.None,
+                )
+            }
+        },
+    ),
 )

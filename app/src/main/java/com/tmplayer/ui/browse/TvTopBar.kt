@@ -24,11 +24,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,6 +42,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,9 +76,11 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.components.MenuAction
+import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
+import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
@@ -113,6 +119,18 @@ internal object TvBarSignals {
 
     /** Back moved the remote from Home's rows to the bar: Home goes back to its top, the carousel whole. */
     val homeToTop = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * Menu, when no screen took it (WP-02): the activity asks the bar for the account's menu, so a
+     * place with no item action (an empty Home, the carousel's background) still reaches it.
+     */
+    val accountMenuAsked = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * Asks the bar for the account's menu. False when no bar is on screen (Settings, a phone), where
+     * the caller does what Menu did before.
+     */
+    fun askAccountMenu(): Boolean = accountMenuAsked.subscriptionCount.value > 0 && accountMenuAsked.tryEmit(Unit)
 }
 
 /**
@@ -167,6 +185,21 @@ internal fun TvTopBar(
 ) {
     val s = LocalStrings.current
     var profileOpen by remember { mutableStateOf(false) }
+    // Menu from a place with no item action: the activity asks, the bar opens the menu.
+    LaunchedEffect(Unit) { TvBarSignals.accountMenuAsked.collect { profileOpen = true } }
+    // The shell's sign out (WP-02): under its first question the menu stays, and Cancel puts the remote
+    // back on Sign out; once it has started the menu closes, since nothing of it belongs to the menu.
+    val signOutFocus = remember { FocusRequester() }
+    val signOutPhase = nav.signOutPhase
+    var wasAsking by remember { mutableStateOf(false) }
+    LaunchedEffect(signOutPhase, profileOpen) {
+        if (signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Running && profileOpen) profileOpen = false
+        if (signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Idle && wasAsking && profileOpen) {
+            withFrameNanos { }
+            runCatching { signOutFocus.requestFocus() }
+        }
+        wasAsking = signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Asking
+    }
     // Who is signed in: Telegram's name once it is known, else the profile's own (saved on this
     // device, so it is there offline and while Telegram connects).
     val shownName = nav.account?.name?.takeIf { it.isNotBlank() } ?: nav.profile?.shownName?.takeIf { it.isNotBlank() }
@@ -206,6 +239,12 @@ internal fun TvTopBar(
                 .focusProperties { onEnter = { runCatching { currentFocus.requestFocus() } } }
                 // Down goes into the page, whatever stands below this item: the page's own place.
                 .onPreviewKeyEvent { event ->
+                    // Menu, with the remote in the bar, opens the account's menu on its release (WP-02);
+                    // a tile's Menu is its options and is never seen here ([holdable]).
+                    if (event.key == Key.Menu) {
+                        if (event.type == KeyEventType.KeyUp) profileOpen = true
+                        return@onPreviewKeyEvent true
+                    }
                     if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
                         if (onDown?.invoke() != true) runCatching { contentFocus.requestFocus() }
                         true
@@ -287,18 +326,41 @@ internal fun TvTopBar(
                 action()
             }
         }
+        val menuName = shownName ?: s.navAccount
+        // "Your viewing" under the name, as the phone's and the desktop's menus head theirs;
+        // the rows below go to each list.
+        val menuSummary = listOfNotNull(
+            nav.account?.username?.takeIf { it.isNotBlank() }?.let { "@$it" },
+            s.profileSummary(
+                s.formatter.number(nav.watchingCount),
+                s.formatter.number(nav.watchedCount),
+                s.formatter.number(nav.favoriteCount),
+            ),
+        ).joinToString("  ·  ")
+        val several = nav.onSwitchProfile != null
+        val switchOrAdd = nav.onSwitchProfile ?: nav.onSwitchOrAdd
+        val signOut = nav.onSignOut
         TvMenu(
-            title = shownName ?: s.navAccount,
-            // "Your viewing" under the name, as the phone's and the desktop's menus head theirs;
-            // the rows below go to each list.
-            subtitle = listOfNotNull(
-                nav.account?.username?.takeIf { it.isNotBlank() }?.let { "@$it" },
-                s.profileSummary(
-                    s.formatter.number(nav.watchingCount),
-                    s.formatter.number(nav.watchedCount),
-                    s.formatter.number(nav.favoriteCount),
-                ),
-            ).joinToString("  ·  "),
+            title = menuName,
+            subtitle = menuSummary,
+            header = if (switchOrAdd != null || signOut != null) {
+                { first ->
+                    AccountMenuHeader(
+                        account = nav.account,
+                        profile = nav.profile,
+                        name = menuName,
+                        summary = menuSummary,
+                        switchLabel = if (several) s.profilesSwitchProfile else s.profilesAdd,
+                        onSwitchOrAdd = switchOrAdd?.let(go),
+                        onSignOut = signOut,
+                        first = first,
+                        signOutFocus = signOutFocus,
+                    )
+                }
+            } else {
+                null
+            },
+            closeOnMenu = true,
             onDismiss = { profileOpen = false },
             actions = buildList {
                 add(MenuAction(s.browseTabFavourites, TmIcons.StarOutline, detail = nav.favoriteCount.takeIf { it > 0 }?.toString(), onSelect = go(nav.onFavourites)))
@@ -307,14 +369,66 @@ internal fun TvTopBar(
                 add(MenuAction(s.browseTabWatchLater, TmIcons.Clock, onSelect = go { nav.onHistory(HistoryTab.WatchLater) }))
                 // Settings, with the account at its top and Sign out at its foot, as on the phone.
                 add(MenuAction(s.navSettings, TmIcons.Settings, onSelect = go(nav.onSettings)))
-                // Switch profile (HX88), with two profiles or more: the picker over the shell.
-                nav.onSwitchProfile?.let { switch -> add(MenuAction(s.profilesSwitchProfile, TmIcons.Person, onSelect = go(switch))) }
+                // Switch profile (HX88) and Add account are the header's two buttons (WP-02).
                 // Home and the chat list fetch again from here: Home also refreshes itself when
                 // the app comes back after a while (MainActivity).
                 if (onRefresh != null) add(MenuAction(s.commonRefresh, TmIcons.Refresh, onSelect = { profileOpen = false; onRefresh() }))
                 nav.updateVersion?.let { version -> add(MenuAction(s.navUpdate, TmIcons.Refresh, detail = version, onSelect = go(nav.onUpdate))) }
             },
         )
+    }
+}
+
+/**
+ * The account menu's head (WP-02): whose account it is, as the picture at [Avatar.Card] with the name
+ * and the summary beside it, then the two buttons that act on the account: Add account (one
+ * profile) or Switch profile (two or more), and Sign out, quiet at rest and red only under the
+ * remote. Sign out is one Right from the first button; its question names the account and has Cancel
+ * focused. The buttons wrap under a large font.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun AccountMenuHeader(
+    account: com.tmplayer.data.Account?,
+    profile: com.tmplayer.data.Profile?,
+    name: String,
+    summary: String,
+    switchLabel: String,
+    onSwitchOrAdd: (() -> Unit)?,
+    onSignOut: (() -> Unit)?,
+    first: FocusRequester,
+    signOutFocus: FocusRequester,
+) {
+    val s = LocalStrings.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.semantics(mergeDescendants = true) {},
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AccountPicture(account, profile, size = Avatar.Card)
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.titleLarge, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(summary, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (onSwitchOrAdd != null) {
+                // 48 dp targets: the buttons alone are 40 dp.
+                TmButton(onClick = onSwitchOrAdd, modifier = Modifier.heightIn(min = 48.dp).focusRequester(first)) { Text(switchLabel) }
+            }
+            if (onSignOut != null) {
+                TmButton(
+                    onClick = onSignOut,
+                    destructive = true,
+                    quietAtRest = true,
+                    modifier = Modifier.heightIn(min = 48.dp).focusRequester(signOutFocus).then(if (onSwitchOrAdd == null) Modifier.focusRequester(first) else Modifier),
+                ) { Text(s.settingsSignOutConfirm) }
+            }
+        }
     }
 }
 

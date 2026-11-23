@@ -24,9 +24,9 @@ the same change.
 
 | Key | Bar | Tile, chat row, picker tile | Long list, nothing focused | Settings rail and pane | Player, row down | Player, row up | Player panels (More, pickers) | Arrows-and-OK fallback |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Menu | account menu (WP-02) | item options (today) | account menu (WP-02 fallback) | account menu (WP-02 fallback) | player menu where the quirk says so (today) | player menu (today) | closes the panel (today, check) | OK on the picture; long OK on a tile; More button |
+| Menu | account menu, on release (today) | item options (today) | account menu where the bar is shown, else the profile picker with two profiles or more (today) | the profile picker with two profiles or more, as no bar is shown there (today) | player menu where the quirk says so (today) | player menu (today) | closes the panel (today, check) | OK on the picture; long OK on a tile; More button |
 | Info | nothing | item options (today) | nothing | nothing | details on a short Info, report stutter on a held one (today; hint WP-21) | same | nothing | long OK; More, Help (WP-89) |
-| Long OK | picture: account menu (WP-02) | item options (today) | nothing | nothing | chooser after 1.5 s (WP-19) | plain OK (WP-19) | nothing | n/a |
+| Long OK | picture: account menu (today, plain OK does the same) | item options (today) | nothing | nothing | chooser after 1.5 s (WP-19) | plain OK (WP-19) | nothing | n/a |
 | Back | leaves to Home or exits (today) | to the bar or the top first in long grids (WP-12) | top first, then leave (WP-12) | pane to rail, rail out (WP-07) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
 | Search | TV search (today, WP-22 everywhere) | TV search (WP-22) | TV search (WP-22) | nothing | nothing | nothing | nothing | the bar's Search tab |
 | CC, Audio | nothing | nothing | nothing | nothing | CC toggles, second press opens (WP-19); Audio opens picker (today) | same | nothing | the row's subtitle and audio buttons |
@@ -51,8 +51,12 @@ Found while pinning the table (WP-69):
   stutter.
 - **Menu elsewhere.** Besides the tile (`Holdable.kt`) and the player: the profile picker's tiles
   (options, on key up), the Add chats rows (star), and `MainActivity.onKeyUp`, which opens the
-  profile picker for a Menu nobody took when the device has two or more profiles. That last one is
-  the fallback WP-02 replaces with the account menu.
+  profile picker for a Menu nobody took when the device has two or more profiles. Since WP-02 that
+  fallback opens the account menu first (`TvBarSignals.askAccountMenu()`, answered by the bar for every
+  profile count) and keeps the picker for where no bar is shown (Settings, a phone). The bar
+  (`TvTopBar.kt`) takes Menu on its release while the remote is inside it, and the account menu
+  (`TvMenu.kt`, `closeOnMenu`) closes on a Menu release; a tile's Menu is never seen by either, since
+  `Holdable.kt` takes both its press and its release.
 - **Left and Right.** The table's "move (today)" is tested on tiles. In the player (WP-18) a TV
   remote jumps 10 s both ways over the bare picture (`PlayerRemoteKeys.remoteBaseMs`; a phone's
   keyboard keeps 5 back and 10 forward, and `Skip.BACK_MS` still feeds Media3 and the
@@ -69,7 +73,7 @@ the key fails the test: add it here with its context first.
 
 | Key | Bound in |
 | --- | --- |
-| Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt` |
+| Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt`, `TvTopBar.kt`, `TvMenu.kt` |
 | Info | `Holdable.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (short Info), `PlaybackMarks.kt` (held) |
 | Search | `BrowseScreen.kt`, `SearchKeyGuard.kt` (swallows it on a phone) |
 | Page, Channel | `AddChatsScreen.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel steps the video, Page a chapter or a minute) |

@@ -34,6 +34,7 @@ import androidx.tv.material3.LocalContentColor as TvContentColor
 import androidx.tv.material3.Text as TvText
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.Danger
+import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.FocusRole
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.LocalFocusStyle
@@ -57,6 +58,11 @@ fun TmButton(
     enabled: Boolean = true,
     /** Clearing a history, unstarring everything: the press that cannot simply be pressed again. */
     destructive: Boolean = false,
+    /**
+     * With [destructive], on a television: the secondary look at rest, red only under focus (WP-02),
+     * for a destructive press in a menu opened many times a day, where red text at rest is noise.
+     */
+    quietAtRest: Boolean = false,
     loading: Boolean = false,
     /** What the button says while [loading]: "Sending code…" in place of "Send me a code". */
     busyLabel: String? = null,
@@ -67,7 +73,11 @@ fun TmButton(
             onClick = onClick,
             modifier = modifier,
             enabled = enabled && !loading,
-            colors = if (destructive) tvDestructiveColors() else tmButtonColors(),
+            colors = when {
+                destructive && quietAtRest -> tvDestructiveQuietColors()
+                destructive -> tvDestructiveColors()
+                else -> tmButtonColors()
+            },
             loading = loading,
             busyLabel = busyLabel,
             content = content,
@@ -165,6 +175,19 @@ private fun Modifier.focusRingOnTvButton(focused: Boolean): Modifier {
 private fun tvDestructiveColors() = TvButtonDefaults.colors(
     containerColor = Tone.surface,
     contentColor = Danger,
+    focusedContainerColor = Danger,
+    focusedContentColor = Color.White,
+    pressedContainerColor = Danger,
+    pressedContentColor = Color.White,
+    disabledContainerColor = Tone.surface,
+    disabledContentColor = Tone.muted,
+)
+
+/** [tvDestructiveColors] with the secondary button's look at rest: Danger only while the remote is on it. */
+@Composable
+private fun tvDestructiveQuietColors() = TvButtonDefaults.colors(
+    containerColor = FloatingTone.control,
+    contentColor = Tone.text,
     focusedContainerColor = Danger,
     focusedContentColor = Color.White,
     pressedContainerColor = Danger,

@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +38,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
@@ -81,6 +87,18 @@ fun TvMenu(
     onDismiss: () -> Unit,
     subtitle: String? = null,
     onClose: (() -> Unit)? = onDismiss,
+    /**
+     * Replaces the heading on a television (WP-02: the account's picture, name and its buttons). It is
+     * given the requester the remote starts on, which it puts on its first button; the list below
+     * then starts on its first line as usual and Up from there reaches the header. Not drawn on a
+     * phone, whose sheet keeps the title and the lines.
+     */
+    header: (@Composable (first: FocusRequester) -> Unit)? = null,
+    /**
+     * Menu closes the menu on a television, on its release. For a menu opened by a Menu release (the
+     * account's), never for one a Menu press opened ([holdable]): that press's release would close it.
+     */
+    closeOnMenu: Boolean = false,
 ) {
     val s = LocalStrings.current
     val first = remember { FocusRequester() }
@@ -104,9 +122,22 @@ fun TvMenu(
                 // edge of the screen to the bottom, its heading and last row lost to the crop.
                 .heightIn(max = maxHeight - Tv.SafeV * 2)
                 .floatingSurface(FloatingTone.sheet)
+                .then(
+                    if (closeOnMenu) {
+                        Modifier.onPreviewKeyEvent { event ->
+                            if (event.key != Key.Menu) return@onPreviewKeyEvent false
+                            if (event.type == KeyEventType.KeyUp) onDismiss()
+                            true
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(horizontal = 24.dp, vertical = 20.dp),
         ) {
-            Column(
+            if (header != null) {
+                Box(Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 8.dp)) { header(first) }
+            } else Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(start = 4.dp, bottom = 8.dp),
@@ -141,7 +172,7 @@ fun TvMenu(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 actions.forEachIndexed { index, action ->
-                    MenuRow(action = action, touch = false, modifier = if (index == 0) Modifier.focusRequester(first) else Modifier)
+                    MenuRow(action = action, touch = false, modifier = if (index == 0 && header == null) Modifier.focusRequester(first) else Modifier)
                 }
             }
 
@@ -157,7 +188,8 @@ fun TvMenu(
                     color = Tone.muted,
                     modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp),
                 )
-                if (onClose != null) SheetCloseButton(onClose)
+                // A 48 dp target, as every TV control: the button alone is 40 dp.
+                if (onClose != null) SheetCloseButton(onClose, Modifier.heightIn(min = 48.dp))
             }
         }
 

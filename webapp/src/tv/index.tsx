@@ -11,6 +11,9 @@ import { ChooseChatsButton } from '../ui/ChooseChatsButton'
 import { initialOf } from '../ui/initial'
 import { nameArt } from '../ui/colour'
 import { me, back } from '../session'
+import { addAccount } from '../accountFlows'
+import { locked, many, openPicker } from '../accounts'
+import { askSignOut } from '../screens/settings/SignOut'
 import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
 import { answer, askOf, loadBackdropLightFirst, loadExtras, loadLogo, type Answer, type Extras } from '../screens/posters'
@@ -130,6 +133,8 @@ export function TvBar() {
     const firstName = () => (me()?.name ?? '').trim().split(/\s+/)[0] ?? ''
     const label = () => (me()?.name?.trim() ? `${me()?.name?.trim()}, ${t('nav.account_menu')}` : t('nav.account'))
     const [scrolled, setScrolled] = createSignal(scrollY > 0)
+    // The account's menu (WP-02): the picture opens it with OK; its header says whose account it is.
+    const [menuOpen, setMenuOpen] = createSignal(false)
     const onScroll = () => {
         const s = scrollY > innerHeight * 0.25
         if (s !== scrolled()) setScrolled(s)
@@ -142,24 +147,32 @@ export function TvBar() {
     return (
         <header class="tv-bar" classList={{ 'over-art': location.pathname === '/' && heroUp() && !scrolled() }}>
             <div class="tv-bar-row">
-                <A
-                    class="tv-picture"
-                    href="/settings"
-                    aria-label={label()}
-                    title={label()}
-                    aria-current={place() === '/settings' ? 'page' : undefined}
-                    style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}
-                >
-                    <Show when={initial()} fallback={<span class="nav-picture-blank" />}>
-                        {initial()}
+                <div class="tv-account">
+                    <button
+                        type="button"
+                        class="tv-picture"
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpen()}
+                        aria-label={label()}
+                        title={label()}
+                        aria-current={place() === '/settings' ? 'page' : undefined}
+                        onClick={() => !locked() && setMenuOpen(!menuOpen())}
+                        style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}
+                    >
+                        <Show when={initial()} fallback={<span class="nav-picture-blank" />}>
+                            {initial()}
+                        </Show>
+                    </button>
+                    {/* Read once, in the picture's label: the chip is for the eye. */}
+                    <Show when={firstName()}>
+                        <span class="tv-picture-name" aria-hidden="true">
+                            {firstName()}
+                        </span>
                     </Show>
-                </A>
-                {/* Read once, in the picture's label: the chip is for the eye. */}
-                <Show when={firstName()}>
-                    <span class="tv-picture-name" aria-hidden="true">
-                        {firstName()}
-                    </span>
-                </Show>
+                    <Show when={menuOpen()}>
+                        <TvAccountMenu onClose={() => setMenuOpen(false)} />
+                    </Show>
+                </div>
                 <nav class="tv-tabs" aria-label="TMPlayer">
                     <For each={TABS}>
                         {(tab) => (
@@ -181,6 +194,61 @@ export function TvBar() {
                 </div>
             </div>
         </header>
+    )
+}
+
+/**
+ * The account's menu on the TV bar (the app's TvMenu with its header, WP-02): the picture, the name
+ * and the @username, then Add account (one profile) or Switch profile (two or more) and Sign out,
+ * quiet at rest and red only under the remote, then Settings. It is a `role=menu` the remote's focus
+ * map keeps the arrows inside (focus.ts `scope`), the first button has the remote on open, and Back
+ * closes it onto the picture. Sign out asks first with Cancel focused (askSignOut) and the menu
+ * stays under the question, so Cancel and Back put the remote back on Sign out.
+ */
+function TvAccountMenu(props: { onClose: () => void }) {
+    let menu!: HTMLDivElement
+    const initial = () => initialOf(me()?.name)
+    const title = () => me()?.name?.trim() || t('nav.account')
+    onMount(() => {
+        // The bar's other items take no key while the menu is up; the page is left alone (focus.ts keeps the arrows inside the menu),
+        // so a row that opens Settings never lands on an inert page.
+        const held: Element[] = []
+        for (const el of document.querySelectorAll('.tv-tabs, .tv-choose, .tv-fullscreen')) {
+            if (!el.hasAttribute('inert')) (el.setAttribute('inert', ''), held.push(el))
+        }
+        onCleanup(() => held.forEach((el) => el.removeAttribute('inert')))
+        menu.querySelector<HTMLElement>('button')?.focus()
+    })
+    const then = (run: () => void) => () => {
+        props.onClose()
+        run()
+    }
+    return (
+        <div ref={menu} class="tv-menu" role="menu" aria-label={title()}>
+            <div class="tv-menu-head">
+                <span class="tv-menu-picture" aria-hidden="true" style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}>
+                    {initial()}
+                </span>
+                <div class="tv-menu-who">
+                    <strong>{title()}</strong>
+                    <Show when={me()?.username}>
+                        <span>@{me()?.username}</span>
+                    </Show>
+                </div>
+            </div>
+            <div class="tv-menu-buttons">
+                <button type="button" class="tv-menu-button" role="menuitem" onClick={then(() => (many() ? openPicker() : void addAccount()))}>
+                    {many() ? t('accounts.switch') : t('accounts.add')}
+                </button>
+                {/* The menu stays under the question: Cancel puts the remote back here. */}
+                <button type="button" class="tv-menu-button tv-menu-signout" role="menuitem" onClick={() => void askSignOut().then((yes) => yes && props.onClose())}>
+                    {t('settings.sign_out_confirm')}
+                </button>
+            </div>
+            <A class="tv-menu-row" role="menuitem" href="/settings" onClick={props.onClose}>
+                {t('nav.settings')}
+            </A>
+        </div>
     )
 }
 

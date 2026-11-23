@@ -245,7 +245,6 @@ private sealed interface Prompt {
     /** "Get test versions" being switched on: pre-releases may have bugs, so it is asked first. Off is not asked. */
     data object TestVersions : Prompt
     data object ClearFavorites : Prompt
-    data object SignOut : Prompt
 
     /** Remove all accounts (HX88): every profile signed out, asked first. */
     data object RemoveAllAccounts : Prompt
@@ -258,12 +257,6 @@ private sealed interface Prompt {
 
     /** A backup file picked, with what restoring it would change. */
     data class Restore(val plan: RestorePlan) : Prompt
-
-    /** The backup before signing out is being sent: Sign out anyway goes on without it, Cancel stops. */
-    data object SignOutSaving : Prompt
-
-    /** The backup before signing out could not be saved: says why, and offers Sign out anyway. */
-    data class SignOutBackupFailed(val reason: String) : Prompt
 }
 
 /**
@@ -325,6 +318,11 @@ fun SettingsScreen(
     onPageChange: (SettingsPage?) -> Unit = {},
     /** The account's Telegram folders; null reads them from TDLib. The promo fixture passes its own. */
     accountFolders: List<com.tmplayer.data.ChatFolderSummary>? = null,
+    /**
+     * The sign out the app shell hosts (WP-02), so the TV's account menu and this page ask the same
+     * one. Null draws a host of this screen's own, for a preview or a test.
+     */
+    signOut: SignOutState? = null,
 ) {
     val s = LocalStrings.current
     val context = LocalContext.current
@@ -482,54 +480,19 @@ fun SettingsScreen(
     val playbackTest = rememberPlaybackTest()
     val saveNameCheck = rememberSaveNameCheck(say = { toast(it) })
     val developerOptions by settings.developerOptions.collectAsStateWithLifecycle(initialValue = false)
-    // The sign out dialog's tick box. Off every time the dialog opens: downloads are the viewer's
-    // files, and losing them has to be asked for each time rather than remembered.
-    var alsoDeleteDownloads by remember { mutableStateOf(false) }
-    // "Save a backup before you sign out" (FQ12): on every time the dialog opens, one tick to turn it off.
-    var backupFirst by remember { mutableStateOf(true) }
-    // Signing out, with the backup first when asked. A backup that cannot be saved is shown with
-    // the way out (Prompt.SignOutBackupFailed) and never keeps the viewer from signing out.
-    var savingBackup by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    fun signOutNow(withBackup: Boolean) {
-        val deleteDownloads = alsoDeleteDownloads
-        savingBackup = scope.launch {
-            if (withBackup) {
-                // A prompt, not a spinner: Sign out anyway stays in reach while the backup is sent.
-                prompt = Prompt.SignOutSaving
-                val service = com.tmplayer.data.BackupService(
-                    settings = settings,
-                    watched = watchedStore,
-                    metadata = com.tmplayer.online.OnlineMetadata.current?.store,
-                    appVersion = com.tmplayer.BuildConfig.VERSION_NAME,
-                    bookmarks = com.tmplayer.data.BookmarkStore(context),
-                )
-                val result = com.tmplayer.data.SignOutBackup.save({ service.export() }, service.fileName(), settings = settings)
-                if (result is com.tmplayer.data.BackupSend.Failed) {
-                    prompt = Prompt.SignOutBackupFailed(result.reason)
-                    return@launch
-                }
-            }
-            prompt = null
-            alsoDeleteDownloads = false
-            backupFirst = true
-            busy = s.settingsSigningOut
-            // The downloads stay unless the box was ticked (forgetProfile says the rest). Through
-            // the profiles (HX88): only this profile goes, then the picker, the one left, or the
-            // sign in when it was the last. On the app's scope: the switch rebuilds this screen.
-            val flow = com.tmplayer.ui.profiles.AndroidProfiles.flow(context)
-            if (flow != null) {
-                // Signed out: the shell moves on. Not (cancelled while it waited, refused): the page
-                // stays as it was, its "Signing out" line cleared.
-                flow.signOutOpen(deleteDownloads) { result ->
-                    busy = null
-                    if (result is com.tmplayer.data.SignOutResult.SignedOut) onLoggedOut()
-                }
-            } else {
-                forgetAccount(context, settings, watchedStore, deleteDownloads)
-                Td.logOut()
-                onLoggedOut()
-            }
-        }
+    // Sign out (WP-02): the prompts, the backup and the sign out itself live in [SignOutHost], at
+    // the app shell, so a sign out asked from the TV's account menu is the same one. This screen
+    // only sends the request. With no shell state (a preview, a test) it hosts one of its own.
+    val ownSignOut = if (signOut == null) rememberSignOutState() else null
+    val signOutState = signOut ?: ownSignOut!!
+    if (ownSignOut != null) {
+        SignOutHost(
+            state = ownSignOut,
+            name = account?.name,
+            settings = settings,
+            watchedStore = watchedStore,
+            onLoggedOut = onLoggedOut,
+        )
     }
     // The profiles on this device (HX88), for Switch profile, Add account and Remove all accounts.
     val profileFlow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
@@ -804,7 +767,7 @@ fun SettingsScreen(
 
         // Whatever is currently running, at the top rather than below the last row: a viewer who
         // has just pressed a row is not looking past the end of the list.
-        busy?.let { message ->
+        (busy ?: s.settingsSigningOut.takeIf { signOutState.signingOut })?.let { message ->
             item {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -1990,7 +1953,7 @@ fun SettingsScreen(
                 settingsNote {
                     SignOutButton(
                         label = s.settingsSignOut,
-                        onClick = { prompt = Prompt.SignOut },
+                        onClick = { signOutState.request() },
                     )
                 }
             }
@@ -2686,37 +2649,6 @@ fun SettingsScreen(
             onDismiss = { prompt = null },
         )
 
-        Prompt.SignOut -> TvConfirm(
-            title = s.settingsSignOutTitle,
-            message = s.settingsSignOutMessage,
-            detail = if (split.downloadBytes > 0) s.settingsSignOutDownloadsStay else null,
-            confirmLabel = s.settingsSignOutConfirm,
-            extra = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // On by default (FQ12): a backup of the settings, places and bookmarks in the
-                    // viewer's own Saved Messages, sent before anything is cleared.
-                    TickRow(
-                        label = s.signoutBackupTick,
-                        checked = backupFirst,
-                        onToggle = { backupFirst = !backupFirst },
-                    )
-                    if (split.downloadBytes > 0) {
-                        TickRow(
-                            label = s.settingsSignOutDeleteDownloads(s.formatter.bytes(split.downloadBytes)),
-                            checked = alsoDeleteDownloads,
-                            onToggle = { alsoDeleteDownloads = !alsoDeleteDownloads },
-                        )
-                    }
-                }
-            },
-            onConfirm = { signOutNow(withBackup = backupFirst) },
-            onDismiss = {
-                prompt = null
-                alsoDeleteDownloads = false
-                backupFirst = true
-            },
-        )
-
         Prompt.RemoveAllAccounts -> TvConfirm(
             title = s.profilesRemoveAllTitle,
             message = s.profilesRemoveAllBody,
@@ -2726,32 +2658,6 @@ fun SettingsScreen(
                 profileFlow?.removeAll(deleteDownloads = false) { onLoggedOut() }
             },
             onDismiss = { prompt = null },
-        )
-
-        Prompt.SignOutSaving -> TvConfirm(
-            title = s.settingsSignOutTitle,
-            message = s.signoutBackupSaving,
-            confirmLabel = s.signoutBackupAnyway,
-            onConfirm = {
-                savingBackup?.cancel()
-                signOutNow(withBackup = false)
-            },
-            onDismiss = {
-                savingBackup?.cancel()
-                prompt = null
-            },
-        )
-
-        // The backup could not be saved: the reason, and the way out. Back returns to the first
-        // dialog (where Sign out tries again, or the tick can be turned off); Sign out anyway goes on.
-        is Prompt.SignOutBackupFailed -> TvConfirm(
-            title = s.signoutBackupFailedTitle,
-            message = s.signoutBackupFailedMessage((prompt as Prompt.SignOutBackupFailed).reason),
-            detail = s.signoutBackupFailedDetail,
-            confirmLabel = s.signoutBackupAnyway,
-            cancelLabel = s.commonBack,
-            onConfirm = { signOutNow(withBackup = false) },
-            onDismiss = { prompt = Prompt.SignOut },
         )
 
         is Prompt.Restore -> {

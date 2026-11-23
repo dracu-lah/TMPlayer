@@ -1890,10 +1890,10 @@ private const val RETURN_HOLD_FRAMES = 90
  * name is known at all, the person glyph.
  */
 @Composable
-internal fun AccountPicture(account: Account?, profile: com.tmplayer.data.Profile?) {
+internal fun AccountPicture(account: Account?, profile: com.tmplayer.data.Profile?, size: androidx.compose.ui.unit.Dp = Avatar.Compact) {
     val name = account?.name?.takeIf { it.isNotBlank() } ?: profile?.shownName?.takeIf { it.isNotBlank() }
     val saved = profile?.photo
-    Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(Tone.surfaceHigh), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(size).clip(CircleShape).background(Tone.surfaceHigh), contentAlignment = Alignment.Center) {
         val telegram = account != null && (account.photoFileId > 0 || account.miniThumbnail?.isNotEmpty() == true)
         when {
             // Telegram's own picture; its stand-in (before it decodes, or if it never arrives) is
@@ -1902,10 +1902,10 @@ internal fun AccountPicture(account: Account?, profile: com.tmplayer.data.Profil
                 miniThumbnail = account.miniThumbnail,
                 thumbnailFileId = account.photoFileId,
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
-                fallback = { SavedOrLetter(name.orEmpty(), saved) },
+                fallback = { SavedOrLetter(name.orEmpty(), saved, size) },
             )
-            name != null -> SavedOrLetter(name, saved)
-            else -> Icon(TmIcons.Account, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(Avatar.Compact * 0.6f))
+            name != null -> SavedOrLetter(name, saved, size)
+            else -> Icon(TmIcons.Account, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(size * 0.6f))
         }
     }
 }
@@ -1917,8 +1917,8 @@ internal fun AccountPicture(account: Account?, profile: com.tmplayer.data.Profil
  * (U-TV-05). It is drawn, not a text node, so a screen reader never reads it after the name.
  */
 @Composable
-private fun SavedOrLetter(name: String, saved: String?) {
-    com.tmplayer.ui.lock.ProfileAvatar(name, saved, Avatar.Compact, letterSize = 22.sp)
+private fun SavedOrLetter(name: String, saved: String?, size: androidx.compose.ui.unit.Dp) {
+    com.tmplayer.ui.lock.ProfileAvatar(name, saved, size, letterSize = 22.sp * (size.value / Avatar.Compact.value))
 }
 
 // ---- content ---------------------------------------------------------------------------------

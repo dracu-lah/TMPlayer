@@ -267,7 +267,15 @@ for (const size of [
             await press(page, 'ArrowUp')
             await press(page, 'ArrowLeft', 3)
             await press(page, 'Enter')
+            // OK on the picture opens the account's menu (WP-02); Settings is its row, one Down from the buttons.
+            await expect(page.locator('.tv-menu[role=menu]')).toHaveCount(1)
+            await press(page, 'ArrowDown')
+            expect(await focusedText(page)).toBe('tv-menu-row|Settings')
+            await press(page, 'Enter')
             await expect(page).toHaveURL(/\/settings$/)
+            await expect(page.locator('.tv-menu')).toHaveCount(0)
+            // The page opened with the remote on its first item; Up reaches the bar, on the picture (the page shown).
+            for (let i = 0; i < 6 && !(await focused(page)).includes('tv-picture'); i++) await press(page, 'ArrowUp')
             await expect.poll(() => focused(page)).toContain('tv-picture')
             // Down to the theme's choices (Chosen chats stands above them since HX27).
             const onTheme = () => page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name === 'theme')
@@ -288,6 +296,35 @@ for (const size of [
             await press(page, 'Backspace')
             await expect(page.locator('dialog[open]')).toHaveCount(0)
             expect(await focused(page)).toContain('danger-button')
+        })
+
+        test('Account menu: OK on the picture opens it on its first button, Right reaches Sign out, OK asks with Cancel focused, Back returns to Sign out, Back again closes the menu onto the picture', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
+            await page.goto('/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await press(page, 'ArrowUp')
+            await press(page, 'ArrowLeft', 3)
+            await expect.poll(() => focused(page)).toContain('tv-picture')
+            await press(page, 'Enter')
+            const menu = page.locator('.tv-menu[role=menu]')
+            await expect(menu).toHaveCount(1)
+            // The header says whose account it is, and the arrows stay inside the menu.
+            await expect(menu).toContainText('Dana Test')
+            expect(await focusedText(page)).toBe('tv-menu-button|Add account')
+            await press(page, 'ArrowRight')
+            expect(await focusedText(page)).toBe('tv-menu-button|Sign out')
+            await press(page, 'Enter')
+            await expect(page.locator('dialog[open]')).toHaveCount(1)
+            // The question names the account and has Cancel focused: a stray OK keeps everything.
+            await expect(page.locator('dialog[open]')).toContainText('Dana Test')
+            expect(await page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Cancel')
+            await press(page, 'Backspace')
+            await expect(page.locator('dialog[open]')).toHaveCount(0)
+            await expect(menu).toHaveCount(1)
+            expect(await focusedText(page)).toBe('tv-menu-button|Sign out')
+            await press(page, 'Backspace')
+            await expect(menu).toHaveCount(0)
+            await expect.poll(() => focused(page)).toContain('tv-picture')
         })
 
         test('Settings: choosing Desktop with the remote takes the TV bar and keys away at once', async ({ page }) => {

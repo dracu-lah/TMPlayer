@@ -678,7 +678,7 @@ export function createFocusMap(host: Host) {
         const to = locked() ? undefined : COLOUR_KEYS[e.key] ?? COLOUR_CODES[code]
         if (to) {
             e.preventDefault()
-            const item = bar()?.querySelector(`a[href="${to}"]`) as HTMLElement | null
+            const item = (bar()?.querySelector(`a[href="${to}"]`) ?? (to === '/settings' ? bar()?.querySelector('.tv-picture') : null)) as HTMLElement | null
             host.go(to)
             if (item) focus(item)
         }

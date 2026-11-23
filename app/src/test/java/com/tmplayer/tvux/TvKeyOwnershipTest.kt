@@ -169,15 +169,18 @@ class TvKeyOwnershipTest {
     // ---- Menu: the unclaimed key, the player, its panels ----
 
     @Test
-    fun `Menu nobody took opens the profile picker, only with two profiles or more and once`() {
+    fun `Menu nobody took opens the account menu where the bar is, else the profile picker with two profiles or more, once`() {
         val source = text("src/main/java/com/tmplayer/MainActivity.kt")
         val up = source.substringAfter("override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {").substringBefore("KEYCODE_ESCAPE")
         assertTrue("KEYCODE_MENU" in up)
-        assertTrue("ProfilePicker.atLaunch(flow.switcher.profiles.value)" in up)
+        // WP-02: the bar's account menu first, for every profile count, once the picker is not up.
+        assertTrue("TvBarSignals.askAccountMenu()" in up)
         assertTrue("flow.entered && !flow.asked" in up)
+        // Where no bar is shown (Settings, a phone): the picker, with two profiles or more.
+        assertTrue("ProfilePicker.atLaunch(flow.switcher.profiles.value)" in up)
         assertTrue("flow.ask()" in up)
-        // It runs in onKeyUp of the activity, after every screen had the key: the bar, a long list and
-        // Settings own no Menu today, so this is their fallback until WP-02.
+        // It runs in onKeyUp of the activity, after every screen had the key: a tile and the bar take
+        // Menu first (Holdable.kt, TvTopBar.kt), so this is the fallback for a place with no item action.
     }
 
     @Test
@@ -328,7 +331,7 @@ class TvKeyOwnershipTest {
     @Test
     fun `the files that bind Menu, Info, Search, Page, Channel and Stop are the ones the table lists`() {
         assertEquals(
-            listOf("AddChatsScreen.kt", "Holdable.kt", "MainActivity.kt", "PlayerActivity.kt", "ProfilePicker.kt"),
+            listOf("AddChatsScreen.kt", "Holdable.kt", "MainActivity.kt", "PlayerActivity.kt", "ProfilePicker.kt", "TvMenu.kt", "TvTopBar.kt"),
             claimants("""(?<![A-Za-z])Key\.Menu\b|KEYCODE_MENU\b"""),
         )
         assertEquals(

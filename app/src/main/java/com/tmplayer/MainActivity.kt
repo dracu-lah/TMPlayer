@@ -541,10 +541,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (SearchKeyGuard.swallows(keyCode)) return true
-        // The remote's Menu key, when no screen took it (a tile's actions do): the profiles, with
-        // two or more on this device (HX88). One profile: the key does what it always did.
+        // The remote's Menu key, when no screen took it (a tile's actions do, so does the bar). On a
+        // television with the bar on screen it opens the account's menu for every profile count (WP-02:
+        // an empty Home, the carousel's background, a page where nothing claims Menu), the picker being
+        // a button of it. Where no bar is shown (Settings, a phone) it is the profiles, with two or
+        // more on this device (HX88); one profile: the key does what it always did.
         if (keyCode == android.view.KeyEvent.KEYCODE_MENU) {
             val flow = com.tmplayer.ui.profiles.AndroidProfiles.flow(this)
+            val free = flow == null || (flow.entered && !flow.asked)
+            if (free && com.tmplayer.ui.browse.TvBarSignals.askAccountMenu()) return true
             if (flow != null && com.tmplayer.data.ProfilePicker.atLaunch(flow.switcher.profiles.value) && flow.entered && !flow.asked) {
                 flow.ask()
                 return true
@@ -1058,6 +1063,9 @@ private fun Root() {
         profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(null)
     }.collectAsStateWithLifecycle()
     val severalProfiles = profileList?.let { com.tmplayer.data.ProfilePicker.atLaunch(it) } == true
+    // Sign out (WP-02): one host at the shell, asked by Settings, the TV's account menu and the phone's
+    // popover alike, so a backup started from a menu is not tied to the menu.
+    val signOutState = com.tmplayer.ui.settings.rememberSignOutState()
 
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
@@ -1600,6 +1608,23 @@ private fun Root() {
                 false
             },
     ) {
+        // Sign out (WP-02), composed first and before every gate below (the app lock, the setup, the
+        // chat choice), whose early returns would otherwise take the host, its backup job and its
+        // prompt with them. It asks the app lock's PIN when Settings' own gate is shut.
+        com.tmplayer.ui.settings.SignOutHost(
+            state = signOutState,
+            name = accountHeader?.name ?: profileList?.active?.shownName,
+            settings = settings,
+            watchedStore = watchedStore,
+            onLoggedOut = {
+                settingsPage = null
+                screen = Screen.Chats
+            },
+            settingsUnlocked = settingsUnlocked,
+            severalProfiles = severalProfiles,
+            // Nothing is drawn over the app lock's own pad.
+            appLocked = appLock?.onOpen == true && !appUnlocked,
+        )
         // The loader after the system splash, over everything while Telegram is being reached,
         // then fading out over the sign in pane or the home screen, whichever is drawn under it.
         // Once Telegram is reached, the loader waits on for Home's first whole screen (rows and the
@@ -2030,6 +2055,10 @@ private fun Root() {
             },
             onUpdate = { showUpdate = true },
             onSwitchProfile = profileFlow?.takeIf { severalProfiles }?.let { flow -> { flow.ask() } },
+            // The picker shows the one tile and Add account with one profile (WP-02).
+            onSwitchOrAdd = profileFlow?.let { flow -> { flow.ask() } },
+            onSignOut = { signOutState.request() },
+            signOutPhase = signOutState.phase,
             profile = profileList?.active,
         )
 
@@ -2306,6 +2335,7 @@ private fun Root() {
                     onOpenAddChats = openAddChats,
                     initialPage = settingsPage,
                     onPageChange = { settingsPage = it },
+                    signOut = signOutState,
                 )
             }
 

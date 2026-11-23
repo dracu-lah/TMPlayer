@@ -165,6 +165,7 @@ fun NavFrame(
                     update,
                     anchorX = with(LocalDensity.current) { (pictureX - frameX).toDp() },
                     below = if (tv) TV_BAR_HEIGHT else null,
+                    name = account?.name,
                 )
             }
         } else {
@@ -478,7 +479,7 @@ internal fun TipIconButton(
  * rows, and focus starts on the first.
  */
 @Composable
-private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, anchorX: Dp, below: Dp? = null) {
+private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, anchorX: Dp, below: Dp? = null, name: String? = null) {
     val s = LocalStrings.current
     val open = state.profileOpen
     val reduced = rememberReducedMotion() || Motion.reduced
@@ -495,6 +496,16 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
     val watching by state.settings.continueWatching.collectAsState(initial = emptyList())
     val watchedVideos by state.watched.watched.collectAsState(initial = emptyMap())
     val inFlight = rememberDownloadsInFlight()
+    // The big screen's menu also acts on the account (WP-02): Switch profile with two profiles or more
+    // and Add account with one, then Sign out. The question is composed here, outside the popover's
+    // own content, so closing the popover never cuts a backup started from it.
+    val profileFlow = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
+    val profileList by remember(profileFlow) {
+        profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(com.tmplayer.data.AccountRules.adopted(0L))
+    }.collectAsState()
+    val severalProfiles = com.tmplayer.data.ProfilePicker.atLaunch(profileList)
+    var signOutAsked by remember { mutableStateOf(false) }
+    if (signOutAsked) SignOutDialog(state, onDismiss = { signOutAsked = false }, name = name)
     val half = POPOVER_WIDTH / 2
     // Over the floating bar at the foot, or hanging under the TV's bar at the top (plan 8.7).
     val origin = TransformOrigin(0.5f, if (below != null) 0f else 1f)
@@ -553,6 +564,17 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
                     // Amber, as on the television's rail and the phone's popover: the one row that is news.
                     HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
                     PopoverRow(TmIcons.Refresh, update.label, update.version, ink = Tone.caution, onClick = close { state.updatePopup = true })
+                }
+                if (below != null && profileFlow != null) {
+                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+                    PopoverRow(
+                        TmIcons.Person,
+                        if (severalProfiles) s.profilesSwitchProfile else s.profilesAdd,
+                        null,
+                        // The picker for both: with one profile it shows the one tile and Add account, as on Android.
+                        onClick = close { profileFlow.ask() },
+                    )
+                    PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = close { signOutAsked = true })
                 }
             }
             LaunchedEffect(Unit) { runCatching { first.requestFocus() } }

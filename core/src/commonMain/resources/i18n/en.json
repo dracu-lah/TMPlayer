@@ -3313,6 +3313,7 @@
     "sign_out_loses": "Favourites, history and the watched list go with it. Downloads stay unless you say otherwise",
     "sign_out_message": "You'll be signed out and taken back to the sign-in screen. Recently played videos, your favourites, your watched list and everything you were part way through go with it.",
     "sign_out_title": "Sign out of Telegram?",
+    "sign_out_title_named": "Sign out of Telegram as {name}?",
     "signed_in_as": "Signed in as {name}",
     "signing_out": "Signing out…",
     "size_limits": "Video size limits",

@@ -80,6 +80,34 @@ html[data-theme=light][data-tv-keys] .tv-choose:focus { box-shadow: 0 0 0 calc(v
   display: grid; place-items: center; background: var(--surface-high); color: var(--fg); text-decoration: none;
   font-size: calc(var(--dp) * 16); font-weight: 600; transition: transform var(--fast) var(--ease), box-shadow var(--fast);
 }
+/* The picture and its menu share one box that adds none of its own: the bar's gap still spaces them. */
+.tv-account { display: contents; }
+.tv-picture { border: 0; padding: 0; cursor: pointer; font-family: inherit; }
+.tv-menu {
+  position: absolute; z-index: 6; top: calc(var(--tv-safe-v) + var(--dp) * 56); left: var(--tv-safe-h);
+  width: calc(var(--dp) * 440); max-width: calc(100vw - var(--tv-safe-h) * 2); box-sizing: border-box;
+  display: flex; flex-direction: column; gap: calc(var(--dp) * 12);
+  padding: calc(var(--dp) * 20) calc(var(--dp) * 24); border-radius: calc(var(--dp) * 24);
+  background: var(--surface-high); border: 1px solid var(--line); color: var(--fg);
+}
+.tv-menu-head { display: flex; align-items: center; gap: calc(var(--dp) * 16); }
+.tv-menu-picture {
+  flex: none; width: calc(var(--dp) * 64); height: calc(var(--dp) * 64); border-radius: 50%;
+  display: grid; place-items: center; background: var(--surface); font-size: calc(var(--dp) * 28); font-weight: 600;
+}
+.tv-menu-who { min-width: 0; display: flex; flex-direction: column; }
+.tv-menu-who strong { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-menu-who span { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); color: var(--muted); }
+.tv-menu-buttons { display: flex; flex-wrap: wrap; gap: calc(var(--dp) * 12); }
+.tv-menu-button, .tv-menu-row {
+  display: inline-flex; align-items: center; min-height: calc(var(--dp) * 48); box-sizing: border-box;
+  padding: 0 calc(var(--dp) * 18); border: 0; border-radius: 999px; background: var(--surface);
+  color: var(--fg); font: inherit; font-size: calc(var(--dp) * 14); font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.tv-menu-row { border-radius: calc(var(--dp) * 12); min-height: calc(var(--dp) * 48); }
+html[data-tv-keys] .tv-menu-button:focus, html[data-tv-keys] .tv-menu-row:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
+/* Sign out is quiet at rest and red only under the remote. */
+html[data-tv-keys] .tv-menu-signout:focus { background: var(--error); color: #fff; }
 .tv-picture[aria-current] { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
 html[data-tv-keys] .tv-picture:focus {
   outline: none; transform: scale(var(--focus-scale));

@@ -173,6 +173,20 @@ internal class TouchNav(
     /** Switch profile (HX88): the picker, with two profiles or more on the device; null hides the row. */
     val onSwitchProfile: (() -> Unit)? = null,
     /**
+     * The profile picker, whatever the profile count (WP-02): with one profile it shows the one tile
+     * and Add account, so the account menu says "Add account" there and "Switch profile" when
+     * [onSwitchProfile] is set. Null where there is no profile list (a preview).
+     */
+    val onSwitchOrAdd: (() -> Unit)? = null,
+    /** Sign out, asked of the app shell's host ([com.tmplayer.ui.settings.SignOutHost]); null hides the entry. */
+    val onSignOut: (() -> Unit)? = null,
+    /**
+     * Where the shell's sign out is (WP-02): the account menu stays under the first question so Cancel
+     * puts the remote back on Sign out, and closes once the sign out has started, so a backup is
+     * never tied to the menu.
+     */
+    val signOutPhase: com.tmplayer.ui.settings.SignOutPhase = com.tmplayer.ui.settings.SignOutPhase.Idle,
+    /**
      * The profile open now (WP-01): its saved photo and name stand in for the account's picture and
      * name while Telegram has not answered yet, or never will (offline), so the bar says who is
      * signed in from the first frame. Null where there is no profile list (a preview).
@@ -466,6 +480,8 @@ internal fun TouchNavHost(
                     onSettings = { chrome.youOpen = false; nav.onSettings() },
                     onUpdate = { chrome.youOpen = false; nav.onUpdate() },
                     onSwitchProfile = nav.onSwitchProfile?.let { switch -> { chrome.youOpen = false; switch() } },
+                    onAddAccount = nav.onSwitchOrAdd?.takeIf { nav.onSwitchProfile == null }?.let { add -> { chrome.youOpen = false; add() } },
+                    onSignOut = nav.onSignOut?.let { out -> { chrome.youOpen = false; out() } },
                 )
             }
         }
@@ -971,6 +987,10 @@ private fun YouPopover(
     onSettings: () -> Unit,
     onUpdate: () -> Unit,
     onSwitchProfile: (() -> Unit)? = null,
+    /** Add account, with one profile on the device (the picker shows the Add tile). */
+    onAddAccount: (() -> Unit)? = null,
+    /** Sign out, through the shell's host; the last row, in the danger colour. */
+    onSignOut: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     AnimatedVisibility(
@@ -1037,10 +1057,13 @@ private fun YouPopover(
                     add { m -> PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, modifier = m, onClick = onWatchLater) }
                     add { m -> PopoverRow(TmIcons.Settings, s.navSettings, null, modifier = m, onClick = onSettings) }
                     if (onSwitchProfile != null) add { m -> PopoverRow(TmIcons.Person, s.profilesSwitchProfile, null, modifier = m, onClick = onSwitchProfile) }
+                    if (onAddAccount != null) add { m -> PopoverRow(TmIcons.Person, s.profilesAdd, null, modifier = m, onClick = onAddAccount) }
                     if (updateVersion != null) {
                         // Amber, as on the television's rail and the desktop's side bar: the one row that is news.
                         add { m -> PopoverRow(TmIcons.Refresh, s.navUpdate, updateVersion, ink = Tone.caution, modifier = m, onClick = onUpdate) }
                     }
+                    // Last, in the danger colour: the press that ends the session, asked first.
+                    if (onSignOut != null) add { m -> PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, modifier = m, onClick = onSignOut) }
                 }
                 rows.take(POPOVER_LISTS).forEach { it(Modifier) }
                 HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
