@@ -2145,13 +2145,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun updateTouchPrefs(change: (TouchPrefs) -> TouchPrefs) {
         prefs.edit { prefs ->
-            val next = change(touchPrefsOf(prefs))
+            val before = touchPrefsOf(prefs)
+            val next = change(before)
             prefs[TAP_PLAYS_PAUSES] = next.tapPlaysPauses
             prefs[DOUBLE_TAP_MS] = TouchPrefs.sanitiseDoubleTap(next.doubleTapMs)
             prefs[HOLD_SPEED] = TouchPrefs.sanitiseHold(next.holdSpeed)
             // Only a value the viewer chose is stored, so a television's own default (5 s) is not
-            // frozen at 3.5 s by changing some other touch setting.
-            if (next.controlsTimeoutStored) prefs[CONTROLS_TIMEOUT_MS] = TouchPrefs.sanitiseTimeout(next.controlsTimeoutMs)
+            // frozen at 3.5 s by changing some other touch setting. A changed time is a choice, so
+            // a caller that only copies controlsTimeoutMs is stored too (it used to be dropped
+            // while nothing was stored yet, the desktop's Hide the controls after step included).
+            if (next.controlsTimeoutStored || next.controlsTimeoutMs != before.controlsTimeoutMs) prefs[CONTROLS_TIMEOUT_MS] = TouchPrefs.sanitiseTimeout(next.controlsTimeoutMs)
             prefs[GESTURE_SEEK] = next.seekGesture
             prefs[GESTURE_BRIGHTNESS] = next.brightnessGesture
             prefs[GESTURE_VOLUME] = next.volumeGesture

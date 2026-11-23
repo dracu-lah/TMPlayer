@@ -103,6 +103,29 @@ class PlayerMouseTest {
     /** A point on the picture clear of the centre cluster and the two bars. */
     private val onPicture = Offset(200f, 360f)
 
+    /**
+     * Waits (real time, bounded) until the player honours the "Hide the controls after" setting just
+     * written, which it reads from the settings store's flow and so takes up a moment after the
+     * write, not in step with the test clock: a move made before then is timed by the 4 s default.
+     * Each try moves the mouse and lets [hideAfterMs] plus half a second of test time pass; the
+     * setting is in force once the controls are down (or, for "Never", still up). Leaves the test
+     * clock paused with the controls in that state.
+     */
+    private fun ComposeUiTest.awaitControlsSetting(hideAfterMs: Long, never: Boolean) {
+        mainClock.autoAdvance = false
+        val deadline = System.nanoTime() + 15_000_000_000L
+        var tries = 0
+        while (true) {
+            val x = if (tries++ % 2 == 0) 0f else 40f
+            onNodeWithTag("video").performMouseInput { moveTo(onPicture + Offset(x, 0f)) }
+            mainClock.advanceTimeBy((if (never) 2_000L else hideAfterMs) + 500)
+            val up = onAllNodes(hasContentDescription("More")).fetchSemanticsNodes().isNotEmpty()
+            if (up == never) return
+            check(System.nanoTime() < deadline) { "the player never took up the controls setting ($hideAfterMs ms, never=$never)" }
+            Thread.sleep(25)
+        }
+    }
+
     @Test
     fun `a click plays or pauses once the double click window has passed`() = runComposeUiTest {
         open()
@@ -188,8 +211,8 @@ class PlayerMouseTest {
     fun `controls hide after the set time, and never when that is Never`() = runComposeUiTest {
         runBlocking { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = 2_000L) } }
         open()
-        mainClock.autoAdvance = false
-        onNodeWithTag("video").performMouseInput { moveTo(onPicture) }
+        awaitControlsSetting(2_000L, never = false)
+        onNodeWithTag("video").performMouseInput { moveTo(onPicture + Offset(80f, 0f)) }
         mainClock.advanceTimeBy(1_000)
         onNode(hasContentDescription("More")).assertExists()
         mainClock.advanceTimeBy(1_500)
@@ -197,6 +220,7 @@ class PlayerMouseTest {
 
         runBlocking { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = 0L) } }
         mainClock.advanceTimeBy(100)
+        awaitControlsSetting(0L, never = true)
         onNodeWithTag("video").performMouseInput { moveTo(onPicture + Offset(40f, 0f)) }
         mainClock.advanceTimeBy(10_000)
         onNode(hasContentDescription("More")).assertExists()

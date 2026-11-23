@@ -525,7 +525,8 @@ class TvUxChecklist(
             val skip = otherRect.inflate(max(dp(6f), 0.1f * max(other.size.width, other.size.height).toFloat())).takeUnless { it.overlaps(restRect) }
             var baseline = rest
             var skipNow = skip
-            if (skip == null) {
+            // The frame the focused one is read against, with the remote on a node far from the region (WP-03).
+            fun takeNeutral() {
                 // A node that is not the neighbour and not beside the node: only its own fill swap
                 // differs between the two frames, and its rect is left out.
                 // One that is not beside the node when there is one; else the nearest that is: its own
@@ -549,16 +550,29 @@ class TvUxChecklist(
                 // Put the remote back where the next check expects it.
                 current(node)?.let { if (!focus(it)) skipped += "${nameOf(it)}: refused the focus back after the neutral frame" }
             }
-            val drawn = drawnChange(baseline, focusedFrame, region, skipNow)
-            if (drawn != null) {
-                val full = restRect.width >= screenW * 0.9f
-                val scale = if (full) 1f else FocusStyle.TvScale
-                val cx = restRect.center.x; val cy = restRect.center.y
-                val allowed = Rect(cx - restRect.width * scale / 2, cy - restRect.height * scale / 2, cx + restRect.width * scale / 2, cy + restRect.height * scale / 2).inflate(tol)
-                if (drawn.left < allowed.left || drawn.top < allowed.top || drawn.right > allowed.right || drawn.bottom > allowed.bottom) {
-                    add("focusSizeStable", name, "drawn ${sizeDp(drawn)} focused over a ${sizeDp(restRect)} layout, more than ${if (full) "none (full width)" else "the design scale $scale"}")
+            if (skip == null) takeNeutral()
+            fun growthChecks() {
+                val drawn = drawnChange(baseline, focusedFrame, region, skipNow)
+                if (drawn != null) {
+                    val full = restRect.width >= screenW * 0.9f
+                    val scale = if (full) 1f else FocusStyle.TvScale
+                    val cx = restRect.center.x; val cy = restRect.center.y
+                    val allowed = Rect(cx - restRect.width * scale / 2, cy - restRect.height * scale / 2, cx + restRect.width * scale / 2, cy + restRect.height * scale / 2).inflate(tol)
+                    if (drawn.left < allowed.left || drawn.top < allowed.top || drawn.right > allowed.right || drawn.bottom > allowed.bottom) {
+                        add("focusSizeStable", name, "drawn ${sizeDp(drawn)} focused over a ${sizeDp(restRect)} layout, more than ${if (full) "none (full width)" else "the design scale $scale"}")
+                    }
+                    drawnInsideClip(name, restRect, drawn, screenW, screenH)
                 }
-                drawnInsideClip(name, restRect, drawn, screenW, screenH)
+            }
+            val mark = findings.size
+            growthChecks()
+            if (skip != null && findings.size > mark) {
+                // The neighbour's own focus can draw beyond its rect (a pill names itself in a label
+                // under it while the remote is on it, FocusTip), and that vanishing is no growth of this
+                // node: read the frames again against one with the remote far away before reporting.
+                while (findings.size > mark) findings.removeAt(findings.size - 1)
+                takeNeutral()
+                growthChecks()
             }
             if (focusedNode.config.getOrNull(SemanticsProperties.Selected) == true) {
                 selectedNotFocused(name, rest, focusedFrame, restRect)
