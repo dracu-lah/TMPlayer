@@ -56,6 +56,16 @@ class TouchPrefsTest {
     }
 
     @Test
+    fun `a television waits five seconds until the viewer chooses, and a stored choice is never changed`() {
+        val unchosen = TouchPrefs(controlsTimeoutStored = false)
+        assertEquals(5_000L, unchosen.timeoutFor(tv = true))
+        assertEquals(3_500L, unchosen.timeoutFor(tv = false))
+        val chosen = TouchPrefs(controlsTimeoutMs = 3_500L, controlsTimeoutStored = true)
+        assertEquals(3_500L, chosen.timeoutFor(tv = true))
+        assertEquals(8_000L, TouchPrefs(controlsTimeoutMs = 8_000L).timeoutFor(tv = true))
+    }
+
+    @Test
     fun `steps clamp at both ends of a list`() {
         val choices = TouchPrefs.DOUBLE_TAP_CHOICES_MS
         assertEquals(5_000L, TouchPrefs.step(choices, 5_000L, -1))

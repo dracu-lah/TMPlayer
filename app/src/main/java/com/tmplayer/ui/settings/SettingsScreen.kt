@@ -1330,17 +1330,23 @@ fun SettingsScreen(
                 // The one player timing that means the same with a remote as with a thumb.
                 item {
                     val choices = TouchPrefs.TIMEOUT_CHOICES_MS
+                    // A television shows (and steps from) its own 5 s default until a choice is made.
+                    val tv = remember { com.tmplayer.data.FormFactor.isTv(context) }
+                    val shown = touchPrefs.timeoutFor(tv)
                     StepperRow(
                         title = s.settingsControlsTimeout,
                         subtitle = s.settingsControlsTimeoutDetail,
-                        value = TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs),
+                        value = TouchPrefs.timeoutLabel(shown),
                         icon = TmIcons.VisibilityOff,
-                        canDecrease = touchPrefs.controlsTimeoutMs != choices.first(),
-                        canIncrease = touchPrefs.controlsTimeoutMs != choices.last(),
+                        canDecrease = shown != choices.first(),
+                        canIncrease = shown != choices.last(),
                         onStep = { direction ->
                             scope.launch {
                                 settings.updateTouchPrefs {
-                                    it.copy(controlsTimeoutMs = TouchPrefs.step(choices, it.controlsTimeoutMs, direction))
+                                    it.copy(
+                                        controlsTimeoutMs = TouchPrefs.step(choices, it.timeoutFor(tv), direction),
+                                        controlsTimeoutStored = true,
+                                    )
                                 }
                             }
                         },

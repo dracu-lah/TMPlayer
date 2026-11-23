@@ -8,7 +8,7 @@ import com.tmplayer.data.RemoteQuirks
  * (Android's TV app quality criteria: OK pauses, Left and Right seek, Play/Pause toggles, Back
  * leaves at once).
  */
-object RemoteKeys {
+object PlayerRemoteKeys {
 
     /**
      * The least time between two seeks from a held arrow. A seek is a TDLib round trip, so a held

@@ -3369,7 +3369,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private val jumpRun = SeekCounter()
     private var jumpRunSeconds = 0L
 
-    /** When the last jump from a remote key landed, for [RemoteKeys.jumpStepMs]'s pacing. */
+    /** When the last jump from a remote key landed, for [PlayerRemoteKeys.jumpStepMs]'s pacing. */
     private var lastRemoteJumpAt = 0L
 
     /**
@@ -3382,7 +3382,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // A held arrow, rewind or fast forward scans in growing steps, a few a second, on every
         // remote: one TDLib seek per key repeat made a held key stall the player on a 1 GB stick.
         val now = SystemClock.uptimeMillis()
-        val step = if (fixedStepMs == null) RemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt) else base
+        val step = if (fixedStepMs == null) PlayerRemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt) else base
         if (step <= 0) return
         lastRemoteJumpAt = now
         skipBy(if (forward) step else -step)
@@ -7036,7 +7036,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // Info let go before its long press (which reports a stutter, below): what is playing.
         // On release, since the press could still become the hold.
         if (event.keyCode == KeyEvent.KEYCODE_INFO && event.action == KeyEvent.ACTION_UP && FormFactor.isTv(this)) {
-            if (RemoteKeys.isInfoTap(event.keyCode, event.downTime, event.eventTime, event.isCanceled, android.view.ViewConfiguration.getLongPressTimeout().toLong()) &&
+            if (PlayerRemoteKeys.isInfoTap(event.keyCode, event.downTime, event.eventTime, event.isCanceled, android.view.ViewConfiguration.getLongPressTimeout().toLong()) &&
                 statusOverlay.visibility != View.VISIBLE && sheets?.isOpen != true && !detailsOpen && player != null
             ) {
                 showPlaybackDetails()
@@ -7128,15 +7128,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 hideNextUp()
                 return true
             }
-            when (RemoteKeys.nextUpKey(event.keyCode, nextUpEngaged)) {
-                RemoteKeys.NextUpKey.Engage -> {
+            when (PlayerRemoteKeys.nextUpKey(event.keyCode, nextUpEngaged)) {
+                PlayerRemoteKeys.NextUpKey.Engage -> {
                     nextUpEngaged = true
                     nextUpCard?.play?.requestFocus()
                     return true
                 }
-                RemoteKeys.NextUpKey.Pass -> return super.dispatchKeyEvent(event)
-                RemoteKeys.NextUpKey.Release -> nextUpEngaged = false
-                RemoteKeys.NextUpKey.Ignore -> Unit
+                PlayerRemoteKeys.NextUpKey.Pass -> return super.dispatchKeyEvent(event)
+                PlayerRemoteKeys.NextUpKey.Release -> nextUpEngaged = false
+                PlayerRemoteKeys.NextUpKey.Ignore -> Unit
             }
         }
 
@@ -7210,7 +7210,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD,
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_CHANNEL_DOWN,
             -> {
-                val forward = RemoteKeys.episodeStep(event.keyCode) ?: return super.dispatchKeyEvent(event)
+                val forward = PlayerRemoteKeys.episodeStep(event.keyCode) ?: return super.dispatchKeyEvent(event)
                 if (event.repeatCount == 0 && !stepEpisode(forward)) {
                     showGestureFeedback(if (forward) L.playerNoNextEpisode else L.playerNoPreviousEpisode)
                 }
@@ -7780,7 +7780,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun applyTouchPrefs() {
         gestures?.prefs = touchPrefs
         feedback?.hapticsEnabled = touchPrefs.haptics
-        controls?.timeoutMs = touchPrefs.controlsTimeoutMs
+        controls?.timeoutMs = touchPrefs.timeoutFor(FormFactor.isTv(this))
         controls?.showRemaining = touchPrefs.showRemaining
     }
 
@@ -9241,7 +9241,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         return rawX >= at[0] && rawX < at[0] + pill.width && rawY >= at[1] && rawY < at[1] + pill.height
     }
 
-    /** The remote has walked onto the next-up card ([RemoteKeys.nextUpKey]); false means OK is pause. */
+    /** The remote has walked onto the next-up card ([PlayerRemoteKeys.nextUpKey]); false means OK is pause. */
     private var nextUpEngaged = false
 
     private fun hideNextUp() {

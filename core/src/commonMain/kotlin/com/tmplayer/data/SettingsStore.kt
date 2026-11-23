@@ -2147,7 +2147,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             prefs[TAP_PLAYS_PAUSES] = next.tapPlaysPauses
             prefs[DOUBLE_TAP_MS] = TouchPrefs.sanitiseDoubleTap(next.doubleTapMs)
             prefs[HOLD_SPEED] = TouchPrefs.sanitiseHold(next.holdSpeed)
-            prefs[CONTROLS_TIMEOUT_MS] = TouchPrefs.sanitiseTimeout(next.controlsTimeoutMs)
+            // Only a value the viewer chose is stored, so a television's own default (5 s) is not
+            // frozen at 3.5 s by changing some other touch setting.
+            if (next.controlsTimeoutStored) prefs[CONTROLS_TIMEOUT_MS] = TouchPrefs.sanitiseTimeout(next.controlsTimeoutMs)
             prefs[GESTURE_SEEK] = next.seekGesture
             prefs[GESTURE_BRIGHTNESS] = next.brightnessGesture
             prefs[GESTURE_VOLUME] = next.volumeGesture
@@ -2161,6 +2163,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         doubleTapMs = TouchPrefs.sanitiseDoubleTap(prefs[DOUBLE_TAP_MS]),
         holdSpeed = TouchPrefs.sanitiseHold(prefs[HOLD_SPEED]),
         controlsTimeoutMs = TouchPrefs.sanitiseTimeout(prefs[CONTROLS_TIMEOUT_MS]),
+        controlsTimeoutStored = prefs[CONTROLS_TIMEOUT_MS] != null,
         seekGesture = prefs[GESTURE_SEEK] ?: true,
         brightnessGesture = prefs[GESTURE_BRIGHTNESS] ?: true,
         volumeGesture = prefs[GESTURE_VOLUME] ?: true,

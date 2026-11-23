@@ -18,6 +18,11 @@ data class TouchPrefs(
     val holdSpeed: Float = HOLD_DEFAULT,
     /** How long the controls stay up while playing; zero keeps them up until tapped away. */
     val controlsTimeoutMs: Long = TIMEOUT_DEFAULT_MS,
+    /**
+     * The viewer has chosen [controlsTimeoutMs] (it is in the store). Until then a television uses
+     * [TIMEOUT_TV_DEFAULT_MS]; a stored choice, even 3.5 s, is never changed. See [timeoutFor].
+     */
+    val controlsTimeoutStored: Boolean = true,
     val seekGesture: Boolean = true,
     val brightnessGesture: Boolean = true,
     val volumeGesture: Boolean = true,
@@ -25,6 +30,10 @@ data class TouchPrefs(
     /** The total on the times line reads as the time left instead. */
     val showRemaining: Boolean = false,
 ) {
+    /** How long the controls stay up on this device: a television's own default until the viewer chooses. */
+    fun timeoutFor(tv: Boolean): Long =
+        if (tv && !controlsTimeoutStored) TIMEOUT_TV_DEFAULT_MS else controlsTimeoutMs
+
     companion object {
         const val DOUBLE_TAP_DEFAULT_MS = 10_000L
         val DOUBLE_TAP_CHOICES_MS = listOf(5_000L, 10_000L, 15_000L, 30_000L)
@@ -34,6 +43,9 @@ data class TouchPrefs(
         val HOLD_CHOICES = listOf(0f, 1.5f, 2f, 3f)
 
         const val TIMEOUT_DEFAULT_MS = 3_500L
+
+        /** A remote needs longer than a thumb to reach the row and a button on it. */
+        const val TIMEOUT_TV_DEFAULT_MS = 5_000L
         /** Zero is "never". */
         val TIMEOUT_CHOICES_MS = listOf(2_000L, 3_500L, 5_000L, 8_000L, 0L)
 
