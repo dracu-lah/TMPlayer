@@ -66,7 +66,11 @@ enum class VoiceRoute {
 data class RemoteQuirks(
     /** A short press of Menu opens the player's own menu, as Amazon's guidelines ask. */
     val menuOpensPlayerMenu: Boolean,
-    /** Holding rewind or fast forward scans in growing steps instead of repeating one jump. */
+    /**
+     * Fire TV's remote scans in growing steps when held, so the hold-to-play-faster speed
+     * ([com.tmplayer.player.HoldSpeedKey] in the app) leaves it alone. Every held jump is paced
+     * and grows on every device now, so this no longer decides that.
+     */
     val holdSeekAccelerates: Boolean,
     /** Whether the system keeps a Watch Next row this app can write to. */
     val watchNextSupported: Boolean,

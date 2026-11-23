@@ -3359,6 +3359,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private val jumpRun = SeekCounter()
     private var jumpRunSeconds = 0L
 
+    /** When the last jump from a remote key landed, for [RemoteKeys.jumpStepMs]'s pacing. */
+    private var lastRemoteJumpAt = 0L
+
     /**
      * A remote's jump, from an arrow over the bare picture or the rewind and fast forward keys:
      * the seek lands at once, and the only thing drawn is the double tap's chevrons and the run's
@@ -3366,10 +3369,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0, fixedStepMs: Long? = null) {
         val base = fixedStepMs ?: if (forward) Skip.FORWARD_MS else Skip.BACK_MS
-        // A held rewind or fast forward on a Fire TV remote scans in growing steps, the way
-        // Amazon's own players answer it; elsewhere every repeat is the plain jump it always was.
-        val step = if (fixedStepMs == null && remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
+        // A held arrow, rewind or fast forward scans in growing steps, a few a second, on every
+        // remote: one TDLib seek per key repeat made a held key stall the player on a 1 GB stick.
+        val now = SystemClock.uptimeMillis()
+        val step = if (fixedStepMs == null) RemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt) else base
         if (step <= 0) return
+        lastRemoteJumpAt = now
         skipBy(if (forward) step else -step)
         val zone = if (forward) TapZone.Right else TapZone.Left
         if (jumpRun.tap(zone, SystemClock.uptimeMillis()) == 1) jumpRunSeconds = 0
@@ -7198,7 +7203,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // reach the focused view through super, which on the bar is the stride and on
                 // the buttons is walking the row.
                 if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    jumpFromRemote(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+                    jumpFromRemote(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT, repeatCount = event.repeatCount)
                     return true
                 }
             }
@@ -7365,8 +7370,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun handleTouchDeviceKey(event: KeyEvent): Boolean {
         if (controlsUp || statusOverlay.visibility == View.VISIBLE) return false
         when (event.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> jumpFromRemote(forward = true)
-            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> jumpFromRemote(forward = false)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> jumpFromRemote(forward = true, repeatCount = event.repeatCount)
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> jumpFromRemote(forward = false, repeatCount = event.repeatCount)
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
