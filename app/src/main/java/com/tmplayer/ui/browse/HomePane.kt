@@ -67,6 +67,8 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import com.tmplayer.ui.components.dropStaleArrowRepeats
+import com.tmplayer.ui.components.staleRepeat
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -1115,7 +1117,7 @@ private fun RowSeeAll(
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(if (poster) posterWidth(touch) else wideWidth(touch)),
             state = grid,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().dropStaleArrowRepeats(),
             contentPadding = PaddingValues(
                 start = start,
                 end = end,
@@ -1601,19 +1603,6 @@ private fun SeeAllLink(label: String, onClick: () -> Unit, modifier: Modifier = 
         androidx.compose.material3.Icon(TmIcons.ChevronRight, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
     }
 }
-
-/**
- * A held D-pad's repeat that has waited longer than a couple of frames to be handled. Leanback
- * caps the moves it queues the same way (GridLayoutManager's pending moves): on a stick whose
- * frames take 40 ms, repeats pile up, and once the button is let go the focus kept moving.
- */
-private fun staleRepeat(event: androidx.compose.ui.input.key.KeyEvent): Boolean {
-    val native = event.nativeKeyEvent
-    return native.repeatCount > 0 && android.os.SystemClock.uptimeMillis() - native.eventTime > STALE_REPEAT_MS
-}
-
-/** How old a repeat may be and still move the focus: about two frames on a slow stick. */
-private const val STALE_REPEAT_MS = 80L
 
 /**
  * Home's vertical list under the TV top bar: a focused item already standing between the bar's foot

@@ -3,6 +3,7 @@ package com.tmplayer.ui.browse
 import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.focusEdge
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.dropStaleArrowRepeats
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -821,7 +822,7 @@ fun MediaGridScreen(
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
                     state = gridState,
-                    modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !touch),
+                    modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !touch).dropStaleArrowRepeats(),
                     contentPadding = padding,
                     horizontalArrangement = Arrangement.spacedBy(gap),
                     verticalArrangement = Arrangement.spacedBy(gap),

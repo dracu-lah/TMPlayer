@@ -4,6 +4,7 @@ import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.focusEdge
 import androidx.compose.animation.core.snap
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.dropStaleArrowRepeats
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -2565,7 +2566,7 @@ internal fun ChatSection(
             twoColumns -> LazyVerticalGrid(
                 columns = GridCells.Fixed(TV_CHAT_COLUMNS),
                 state = rowsState,
-                modifier = Modifier.fillMaxSize().keepTopInSight(rowsState),
+                modifier = Modifier.fillMaxSize().keepTopInSight(rowsState).dropStaleArrowRepeats(),
                 // The television's rows are cards, with room on every side to grow a border.
                 contentPadding = PaddingValues(start = insets.start, end = insets.end, bottom = insets.bottom),
                 horizontalArrangement = Arrangement.spacedBy(TV_CHAT_COLUMN_GAP),

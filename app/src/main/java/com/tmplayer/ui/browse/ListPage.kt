@@ -33,6 +33,7 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.VisibleList
 import com.tmplayer.data.WatchLaterRecord
 import com.tmplayer.ui.components.FloatingBackButton
+import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.isTouch
@@ -92,7 +93,7 @@ internal fun ListPage(
                     ),
                     horizontalArrangement = Arrangement.spacedBy(if (touch) 10.dp else 20.dp),
                     verticalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 20.dp),
-                    modifier = Modifier.fillMaxWidth().weight(1f).testTag(LIST_GRID_TAG),
+                    modifier = Modifier.fillMaxWidth().weight(1f).dropStaleArrowRepeats().testTag(LIST_GRID_TAG),
                 ) {
                     items(cards, key = { it.key }) { card ->
                         val tile = card.tile
