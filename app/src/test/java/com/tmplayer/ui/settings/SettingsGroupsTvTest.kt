@@ -128,7 +128,7 @@ class SettingsGroupsTvTest {
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `Subtitles and audio walks into the sound and the sheet gives the focus back`() {
         show(SettingsPage.Subtitles)
-        walk("Preferred subtitle language", "Preferred audio language", "Remembered languages", "Downmix to stereo", "Even out volume")
+        walk("Preferred subtitle language", "Preferred audio language")
 
         row("Preferred audio language").performScrollTo().requestFocus()
         row("Preferred audio language").performKeyInput { pressKey(Key.DirectionCenter) }
@@ -142,6 +142,8 @@ class SettingsGroupsTvTest {
         rule.mainClock.advanceTimeBy(500)
         rule.waitForIdle()
         row("Preferred audio language").assertIsFocused()
+        // Then on down into the sound; WP-24 put Volume boost and Night mode between Downmix and Even out volume.
+        walk("Preferred audio language", "Remembered languages", "Downmix to stereo", "Volume boost", "Night mode", "Even out volume")
     }
 
     @Test
