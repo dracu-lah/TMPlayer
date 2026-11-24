@@ -92,7 +92,7 @@ internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
                             Modifier.focusRequester(requester).onFocusChanged {
                                 if (it.hasFocus) {
                                     crumb.section = title
-                                    crumb.rowFocused(index, sectionStart, nextSection, previousSection)
+                                    crumb.rowFocused(index, sectionStart, nextSection, previousSection, first = index == starts.first())
                                 }
                             },
                             propagateMinConstraints = true,

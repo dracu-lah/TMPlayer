@@ -138,6 +138,9 @@ internal fun TvSettingsPane(
      * window taking focus picks the first item it finds) goes to [entry] instead.
      */
     arrived: BooleanArray,
+    /** Opens Find a setting (WP-09): the header's button, which Up from the page's first row reaches; null: none. */
+    onFind: (() -> Unit)? = null,
+    findFocus: FocusRequester = remember { FocusRequester() },
     /** Where the Page and Channel keys' arrival is noted and the hint about them kept; null: no hint. */
     hints: SettingsStore? = null,
     /** Quiet facts at the header's trailing end: the version line (WP-104). */
@@ -190,6 +193,18 @@ internal fun TvSettingsPane(
             crumb = paneTitle,
             breadcrumb = breadcrumb,
             onRail = railHasFocus,
+            find = onFind?.let { openFind ->
+                {
+                    FindButton(
+                        onClick = openFind,
+                        requester = findFocus,
+                        // Down goes into the page, Left to the rail: the arrows leave the header the way they came.
+                        onDown = { runCatching { landing.requestFocus() } },
+                        onTowardsRail = { runCatching { railFocus.getValue(open).requestFocus() } },
+                        towardsRailKey = if (ltr) Key.DirectionLeft else Key.DirectionRight,
+                    )
+                }
+            },
             end = headerEnd,
         )
         Row(Modifier.fillMaxWidth().weight(1f)) {
@@ -242,6 +257,14 @@ internal fun TvSettingsPane(
                     .weight(1f)
                     .fillMaxHeight()
                     .testTag(SETTINGS_PANE_TAG)
+                    // Up from the page's first row: the header's Find a setting (WP-09).
+                    .onPreviewKeyEvent { event ->
+                        if (onFind != null && event.key == Key.DirectionUp && breadcrumb.onFirstRow) {
+                            if (event.type == KeyEventType.KeyDown) runCatching { findFocus.requestFocus() }
+                            return@onPreviewKeyEvent true
+                        }
+                        false
+                    }
                     // Page and Channel keys: section to section (WP-75).
                     .onPreviewKeyEvent { event ->
                         val dir = PageKeys.step(event.key)
@@ -326,6 +349,8 @@ internal fun SettingsHeader(
     breadcrumb: SettingsBreadcrumb? = null,
     /** The remote on the rail: the page alone, no section. */
     onRail: Boolean = false,
+    /** The Find a setting button, between the breadcrumb and [end] (WP-09); null on About. */
+    find: (@Composable () -> Unit)? = null,
     end: @Composable () -> Unit = {},
 ) {
     val s = LocalStrings.current
@@ -354,8 +379,43 @@ internal fun SettingsHeader(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).testTag(SETTINGS_CRUMB_TAG),
         )
-        Spacer(Modifier.width(16.dp))
+        if (find != null) {
+            find()
+            Spacer(Modifier.width(16.dp))
+        }
         Box(Modifier.width(HEADER_END_WIDTH), contentAlignment = Alignment.CenterEnd) { end() }
+    }
+}
+
+/** The header's Find a setting (WP-09): a 40 dp TV button, never a rail item. OK opens the panel. */
+@Composable
+private fun FindButton(
+    onClick: () -> Unit,
+    requester: FocusRequester,
+    onDown: () -> Unit,
+    onTowardsRail: () -> Unit,
+    towardsRailKey: Key,
+) {
+    com.tmplayer.ui.components.TmButton(
+        onClick = onClick,
+        modifier = Modifier
+            .height(40.dp)
+            .focusRequester(requester)
+            .testTag(FIND_BUTTON_TAG)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionDown -> { onDown(); true }
+                    towardsRailKey -> { onTowardsRail(); true }
+                    // Nothing above, and the far side holds: the header is one line.
+                    Key.DirectionUp -> true
+                    else -> false
+                }
+            },
+    ) {
+        Icon(com.tmplayer.ui.icons.TmIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(LocalStrings.current.settingsFindSetting, style = MaterialTheme.typography.labelLarge, maxLines = 1)
     }
 }
 
@@ -524,7 +584,12 @@ internal class SettingsBreadcrumb {
         if (rows[row] === requester) rows.remove(row)
     }
 
-    internal fun rowFocused(row: Int, sectionStart: Int, nextSection: Int, previousSection: Int) {
+    /** The remote is on the page's first row: Up from it goes to the header's Find a setting (WP-09). */
+    var onFirstRow: Boolean = false
+        private set
+
+    internal fun rowFocused(row: Int, sectionStart: Int, nextSection: Int, previousSection: Int, first: Boolean = false) {
+        onFirstRow = first
         at = row
         this.sectionStart = sectionStart
         this.nextSection = nextSection

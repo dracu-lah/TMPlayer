@@ -216,7 +216,17 @@ class SettingsMapTest {
 
     @Test
     fun `a television gets no search box, a phone and a desktop do past 25 rows`() {
-        assertFalse(SettingsSearch.offered(DeviceForm.Tv, 500))
+        assertFalse("a television has no box over a list", SettingsSearch.offered(DeviceForm.Tv, 500))
+        // WP-09: it has Find a setting, over the rows it shows and never a touch-only one.
+        assertTrue(SettingsSearch.findOnTv(SettingsMap.on(DeviceForm.Tv).size))
+        assertFalse(SettingsSearch.findOnTv(0))
+        val tvRows = SettingsMap.on(DeviceForm.Tv)
+        val hits = SettingsSearch.match("haptic", tvRows, DeviceForm.Tv) { text(it) }
+        assertEquals("haptics is a phone's row", emptyList<String>(), hits.map { it.row.id })
+        assertTrue(SettingsSearch.match("back up", tvRows, DeviceForm.Tv) { text(it) }.any { it.row.id == "back_up" })
+        // An empty query: the rows people come for, those this device has, in order.
+        val common = SettingsSearch.suggestions(tvRows, DeviceForm.Tv) { text(it) }.map { it.row.id }
+        assertEquals(SettingsSearch.COMMON_ROWS.filter { id -> tvRows.any { it.id == id } }, common)
         assertFalse(SettingsSearch.offered(DeviceForm.Phone, 25))
         assertTrue(SettingsSearch.offered(DeviceForm.Phone, 26))
         assertTrue(SettingsSearch.offered(DeviceForm.Desktop, SettingsMap.on(DeviceForm.Desktop).size))

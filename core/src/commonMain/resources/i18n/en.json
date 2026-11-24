@@ -3153,6 +3153,8 @@
     "favourites_cleared": "{count, plural, =1 {Favourite cleared} one {# favourites cleared} other {# favourites cleared}}",
     "favourites_detail": "Take the star off every chat",
     "favourites_empty": "No chats are starred",
+    "find_setting": "Find a setting",
+    "find_voice_prompt": "Say a setting name",
     "follow_system_contrast": "Follow the system",
     "forget": "Forget",
     "forget_last": "Forget the last chat",

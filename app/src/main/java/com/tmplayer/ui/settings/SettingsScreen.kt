@@ -598,6 +598,12 @@ fun SettingsScreen(
     val railFocus = remember { SettingsPage.entries.associateWith { FocusRequester() } }
     val tvArrived = remember { BooleanArray(1) }
     val breadcrumb = remember(page) { SettingsBreadcrumb() }
+    // Find a setting (WP-09): its panel, the words typed (kept while a result's page is open), the
+    // header's button the remote returns to, and whether Back from a result's page reopens the panel.
+    var findOpen by rememberSaveable { mutableStateOf(false) }
+    var findQuery by rememberSaveable { mutableStateOf("") }
+    var cameFromFind by remember { mutableStateOf(false) }
+    val findFocus = remember { FocusRequester() }
     // The row the remote was on in each category (WP-75): Right from the rail lands on it again.
     val rowMemory = rememberSaveable(saver = SettingsRowMemory.Saver) { SettingsRowMemory() }
     // Whether the next page shown takes the remote to its remembered row rather than its first.
@@ -714,6 +720,7 @@ fun SettingsScreen(
     BackHandler(enabled = !remoteHere && page != null && (!twoPane || page?.parent != null || cameFromStep != null)) { closePage() }
     // The pane following the rail (WP-07): the page changes, the remote stays on the rail.
     val followRail = { target: SettingsPage ->
+        cameFromFind = false
         cameFromStep = null
         returnTo = null
         paneEntry = false
@@ -804,8 +811,10 @@ fun SettingsScreen(
             val restore = restoreRow
             restoreRow = false
             if (!intoPane) return@LaunchedEffect
-            // A jump from Setup choices lands on its row instead (the effect below).
+            // A jump from Setup choices lands on its row instead (the effect below), and so does a
+            // result of Find a setting (WP-09): the page's own landing row must not take the remote after it.
             if (jumpTo != null && open != SettingsPage.SetupChoices) return@LaunchedEffect
+            if (seek.titles.isNotEmpty()) return@LaunchedEffect
             // Back from a sub-page lands on the row of this page that opened it.
             val opener = returnTo?.takeIf { it.parent == open }
             returnTo = null
@@ -2896,15 +2905,21 @@ fun SettingsScreen(
                 }
             },
             onBackInPane = {
+                // Out of a result's page of Find a setting: back to its panel, the query kept (WP-09).
+                if (cameFromFind) {
+                    cameFromFind = false
+                    findOpen = true
                 // Out of a sub-page (Troubleshooting, Redo setup choices) first, as on a phone;
                 // from a page of the rail, to its rail item.
-                if (page?.parent != null || cameFromStep != null) {
+                } else if (page?.parent != null || cameFromStep != null) {
                     closePage()
                 } else {
                     scope.launch { railFocus.getValue(shown.railItem).settle() }
                 }
             },
             landing = landing,
+            onFind = if (SettingsSearch.findOnTv(searchRows.size)) ({ findOpen = true }) else null,
+            findFocus = findFocus,
             hints = settings,
             entry = if (initialPage != null) landing else railFocus.getValue(shown.railItem),
             arrived = tvArrived,
@@ -2918,6 +2933,27 @@ fun SettingsScreen(
         ) {
             androidx.compose.runtime.CompositionLocalProvider(LocalSettingsBreadcrumb provides breadcrumb) { list(page, null) }
         }
+    }
+
+    if (findOpen && remoteHere) {
+        TvFindSettingPanel(
+            query = findQuery,
+            onQuery = { findQuery = it },
+            rows = searchRows,
+            onPick = { row ->
+                findOpen = false
+                cameFromFind = true
+                val target = SettingsPage.of(row.group)
+                val samePage = target != null && page == target
+                openHit(row)
+                // The page is open already: nothing arrives, so the remote must not be sent "into" the next one.
+                if (samePage) paneEntry = false
+            },
+            onClose = {
+                findOpen = false
+                scope.launch { findFocus.settle() }
+            },
+        )
     }
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }

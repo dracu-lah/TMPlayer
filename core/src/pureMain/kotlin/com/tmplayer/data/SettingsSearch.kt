@@ -3,8 +3,8 @@ package com.tmplayer.data
 /**
  * The search box at the top of Settings on the phone and the desktop (U20): every word typed must
  * be found in a row's title, the lines under it or its page's name, and the rows whose title
- * answers best come first. A television has no box: its pages are a few presses of the D-pad
- * apart, and typing with a remote costs more than walking them.
+ * answers best come first. A television has no box but a Find a setting button and panel (WP-09,
+ * [findOnTv]): the walk to a row still takes up to a dozen presses.
  *
  * Pure, so the rules are table tested: the caller hands in the rows its device shows and [text],
  * which turns a catalog key into the words in the viewer's language.
@@ -16,6 +16,22 @@ object SettingsSearch {
 
     /** Whether [form] gets the box with [rows] rows to look through. */
     fun offered(form: DeviceForm, rows: Int): Boolean = form != DeviceForm.Tv && rows > BOX_FROM_ROWS
+
+    /**
+     * Whether a television has "Find a setting" (WP-09): always, with any rows to look through. It is
+     * a button in the header and a panel, never the phone's box over a list, and the same [match]
+     * rules apply to the rows [form] shows (a touch-only row is never one of them).
+     */
+    fun findOnTv(rows: Int): Boolean = rows > 0
+
+    /** The rows people come to Settings for, shown for an empty query on a television. */
+    val COMMON_ROWS = listOf("language", "subtitle_style", "decoder", "sign_out", "back_up", "interface_size")
+
+    /** [COMMON_ROWS] among [rows], in that order, as hits; the rows this device does not have are left out. */
+    fun suggestions(rows: List<SettingsRow>, form: DeviceForm, text: (String) -> String): List<Hit> =
+        COMMON_ROWS.mapNotNull { id -> rows.firstOrNull { it.id == id } }.map { row ->
+            Hit(row, read(text, row.titleOn(form)), "", read(text, row.group.title))
+        }
 
     /** Results past this many are not worth reading; a longer query narrows them. */
     const val MAX_HITS = 30

@@ -14,6 +14,9 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotSelected
@@ -296,6 +299,36 @@ class SettingsPaneTvFocusTest {
     }
 
     @Test
+    fun `Up from the first row reaches Find a setting, a typed word lands on its row, and Back returns to the panel with the word kept (WP-09)`() {
+        show()
+        rail(SettingsPage.Playback).press(Key.DirectionRight)
+        settle()
+        // Up from the page's first row: the header's button, not a dead end.
+        rule.onNode(isFocused()).press(Key.DirectionUp)
+        settle()
+        rule.onNodeWithTag(FIND_BUTTON_TAG).assertIsFocused()
+        rule.onNodeWithTag(FIND_BUTTON_TAG).press(Key.DirectionCenter)
+        settle()
+        // The panel opens on its field; an empty query shows the rows people come for.
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction()).assertIsFocused()
+        rule.onAllNodesWithText("Back up").assertCountEquals(1)
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("back")
+        settle()
+        // OK on the first result opens its page on the row, the remote on it. (The panel is a window of
+        // its own: moving the remote inside it, Down from the field, is checked on the device.)
+        val result = rule.onAllNodes(hasText("Back up") and hasClickAction()).onFirst()
+        result.performClick()
+        settle()
+        rail(SettingsPage.Storage).assertIsSelected()
+        rule.onNode(isFocused() and hasText("Back up", substring = true)).assertExists()
+        // Back from the result's page: the panel, with the word still in the field.
+        back()
+        rule.onNode(androidx.compose.ui.test.hasSetTextAction()).assertTextEquals("back")
+        assertEquals("Back stayed in Settings", 0, leaves)
+        // Back from the panel itself (the button again) is its own window's Back: checked on the device.
+    }
+
+    @Test
     fun `OK on a rail item goes in on its first row, Back goes to the rail and then out`() {
         show()
         rail(SettingsPage.Playback).press(Key.DirectionUp)
@@ -332,7 +365,7 @@ class SettingsPaneTvFocusTest {
         settle()
         rail(SettingsPage.About).assertIsFocused()
 
-        // Up from a page's first row: nowhere, never the rail by accident.
+        // Up from a page's first row: never the rail by accident; the header's Find a setting (WP-09).
         rail(SettingsPage.Accounts).requestFocus()
         settle()
         rail(SettingsPage.Accounts).press(Key.DirectionRight)
@@ -340,7 +373,11 @@ class SettingsPaneTvFocusTest {
         row("Connected devices").assertIsFocused()
         row("Connected devices").press(Key.DirectionUp)
         settle()
-        row("Connected devices").assertIsFocused()
+        rule.onNodeWithTag(FIND_BUTTON_TAG).assertIsFocused()
+        // And Up again goes nowhere: the header is one line.
+        rule.onNodeWithTag(FIND_BUTTON_TAG).press(Key.DirectionUp)
+        settle()
+        rule.onNodeWithTag(FIND_BUTTON_TAG).assertIsFocused()
     }
 
     @Test
