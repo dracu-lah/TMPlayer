@@ -384,13 +384,18 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
      * holds through a re-open ([policyForBuild]); and it is the class's start next time, software
      * learned or unlearned in [RemedyMemory], as the ladder remembers what worked. A probation
      * wait for the old path is dropped and the watches start again for the new one.
+     *
+     * No replace grace (PB2-02): the switch prepares the same player again in place, nothing builds
+     * a new one to end the grace, so an error right after the press (FFmpeg's init, memory on a
+     * small stick) was swallowed and the player sat idle with no sheet. Such an error now takes the
+     * usual way: the decoder level is spent, so it ends in the status sheet.
      */
     fun viewerPickedDecoder(software: Boolean) {
         viewerSoftware = software
         decoderSwitchedByItself = true
         later?.let(clock::cancel)
         later = null
-        replacing()
+        replacingUntilMs = -1L
         rearm()
         val k = key ?: return
         if (!active) return

@@ -349,6 +349,20 @@ class RemedyRunnerTest {
         assertEquals(null, runner.viewerDecoderSoftware)
     }
 
+    /** PB2-02: the menu's switch re-prepares the same player, so an error right after it is the player's own, never swallowed. */
+    @Test
+    fun anErrorRightAfterTheViewersDecoderPickReachesTheSheet() {
+        open()
+        runner.viewerPickedDecoder(software = true)
+        clock.advance(100)
+        assertFalse(
+            "no grace: the player was not replaced, so the error goes to the status sheet",
+            runner.onPlayerError(decoderError(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, ffmpeg = true)),
+        )
+        assertFalse(runner.onPlayerError(decoderError(PlaybackException.ERROR_CODE_DECODING_FAILED)))
+        assertTrue("nothing re-opened by the runner", player.reopened.isEmpty())
+    }
+
     @Test
     fun pictureLooksWrongLeavesTheDecoderNameOutEvenWithNeverSwitchOn() {
         player.autoSwitch = false
