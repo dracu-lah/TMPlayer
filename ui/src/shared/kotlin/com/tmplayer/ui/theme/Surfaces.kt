@@ -103,10 +103,16 @@ object FloatingTone {
             if (LocalOnFloating.current) M3.colorScheme.surfaceContainerHighest else M3.colorScheme.surfaceContainerHigh
 }
 
-/** The hairline round a floating surface, in the scheme's outline. */
+/**
+ * The hairline round a floating surface, in the scheme's outline. On a television in the dark theme
+ * there is none: the surface step against the dim already separates it (user, 2026-11-25), and in
+ * daylight, where the step is small, it is the television's faint outline.
+ */
 @Composable
 @ReadOnlyComposable
-fun floatingBorder(): BorderStroke = BorderStroke(Floating.Border, Tone.outline)
+fun floatingBorder(): BorderStroke =
+    if (LocalFocusStyle.current.tv && LocalDarkTheme.current) BorderStroke(0.dp, Color.Transparent)
+    else BorderStroke(Floating.Border, Tone.outline)
 
 /**
  * A panel the app draws itself as a floating surface: clipped to [shape], filled with [fill] and

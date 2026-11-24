@@ -1,6 +1,7 @@
 package com.tmplayer.ui.browse
 
 import com.tmplayer.ui.theme.focusScale
+import com.tmplayer.ui.theme.focusStrokeWidth
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.components.pageKeys
@@ -738,7 +739,7 @@ private fun ChatCard(chat: ChatSummary, reduced: Boolean, onClick: () -> Unit) {
             80.dp,
             Modifier
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .border(if (focused) 3.dp else 0.dp, if (focused) Tone.accent else Color.Transparent, CircleShape),
+                .border(if (focused) focusStrokeWidth(3.dp) else 0.dp, if (focused) Tone.accent else Color.Transparent, CircleShape),
         )
         Spacer(Modifier.height(8.dp))
         Text(
@@ -773,7 +774,7 @@ private fun PosterCard(
         Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(12.dp))
-            .border(if (focused) 3.dp else 0.dp, if (focused) Tone.accent else Color.Transparent, RoundedCornerShape(12.dp))
+            .border(if (focused) focusStrokeWidth(3.dp) else 0.dp, if (focused) Tone.accent else Color.Transparent, RoundedCornerShape(12.dp))
             .pageTile(pageTiles, group.key)
             .returnTile(tileReturn, group.key)
             .onFocusChanged { if (it.isFocused) onFocused() }

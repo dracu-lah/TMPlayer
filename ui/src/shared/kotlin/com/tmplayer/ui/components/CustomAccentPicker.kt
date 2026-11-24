@@ -1,6 +1,7 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import com.tmplayer.ui.theme.focusStrokeWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -165,7 +166,7 @@ private fun TvAccentControls(hue: Float, strength: Float, onHue: (Float) -> Unit
                 Modifier
                     .size(TV_SWATCH)
                     .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
-                    .border(if (focused) 3.dp else 2.dp, if (focused) Tone.text else if (chosen) Tone.accent else Color.Transparent, CircleShape)
+                    .border(if (focused) focusStrokeWidth(3.dp) else 2.dp, if (focused) Tone.text else if (chosen) Tone.accent else Color.Transparent, CircleShape)
                     .padding(5.dp)
                     .clip(CircleShape)
                     .background(Color.hsl(presetHue, TV_STRENGTH, SEED_LIGHTNESS))
@@ -184,7 +185,7 @@ private fun TvAccentControls(hue: Float, strength: Float, onHue: (Float) -> Unit
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .border(if (rowFocused) 3.dp else 1.dp, if (rowFocused) Tone.text else Tone.surfaceHigh, RoundedCornerShape(12.dp))
+            .border(if (rowFocused) focusStrokeWidth(3.dp) else 1.dp, if (rowFocused) Tone.text else Tone.surfaceHigh, RoundedCornerShape(12.dp))
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {

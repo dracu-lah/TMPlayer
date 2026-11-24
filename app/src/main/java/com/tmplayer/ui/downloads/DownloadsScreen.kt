@@ -1795,7 +1795,7 @@ private fun RowCard(
         border = when {
             accent != null -> BorderStroke(2.dp, accent)
             phone -> null
-            else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            else -> BorderStroke(1.dp, Tone.outline)
         },
     ) {
         // [CARD_PAD] on every device, the storage card's and the switch row's own figure, so the

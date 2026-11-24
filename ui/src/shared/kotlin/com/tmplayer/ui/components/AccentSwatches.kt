@@ -1,6 +1,7 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import com.tmplayer.ui.theme.focusStrokeWidth
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -133,7 +134,7 @@ private fun Swatch(accent: Accent, chosen: Boolean, enabled: Boolean, size: Dp, 
                 scaleY = scale
             }
             .size(size + 12.dp)
-            .border(if (focused) 3.dp else 2.dp, ring, CircleShape)
+            .border(if (focused) focusStrokeWidth(3.dp) else 2.dp, ring, CircleShape)
             .padding(5.dp)
             .focusProperties { canFocus = enabled }
             .semantics {
