@@ -53,7 +53,7 @@ object AccountKeys {
         "feedback_draft", "heavy_ask_skip", "app_pin", "app_pin_failures", "app_pin_wait_left_ms",
         "app_pin_wait_stamp", "app_lock_on_open", "app_lock_biometric", "kids_lock", "setup", "tour", "history_tab", "history_sort",
         "downloads_sort", "theme_choice", "pure_black", "accent", "accent_custom", "app_typeface", "high_contrast",
-        "language", "language_announced", "last_seen_version", "dynamic_colour", "ui_scale", "ui_scale_tentative", "video_scale",
+        "language", "language_announced", "last_seen_version", "dynamic_colour", "ui_scale", "ui_scale_tentative", "scan_then_jump", "video_scale",
         "remember_searches", "update_notify", "update_last_check", "update_skipped_version", "update_snoozed_until",
         "update_popup_shown", "update_test_versions", "update_auto_install", "update_auto_tried",
         "update_silent_refused", "update_installing", "support_first_seen", "support_snoozed_until", "support_never",

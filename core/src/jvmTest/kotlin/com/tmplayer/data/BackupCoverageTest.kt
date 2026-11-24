@@ -44,6 +44,8 @@ class BackupCoverageTest {
         // Installing updates by itself is a choice about this device and its Android release, and
         // the rest is that install's own bookkeeping (HX5).
         "update_auto_install", "update_auto_tried", "update_silent_refused", "update_installing",
+        // Scan then jump (WP-79): a choice about this device's TV stick, made on the one that needs it.
+        "scan_then_jump",
         // An interface size being tried (WP-10): the size before it, until Keep. A change in progress on this device.
         "ui_scale_tentative",
         // Hints, walkthroughs and notices already seen.

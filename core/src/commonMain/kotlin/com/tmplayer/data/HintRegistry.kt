@@ -54,6 +54,9 @@ object HintIds {
     /** The television Settings' line that Page and Channel keys jump between sections, once such a key has arrived (WP-75). */
     const val SETTINGS_PAGE_KEYS = "settings_page_keys"
 
+    /** The scrub card's "Let go to jump here", the first three scans of the television's scan option (WP-79). */
+    const val SCAN_JUMP = "scan_jump"
+
     /** The first Info press on the television's player: Hold Info reports a stutter (WP-21). */
     const val INFO_HOLD = "info_hold"
 

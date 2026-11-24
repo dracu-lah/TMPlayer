@@ -426,6 +426,7 @@ fun SettingsScreen(
     val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
     val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
     val evenVolume by settings.evenVolume.collectAsStateWithLifecycle(initialValue = true)
+    val scanThenJumpOn by settings.scanThenJump.collectAsStateWithLifecycle(initialValue = false)
     // Volume boost and Night mode, as the player's menu leaves them (WP-24), and whether audio passthrough
     // is allowed: with it on, Dolby and DTS sound goes to the speakers and neither touches it.
     val volumeBoostOn by settings.volumeBoost.collectAsStateWithLifecycle(initialValue = false)
@@ -1583,6 +1584,18 @@ fun SettingsScreen(
                         },
                         onWrap = { scope.launch { settings.setResumeRewindMs(choices.first()) } },
                     )
+                }
+                // A television's: a held arrow scans and seeks once when let go (WP-79). Off, the live ramp stays.
+                if (!touch) {
+                    item(key = "scan_then_jump") {
+                        ToggleRow(
+                            title = s.settingsScanThenJump,
+                            subtitle = s.settingsScanThenJumpDetail,
+                            icon = TmIcons.Frames,
+                            checked = scanThenJumpOn,
+                            onToggle = { scope.launch { settings.setScanThenJump(!scanThenJumpOn) } },
+                        )
+                    }
                 }
                 // The four kinds of skip, one row (WP-08). Only where the build has the online lists.
                 if (com.tmplayer.online.OnlineMetadata.current != null) item(key = "skip_buttons") { SkipButtonsRow() }

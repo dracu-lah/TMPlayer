@@ -443,6 +443,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Volume boost as the viewer left it, read before the player is built. */
     private var volumeBoostOn = false
 
+    /** Settings, Playback: scan while holding and jump once when let go (WP-79); off unless chosen. */
+    private var scanThenJump = false
+
+    /** The held arrow's virtual position while the scan option scans; see [RemoteScan]. */
+    private val remoteScan = RemoteScan()
+    private val scanIdle = Runnable { commitScan() }
+
     /**
      * The sound now plays as a Dolby or DTS bitstream, read from the output's own AudioTrack on every
      * audio format change (WP-24): Volume boost and Night mode cannot reach it, and say so.
@@ -2659,6 +2666,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val trackPrefsRead = async { runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences()) }
             val downmixRead = async { runCatching { settings.downmixChoiceNow() }.getOrNull() }
             val boostRead = async { runCatching { settings.volumeBoostNow() }.getOrDefault(false) }
+            val scanRead = async { runCatching { settings.scanThenJumpNow() }.getOrDefault(false) }
             val nightRead = async { runCatching { settings.nightModeNow() }.getOrDefault(false) }
             val evenRead = async { runCatching { settings.evenVolumeNow() }.getOrDefault(true) }
             val playerVolumeRead = async { runCatching { settings.playerVolumeNow() }.getOrDefault(PlayerVolume.FULL) }
@@ -2760,6 +2768,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 (trackPlan.subtitles is SubtitlePlan.On || trackPlan.subtitles is SubtitlePlan.IfForeignAudio)
             downmixChoice = downmixRead.await()
             volumeBoostOn = boostRead.await()
+            scanThenJump = scanRead.await()
             nightModeOn = nightRead.await()
             evenVolumeOn = evenRead.await()
             playerVolumePercent = playerVolumeRead.await()
@@ -3468,6 +3477,61 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (jumpRun.tap(zone, SystemClock.uptimeMillis()) == 1) jumpRunSeconds = 0
         jumpRunSeconds += step / 1000
         feedback?.jump(zone, jumpRunSeconds, PlayerRemoteKeys.pace(step, base))
+    }
+
+    /**
+     * The scan option (WP-79): a held arrow, from its [PlayerRemoteKeys.SCAN_FROM_REPEAT]th repeat on,
+     * moves a virtual position (the bar's thumb and a card with the time) and seeks nothing; one
+     * seek lands when the key is let go ([commitScan]) or none repeats for [PlayerRemoteKeys.SCAN_IDLE_MS].
+     * False where the key should seek live as before: a first press and the first repeats, a video
+     * with no length, a cast or the other engine, a file that cannot be sought.
+     */
+    private fun scanFromRemote(forward: Boolean, event: KeyEvent): Boolean {
+        // A fresh press while a scan waits lands it first; the press itself is an ordinary jump.
+        if (event.repeatCount == 0) {
+            if (remoteScan.target != null) commitScan()
+            return false
+        }
+        if (remoteScan.target == null && event.repeatCount < PlayerRemoteKeys.SCAN_FROM_REPEAT) return false
+        val exo = playing ?: return false
+        val duration = exo.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: return false
+        if (castUp() || vlcEngine != null || refuseSeek()) return false
+        val starting = remoteScan.target == null
+        val next = remoteScan.step(exo.currentPosition, forward, event.repeatCount, event.eventTime, SystemClock.uptimeMillis(), duration, END_GUARD_MS)
+        if (next != null) {
+            controls?.scanTo(next)
+            if (starting) hintScan()
+        }
+        loopHandler.removeCallbacks(scanIdle)
+        loopHandler.postDelayed(scanIdle, PlayerRemoteKeys.SCAN_IDLE_MS)
+        return true
+    }
+
+    /** The one seek of a scan, to where it stopped; the card and the scrub mode go away first. */
+    private fun commitScan() {
+        loopHandler.removeCallbacks(scanIdle)
+        val to = remoteScan.commit() ?: return
+        controls?.endScan()
+        playing?.seekTo(to)
+    }
+
+    /** Drops a scan without a seek. */
+    private fun cancelScan() {
+        loopHandler.removeCallbacks(scanIdle)
+        if (remoteScan.target == null) return
+        remoteScan.cancel()
+        controls?.endScan()
+    }
+
+    /** "Let go to jump here", on the first three scans, through the hint registry (WP-68). */
+    private fun hintScan() {
+        lifecycleScope.launch {
+            val state = runCatching { settings.hintState.first() }.getOrNull()
+            // A scan is the viewer steering, not a video playing on: the registry's playback rule does not apply.
+            if (!com.tmplayer.ui.components.hintAllowed(state, com.tmplayer.data.HintIds.SCAN_JUMP, maxShows = 3, inPlayback = false)) return@launch
+            runCatching { settings.bumpHint(com.tmplayer.data.HintIds.SCAN_JUMP) }
+            showGestureFeedback(L.playerScanReleaseToJump)
+        }
     }
 
     /**
@@ -7265,6 +7329,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             return true
         }
+        // A scan lands once, when its key is let go (WP-79).
+        if (event.action == KeyEvent.ACTION_UP && remoteScan.target != null &&
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || event.keyCode == KeyEvent.KEYCODE_MEDIA_REWIND)
+        ) {
+            commitScan()
+            return true
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         // The quiet line about software decoding goes with the next press, which still does what
         // it does: the line asks nothing, so it never holds a key back.
@@ -7435,6 +7506,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                // A held Rewind scans like a held Left (WP-79); held Fast forward stays 2x playback.
+                if (scanThenJump && FormFactor.isTv(this) && scanFromRemote(false, event)) return true
                 jumpFromRemote(forward = false, repeatCount = event.repeatCount, eventMs = event.eventTime)
                 return true
             }
@@ -7492,8 +7565,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // bar's longer strides opens the row with OK; once it is up the same arrows
                 // reach the focused view through super, which on the bar is the stride and on
                 // the buttons is walking the row.
-                if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    jumpFromRemote(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT, repeatCount = event.repeatCount, eventMs = event.eventTime)
+                // A scan under way keeps the keys even with its row raised (WP-79).
+                if (FormFactor.isTv(this) && (!controlsUp || remoteScan.target != null) && statusOverlay.visibility != View.VISIBLE) {
+                    val forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    if (scanThenJump && scanFromRemote(forward, event)) return true
+                    jumpFromRemote(forward = forward, repeatCount = event.repeatCount, eventMs = event.eventTime)
                     return true
                 }
             }
@@ -11289,8 +11365,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     override fun onStop() {
         super.onStop()
-        // The pause mark's timers never run in the background (WP-21).
+        // The pause mark's timers never run in the background (WP-21), and a scan that was not let go
+        // lands nowhere: nothing was sought, so there is nothing to save (WP-79).
         controls?.stopPauseDim()
+        cancelScan()
         // A key that was held when the window went away never reports its release.
         endRemoteHold()
         // A SubMaker translation waits while nobody can see it, and carries on when they are back.

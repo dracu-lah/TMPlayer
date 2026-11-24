@@ -196,6 +196,8 @@ object SettingsMap {
         row("picture_in_picture", g, "settings.picture_in_picture_leave", P, onOff("settings.picture_in_picture_leave"), SettingsNeed.PictureInPicture)
         row("controls_timeout", g, "settings.controls_timeout", PTD, listOf("settings.controls_timeout_detail"), desktopTitle = "settings.hide_controls")
         row("resume_rewind", g, "settings.resume_rewind", PTD, listOf("settings.resume_rewind_detail"))
+        // A held Left or Right scans a position and seeks once when let go (WP-79); a television's, off by default.
+        row("scan_then_jump", g, "settings.scan_then_jump", T, listOf("settings.scan_then_jump_detail"))
         // One row for Recap, Intro, Credits and Preview, each Ask me, Skip by itself or Off (was four lines under
         // Skip intro buttons in Home and library; the switch and its privacy line stay in Online metadata, and
         // the row is there in the builds that have it).

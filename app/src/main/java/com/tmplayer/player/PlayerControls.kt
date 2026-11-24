@@ -481,14 +481,38 @@ class PlayerControls(
      * Shows the card for [position] over the bar, centred on where the scrubber is: the time at
      * once, the picture when a source has one (see [ScrubPreviewCard]).
      */
-    fun preview(position: Long) {
+    fun preview(position: Long, pictures: Boolean = true) {
         if (previewsOff && !isTv) return
         previewAt = position
         val duration = player()?.duration?.takeIf { it > 0 } ?: 0L
         val label = Translator.messages.formatter.clock(position)
-        val source = if (previewsOff) null else thumbnails
+        val source = if (previewsOff || !pictures) null else thumbnails
         scrubCard.show(position, duration, label, source) { scrubbing || previewPinned }
         placePreview(position)
+    }
+
+    /**
+     * The scan option (WP-79): the row raised in scrub mode at a virtual [position]. The thumb, the
+     * clock and the card move there and nothing is sought; the card shows the time only, never a
+     * frame (nothing is fetched while a stick scans). [endScan] puts it all away; the activity does
+     * the one seek.
+     */
+    fun scanTo(position: Long) {
+        if (!isTv) return
+        scrubbing = true
+        container.removeCallbacks(hide)
+        if (!shown) show()
+        timeBar.setPosition(position)
+        renderClock(position)
+        preview(position, pictures = false)
+    }
+
+    /** The scan is over: the card goes, the bar follows the video again, the row gets its usual time. */
+    fun endScan() {
+        if (!scrubbing) return
+        scrubbing = false
+        hidePreview()
+        poke()
     }
 
     /** For the screenshot fixture: keep the card up without a scrub in progress. */

@@ -346,6 +346,7 @@ private val ENGINE_HISTORY = stringPreferencesKey("engine_history")
 // What the remedy ladder learned per class of video on this device (RL6, [RemedyMemory]): its decoders, so it stays behind.
 private val REMEDY_MEMORY = stringPreferencesKey("remedy_memory")
 private val FRAME_RATE_MATCHING = booleanPreferencesKey("frame_rate_matching")
+private val SCAN_THEN_JUMP = booleanPreferencesKey("scan_then_jump")
 private val TUNNELED_PLAYBACK = stringPreferencesKey("tunneled_playback")
 // Dolby and DTS to the television or receiver as they are (A2); off decodes them to plain sound here.
 private val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
@@ -2381,6 +2382,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     val frameRateMatching: Flow<Boolean> = read { it[FRAME_RATE_MATCHING] ?: true }
 
     suspend fun frameRateMatchingNow(): Boolean = prefs.data.first()[FRAME_RATE_MATCHING] ?: true
+
+    /**
+     * Scan while holding, jump once when let go (WP-79): a held Left or Right over the bare picture
+     * moves a scrub position and seeks once on release, instead of a live seek a few times a second.
+     * Off unless chosen: nobody's habit changes, and the live ramp stays the default.
+     */
+    val scanThenJump: Flow<Boolean> = read { it[SCAN_THEN_JUMP] ?: false }
+
+    /** Read before the player is built, like [frameRateMatchingNow]. */
+    suspend fun scanThenJumpNow(): Boolean = prefs.data.first()[SCAN_THEN_JUMP] ?: false
+
+    suspend fun setScanThenJump(value: Boolean) {
+        prefs.edit { it[SCAN_THEN_JUMP] = value }
+    }
 
     suspend fun setFrameRateMatching(value: Boolean) {
         prefs.edit { it[FRAME_RATE_MATCHING] = value }

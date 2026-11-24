@@ -266,4 +266,30 @@ class PauseControlsRowTest {
         assertTrue(phone.visible)
         assertEquals(null, mark(phoneDisc.rootView))
     }
+
+    // ---- the scan option's scrub mode (WP-79) -------------------------------------------------
+
+    @Test
+    fun `a scan moves the clock and the card to the virtual position and puts them away, a phone has none`() {
+        val (controls, disc) = row(tv = true)
+        playing = true
+        controls.scanTo(754_000L)
+        assertTrue("the row is raised in scrub mode", controls.visible)
+        assertEquals(View.VISIBLE, controls.previewCard.visibility)
+        val clock = com.tmplayer.i18n.L.messages.formatter.clock(754_000L)
+        val texts = buildList {
+            fun walk(v: View) {
+                if (v is android.widget.TextView && v.visibility == View.VISIBLE) add(v.text.toString())
+                if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+            walk(disc.rootView)
+        }
+        assertTrue("the time is on the card or the bar: $clock in $texts", texts.any { clock in it })
+        controls.scanTo(900_000L)
+        controls.endScan()
+        assertEquals("the card is gone", View.GONE, controls.previewCard.visibility)
+        val (phone, _) = row(tv = false)
+        phone.scanTo(500_000L)
+        assertEquals("nothing scans on a phone", View.GONE, phone.previewCard.visibility)
+    }
 }

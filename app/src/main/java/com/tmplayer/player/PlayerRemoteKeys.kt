@@ -12,6 +12,12 @@ import kotlin.math.roundToInt
  */
 object PlayerRemoteKeys {
 
+    /** From this repeat of a held arrow the scan option moves the scrub position instead of seeking (WP-79). */
+    const val SCAN_FROM_REPEAT = 3
+
+    /** Without a repeat for this long a scan lands on its own: the key was let go without its release being seen. */
+    const val SCAN_IDLE_MS = 400L
+
     /**
      * The least time between two seeks from a held arrow. A seek is a TDLib round trip, so a held
      * key lands about five a second and never one per repeat.
@@ -278,5 +284,45 @@ object PlayerRemoteKeys {
         KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP ->
             if (engaged) NextUpKey.Release else NextUpKey.Ignore
         else -> NextUpKey.Ignore
+    }
+}
+
+/**
+ * The position a held arrow scans to (WP-79): the virtual target moves with [PlayerRemoteKeys]'s own
+ * steps and pace (the 150 ms gate, x1, x3, x6, capped to a share of the length, a stale repeat
+ * dropped) and nothing is sought until [commit], once, on the key's release or after
+ * [PlayerRemoteKeys.SCAN_IDLE_MS] without a repeat. Two keys at once: the last one's direction wins,
+ * from the same target. No duration (a live stream) moves nothing, and the caller seeks live.
+ */
+class RemoteScan {
+    /** Where a release would land, or null with no scan in progress. */
+    var target: Long? = null
+        private set
+
+    private var lastStepAt = 0L
+
+    /**
+     * One repeat of a held arrow: the new target, or null when nothing moved (no duration, a repeat
+     * inside the gate, or one that waited too long behind a slow main thread).
+     */
+    fun step(positionMs: Long, forward: Boolean, repeatCount: Int, eventMs: Long, nowMs: Long, durationMs: Long, endGuardMs: Long): Long? {
+        if (durationMs <= 0L) return null
+        val base = PlayerRemoteKeys.remoteBaseMs(forward, true)
+        val step = PlayerRemoteKeys.pictureStepMs(repeatCount, base, eventMs, nowMs, lastStepAt, durationMs)
+        if (step <= 0L) return null
+        lastStepAt = nowMs
+        val from = target ?: positionMs
+        val next = (from + if (forward) step else -step).coerceIn(0L, (durationMs - endGuardMs).coerceAtLeast(0L))
+        target = next
+        return next
+    }
+
+    /** The one seek: where the scan stopped, and the scan is over. Null when none was in progress. */
+    fun commit(): Long? = target.also { cancel() }
+
+    /** Drops the scan without a seek (the screen stopped): nothing happened to the video. */
+    fun cancel() {
+        target = null
+        lastStepAt = 0L
     }
 }
