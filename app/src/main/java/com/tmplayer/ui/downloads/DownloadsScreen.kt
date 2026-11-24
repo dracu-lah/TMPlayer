@@ -334,7 +334,7 @@ fun DownloadsScreen(
     val pageTiles = rememberPageTiles(settings)
     // The row the player was opened from: when the player closes the remote is on it again, not on
     // whatever the window picked (R2, "Back from the player returns focus to the opener").
-    val opener = remember { OpenerMemory() }
+    val opener = rememberOpenerMemory()
     RestoreOpenerOnResume(opener) { key ->
         if (remote) {
             rowFocusKey = key

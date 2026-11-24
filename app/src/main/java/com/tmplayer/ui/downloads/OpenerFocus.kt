@@ -3,6 +3,8 @@ package com.tmplayer.ui.downloads
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -14,8 +16,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
  * resumes, and the row that was playing takes the remote again, instead of whatever the window
  * decided to focus on its own.
  */
-internal class OpenerMemory {
-    private var key: String? = null
+internal class OpenerMemory(restored: String? = null) {
+    private var key: String? = restored
+
+    /** The row kept across a destroyed activity (WP-15), or null. */
+    internal fun saved(): String? = key
 
     /** The row [key] opened the player. */
     fun opened(key: String) {
@@ -25,6 +30,15 @@ internal class OpenerMemory {
     /** The row to give the remote back to, once: null when nothing was opened (the page's first resume). */
     fun takeOnReturn(): String? = key.also { key = null }
 }
+
+/** An [OpenerMemory] that survives the activity being destroyed behind the player ("Don't keep activities"). */
+@Composable
+internal fun rememberOpenerMemory(): OpenerMemory = rememberSaveable(
+    saver = Saver<OpenerMemory, String>(
+        save = { it.saved() ?: "" },
+        restore = { OpenerMemory(it.ifEmpty { null }) },
+    ),
+) { OpenerMemory() }
 
 /**
  * Calls [restore] with the row that opened the player each time this page resumes after one, and not

@@ -242,7 +242,7 @@ enum class SettingsPage {
  * Focus for a row in a lazy list, which exists only once the list has been measured: a frame
  * first, and a couple more if the row is still not there to take it.
  */
-private suspend fun FocusRequester.settle(): Boolean {
+internal suspend fun FocusRequester.settle(): Boolean {
     repeat(3) {
         withFrameNanos { }
         if (runCatching { requestFocus() }.getOrDefault(false)) return true
@@ -484,6 +484,8 @@ fun SettingsScreen(
     // A link a TV cannot open, shown as a QR code instead: the address and what it is.
     var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
     var supporting by remember { mutableStateOf(false) }
+    // The Support row, which the remote goes back to when its dialog closes (WP-15).
+    val supportRow = remember { FocusRequester() }
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     // The language picker, the "What's new" sheet and "Report a problem", each over the list.
     var pickingLanguage by remember { mutableStateOf(false) }
@@ -2372,6 +2374,7 @@ fun SettingsScreen(
                             title = if (supportCounters.supporter) About.SUPPORT_THANKS_TITLE else About.SUPPORT_TITLE,
                             subtitle = s.settingsSupportDetail,
                             icon = TmIcons.Favorite,
+                            modifier = Modifier.focusRequester(supportRow),
                             onClick = { supporting = true },
                         )
                     }
@@ -2730,8 +2733,8 @@ fun SettingsScreen(
     }
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
-    if (supporting) SupportDialog(onClose = { supporting = false })
-    if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
+    if (supporting) SupportDialog(onClose = { supporting = false; if (!touch) scope.launch { supportRow.settle() } })
+    if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false; if (!touch) scope.launch { landing.settle() } })
     if (pickingLayout) LayoutSheet(onClose = { pickingLayout = false })
     if (showingLearnt) {
         LearntLanguagesSheet(

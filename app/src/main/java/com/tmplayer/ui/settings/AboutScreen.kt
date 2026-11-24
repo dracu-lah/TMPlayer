@@ -105,6 +105,9 @@ fun AboutScreen(onBack: () -> Unit) {
     val supporter by remember { com.tmplayer.data.SettingsStore(context).supportCounters }
         .collectAsState(initial = com.tmplayer.data.SupportReminder.Counters())
     val first = remember { FocusRequester() }
+    // The rows that open a dialog, which the remote goes back to when it closes (WP-15).
+    val coffeeRow = remember { FocusRequester() }
+    val linkRows = remember { HashMap<String, FocusRequester>() }
     val insets = WindowInsets.safeDrawing.asPaddingValues()
     val open = { link: About.Link -> if (!openLink(context, link.url)) qr = link }
 
@@ -174,7 +177,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         } else {
-                            CoffeeRow(onClick = { coffee = true })
+                            CoffeeRow(onClick = { coffee = true }, modifier = Modifier.focusRequester(coffeeRow))
                         }
                     }
                     item {
@@ -193,6 +196,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         subtitle = link.detail,
                         icon = iconFor(group.title),
                         service = link.service,
+                        modifier = if (touch) Modifier else Modifier.focusRequester(linkRows.getOrPut(link.url) { FocusRequester() }),
                         onClick = { open(link) },
                     )
                 }
@@ -233,11 +237,14 @@ fun AboutScreen(onBack: () -> Unit) {
         }
     }
 
-    if (coffee) CoffeeDialog(supporter, asking = false, onLater = { coffee = false }, onNever = { coffee = false })
+    val scope = rememberCoroutineScope()
+    val coffeeDone = { coffee = false; if (!touch) scope.launch { coffeeRow.settle() } }
+    if (coffee) CoffeeDialog(supporter, asking = false, onLater = coffeeDone, onNever = coffeeDone)
 
     qr?.let { link ->
         LinkQrDialog(url = link.url, what = link.title.replaceFirstChar { it.lowercase() }.let { s.aboutLinkQrWhat(it) }) {
             qr = null
+            if (!touch) scope.launch { linkRows[link.url]?.settle() }
         }
     }
 }

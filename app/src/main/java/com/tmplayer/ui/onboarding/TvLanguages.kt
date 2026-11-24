@@ -41,8 +41,11 @@ internal fun TvLanguages(
     val saved = current ?: stored
     val system = remember { systemLanguageName() }
     val choices = remember { Onboarding.languages() }
+    // The chosen row; a stored tag the list does not know leaves the first row to take the remote.
+    val chosenAt = choices.indexOfFirst { it.tag.equals(saved, ignoreCase = true) }.coerceAtLeast(0)
     val list = rememberLazyListState(
-        initialFirstVisibleItemIndex = choices.indexOfFirst { it.tag.equals(saved, ignoreCase = true) }.coerceAtLeast(0),
+        // Two rows above the chosen one show, so the list reads as a list with the choice inside it (WP-15).
+        initialFirstVisibleItemIndex = (chosenAt - 2).coerceAtLeast(0),
     )
     LazyColumn(
         modifier,
@@ -50,13 +53,13 @@ internal fun TvLanguages(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(vertical = Tv.FocusClearance),
     ) {
-        itemsIndexed(choices, key = { _, it -> it.tag }) { _, choice ->
+        itemsIndexed(choices, key = { _, it -> it.tag }) { at, choice ->
             val selected = saved.equals(choice.tag, ignoreCase = true)
             TvChoiceRow(
                 title = choice.name ?: s.onboardingLanguageSystem,
                 trailing = if (choice.name == null) system else null,
                 selected = selected,
-                modifier = if (selected && focusSelected != null) Modifier.focusRequester(focusSelected) else Modifier,
+                modifier = if (at == chosenAt && focusSelected != null) Modifier.focusRequester(focusSelected) else Modifier,
             ) {
                 scope.launch { settings.setLanguage(choice.tag) }
                 onPicked()

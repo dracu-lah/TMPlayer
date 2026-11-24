@@ -908,7 +908,7 @@ fun MediaGridScreen(
                                         poster = shelved.key in posterKeys,
                                         selected = if (selecting) selected.containsKey(item.id) else null,
                                         onClick = {
-                                            tileReturn.open(shelved.key)
+                                            tileReturn.open(shelved.key, feedIndexOfTile(feed, shelved.key))
                                             if (selecting) toggle(item) else if (detailFirst) details.open(item) else onPlay(item)
                                         },
                                         onLongClick = if (selecting) null else {
@@ -1148,7 +1148,19 @@ fun MediaGridScreen(
                 val target = lastTile.value
                 if (target != null && feedIndexOfTile(feed, target.key) < 0) lastTile.value = null
             }
-            ReturnToTile(tileReturn, pageOpen = details.top != null || heldMenuOf != null || openSeries.series != null, scrollTo = scrollToTile)
+            ReturnToTile(
+                tileReturn,
+                pageOpen = details.top != null || heldMenuOf != null || openSeries.series != null,
+                // A grid built again after the activity was killed has no tiles until its first page is in.
+                ready = feed.isNotEmpty(),
+                // A video gone meanwhile: the tile now at its place, or the one before it.
+                nearest = { at ->
+                    var i = at.coerceAtMost(feed.lastIndex)
+                    while (i >= 0 && at >= 0 && (feed[i] as? MediaFeedEntry.Media) == null) i--
+                    if (at < 0 || i < 0) null else (feed[i] as? MediaFeedEntry.Media)?.item?.key
+                },
+                scrollTo = scrollToTile,
+            )
 
             // Fetch the next page well before the user reaches the bottom row: two rows ahead.
             val nearEnd by remember(list.items.size, columns, feed) {

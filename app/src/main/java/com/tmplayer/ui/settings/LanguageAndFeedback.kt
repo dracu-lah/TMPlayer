@@ -101,10 +101,16 @@ fun LanguageDialog(settings: SettingsStore, onClose: () -> Unit) {
             ChoiceList { LanguageList(settings, columns = 1) }
         } else {
             BackHandler(onBack = onClose)
-            TvLanguages(settings, Modifier.weight(1f, fill = false).focusRequester(close))
+            TvLanguages(settings, Modifier.weight(1f, fill = false), focusSelected = close)
         }
     }
-    if (!touch) LaunchedEffect(Unit) { runCatching { close.requestFocus() } }
+    // The chosen row is a lazy item: composed a frame after the list is measured, so asked a few times.
+    if (!touch) LaunchedEffect(Unit) {
+        repeat(5) {
+            androidx.compose.runtime.withFrameNanos { }
+            if (runCatching { close.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+        }
+    }
 }
 
 /**

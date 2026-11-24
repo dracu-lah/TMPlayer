@@ -1677,7 +1677,7 @@ private fun <T : Any> ContinueSection(
         if (ticked != null) {
             onTick(record)
         } else {
-            tileReturn.open(text(record).key)
+            tileReturn.open(text(record).key, records.indexOf(record))
             onResume(record)
         }
     }
@@ -1769,7 +1769,13 @@ private fun <T : Any> ContinueSection(
     }
     // Back from a video's page, the remote lands on the card it was opened from, scrolled back
     // to where the list went while the page was up. Its lazy index counts the day headings.
-    ReturnToTile(tileReturn, pageOpen) { key ->
+    ReturnToTile(
+        tileReturn,
+        pageOpen,
+        ready = records.isNotEmpty(),
+        // A video gone meanwhile (deleted, forgotten): the card now at its place, or the last one.
+        nearest = { at -> if (at < 0) null else records.getOrNull(at.coerceAtMost(records.lastIndex))?.let { text(it).key } },
+    ) { key ->
         var index = 0
         var found = -1
         for ((day, members) in sections) {
