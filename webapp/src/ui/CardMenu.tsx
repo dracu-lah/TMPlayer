@@ -5,7 +5,7 @@
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Copy01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, MoreVerticalIcon, PlayIcon, Search01Icon, Share08Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Copy01Icon, Download04Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, MoreVerticalIcon, PlayIcon, Search01Icon, Share08Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { laterIds, settings, setLater, setWatched, watchedIds, watchedTick } from '../store'
@@ -17,6 +17,7 @@ import { RenameSheet } from './RenameSheet'
 import { showToast } from './Toast'
 import { copyLink, isTgLink, linkOf, linkOffered } from './tgLinks'
 import { canShare, shareVideo } from './shareVideo'
+import { canSaveToDevice, saveToDevice } from './saveRuntime'
 import { api } from '../tg/rpc'
 import { openListPicker } from '../screens/Lists'
 import { isApart, keepApart } from '../copies'
@@ -185,6 +186,10 @@ export function CardMenu() {
         const text = manual()
         if (text) queueMicrotask(() => dialog.querySelector<HTMLInputElement>('input.link-field')?.select())
     })
+    const saveFrom = (item: VideoItem) => {
+        close()
+        void saveToDevice(item)
+    }
     const share = (href: string, name: string) => {
         close()
         void shareVideo(href, name)
@@ -290,6 +295,16 @@ export function CardMenu() {
                                 <small>{t('poster.choose_detail')}</small>
                             </span>
                         </button>
+                        {/* Save to device (WP-86): the file itself, streamed to the browser's download; never for a chat that restricts saving, nor where the browser cannot. */}
+                        <Show when={canSaveToDevice(now().item)}>
+                            <button class="menu-row" type="button" onClick={() => saveFrom(now().item)}>
+                                <Icon icon={Download04Icon} size={22} />
+                                <span>
+                                    {t('web.save_to_device')}
+                                    <small>{t('web.save_to_device_detail')}</small>
+                                </span>
+                            </button>
+                        </Show>
                         {/* The apps' Copy link: not for a chat that restricts saving, nor a video played from pieces. */}
                         <Show when={linkOffered(now().item) && !blocked()}>
                             <button class="menu-row" type="button" onClick={copy}>

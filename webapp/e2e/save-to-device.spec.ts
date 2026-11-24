@@ -1,0 +1,88 @@
+// WP-86: Save to device. The file goes through the service worker to the browser's own download, a
+// piece at a time; room is checked first and said in figures; a running save can be cancelled and the
+// browser keeps nothing; a restricted chat never offers it. Chromium: the other engines are the user's
+// device check.
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import { fakeCase, noSizeFloor } from './helpers'
+
+test.beforeEach(async ({ page, isMobile }) => {
+    test.skip(isMobile, 'a desktop browser saves to its downloads folder')
+    await noSizeFloor(page)
+})
+
+const controlled = (page: Page) => expect.poll(() => page.evaluate(() => !!navigator.serviceWorker?.controller), { timeout: 15_000 }).toBe(true)
+
+async function openDetail(page: Page, room: string, name: string) {
+    await page.goto(room)
+    await controlled(page)
+    await page.locator('.card').filter({ hasText: name }).click()
+    await expect(page).toHaveURL(/\/video\//)
+}
+
+async function menuOf(page: Page, card: Locator) {
+    await card.click({ button: 'right' })
+    await expect(page.locator('dialog.card-menu[open]')).toBeVisible()
+}
+
+test.describe('with room', () => {
+    test.beforeEach(async ({ context }) => {
+        await fakeCase(context, 'links')
+    })
+
+    test('the video page saves the file as a download, with its name, and says so', async ({ page }) => {
+        await openDetail(page, '/chat/-1001234567890', 'Plain Clip')
+        const downloading = page.waitForEvent('download')
+        await page.locator('.detail-round', { hasText: 'Save to device' }).click()
+        const file = await downloading
+        expect(file.suggestedFilename()).toMatch(/\.(mp4|mkv|webm|mov)$/)
+        const path = await file.path()
+        expect(path).toBeTruthy()
+        expect(await file.failure()).toBeNull()
+        await expect(page.locator('.toast')).toContainText('Saved')
+        await expect(page.locator('.save-status')).toHaveCount(0, { timeout: 10_000 })
+    })
+
+    test('the card menu has the row, and a chat that restricts saving does not', async ({ page }) => {
+        await page.goto('/chat/-1001234567890')
+        await controlled(page)
+        await menuOf(page, page.locator('.card').filter({ hasText: 'Plain Clip' }))
+        await expect(page.locator('dialog.card-menu[open]').getByRole('button', { name: /Save to device/ })).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.locator('dialog[open]')).toHaveCount(0)
+        // The menu's own history entry goes with it; a navigation made before that lands on the old one.
+        await page.waitForTimeout(300)
+        await page.goto('/chat/-1005555555555')
+        await controlled(page)
+        await menuOf(page, page.locator('.card').first())
+        await expect(page.locator('dialog.card-menu[open]').getByRole('button', { name: /Save to device/ })).toHaveCount(0)
+        await page.keyboard.press('Escape')
+        await page.locator('.card').first().click()
+        await expect(page).toHaveURL(/\/video\//)
+        await expect(page.locator('.detail-round', { hasText: 'Save to device' })).toHaveCount(0)
+    })
+
+    test('a save that does not fit says what it needs and what is free, and starts nothing', async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator.storage, 'estimate', { value: async () => ({ quota: 200_000, usage: 150_000 }), configurable: true })
+        })
+        await openDetail(page, '/chat/-1001234567890', 'Plain Clip')
+        let downloaded = false
+        page.on('download', () => (downloaded = true))
+        await page.locator('.detail-round', { hasText: 'Save to device' }).click()
+        await expect(page.locator('.toast')).toContainText(/Needs .+, .+ free/)
+        await page.waitForTimeout(500)
+        expect(downloaded).toBe(false)
+        await expect(page.locator('.save-status')).toHaveCount(0)
+    })
+})
+
+test('a big file can be cancelled while it saves: the line goes, the toast says it was not saved', async ({ page, context }) => {
+    await fakeCase(context, 'links', 'big')
+    await openDetail(page, '/chat/-1001234567890', 'Plain Clip')
+    await page.locator('.detail-round', { hasText: 'Save to device' }).click()
+    const line = page.locator('.save-status .save-line').first()
+    await expect(line).toContainText('Saving')
+    await line.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.locator('.toast')).toContainText(/Stopped|Could not save/)
+    await expect(page.locator('.save-status')).toHaveCount(0, { timeout: 10_000 })
+})

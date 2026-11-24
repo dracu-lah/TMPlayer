@@ -15,6 +15,7 @@ import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
+import { SaveStatus } from './ui/SaveStatus'
 import { ReachBanner } from './ui/ReachBanner'
 import { LinkStatusLine } from './ui/WorkStatus'
 import { CardMenu } from './ui/CardMenu'
@@ -324,6 +325,7 @@ function Shell(props: ParentProps) {
                 </Show>
             </Show>
             <Toaster />
+            <SaveStatus />
             <CardMenu />
             <ListPicker />
             <PosterPicker />

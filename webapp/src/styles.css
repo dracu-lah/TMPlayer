@@ -137,6 +137,13 @@ main.page:focus, main.page h1:focus { outline: none; }
 .set-field { display: grid; gap: 8px; }
 .set-field-title { margin: 0; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--muted); }
 .look-preview { display: grid; place-items: center; min-height: 72px; padding: 12px; border-radius: var(--r-m); background: linear-gradient(135deg, #3a4a55, #1b2329); text-align: center; }
+/* Save to device (WP-86): the running saves over the page's foot, above the bar. */
+.save-status { position: fixed; z-index: 6; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); max-width: 420px; margin: 0 auto; display: grid; gap: 8px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--menu); color: var(--fg); box-shadow: var(--shadow); }
+.save-line { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; }
+.save-line .save-name { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
+.save-line progress { width: 100%; accent-color: var(--accent); }
+.save-line .save-figure { grid-column: 1; color: var(--muted); font-size: 0.8125rem; }
+.save-line.over .save-name { color: var(--muted); }
 /* Recent searches (WP-59): chips under an empty search box. */
 .search-recents { display: grid; gap: 8px; margin: 8px 0 16px; }
 .search-recents-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -42,14 +42,23 @@ self.addEventListener('activate', (event) => {
     )
 })
 
+// Saves to the device that are running (WP-86): id to { cancelled }. A cancel from the page ends the stream with an error, which the browser answers by dropping the download.
+const saves = new Map()
+
 self.addEventListener('message', (event) => {
     if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
+    if (event.data?.type === 'save-cancel' && typeof event.data.id === 'string') {
+        const run = saves.get(event.data.id)
+        if (run) run.cancelled = true
+    }
 })
 
 self.addEventListener('fetch', (event) => {
     const request = event.request
     const url = new URL(request.url)
     if (url.origin !== self.location.origin || request.method !== 'GET') return
+    // A request for a download (no range, a name to save as) is answered whole, a piece at a time (saveStream); the player's reads are ranges.
+    if (url.pathname.startsWith('/stream/') && url.searchParams.has('save') && !request.headers.get('range')) return event.respondWith(saveStream(event, url))
     if (url.pathname.startsWith('/stream/')) return event.respondWith(stream(event, url))
     if (VERSION === 'dev') return
     // libav.js and its sources (/libav/sources/, linked from /licenses.txt) come from the network as they are.
@@ -155,6 +164,70 @@ async function stream(event, url) {
             'Content-Range': `bytes ${start}-${start + bytes.byteLength - 1}/${size}`,
             'Accept-Ranges': 'bytes',
             'Cache-Control': 'no-store',
+        },
+    })
+}
+
+/**
+ * Save to device (WP-86): the file as an attachment, streamed. The body pulls the next piece from the page
+ * only when the browser has taken the last, so nothing is held but one piece; a failed read or a cancel
+ * ends the stream with an error, and the browser drops what it had (no partial file is kept by the app).
+ * The page is told how far it has got, and how it ended, to show the bar and the summary.
+ */
+async function saveStream(event, url) {
+    const key = decodeURIComponent(url.pathname.slice('/stream/'.length))
+    const size = Number(url.searchParams.get('size'))
+    const name = url.searchParams.get('save') || 'video'
+    const id = url.searchParams.get('id') || key
+    const profile = url.searchParams.get('p')
+    if (!(size > 0)) return new Response(null, { status: 400 })
+    const run = { cancelled: false }
+    saves.set(id, run)
+    let at = 0
+    const tell = async (state, extra) => {
+        for (const client of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) client.postMessage({ type: 'save', id, state, ...extra })
+    }
+    const end = (state, extra) => {
+        saves.delete(id)
+        return tell(state, extra)
+    }
+    const body = new ReadableStream({
+        async pull(controller) {
+            if (run.cancelled) {
+                controller.error(new Error('cancelled'))
+                return end('cancelled')
+            }
+            if (at >= size) {
+                controller.close()
+                return end('done', { loaded: size })
+            }
+            const last = Math.min(size - 1, at + MAX_ANSWER - 1)
+            const answer = await readFrom(event, { type: 'read', key, start: at, end: last, p: profile })
+            if (run.cancelled) {
+                controller.error(new Error('cancelled'))
+                return end('cancelled')
+            }
+            if (!answer || typeof answer === 'string' || answer.error || !answer.bytes || !answer.bytes.byteLength) {
+                controller.error(new Error('read'))
+                return end('failed', { why: typeof answer === 'string' ? answer : (answer && answer.error) || 'read' })
+            }
+            at += answer.bytes.byteLength
+            controller.enqueue(new Uint8Array(answer.bytes))
+            tell('progress', { loaded: at })
+        },
+        cancel() {
+            // The browser's own download list stopped it.
+            end('cancelled')
+        },
+    })
+    return new Response(body, {
+        status: 200,
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': String(size),
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
         },
     })
 }
