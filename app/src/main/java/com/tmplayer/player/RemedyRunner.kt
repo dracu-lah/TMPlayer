@@ -159,6 +159,12 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
 
     /** The decoder the viewer picked for this video from the player's menu (WP-25): true for software, null until then. */
     private var viewerSoftware: Boolean? = null
+
+    /** The viewer's software pick is too heavy for software here: never taught to the class (PB2-09). */
+    private var viewerSoftwareHeavy = false
+
+    /** The viewer turned passthrough off for this video (WP-24): for this video only, never taught to the class (PB2-05). */
+    private var viewerPassthrough = false
     private var engineSwitchedByItself = false
     private val firstFrameWatch = FirstFrameWatch()
     private val frozenWatch = FrozenOutputWatch()
@@ -202,6 +208,8 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         replacingUntilMs = -1L
         decoderSwitchedByItself = false
         viewerSoftware = null
+        viewerSoftwareHeavy = false
+        viewerPassthrough = false
         engineSwitchedByItself = false
         codecErrors = 0
         viewerStepTaken = false
@@ -381,17 +389,21 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
      * while the video plays): a choice, not an automatic hop, so it is never refused and never
      * counted in [RemedyLadder.MAX_HOPS]. It spends this video's decoder level, so neither the
      * ladder nor the player's own one-time switch moves the picture back by itself (no loop); it
-     * holds through a re-open ([policyForBuild]); and it is the class's start next time, software
-     * learned or unlearned in [RemedyMemory], as the ladder remembers what worked. A probation
-     * wait for the old path is dropped and the watches start again for the new one.
+     * holds through a re-open ([policyForBuild]). Back to the device's decoder unlearns software for
+     * the class at once; software is learned only the way the ladder learns, after
+     * [RemedyLadder.WORKED_MS] of clean play on it ([countClean]), and never when [heavy] says the
+     * picture is too much for software here (PB2-09: one curious press on a 1080p 10-bit HEVC video
+     * sent every later one of its class on the 1 GB stick to FFmpeg at four frames a second). A
+     * probation wait for the old path is dropped and the watches start again for the new one.
      *
      * No replace grace (PB2-02): the switch prepares the same player again in place, nothing builds
      * a new one to end the grace, so an error right after the press (FFmpeg's init, memory on a
      * small stick) was swallowed and the player sat idle with no sheet. Such an error now takes the
      * usual way: the decoder level is spent, so it ends in the status sheet.
      */
-    fun viewerPickedDecoder(software: Boolean) {
+    fun viewerPickedDecoder(software: Boolean, heavy: Boolean = false) {
         viewerSoftware = software
+        viewerSoftwareHeavy = software && heavy
         decoderSwitchedByItself = true
         later?.let(clock::cancel)
         later = null
@@ -399,9 +411,27 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         rearm()
         val k = key ?: return
         if (!active) return
-        memory = if (software) memory.learned(k, Remedy.Software, host.today()) else memory.unlearned(k, Remedy.Software, host.today())
-        host.saveMemory(memory)
         host.log("Remedy: viewer picked the ${if (software) "software" else "device"} decoder, class $k")
+        if (software) return
+        memory = memory.unlearned(k, Remedy.Software, host.today())
+        host.saveMemory(memory)
+    }
+
+    /**
+     * What a clean minute teaches the class ([countClean]): the ladder's steps, with the viewer's
+     * own choices in their place. The decoder the viewer picked stands for the ladder's at that
+     * level (software only when it is not too heavy here, PB2-09), and the press that turned
+     * passthrough off for this video is not taught at all (PB2-05).
+     */
+    private fun learnedFrom(l: RemedyLadder): List<Remedy> {
+        var taken = l.taken
+        if (viewerPassthrough) taken = taken.filter { it != Remedy.PassthroughOff }
+        when (viewerSoftware) {
+            true -> taken = taken.filter { it != Remedy.Software } + listOfNotNull(Remedy.Software.takeIf { !viewerSoftwareHeavy })
+            false -> taken = taken.filter { it != Remedy.Software }
+            null -> Unit
+        }
+        return taken
     }
 
     /** The decoder the viewer picked in the menu for this video, null when none (WP-25). */
@@ -470,9 +500,10 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             host.log("Remedy: class $k played clean without sound on ${l.taken.joinToString(",") { it.code }}: not learned")
             return
         }
-        memory = memory.worked(k, l.taken, host.today())
+        val taught = learnedFrom(l)
+        memory = memory.worked(k, taught, host.today())
         host.saveMemory(memory)
-        host.log("Remedy: class $k played ${RemedyLadder.WORKED_MS / 1000} s clean on ${l.taken.joinToString(",") { it.code }.ifEmpty { "default" }}")
+        host.log("Remedy: class $k played ${RemedyLadder.WORKED_MS / 1000} s clean on ${taught.joinToString(",") { it.code }.ifEmpty { "default" }}")
     }
 
     /** Carries out [action]; true when the evidence was dealt with here. */
@@ -500,9 +531,12 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         }
     }
 
-    private fun hop(l: RemedyLadder, k: String, hop: RemedyAction.Hop, error: PlaybackException?): Boolean {
-        memory = memory.hopped(k, hop, host.videoTag(), host.appVersion, host.today())
-        host.saveMemory(memory)
+    private fun hop(l: RemedyLadder, k: String, hop: RemedyAction.Hop, error: PlaybackException?, learn: Boolean = true): Boolean {
+        // The viewer's passthrough press is for this video alone: no hop, no failure for the class (PB2-05).
+        if (learn) {
+            memory = memory.hopped(k, hop, host.videoTag(), host.appVersion, host.today())
+            host.saveMemory(memory)
+        }
         // The step before this one, if it was still on probation, did not hold: the trace says so.
         traceResult(TraceHop.FAILED)
         val traced = TraceHop(System.currentTimeMillis(), hop.evidence.name, hop.replaced?.code ?: "default", hop.remedy.code)
@@ -601,17 +635,19 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         val k = key ?: return ViewerOutcome.NoClass
         host.log("Remedy: viewer asked for passthrough off, class $k")
         if (exhausted || host.engineRunning().engine != PlayerEngine.ExoPlayer) return ViewerOutcome.Recorded
-        val action = l.viewerPress(Remedy.PassthroughOff, RemedyEvidence.UserReport, host.facts(l.path.excluded), clock.now())
+        val action = l.viewerPress(Remedy.PassthroughOff, RemedyEvidence.UserReport, facts(l.path.excluded), clock.now())
         if (action !is RemedyAction.Hop) return ViewerOutcome.Recorded
         stopTicking()
-        val dealt = hop(l, k, action, null)
+        viewerPassthrough = true
+        val dealt = hop(l, k, action, null, learn = false)
         return if (dealt && !exhausted) ViewerOutcome.Tried else ViewerOutcome.Recorded
     }
 
     private fun exhaust(l: RemedyLadder, k: String, evidence: RemedyEvidence, error: PlaybackException?) {
         exhausted = true
         stopTicking()
-        memory = memory.failed(k, l.taken.lastOrNull(), host.videoTag(), host.appVersion, host.today())
+        val last = l.taken.lastOrNull()?.takeUnless { viewerPassthrough && it == Remedy.PassthroughOff }
+        memory = memory.failed(k, last, host.videoTag(), host.appVersion, host.today())
         host.saveMemory(memory)
         host.log("Remedy: no step left for ${evidence.name} after ${l.hops.size} hops, class $k")
         // The viewer's press never opens the sheet: the video was playing, see [viewerReported].

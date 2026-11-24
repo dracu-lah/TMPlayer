@@ -327,6 +327,10 @@ class RemedyRunnerTest {
         runner.viewerPickedDecoder(software = true)
         assertEquals(true, runner.viewerDecoderSoftware)
         assertEquals("a choice, not a hop: nothing re-opened by the runner", 0, player.reopened.size)
+        assertTrue("nothing learned before software played clean (PB2-09)", player.saved?.records?.values?.none { Remedy.Software in it.working } ?: true)
+        // A clean minute on software: now the class starts there next time.
+        play()
+        clock.advance(RemedyLadder.WORKED_MS + 5_000)
         val learned = player.saved!!.records.values.single()
         assertTrue("the class starts on software next time", Remedy.Software in learned.working)
         assertEquals("not counted as a hop", 0, learned.hops)
@@ -347,6 +351,38 @@ class RemedyRunnerTest {
         assertFalse(runner.policyForBuild().softwareVideo)
         open()
         assertEquals(null, runner.viewerDecoderSoftware)
+    }
+
+    /** PB2-09: a software pick too heavy for this device is never taught to the class, however clean it plays. */
+    @Test
+    fun aHeavySoftwarePickIsNeverLearnedForTheClass() {
+        open()
+        runner.viewerPickedDecoder(software = true, heavy = true)
+        play()
+        clock.advance(RemedyLadder.WORKED_MS + 5_000)
+        val records = player.saved?.records?.values.orEmpty()
+        assertTrue("software stays this video's only: $records", records.none { Remedy.Software in it.working })
+        assertTrue("this video still plays on software", runner.policyForBuild().softwareVideo)
+    }
+
+    /** PB2-05: the passthrough press is for this video only: a clean minute after it teaches the class nothing about it. */
+    @Test
+    fun theViewersPassthroughOffPressIsNotLearnedForTheClass() {
+        open()
+        assertEquals(RemedyRunner.ViewerOutcome.Tried, runner.viewerPassthroughOff())
+        assertTrue(player.reopened.last().passthroughOff)
+        play()
+        clock.advance(RemedyLadder.WORKED_MS + 5_000)
+        val records = player.saved?.records?.values.orEmpty()
+        assertTrue("PCM for this video only: $records", records.none { Remedy.PassthroughOff in it.working })
+        assertTrue("the press is no hop for the class", records.all { it.hops == 0 })
+        // The next video of the class starts with passthrough on again.
+        player.reopened.clear()
+        runner.newVideo(KnownRemedies(), active = true)
+        runner.memoryLoaded(player.saved ?: RemedyMemory.Empty)
+        assertFalse(runner.policyForBuild().passthroughOff)
+        runner.tracksKnown()
+        assertTrue(player.reopened.none { it.passthroughOff })
     }
 
     /** PB2-02: the menu's switch re-prepares the same player, so an error right after it is the player's own, never swallowed. */

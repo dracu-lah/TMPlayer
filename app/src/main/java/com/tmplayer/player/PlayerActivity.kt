@@ -10864,7 +10864,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         decoderPlan = null
         if (plan.trackType == C.TRACK_TYPE_VIDEO) videoSwitchedToSoftware = plan.toFfmpeg
         decodersSwitched += plan.trackType
-        remedies.viewerPickedDecoder(plan.toFfmpeg)
+        // Software is learned for the class only after a clean minute on it, and never for a
+        // picture too heavy to decode in software here (PB2-09).
+        val format = exo.videoFormat
+        val heavy = plan.toFfmpeg && format != null && com.tmplayer.data.SoftwareDecode.heavy(
+            format.sampleMimeType, format.width, format.height, hardware = false, weak = weakDevice,
+        )
+        remedies.viewerPickedDecoder(plan.toFfmpeg, heavy = heavy)
         Log.i(START_TAG, "Decoder: the viewer moved the picture to the ${if (plan.toFfmpeg) "FFmpeg" else "device"} decoder at $position ms")
         runCatching {
             exo.stop()
