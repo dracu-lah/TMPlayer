@@ -3356,6 +3356,7 @@ internal fun StepperRow(
 
     Row(
         modifier.seekable(title)
+            .detailOnFocus(subtitle)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .clip(shape)
@@ -3405,7 +3406,7 @@ internal fun StepperRow(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = dim,
-                maxLines = 2,
+                maxLines = if (LocalSettingsDetail.current != null) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -3582,7 +3583,7 @@ internal fun ActionRow(
 ) {
     val iconTint = if (tint == Color.Unspecified) Tone.accent else tint
     FocusRow(
-        modifier = (if (searchable) modifier.seekable(title) else modifier)
+        modifier = (if (searchable) modifier.seekable(title) else modifier).detailOnFocus(subtitle)
             .then(if (busy != null) Modifier.alpha(0.7f).semantics { stateDescription = busy } else Modifier),
         onClick = onClick,
         trailing = if (busy != null) ({ Spinner(size = 18.dp, strokeWidth = 2.dp) }) else null,
@@ -3608,7 +3609,7 @@ internal fun ActionRow(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
-                maxLines = 2,
+                maxLines = if (LocalSettingsDetail.current != null) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = if (busy != null) Modifier.liveMessage() else Modifier,
             )
@@ -3645,7 +3646,7 @@ internal fun ToggleRow(
     FocusRow(
         // The phone's real switch says its own state; the television's drawn pill is silent to a
         // screen reader or a switch device, so the row says "On" or "Off" for it.
-        modifier = modifier.seekable(title).then(
+        modifier = modifier.seekable(title).detailOnFocus(subtitle).then(
             if (isTouch()) Modifier else Modifier.semantics { stateDescription = if (checked) onWord else offWord },
         ),
         onClick = toggle,
@@ -3675,7 +3676,7 @@ internal fun ToggleRow(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
-                maxLines = 2,
+                maxLines = if (LocalSettingsDetail.current != null) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }

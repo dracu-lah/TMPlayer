@@ -198,11 +198,14 @@ class SettingsPaneTvRenderTest {
             rule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).performKeyInput { pressKey(Key.DirectionDown) }
             rule.waitForIdle()
         }
-        // No empty band under the pane until the detail strip (WP-74) is built (F-27).
+        // No empty band under the pane: the page's list runs down to the detail strip (WP-74), which
+        // ends at the pane's foot (F-27).
         val pane = bounds(SETTINGS_PANE_TAG)
         val list = rule.onNode(hasAnyAncestor(hasTestTag(SETTINGS_PANE_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex))
             .fetchSemanticsNode().boundsInRoot
-        assertTrue("the page's list reaches the pane's foot: list ${list.bottom}, pane ${pane.bottom}", list.bottom >= pane.bottom - 1f)
+        val strip = bounds(SETTINGS_DETAIL_TAG)
+        assertTrue("the strip ends at the pane's foot: strip ${strip.bottom}, pane ${pane.bottom}", kotlin.math.abs(strip.bottom - pane.bottom) <= 1f)
+        assertTrue("the page's list reaches the strip: list ${list.bottom}, strip ${strip.top}", list.bottom >= strip.top - 1f)
     }
 
     /** No text in the header or the rail below 14 sp; the rail's words on one line. */

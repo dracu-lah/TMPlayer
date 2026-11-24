@@ -39,7 +39,9 @@ import com.tmplayer.ui.theme.UiScaled
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import androidx.compose.ui.semantics.getOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -192,6 +194,27 @@ class SettingsPaneTvFocusTest {
         row("Subtitle style").press(Key.DirectionLeft)
         settle()
         rail(SettingsPage.Subtitles).assertIsFocused().assertIsSelected()
+    }
+
+    @Test
+    fun `the strip shows the focused row's sentence and is empty with the remote on the rail (WP-74)`() {
+        show()
+        fun strip(): String = rule.onNodeWithTag(SETTINGS_DETAIL_TAG, useUnmergedTree = true).fetchSemanticsNode().children
+            .firstNotNullOfOrNull { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text) }
+            ?.joinToString { it.text } ?: ""
+        assertEquals("", strip())
+        rail(SettingsPage.Playback).press(Key.DirectionRight)
+        settle()
+        // A row's sentence moved out of the row into the strip: it is the focused row's own.
+        val first = strip()
+        assertTrue("the first Playback row has a sentence", first.isNotBlank())
+        rule.onNode(isFocused()).press(Key.DirectionDown)
+        settle()
+        assertTrue("the next row writes its own", strip().isNotBlank() && strip() != first)
+        rule.onNode(isFocused()).press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Playback).assertIsFocused()
+        assertEquals("", strip())
     }
 
     @Test

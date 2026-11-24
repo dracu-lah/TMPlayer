@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,8 +81,8 @@ import com.tmplayer.ui.theme.focusRingOnTv
  * shape every TV user knows from the system's own settings, YouTube and Plex.
  *
  * At 960 x 540 dp, inside the safe area ([Tv.SafeH] 48, [Tv.SafeV] 27): a 48 dp header, a 232 dp
- * rail, a 24 dp gap and the pane (about 608 dp), which reaches the foot of the area: the detail
- * strip for the focused row's long sentence (WP-74) gets its room when it is built, not before.
+ * rail, a 24 dp gap and the pane (about 608 dp), which ends in the detail strip (WP-74): 68 dp
+ * for the focused row's sentence, so a row stays one line and nothing shifts when the remote moves.
  * The rail holds 9 categories of [RAIL_ITEM] each (432 dp inside about 438), which fits at Default
  * only: Larger and Largest multiply the density, so the rail scrolls (focus brings the item into
  * view) and never leaves an item with no height that the remote can still reach (F-04).
@@ -131,6 +132,8 @@ internal fun TvSettingsPane(
     pane: @Composable () -> Unit,
 ) {
     var railHasFocus by remember { mutableStateOf(false) }
+    // The focused row's long sentence, shown in the strip under the pane (WP-74).
+    val detail = remember { SettingsDetailHolder() }
     // The rail item the remote moved to with Up or Down, and the pane following it once it stops.
     // Only an arrow on the rail moves the pane: focus arriving on an item any other way (the
     // window's first focus, Left from the pane) leaves the page as it is.
@@ -234,9 +237,13 @@ internal fun TvSettingsPane(
                             if (requestedFocusDirection in ARROWS && requestedFocusDirection != towardsRail) cancelFocusChange()
                         }
                     }
+                    .onFocusChanged { if (!it.hasFocus) detail.text = "" }
                     .focusGroup(),
             ) {
-                PaneFade(paneKey, Modifier.fillMaxWidth().weight(1f)) { pane() }
+                androidx.compose.runtime.CompositionLocalProvider(LocalSettingsDetail provides detail) {
+                    PaneFade(paneKey, Modifier.fillMaxWidth().weight(1f)) { pane() }
+                }
+                DetailStrip(detail)
             }
         }
     }
@@ -390,6 +397,62 @@ private fun RailItem(
 }
 
 /**
+ * The sentence of the focused row, for the strip under the pane (WP-74). Written from the rows'
+ * focus callbacks and read only inside [DetailStrip], so a focus move recomposes the strip and
+ * never the page (the state is read in the narrowest scope).
+ */
+@Stable
+internal class SettingsDetailHolder {
+    var text: String by mutableStateOf("")
+}
+
+/** Provided by the television's pane: its rows hand their description to it. Null elsewhere. */
+internal val LocalSettingsDetail = staticCompositionLocalOf<SettingsDetailHolder?> { null }
+
+/**
+ * A row's description goes to the strip while the row has the remote (television, inside the pane);
+ * nowhere else, so a phone's row keeps its sentence in the row.
+ */
+@Composable
+internal fun Modifier.detailOnFocus(text: String): Modifier {
+    val holder = LocalSettingsDetail.current ?: return this
+    var focused by remember { mutableStateOf(false) }
+    // Written only while focused, and never cleared by a row losing it: the row that takes the
+    // remote next writes its own words, so the strip never flickers empty between two rows.
+    if (focused) LaunchedEffect(text) { holder.text = text }
+    return this.onFocusChanged { state ->
+        focused = state.hasFocus
+        if (state.hasFocus) holder.text = text
+    }
+}
+
+/**
+ * The strip: a fixed [DETAIL_HEIGHT] under the pane holding two lines of the focused row's
+ * sentence, the second ending in an ellipsis. An empty sentence keeps the space (nothing shifts).
+ * Hidden from a screen reader: each row already speaks its own description with the row, once, so
+ * there is no live region and nothing is read twice.
+ */
+@Composable
+private fun DetailStrip(holder: SettingsDetailHolder) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(DETAIL_HEIGHT)
+            .testTag(SETTINGS_DETAIL_TAG)
+            .semantics { hideFromAccessibility() }
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        Text(
+            holder.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Tone.muted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
  * What the pinned header says the remote is under: the section title of the focused row. Written
  * from the rows' focus callbacks and read only by the header, so a focus move composes the header
  * alone. One per page shown, so a page never shows the last page's section.
@@ -427,6 +490,7 @@ internal const val SETTINGS_RAIL_TAG = "settings-rail"
 internal const val SETTINGS_PANE_TAG = "settings-pane"
 internal const val SETTINGS_HEADER_TAG = "settings-header"
 internal const val SETTINGS_CRUMB_TAG = "settings-crumb"
+internal const val SETTINGS_DETAIL_TAG = "settings-detail"
 
 /** How long the rail rests on an item before the pane follows it. */
 internal const val SETTLE_MS = 150L
@@ -435,6 +499,9 @@ internal const val SETTLE_MS = 150L
 private const val FADE_MS = 120
 
 internal val HEADER_HEIGHT = 48.dp
+
+/** The detail strip's height: two lines of body text and its padding (WP-74). */
+internal val DETAIL_HEIGHT = 68.dp
 internal val RAIL_WIDTH = 232.dp
 internal val RAIL_ITEM = 48.dp
 private val RAIL_GAP = 24.dp
