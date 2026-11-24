@@ -24,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -147,6 +148,8 @@ object ResumeSync {
             foreground = { foreground },
             lowEnd = lowEnd,
             lastRunAt = { lastAutoAtNow() },
+            // Three failed runs in a row (WP-97, WP-100): what the viewer did not ask for is left alone.
+            stopped = { stoppedByFailures(settings) },
             // As the profile open when the run starts (HX88): when it ran is that profile's, kept
             // here and in its store, or nowhere once another profile is open.
             job = { why ->
@@ -185,6 +188,7 @@ object ResumeSync {
      */
     suspend fun pullFor(settings: SettingsStore) {
         if (!runCatching { settings.resumeSyncNow() }.getOrDefault(false)) return
+        if (stoppedByFailures(settings)) return
         val now = System.currentTimeMillis()
         if (now - lastPullAt < MIN_PULL_INTERVAL_MS) return
         lastPullAt = now
@@ -215,7 +219,7 @@ object ResumeSync {
                 current = currentCoroutineContext()[Job]
                 try {
                     val outcome = run(settings, push, manual, replace)
-                    if (outcome != Outcome.Off) runCatching { settings.setResumeSyncStatus(statusOf(outcome)) }
+                    if (outcome != Outcome.Off) runCatching { settings.setResumeSyncStatus(withStreak(settings, statusOf(outcome))) }
                     outcome
                 } finally {
                     current = null
@@ -224,6 +228,16 @@ object ResumeSync {
             }
         }
     }
+
+    /** [status] with the count of failed runs in a row ([SyncStreak]) worked out from the one stored before it. */
+    private suspend fun withStreak(settings: SettingsStore, status: SyncStatus): SyncStatus {
+        val before = runCatching { settings.resumeSyncStatus.first() }.getOrNull()
+        return status.copy(failures = SyncStreak.next(before, status))
+    }
+
+    /** True when the last runs failed [SyncStreak.STOP_AFTER] times in a row: nothing runs by itself until the viewer asks. */
+    private suspend fun stoppedByFailures(settings: SettingsStore): Boolean =
+        SyncStreak.stopped(runCatching { settings.resumeSyncStatus.first() }.getOrNull())
 
     /** The run under way, for a switch to stop and wait for. */
     @Volatile private var current: Job? = null

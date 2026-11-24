@@ -3436,6 +3436,7 @@
     "resume_sync_replace_message": "The file TMPlayer cannot read is replaced with this device's lists. Anything only that file held is lost; the lists on your other devices stay.",
     "resume_sync_replace_title": "Replace the sync file?",
     "resume_sync_started": "Resume on your other devices is on",
+    "resume_sync_stopped": "Sync stopped after three failed tries.",
     "resume_sync_syncing": "Syncing with your Saved Messages",
     "resume_sync_too_new": "The sync file comes from a newer TMPlayer. Update TMPlayer here to keep syncing; nothing was written.",
     "resume_sync_two_copies": "Two sync files were found in your Saved Messages. Their places were taken in, but nothing was written here: open TMPlayer on your phone or computer to join them into one.",

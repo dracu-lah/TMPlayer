@@ -34,6 +34,11 @@ class SyncScheduler(
     /** Runs a sync, which writes the file when something changed; false when it did nothing at all (sync is off). Never throws. */
     private val job: suspend (Why) -> Boolean,
     private val onRan: (Long) -> Unit = {},
+    /**
+     * True when runs nobody asked for are to be left alone (the last three runs failed, see
+     * [SyncStreak]). A run the viewer asked for ([Why.Manual], [Why.TurnedOn]) still goes. Never throws.
+     */
+    private val stopped: suspend () -> Boolean = { false },
 ) {
     enum class Why(val settleMs: Long) {
         /** The app started, or Telegram connected. */
@@ -74,6 +79,8 @@ class SyncScheduler(
                 if (more <= 0L) break
                 delay(more)
             }
+            // Looked at last, after the waits, so a run that failed meanwhile stops the ones queued behind it.
+            if (!viewerAsked && stopped()) return@launch
             // Only the wait is cancelled by a newer ask: a sync under way finishes.
             withContext(NonCancellable) {
                 runs++

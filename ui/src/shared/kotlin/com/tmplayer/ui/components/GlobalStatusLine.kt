@@ -43,11 +43,17 @@ import kotlinx.coroutines.delay
  * a profile locked, a connection state already shown) is [GlobalLine.Idle].
  */
 @Composable
-fun rememberGlobalLine(active: Boolean, syncKind: SyncStatus.Kind?, syncDismissed: Boolean): GlobalLine {
+fun rememberGlobalLine(
+    active: Boolean,
+    syncKind: SyncStatus.Kind?,
+    syncDismissed: Boolean,
+    /** The sync gave up after three failed tries ([com.tmplayer.data.SyncStreak.stopped]). */
+    syncStopped: Boolean = false,
+): GlobalLine {
     val link by Td.link.collectAsState()
     val waitUntil by Td.floodWaitUntil.collectAsState()
     var line by remember { mutableStateOf<GlobalLine>(GlobalLine.Idle) }
-    LaunchedEffect(active, link, waitUntil, syncKind, syncDismissed) {
+    LaunchedEffect(active, link, waitUntil, syncKind, syncDismissed, syncStopped) {
         if (!active) {
             line = GlobalLine.Idle
             return@LaunchedEffect
@@ -62,6 +68,7 @@ fun rememberGlobalLine(active: Boolean, syncKind: SyncStatus.Kind?, syncDismisse
                 waitSeconds = waitSeconds,
                 sync = syncKind,
                 syncDismissed = syncDismissed,
+                syncStopped = syncStopped,
             )
             line = next
             if (!GlobalStatusRules.ticks(next, link)) return@LaunchedEffect
@@ -84,6 +91,10 @@ fun GlobalStatusPill(
     modifier: Modifier = Modifier,
     syncStatus: SyncStatus? = null,
     onRetry: (() -> Unit)? = null,
+    /** "Try again" on a sync that stopped after three failed tries: one more run, asked for by the viewer. */
+    onTryAgainSync: (() -> Unit)? = null,
+    /** "Send logs" beside it, where the platform can. */
+    onSendLogs: (() -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
     onDismiss: (() -> Unit)? = null,
 ) {
@@ -101,7 +112,12 @@ fun GlobalStatusPill(
             GlobalLine.Updating -> s.stateUpdating
             GlobalLine.SlowAnswer -> s.commonSlowAnswer
             is GlobalLine.RateLimited -> s.stateRateLimited(shown.seconds)
-            is GlobalLine.SyncNeedsYou -> SyncWords.status(syncStatus?.takeIf { it.kind == shown.kind } ?: SyncStatus(shown.kind, 0L), 0L, false)
+            is GlobalLine.SyncNeedsYou ->
+                if (shown.kind == SyncStatus.Kind.Failed) {
+                    SyncWords.stopped(syncStatus ?: SyncStatus(shown.kind, 0L))
+                } else {
+                    SyncWords.status(syncStatus?.takeIf { it.kind == shown.kind } ?: SyncStatus(shown.kind, 0L), 0L, false)
+                }
         }
         Row(
             // Heard when it appears. A count down changes every second and is not read each time.
@@ -125,7 +141,13 @@ fun GlobalStatusPill(
                 when (shown) {
                     GlobalLine.SlowAnswer -> onRetry?.let { retry -> TextButton(onClick = retry) { Text(s.commonRetry) } }
                     is GlobalLine.SyncNeedsYou -> {
-                        onOpenSettings?.let { open -> TextButton(onClick = open) { Text(s.notifyOpenSettings) } }
+                        if (shown.kind == SyncStatus.Kind.Failed) {
+                            // Stopped after three tries: the way out is another try or the logs, not Settings.
+                            onTryAgainSync?.let { again -> TextButton(onClick = again) { Text(s.commonTryAgain) } }
+                            onSendLogs?.let { logs -> TextButton(onClick = logs) { Text(s.logsSend) } }
+                        } else {
+                            onOpenSettings?.let { open -> TextButton(onClick = open) { Text(s.notifyOpenSettings) } }
+                        }
                         onDismiss?.let { close -> TextButton(onClick = close) { Text(s.commonClose) } }
                     }
                     else -> Unit

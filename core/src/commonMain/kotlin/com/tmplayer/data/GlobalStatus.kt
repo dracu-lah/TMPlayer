@@ -36,7 +36,10 @@ object GlobalStatusRules {
     /** After this long catching up, the line becomes "Telegram is slow to answer" with Retry. */
     const val SLOW_AFTER_MS = 60_000L
 
-    /** The sync outcomes that wait for the viewer to do something. A plain failure is retried by itself. */
+    /**
+     * The sync outcomes that wait for the viewer to do something. A plain failure is retried by
+     * itself, three times ([SyncStreak]); then it is [GlobalLine.SyncNeedsYou] of [SyncStatus.Kind.Failed].
+     */
     val NEEDS_YOU = setOf(SyncStatus.Kind.Unreadable, SyncStatus.Kind.TooNew, SyncStatus.Kind.OtherAccount)
 
     /**
@@ -53,6 +56,8 @@ object GlobalStatusRules {
         waitSeconds: Int,
         sync: SyncStatus.Kind?,
         syncDismissed: Boolean,
+        /** The sync gave up after three failed tries in a row ([SyncStreak.stopped]). */
+        syncStopped: Boolean = false,
     ): GlobalLine {
         WorkStatus.rateLimited(waitSeconds, now = 0L)?.let { return GlobalLine.RateLimited(waitSeconds) }
         if (link == TelegramLink.Updating) {
@@ -60,6 +65,8 @@ object GlobalStatusRules {
             if (updatingForMs >= UPDATING_SHOWN_AFTER_MS) return GlobalLine.Updating
         }
         if (sync != null && sync in NEEDS_YOU && !syncDismissed) return GlobalLine.SyncNeedsYou(sync)
+        // Three failed tries: it stopped by itself, and the way out is Try again and Send logs.
+        if (syncStopped && !syncDismissed) return GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)
         return GlobalLine.Idle
     }
 
@@ -72,6 +79,13 @@ object GlobalStatusRules {
      * day, through the hint registry ([HintRegistry]), so no new stored key exists. Ids are
      * lower case letters, digits and underscores, at most [HintRegistry.MAX_ID] long.
      */
+    /**
+     * The kind the sync line is filed under for "once per day": [SyncStatus.Kind.Failed] once the
+     * sync gave up ([SyncStreak.stopped]), whatever the last run said, else the last run's kind.
+     */
+    fun hintKind(status: SyncStatus?): SyncStatus.Kind? =
+        if (SyncStreak.stopped(status)) SyncStatus.Kind.Failed else status?.kind
+
     fun syncHintId(kind: SyncStatus.Kind, day: String): String =
         ("sync_" + kind.code + "_" + day.filter { it.isDigit() }.take(8)).take(HintRegistry.MAX_ID)
 }

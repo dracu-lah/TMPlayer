@@ -1225,11 +1225,14 @@ private fun Root() {
     val syncStatus by settings.resumeSyncStatus.collectAsStateWithLifecycle(initialValue = null)
     val hintsSeen by settings.hintsSeen.collectAsStateWithLifecycle(initialValue = emptySet())
     val statusDay = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(java.util.Date()) }
-    val syncHintId = syncStatus?.kind?.let { com.tmplayer.data.GlobalStatusRules.syncHintId(it, statusDay) }
+    // Filed as Failed once three runs in a row failed (WP-97, WP-100): that line has Try again and Send logs.
+    val syncHintId = com.tmplayer.data.GlobalStatusRules.hintKind(syncStatus)?.let { com.tmplayer.data.GlobalStatusRules.syncHintId(it, statusDay) }
+    val syncSendLogs = com.tmplayer.ui.settings.rememberSendLogs()
     val globalLine = com.tmplayer.ui.components.rememberGlobalLine(
         active = auth is AuthState.Ready && connectionNotice == ConnectionNotice.Hidden && !com.tmplayer.data.ProfileUnlock.hiddenNow(),
         syncKind = syncStatus?.kind,
         syncDismissed = syncHintId != null && syncHintId in hintsSeen,
+        syncStopped = com.tmplayer.data.SyncStreak.stopped(syncStatus),
     )
 
     var screen by rememberSaveable(stateSaver = ScreenSaver) {
@@ -2630,6 +2633,12 @@ private fun Root() {
                                 line = globalLine,
                                 syncStatus = syncStatus,
                                 onRetry = { scope.launch { Td.retryConnecting() } },
+                                // The viewer's own run: the only thing that tries again once the sync has stopped.
+                                onTryAgainSync = {
+                                    syncHintId?.let { id -> scope.launch { runCatching { settings.markHintSeen(id) } } }
+                                    com.tmplayer.platform.Background.scope.launch { runCatching { com.tmplayer.data.ResumeSync.sync(settings, manual = true) } }
+                                },
+                                onSendLogs = syncSendLogs,
                                 onOpenSettings = {
                                     syncHintId?.let { id -> scope.launch { runCatching { settings.markHintSeen(id) } } }
                                     openSettings()

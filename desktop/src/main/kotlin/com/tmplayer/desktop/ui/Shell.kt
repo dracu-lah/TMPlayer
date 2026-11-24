@@ -490,12 +490,15 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     val syncStatus by state.settings.resumeSyncStatus.collectAsState(initial = null)
     val hintsSeen by state.settings.hintsSeen.collectAsState(initial = emptySet())
     val statusDay = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(java.util.Date()) }
-    val syncHintId = syncStatus?.kind?.let { com.tmplayer.data.GlobalStatusRules.syncHintId(it, statusDay) }
+    // Filed as Failed once three runs in a row failed (WP-97, WP-100): that line has Try again and Send logs.
+    val syncHintId = com.tmplayer.data.GlobalStatusRules.hintKind(syncStatus)?.let { com.tmplayer.data.GlobalStatusRules.syncHintId(it, statusDay) }
     val globalLine = com.tmplayer.ui.components.rememberGlobalLine(
         active = connection == ConnectionNotice.Hidden && !com.tmplayer.data.ProfileUnlock.hiddenNow(),
         syncKind = syncStatus?.kind,
         syncDismissed = syncHintId != null && syncHintId in hintsSeen,
+        syncStopped = com.tmplayer.data.SyncStreak.stopped(syncStatus),
     )
+    val syncToast = com.tmplayer.ui.components.rememberToast()
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
     // Back from any page lands on Home, the first destination, as on the phone and the TV; in the
@@ -662,6 +665,22 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             syncStatus = syncStatus,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
             onRetry = { browseScope.launch { Td.retryConnecting() } },
+            // The viewer's own run: the only thing that tries again once the sync has stopped.
+            onTryAgainSync = {
+                syncHintId?.let { id -> browseScope.launch { runCatching { state.settings.markHintSeen(id) } } }
+                com.tmplayer.platform.Background.scope.launch { runCatching { com.tmplayer.data.ResumeSync.sync(state.settings, manual = true) } }
+            },
+            onSendLogs = {
+                browseScope.launch {
+                    val file = SendLogs.save()
+                    if (file == null) {
+                        syncToast(com.tmplayer.i18n.L.logsFailed)
+                    } else {
+                        syncToast(com.tmplayer.i18n.L.logsSavedTo(file.absolutePath))
+                        com.tmplayer.desktop.os.OpenExternal.reveal(file)
+                    }
+                }
+            },
             onOpenSettings = {
                 syncHintId?.let { id -> browseScope.launch { runCatching { state.settings.markHintSeen(id) } } }
                 state.go(Destination.Settings)
