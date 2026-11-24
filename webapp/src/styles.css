@@ -104,6 +104,8 @@ h1, h2, h3, p { margin: 0; }
 .boot { display: grid; place-items: center; align-content: center; gap: 16px; min-height: 100dvh; color: var(--muted); padding: 16px; text-align: center; }
 .boot .loader { color: var(--fg); }
 .boot-mark { width: 64px; height: 64px; border-radius: var(--r-l); }
+/* A sheet scrolls inside itself: the page behind it does not follow at the end of the list (WP-54). */
+dialog { overscroll-behavior: contain; }
 /* The last stop for an uncaught error (crash.ts): over everything, clear of the edges. */
 .crash-card {
   position: fixed; z-index: 2147483647; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));

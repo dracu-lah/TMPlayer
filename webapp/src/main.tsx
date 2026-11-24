@@ -8,6 +8,7 @@ import { watchForm } from './form'
 import { watchCrashes } from './crash'
 import { takeMsoneParam } from './msoneFlag'
 import { blockBrowserMenu } from './ui/CardMenu'
+import { installModalHistory } from './ui/modalHistory'
 import { languageFailedToast, startLanguage } from './i18n'
 import { names } from './accounts'
 import { usePicksDatabase } from './player/subpicks-db'
@@ -25,6 +26,8 @@ if (location.hostname === 'localhost') void import('./survey')
 // index.html has said the browser is too old: nothing more starts.
 if (!document.documentElement.dataset.old) {
     markEntry()
+    // Before the router starts: its popstate listener must come after this one (WP-54).
+    installModalHistory()
     watchForm()
     // The browser's right click menu is the app's own long press menu on a card, and nothing elsewhere.
     blockBrowserMenu()
