@@ -40,15 +40,45 @@ internal fun BiometricUnlockRow(settings: SettingsStore) {
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    if (sensor == BiometricState.Unavailable) return
     val on by settings.appLockBiometric.collectAsStateWithLifecycle(initialValue = false)
-    val ready = sensor == BiometricState.Ready
+    val kind = biometricRowOf(sensor, on)
+    if (kind == BiometricRow.Hidden) return
+    val ready = kind == BiometricRow.Ready
     ToggleRow(
         title = s.settingsBiometricUnlock,
-        subtitle = if (ready) s.lockBiometricRowDetail else s.lockBiometricNone,
+        subtitle = when (kind) {
+            BiometricRow.Weaker -> s.lockBiometricWeak
+            BiometricRow.Ready -> s.lockBiometricRowDetail
+            else -> s.lockBiometricNone
+        },
         icon = TmIcons.Lock,
         checked = on && ready,
         enabled = ready,
         onToggle = { scope.launch { runCatching { settings.setAppLockBiometric(!on) } } },
     )
+}
+
+/** What Privacy and lock shows for the fingerprint or face row. */
+internal enum class BiometricRow {
+    /** A phone with no strong sensor (SEC2-07, only a Class 2 face unlock, or none) and nothing switched on: no row. */
+    Hidden,
+
+    /** A strong sensor with a fingerprint or face enrolled: the switch works. */
+    Ready,
+
+    /** A strong sensor with nothing enrolled: drawn off, saying what to do. */
+    NoneEnrolled,
+
+    /**
+     * It was switched on and the phone now offers only a weaker sensor (or none): kept, drawn off and not
+     * pressable, saying the PIN is used. The pad never offers the sensor then (it asks `available()` each time),
+     * so the lock cannot fail open; the switch comes back as it was if a strong one is enrolled again.
+     */
+    Weaker,
+}
+
+internal fun biometricRowOf(sensor: BiometricState, switchedOn: Boolean): BiometricRow = when (sensor) {
+    BiometricState.Ready -> BiometricRow.Ready
+    BiometricState.NoneEnrolled -> BiometricRow.NoneEnrolled
+    BiometricState.Unavailable -> if (switchedOn) BiometricRow.Weaker else BiometricRow.Hidden
 }

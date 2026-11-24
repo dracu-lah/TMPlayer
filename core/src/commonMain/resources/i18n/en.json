@@ -1548,6 +1548,7 @@
     "biometric_none": "Add a fingerprint or face in the phone's settings first",
     "biometric_row_detail": "Opens the app without the PIN. Settings, signing out and profile PINs still ask for it, and the PIN always works.",
     "biometric_title": "Unlock TMPlayer",
+    "biometric_weak": "This phone's face or fingerprint unlock is not strong enough for the app lock. The PIN is used.",
     "change_pin": "Change the PIN",
     "change_pin_detail": "Asks for the current PIN first",
     "delete_digit": "Delete a digit",
