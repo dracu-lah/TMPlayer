@@ -659,6 +659,32 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                 )
             }
         }
+        // The first run's support step (the desktop has no notification step: the system handles
+        // those), once after the chats question, with Skip, before Home. Never armed for an update.
+        val onboarding by state.settings.onboardingSteps.collectAsState(initial = com.tmplayer.data.OnboardingSteps.State())
+        val supportStep = !setupPending && !gateUp && tour != com.tmplayer.data.SettingsStore.TourState.Pending &&
+            com.tmplayer.data.OnboardingSteps.next(
+                onboarding,
+                com.tmplayer.data.OnboardingSteps.Inputs(supportOffered = SupportReminder.enabled),
+            ) == com.tmplayer.data.OnboardingSteps.Step.Support
+        if (supportStep) {
+            val stepScope = rememberCoroutineScope()
+            val mark: (com.tmplayer.data.OnboardingSteps.Outcome) -> Unit = { outcome ->
+                stepScope.launch {
+                    runCatching { state.settings.markOnboardingStep(com.tmplayer.data.OnboardingSteps.Step.Support, outcome) }
+                }
+            }
+            CoverWindowControls()
+            Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
+                com.tmplayer.ui.onboarding.SupportStepScreen(
+                    onOpenPage = {
+                        com.tmplayer.desktop.os.OpenExternal.browse(com.tmplayer.ui.about.About.supportUrl(com.tmplayer.ui.onboarding.SOURCE))
+                        mark(com.tmplayer.data.OnboardingSteps.Outcome.Opened)
+                    },
+                    onSkip = { mark(com.tmplayer.data.OnboardingSteps.Outcome.Skipped) },
+                )
+            }
+        }
         if (SupportReminder.enabled && !setupPending && !gateUp) {
             SupportAskHost(state)
         }
