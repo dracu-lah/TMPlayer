@@ -369,7 +369,7 @@ html[data-form=tv] .tv-rail-item {
 }
 /* The page the pane shows stays marked while the remote is in the pane, so Left comes back to a place it can see. */
 html[data-form=tv] .tv-rail-item[aria-current=page] { background: var(--surface-high); font-weight: 600; }
-html[data-form=tv][data-tv-keys] .tv-rail-item:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv][data-tv-keys] .tv-rail-item:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
 html[data-form=tv] .tv-pane { display: grid; gap: calc(var(--dp) * 12); align-content: start; min-width: 0; }
 html[data-form=tv] .panel { padding: calc(var(--dp) * 16) calc(var(--dp) * 20); gap: calc(var(--dp) * 10); border-radius: calc(var(--dp) * 16); }
 html[data-form=tv] .panel-title { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
