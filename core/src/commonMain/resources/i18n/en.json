@@ -3775,6 +3775,7 @@
     "offline_refresh": "You are offline. It updates when you are back online.",
     "rate_limited": "{seconds, plural, one {Telegram asked to wait. Trying again in # second} other {Telegram asked to wait. Trying again in # seconds}}",
     "reconnecting": "Back online. Reconnecting to Telegram…",
+    "sync_open_settings": "Open Settings and find \"{name}\".",
     "updated": "Up to date",
     "updating": "Updating…"
   },

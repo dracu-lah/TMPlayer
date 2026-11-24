@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +34,7 @@ import com.tmplayer.data.TelegramLink
 import com.tmplayer.data.Td
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
 
 /**
@@ -78,6 +80,9 @@ fun rememberGlobalLine(
     return line
 }
 
+/** The widest the corner's pill gets on a television; longer words wrap on a second line. */
+private val TV_PILL_MAX_WIDTH = 720.dp
+
 /**
  * The corner's pill for a [GlobalLine]: a spinner and a few words, in the snackbar's shape on a
  * phone and a pill on a television and a desktop. Never takes focus on a television: it says the
@@ -107,7 +112,7 @@ fun GlobalStatusPill(
         val container = if (touch) SnackbarDefaults.color else Tone.surfaceHigh.copy(alpha = 0.96f)
         val onContainer = if (touch) SnackbarDefaults.contentColor else Tone.text
         val shown = if (line != GlobalLine.Idle) line else last
-        val words = when (shown) {
+        val said = when (shown) {
             GlobalLine.Idle -> ""
             GlobalLine.Updating -> s.stateUpdating
             GlobalLine.SlowAnswer -> s.commonSlowAnswer
@@ -119,9 +124,14 @@ fun GlobalStatusPill(
                     SyncWords.status(syncStatus?.takeIf { it.kind == shown.kind } ?: SyncStatus(shown.kind, 0L), 0L, false)
                 }
         }
+        // A remote has no button to press here, so the words say where the way out is (WP-100).
+        val words = if (!touch && shown is GlobalLine.SyncNeedsYou) said + " " + s.stateSyncOpenSettings(s.settingsResumeSync) else said
         Row(
             // Heard when it appears. A count down changes every second and is not read each time.
             Modifier
+                // On a television a long line (a sync that needs you says a whole sentence and where to go) wraps inside the
+                // safe area, not out to the screen's edges.
+                .then(if (touch) Modifier else Modifier.padding(horizontal = Tv.SafeH).widthIn(max = TV_PILL_MAX_WIDTH))
                 .liveMessage(on = shown !is GlobalLine.RateLimited)
                 .background(container, if (touch) MaterialTheme.shapes.extraSmall else CircleShape)
                 .padding(horizontal = if (touch) 12.dp else 16.dp, vertical = if (touch) 4.dp else 10.dp),
