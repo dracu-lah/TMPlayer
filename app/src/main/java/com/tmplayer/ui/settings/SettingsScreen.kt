@@ -538,6 +538,8 @@ fun SettingsScreen(
             settings = settings,
             watchedStore = watchedStore,
             onLoggedOut = onLoggedOut,
+            // Drawn inside Settings, past its own gate.
+            settingsUnlocked = true,
         )
     }
     // The profiles on this device (HX88), for Switch profile, Add account and Remove all accounts.

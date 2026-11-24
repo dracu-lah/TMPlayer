@@ -3352,6 +3352,7 @@
     "sign_out_confirm": "Sign out",
     "sign_out_delete_downloads": "Also delete my downloads ({size})",
     "sign_out_detail": "{device, select, tv {This TV will stop appearing in your Telegram devices} other {This phone will stop appearing in your Telegram devices}}",
+    "sign_out_did_not_finish": "Signing out did not finish. Try again, and if it keeps happening, use Send logs.",
     "sign_out_downloads_stay": "Your downloads stay unless you tick the box.",
     "sign_out_loses": "Favourites, history and the watched list go with it. Downloads stay unless you say otherwise",
     "sign_out_message": "You'll be signed out and taken back to the sign-in screen. Recently played videos, your favourites, your watched list and everything you were part way through go with it.",

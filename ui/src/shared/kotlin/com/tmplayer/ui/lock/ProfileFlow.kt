@@ -246,6 +246,26 @@ class ProfileFlow(
                 }
             }.onFailure { if (it is CancellationException) throw it else Logger.w(TAG, "the app lock could not be read", it) }
         }
+        // The app lock closing, or the app leaving the screen whatever the lock's options: a PIN given
+        // before it counts for nothing after it (SEC-01), and nothing asked or answered behind a PIN
+        // is left for whoever comes next (SEC-02).
+        AppLockSession.onLock { forgetAnswers(appLocked = true) }
+        com.tmplayer.data.SettingsUnlock.onAppLeft { forgetAnswers(appLocked = false) }
+    }
+
+    /**
+     * What a PIN was given for goes: the profile PIN given at the picker, the sign out it cleared.
+     * When the app lock closed ([appLocked]), the notice (its Try again and Send logs) and any panel
+     * past a PIN go too, so the one who unlocks the app finds the picker, not someone else's answers.
+     */
+    private fun forgetAnswers(appLocked: Boolean) {
+        pinGiven = null
+        signOutCleared = null
+        if (!appLocked) return
+        notice = null
+        removeAllAsk = null
+        manage = false
+        if (stage != Stage.Picker) stage = Stage.Picker
     }
 
     /** The profile whose PIN was just given at the picker, until its switch has opened it. */
@@ -317,6 +337,7 @@ class ProfileFlow(
 
     /** Back from a picker the menu opened: the open profile again, as it was. */
     fun close() {
+        pinGiven = null
         asked = false
         stage = Stage.Picker
         if (switcher.profiles.value.profiles.isNotEmpty()) entered = true
@@ -337,6 +358,8 @@ class ProfileFlow(
 
     /** Back to the row, the focus on [id]'s tile. */
     fun back(id: String? = null) {
+        // A panel given up (Cancel on "stop the video first?"): the PIN given for it is spent.
+        pinGiven = null
         stage = Stage.Picker
         focusOn = id
         focusAsk++
@@ -515,7 +538,8 @@ class ProfileFlow(
             } catch (e: Exception) {
                 Logger.w(TAG, "a profile action failed", e)
                 status = null
-                notice = Notice(L.profilesSwitchFailed(name = nameOf(id)), e.message.orEmpty().take(200))
+                // A sentence, never the raw text: it can name folders or TDLib's insides (SEC-11).
+                notice = Notice(L.profilesSwitchFailed(name = nameOf(id)), com.tmplayer.data.Failures.humanise(e.message))
             }
         }
     }
@@ -558,8 +582,9 @@ class ProfileFlow(
     private fun signOutFailed(name: String, title: String = L.profilesSignOut) = Notice(title, L.profilesSignOutFailed(name = name))
 
     /**
-     * Try again on a failed switch. The PIN given for that very switch still counts; a locked
-     * profile it was not given for asks again, as a press on its tile does.
+     * Try again on a failed switch. A profile with a PIN asks it again, as a press on its tile does:
+     * the notice can stay up for hours, and the PIN given for the switch that failed was spent on it
+     * (SEC-01).
      */
     private fun retrySwitch(id: String, signInAgain: Boolean) {
         if (signInAgain) {
@@ -567,10 +592,14 @@ class ProfileFlow(
             return
         }
         val tile = tile(id)
-        if (tile != null && ProfilePicker.needsPin(tile) && pinGiven != id) open(tile) else switchNow(id, signInAgain = false)
+        if (tile != null && ProfilePicker.needsPin(tile)) open(tile) else switchNow(id, signInAgain = false)
     }
 
     private fun switchNow(id: String, signInAgain: Boolean) {
+        // The PIN given at the picker counts for this switch alone, taken now: a switch that fails,
+        // is superseded or lands on a broken profile leaves nothing behind for a later one (SEC-01).
+        val given = pinGiven == id
+        pinGiven = null
         val name = nameOf(id)
         stage = Stage.Picker
         focusOn = id
@@ -582,8 +611,7 @@ class ProfileFlow(
             when (val result = switcher.switchTo(id, signInAgain)) {
                 SwitchResult.Switched, SwitchResult.Already -> {
                     // Its PIN was given at the picker for this very switch: open, and unlocked.
-                    if (pinGiven == id) ProfileUnlock.unlock(id)
-                    pinGiven = null
+                    if (given) ProfileUnlock.unlock(id)
                     // Leaving a profile that never finished signing in is Add account given up:
                     // it goes, folders and all, so a half made profile never lingers as a tile.
                     if (left != null && left.id != id && left.adding && !left.signedIn) switcher.remove(left.id)
@@ -664,14 +692,20 @@ class ProfileFlow(
         }
     }
 
-    /** Settings' sign out of the open profile, through the same switcher (its backup was asked before). */
-    fun signOutOpen(deleteDownloads: Boolean, done: (SignOutResult) -> Unit = {}) {
-        // Settings is only ever drawn for an unlocked profile; anything else is refused.
-        if (needsUnlock(switcher.profiles.value)) {
+    /**
+     * Settings' sign out of the open profile, through the same switcher (its backup was asked before).
+     * [expected] is the profile the question named, when it was answered: a switch that landed since
+     * (or one under way) signs nobody out (SEC-04).
+     */
+    fun signOutOpen(deleteDownloads: Boolean, expected: String? = null, done: (SignOutResult) -> Unit = {}) {
+        val list = switcher.profiles.value
+        // Settings is only ever drawn for an unlocked profile; anything else is refused, and said (SEC-07).
+        if (needsUnlock(list) || list.switchingTo != null || (expected != null && list.activeId != expected)) {
+            notice = signOutFailed(nameOf(expected ?: list.activeId))
             done(SignOutResult.Unknown)
             return
         }
-        confirmSignOutWith(switcher.profiles.value.activeId, deleteDownloads, done)
+        confirmSignOutWith(list.activeId, deleteDownloads, done)
     }
 
     private fun confirmSignOutWith(id: String, deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
@@ -826,6 +860,8 @@ fun ProfilesGate(
     val several = ProfilePicker.atLaunch(list)
     val show = several && (flow.asked || !flow.entered)
     val lock = flow.appLockSettings
+    // The app lock's pad is up (in [content] or here), or the lock was not read: fail closed.
+    val appShut = !flow.appLockKnown || lock == null || (lock.pinSet && lock.onOpen && !appUnlocked)
     Box(Modifier.fillMaxSize()) {
         when {
             // The app lock not read yet: nothing of the picker until it is (fail closed).
@@ -864,10 +900,12 @@ fun ProfilesGate(
                 // A panel a press in the shell asked for (Add account behind the app lock's PIN, or
                 // asked first while a video plays), with one profile too: drawn over the shell,
                 // which stays composed, so Cancel lands back where it came from (Settings).
-                if (flow.stage != ProfileFlow.Stage.Picker) ProfileFlowScreen(flow, list, signInStep)
+                if (flow.stage != ProfileFlow.Stage.Picker && !appShut) ProfileFlowScreen(flow, list, signInStep)
             }
         }
-        flow.notice?.let { notice ->
+        // Nothing of a profile's notice over the app lock's pad, nor before the lock is read: its Try
+        // again, Send logs and the profile's name are past the app PIN (SEC-02). It shows once unlocked.
+        if (!appShut) flow.notice?.let { notice ->
             ProfilePanel(
                 title = notice.title,
                 body = notice.body.ifBlank { null },

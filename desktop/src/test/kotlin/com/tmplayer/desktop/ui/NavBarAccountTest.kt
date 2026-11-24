@@ -223,6 +223,22 @@ class NavBarAccountTest {
         waitUntil(timeoutMillis = 5_000) { exists(L.settingsSignOutTitleNamed("Asha Rao")) }
     }
 
+    @Test
+    fun `while a sign out runs, Sign out from the menu asks nothing again (SEC-08)`() = runComposeUiTest {
+        profiles("Asha Rao")
+        shell.signingOut = true
+        try {
+            window()
+            cell(L.navAccountNamed("Asha Rao")).performSemanticsAction(SemanticsActions.OnClick)
+            waitForIdle()
+            row(L.settingsSignOutConfirm).performSemanticsAction(SemanticsActions.OnClick)
+            waitForIdle()
+            assertEquals(false, exists(L.settingsSignOutTitleNamed("Asha Rao")))
+        } finally {
+            shell.signingOut = false
+        }
+    }
+
     /** How many PIN pads are up: each draws its title once. */
     private fun ComposeUiTest.pads(): Int = listOf(L.lockEnterPin, L.lockEnterForSignOut, L.lockEnterForSettings)
         .sumOf { onAllNodes(hasText(it), useUnmergedTree = true).fetchSemanticsNodes().size }

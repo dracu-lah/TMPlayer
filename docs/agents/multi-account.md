@@ -407,6 +407,17 @@ Shared (`ui/src/shared/.../ui/lock`, phone, tablet, TV, desktop and iOS alike):
   is gone). Add account asks the app lock's PIN. Remove all accounts asks the app lock's PIN and
   then every profile's PIN in turn, before anything is wiped: a wrong PIN, a wait or Cancel wipes
   nothing. The app lock's "ask when the app opens" comes before the picker.
+- Switch profile from an account menu asks the target's PIN only, never the app lock's. The web has
+  no app lock: if it ever gets one, gate `askSignOut` and `addAccount` there (SEC-09).
+- A PIN given counts for what it was given for, once (security review 2026-11-24): the profile PIN
+  typed at the picker is spent by the switch it opened, whether that switch worked or not, so Try
+  again on a failed switch asks it again; the app lock closing or the app leaving the screen forgets
+  it. Settings' gate (`SettingsUnlock`) is one visit: leaving Settings for anything but About and Add
+  chats, or the app leaving the screen whatever the lock's options, locks it, and every sign out
+  (Settings, the TV bar over Downloads, the phone's account button) reads it. Nothing of
+  `ProfilesGate` (a notice, a panel) is drawn while "ask when the app opens" is shut or the lock is
+  unread, and the app lock closing drops the notice and any panel past a PIN. A sign out acts only on
+  the profile its question named, checked after the backup.
 - Forgetting a profile's PIN has no way out in the app (only clearing TMPlayer's storage removes
   every profile): the user's call, see the B1 report.
 

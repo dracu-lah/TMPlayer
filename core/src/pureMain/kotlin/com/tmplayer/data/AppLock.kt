@@ -196,3 +196,44 @@ object AppLockSession {
     }
 }
 
+/**
+ * Settings' own gate (the app lock's PIN given for this visit to Settings), process wide, so a
+ * rotation keeps it and a process that died asks again. What every account action behind the
+ * Settings PIN reads ([SignOutGate]), from Settings or from a menu outside it (the TV's bar over
+ * Downloads, the phone's account button), so no route trusts a gate that outlived its visit.
+ *
+ * A visit ends when Settings is left for anything but its own pages (About, Add chats), and when
+ * the app leaves the screen ([appLeft]), whatever the lock's options: with "ask when the app opens"
+ * off nothing else locks, and a phone left on a table must not keep Settings open.
+ */
+object SettingsUnlock {
+    private val state = MutableStateFlow(false)
+
+    val unlocked: StateFlow<Boolean> = state.asStateFlow()
+
+    fun unlock() {
+        state.value = true
+    }
+
+    fun lock() {
+        state.value = false
+    }
+
+    private val leaveListeners = MutableStateFlow<List<() -> Unit>>(emptyList())
+
+    /**
+     * The app's last window left the screen (not a rotation): Settings locks, and what was asked or
+     * answered for a PIN before it goes ([onAppLeft]).
+     */
+    fun appLeft() {
+        state.value = false
+        for (each in leaveListeners.value) runCatching(each)
+    }
+
+    /** Runs [block] each time the app leaves the screen; the returned function stops it. */
+    fun onAppLeft(block: () -> Unit): () -> Unit {
+        leaveListeners.update { it + block }
+        return { leaveListeners.update { list -> list - block } }
+    }
+}
+

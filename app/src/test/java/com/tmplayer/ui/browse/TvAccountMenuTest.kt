@@ -97,9 +97,14 @@ class TvAccountMenuTest {
         FormFactor.override(false)
         Motion.reduced = false
         SignOutBackup.sender = com.tmplayer.data.SavedMessagesBackup
+        com.tmplayer.data.SettingsUnlock.lock()
     }
 
-    private fun open(several: Boolean = false, tiles: Boolean = false, pin: Boolean = false) {
+    /**
+     * [realGate]: the host reads Settings' gate as the shell has it ([com.tmplayer.data.SettingsUnlock]),
+     * instead of being told it is shut whenever a PIN is set.
+     */
+    private fun open(several: Boolean = false, tiles: Boolean = false, pin: Boolean = false, realGate: Boolean = false) {
         FormFactor.override(true)
         Motion.reduced = true
         val settings = SettingsStore(RuntimeEnvironment.getApplication())
@@ -142,10 +147,17 @@ class TvAccountMenuTest {
                         Box(Modifier.size(120.dp).testTag("bare").focusable())
                     }
                 }
-                SignOutHost(
-                    signOut, name = "Asha Rao", settings = settings, watchedStore = watched, onLoggedOut = { calls += "signedOut" },
-                    settingsUnlocked = !pin, severalProfiles = several, appLocked = appLocked.value,
-                )
+                if (realGate) {
+                    SignOutHost(
+                        signOut, name = "Asha Rao", settings = settings, watchedStore = watched, onLoggedOut = { calls += "signedOut" },
+                        severalProfiles = several, appLocked = appLocked.value,
+                    )
+                } else {
+                    SignOutHost(
+                        signOut, name = "Asha Rao", settings = settings, watchedStore = watched, onLoggedOut = { calls += "signedOut" },
+                        settingsUnlocked = !pin, severalProfiles = several, appLocked = appLocked.value,
+                    )
+                }
             }
         }
         remoteWindow()
@@ -396,6 +408,27 @@ class TvAccountMenuTest {
         rule.waitForIdle()
         typePin(PIN)
         waitForText(L.settingsSignOutTitleNamed("Asha Rao"))
+    }
+
+    @Test
+    fun `Settings unlocked before the app left the screen counts for nothing, with ask on open off the bar's Sign out asks the PIN (SEC-03)`() {
+        // The PIN given in Settings, then Settings left by the bar over Downloads: no visit to ask in.
+        com.tmplayer.data.SettingsUnlock.unlock()
+        open(several = true, pin = true, realGate = true)
+        rule.waitForIdle()
+        pictureOnBar().performKeyInput { pressKey(Key.Menu) }
+        rule.waitForIdle()
+        button(L.settingsSignOutConfirm).press()
+        rule.waitForIdle()
+        waitForText(L.settingsSignOutTitleNamed("Asha Rao"))
+        // The phone left on the table: the app leaves the screen, "ask when the app opens" is off.
+        rule.runOnUiThread { com.tmplayer.data.SettingsUnlock.appLeft() }
+        rule.waitForIdle()
+        assertTrue("the question went", rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
+        button(L.settingsSignOutConfirm).press()
+        rule.waitForIdle()
+        rule.onNodeWithTextExists(L.lockEnterForSignOut)
+        assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

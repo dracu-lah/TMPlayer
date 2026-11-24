@@ -37,7 +37,7 @@ import kotlinx.coroutines.withContext
 enum class SignOutPhase { Idle, Asking, Running }
 
 /** The prompt the host shows now. */
-internal enum class SignOutPrompt { None, Ask, Saving, BackupFailed }
+internal enum class SignOutPrompt { None, Ask, Saving, BackupFailed, Failed }
 
 /**
  * Everything a sign out holds between the press and the end (WP-02): the prompt, the two ticks, the
@@ -99,13 +99,14 @@ class SignOutState internal constructor(asking: Boolean = false) {
     }
 
     /**
-     * The app locked while a question stood (the app lock closing on leaving the app): the question
-     * and the PIN given for it go, so after unlocking it asks the PIN again. A backup that is already
-     * running stays: nothing of it is drawn while locked, and it is not cut.
+     * The app locked, or left the screen, while a question stood: the question and the PIN given for
+     * it go, so it asks the PIN again (SEC-03, whatever the lock's options). A backup that failed goes
+     * too, its Sign out anyway with it. A backup that is already running stays: nothing of it is
+     * drawn while locked, and it is not cut.
      */
     internal fun appLocked() {
         pinOk = false
-        if (prompt == SignOutPrompt.Ask) {
+        if (prompt == SignOutPrompt.Ask || prompt == SignOutPrompt.BackupFailed || prompt == SignOutPrompt.Failed) {
             prompt = SignOutPrompt.None
             alsoDeleteDownloads = false
             backupFirst = true
@@ -119,11 +120,39 @@ class SignOutState internal constructor(asking: Boolean = false) {
         backupFirst = true
     }
 
+    /**
+     * The no profiles sign out ([forget] this device's data, then [logOut] of Telegram): "Signing out…"
+     * ends whatever happens, and a failure is said with Try again instead of a line left up for good.
+     * True when it went through.
+     */
+    internal suspend fun signOutAlone(forget: suspend () -> Unit, logOut: suspend () -> Unit): Boolean {
+        return try {
+            forget()
+            logOut()
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.tmplayer.platform.Logger.w("SignOutHost", "signing out failed", e)
+            prompt = SignOutPrompt.Failed
+            false
+        } finally {
+            signingOut = false
+        }
+    }
+
     internal companion object {
-        /** Only the first question survives a rotation: nothing has run yet, and a lost later prompt is harmless. */
-        val Saver: Saver<SignOutState, Boolean> = Saver(
-            save = { it.asking },
-            restore = { SignOutState(asking = it) },
+        /** This process: a question saved by another one (the process died) is not asked again. */
+        private val process: String = "p" + kotlin.random.Random.nextLong().toULong().toString(16)
+
+        /**
+         * Only the first question survives a rotation: nothing has run yet, and a lost later prompt is
+         * harmless. A process started again asks nothing (SEC-05): it would show the account's name
+         * before the app lock is read.
+         */
+        val Saver: Saver<SignOutState, String> = Saver(
+            save = { if (it.asking) process else "" },
+            restore = { SignOutState(asking = it == process) },
         )
     }
 }
@@ -151,7 +180,7 @@ fun SignOutHost(
      * is Settings' press: with a PIN set and the gate shut (from the bar's menu, the phone's popover) the
      * PIN is asked first, and a wrong PIN or Cancel signs nothing out.
      */
-    settingsUnlocked: Boolean = true,
+    settingsUnlocked: Boolean = com.tmplayer.data.SettingsUnlock.unlocked.collectAsState().value,
     /** More than one profile on this device; null reads it from the profile list. */
     severalProfiles: Boolean? = null,
     /** The app lock is shut ("ask when the app opens"): no prompt is drawn over it, and a question waiting is dropped. */
@@ -164,6 +193,11 @@ fun SignOutHost(
     // A lock not yet read decides nothing: no question and no pad until the store has answered.
     val gate = SignOutGate.of(lock, settingsUnlocked, state.pinOk)
     LaunchedEffect(appLocked) { if (appLocked) state.appLocked() }
+    // The app leaving the screen drops the question and its PIN whatever the lock's options (SEC-03).
+    androidx.compose.runtime.DisposableEffect(state) {
+        val off = com.tmplayer.data.SettingsUnlock.onAppLeft { state.appLocked() }
+        onDispose { off() }
+    }
     val profileFlow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
     val profileList by remember(profileFlow) {
         profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(null)
@@ -186,6 +220,9 @@ fun SignOutHost(
         // A second press while the first is under way (two quick OKs) starts nothing more.
         if (state.job?.isActive == true) return
         val deleteDownloads = state.alsoDeleteDownloads
+        // The profile the question named, as it was answered: a switch that lands while the backup
+        // is sent never has another profile signed out under this one's question (SEC-04).
+        val asked = profileList?.activeId
         // The prompt changes before anything launches, so the next press finds another prompt.
         if (withBackup) {
             // A prompt, not a spinner: Sign out anyway stays in reach while the backup is sent.
@@ -223,15 +260,16 @@ fun SignOutHost(
             if (flow != null) {
                 // Signed out: the shell moves on. Not (cancelled while it waited, refused): the
                 // page stays as it was, its "Signing out" line cleared.
-                flow.signOutOpen(deleteDownloads) { result ->
+                flow.signOutOpen(deleteDownloads, expected = asked) { result ->
                     state.signingOut = false
                     if (result is com.tmplayer.data.SignOutResult.SignedOut) onLoggedOut()
                 }
             } else {
-                forgetAccount(context, settings, watchedStore, deleteDownloads)
-                Td.logOut()
-                state.signingOut = false
-                onLoggedOut()
+                val done = state.signOutAlone(
+                    forget = { forgetAccount(context, settings, watchedStore, deleteDownloads) },
+                    logOut = { Td.logOut() },
+                )
+                if (done) onLoggedOut()
             }
         }
     }
@@ -309,6 +347,15 @@ fun SignOutHost(
             cancelLabel = s.commonBack,
             onConfirm = { signOutNow(withBackup = false) },
             onDismiss = { state.show(SignOutPrompt.Ask) },
+        )
+
+        // The sign out itself failed (SEC-06): what happened, and Try again.
+        SignOutPrompt.Failed -> TvConfirm(
+            title = title,
+            message = com.tmplayer.i18n.L.settingsSignOutDidNotFinish,
+            confirmLabel = com.tmplayer.i18n.L.commonTryAgain,
+            onConfirm = { signOutNow(withBackup = false) },
+            onDismiss = { state.reset() },
         )
     }
 }

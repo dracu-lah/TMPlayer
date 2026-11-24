@@ -109,7 +109,11 @@ internal class KitPlatform : ProfilePlatform {
     override suspend fun wipe(profile: Profile, last: Boolean, deleteDownloads: Boolean) {
         wiped += profile.id
     }
+    /** Set: saying something throws this, as a failing platform would. */
+    @Volatile var sayFails: Exception? = null
+
     override fun say(text: String) {
+        sayFails?.let { throw it }
         said += text
     }
     /** What the store says as it changes; a test may make it say nothing for a while. */

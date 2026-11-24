@@ -804,13 +804,10 @@ private fun Root() {
     // never flash up over an app that has no PIN.
     val appLock by settings.appLock.collectAsStateWithLifecycle(initialValue = null)
     val appUnlocked by AppLockSession.unlocked.collectAsStateWithLifecycle()
-    // Settings asks once per visit: back to the chats and it asks again.
-    var settingsUnlocked by rememberSaveable { mutableStateOf(false) }
-    // Leaving the app locks the session, and Settings with it: whoever opens the app next, or
-    // the activity restored after the process died, must not find Settings already open.
-    LaunchedEffect(appUnlocked) {
-        if (!appUnlocked) settingsUnlocked = false
-    }
+    // Settings asks once per visit (SettingsUnlock, process wide: a rotation keeps it, a process
+    // that died asks again). Leaving Settings for anything but its own pages locks it, and so does
+    // the app leaving the screen whatever the lock's options (App.LockOnLeave, SEC-03).
+    val settingsUnlocked by com.tmplayer.data.SettingsUnlock.unlocked.collectAsStateWithLifecycle()
 
     val toast = rememberToast()
     val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
@@ -1668,8 +1665,8 @@ private fun Root() {
             },
             settingsUnlocked = settingsUnlocked,
             severalProfiles = severalProfiles,
-            // Nothing is drawn over the app lock's own pad.
-            appLocked = appLock?.onOpen == true && !appUnlocked,
+            // Nothing is drawn over the app lock's own pad, nor before the lock is read (SEC-05).
+            appLocked = appLock?.let { it.onOpen && !appUnlocked } ?: true,
         )
         // The loader after the system splash, over everything while Telegram is being reached,
         // then fading out over the sign in pane or the home screen, whichever is drawn under it.
@@ -1877,7 +1874,7 @@ private fun Root() {
                 onDone = {
                     AppLockSession.unlock()
                     // The PIN has just been given; Settings need not ask for it again this visit.
-                    settingsUnlocked = true
+                    com.tmplayer.data.SettingsUnlock.unlock()
                 },
                 onCancel = { activity?.finish() },
             )
@@ -1930,9 +1927,12 @@ private fun Root() {
             return@Box
         }
 
-        // Back to browsing locks Settings again.
+        // Anywhere but Settings and its own pages (About, Add chats) locks Settings again: Downloads
+        // too, so its bar's Sign out asks the PIN, as a new visit does (SEC-03).
         LaunchedEffect(screen) {
-            if (screen is Screen.Chats || screen is Screen.Media) settingsUnlocked = false
+            if (screen !is Screen.Settings && screen !is Screen.About && screen !is Screen.AddChats) {
+                com.tmplayer.data.SettingsUnlock.lock()
+            }
         }
 
         // A chat restored from the saved state carries only what could be written down, so its
@@ -2362,7 +2362,7 @@ private fun Root() {
                 val lock = appLock
                 // With no PIN there is nothing to ask, and a PIN set from inside Settings must not
                 // lock the viewer out of the page they set it on.
-                LaunchedEffect(lock?.pinSet) { if (lock?.pinSet == false) settingsUnlocked = true }
+                LaunchedEffect(lock?.pinSet) { if (lock?.pinSet == false) com.tmplayer.data.SettingsUnlock.unlock() }
                 // No floating bar: Settings is a screen pushed from the picture's popover, with
                 // its own back arrow, as a chat is.
                 TouchPage(null)
@@ -2372,7 +2372,7 @@ private fun Root() {
                         settings = settings,
                         purpose = PinPurpose.Check,
                         title = s.lockEnterForSettings,
-                        onDone = { settingsUnlocked = true },
+                        onDone = { com.tmplayer.data.SettingsUnlock.unlock() },
                         onCancel = leaveSettings,
                     )
                     return@screens

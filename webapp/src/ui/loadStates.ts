@@ -59,6 +59,12 @@ export interface SwitchGuard {
     release: () => void
     /** The profile being opened, or null. */
     current: () => string | null
+    /**
+     * The page should go now (a reload into the profile): if it is still here after `ms` (the reload
+     * never came, or a back/forward cache brought it back), the guard lets go, so the next press is
+     * not ignored for good (SEC-10). Only the switch it was asked for is released.
+     */
+    releaseAfter: (ms: number, schedule?: (run: () => void, ms: number) => unknown) => void
 }
 
 /** One profile switch at a time (LS-30); `onChange` tells the tile which profile is opening. */
@@ -77,5 +83,12 @@ export function createSwitchGuard(onChange: (id: string | null) => void = () => 
             onChange(null)
         },
         current: () => id,
+        releaseAfter(ms, schedule = (run, wait) => setTimeout(run, wait)) {
+            const held = id
+            if (held === null) return
+            schedule(() => {
+                if (id === held) this.release()
+            }, ms)
+        },
     }
 }

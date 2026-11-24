@@ -344,6 +344,9 @@ class App : Application() {
             if (started == 0 && !activity.isChangingConfigurations) {
                 com.tmplayer.data.ProfileUnlock.onBackground()
                 AppLockSession.lock()
+                // Settings' gate, and what a PIN was given for, go whatever the lock's options
+                // (SEC-03): with "ask when the app opens" off the lock above changes nothing.
+                com.tmplayer.data.SettingsUnlock.appLeft()
                 Td.onForegroundChanged(false)
                 com.tmplayer.data.ResumeSync.setForeground(false)
                 // With "Install updates by itself" on, one look a few minutes from now (HX5).

@@ -72,3 +72,18 @@ test('a second switch while one runs is refused, and the next may start once it 
     assert.equal(guard.start('b'), true)
     assert.deepEqual(seen, ['a', null, 'b'])
 })
+
+test('a switch whose reload never came lets go after the wait, and a later switch is not released by it', () => {
+    const runs: (() => void)[] = []
+    const guard = createSwitchGuard()
+    assert.equal(guard.start('a'), true)
+    guard.releaseAfter(10_000, (run) => runs.push(run))
+    assert.equal(guard.start('b'), false, 'held while the reload may still come')
+    runs[0]()
+    assert.equal(guard.current(), null)
+    assert.equal(guard.start('b'), true, 'the next press works again')
+    guard.release()
+    assert.equal(guard.start('c'), true)
+    runs[0]()
+    assert.equal(guard.current(), 'c', "the first switch's timer does not release a newer one")
+})

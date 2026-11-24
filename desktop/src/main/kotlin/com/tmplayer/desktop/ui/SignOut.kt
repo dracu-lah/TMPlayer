@@ -70,8 +70,17 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: Strin
     LaunchedEffect(Unit) {
         size = withContext(Dispatchers.IO) { DownloadIndex.bytesOnDisk(runCatching { settings.downloadsNow() }.getOrDefault(emptyList())) }
     }
+    // The profile the question named, when it was answered (SEC-04): a switch landing while the
+    // backup is sent never has another profile signed out under this one's question.
+    var asked by remember { mutableStateOf<String?>(null) }
+    fun answered() {
+        asked = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.activeId
+    }
     fun signOutNow() {
         onDismiss()
+        // One sign out at a time for both hosts (the menu's, Settings' page): a second confirm while
+        // the first is queued signs nothing out again (SEC-08).
+        if (state.signingOut) return
         val deleteDownloads = alsoDownloads
         // On the process's scope, not this dialog's: closing the dialog cancelled its scope
         // part way, every step's runCatching swallowed the cancel, nothing was cleared and the
@@ -80,10 +89,12 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: Strin
         // then the picker, the one left, or the sign in when it was the last. The flow runs on the
         // app's scope: a switch builds this window again.
         val flow = com.tmplayer.desktop.profiles.DesktopProfiles.flow()
+        state.signingOut = true
         if (flow != null) {
-            flow.signOutOpen(deleteDownloads) { result ->
-                if (result is com.tmplayer.data.SignOutResult.SignedOut) {
-                    java.awt.EventQueue.invokeLater {
+            flow.signOutOpen(deleteDownloads, expected = asked) { result ->
+                java.awt.EventQueue.invokeLater {
+                    state.signingOut = false
+                    if (result is com.tmplayer.data.SignOutResult.SignedOut) {
                         state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
                     }
                 }
@@ -91,11 +102,15 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: Strin
             return
         }
         com.tmplayer.platform.Background.scope.launch {
-            signOut(settings, deleteDownloads, state.watched, state.bookmarks)
-            withContext(Dispatchers.Main) {
-                state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+            try {
+                signOut(settings, deleteDownloads, state.watched, state.bookmarks)
+                withContext(Dispatchers.Main) {
+                    state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+                }
+                Td.logOut()
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) { state.signingOut = false }
             }
-            Td.logOut()
         }
 
     }
@@ -111,6 +126,11 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: Strin
             if (result is BackupSend.Failed) phase = SignOutPhase.Failed(result.reason) else signOutNow()
         }
     }
+    // A sign out already under way (asked from the other host): no second question (SEC-08).
+    if (state.signingOut && phase == SignOutPhase.Asking) {
+        LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
     // A lock not yet read decides nothing: no question and no pad until the store has answered.
     val gate = com.tmplayer.data.SignOutGate.of(lock, state.settingsUnlocked, pinGiven)
     if (gate == com.tmplayer.data.SignOutGate.Wait) return
@@ -124,7 +144,10 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: Strin
             message = s.signoutBody(DesktopPaths.profileDownloadsDir.path),
             confirmLabel = s.signoutConfirm,
             onDismiss = onDismiss,
-            onConfirm = { if (backupFirst) saveThenSignOut() else signOutNow() },
+            onConfirm = {
+                answered()
+                if (backupFirst) saveThenSignOut() else signOutNow()
+            },
             extra = {
                 Column {
                     CheckRow(backupFirst, { backupFirst = it }, s.signoutBackupTick)

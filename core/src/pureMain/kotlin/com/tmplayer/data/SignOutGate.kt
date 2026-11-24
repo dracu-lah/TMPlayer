@@ -27,5 +27,8 @@ enum class SignOutGate {
             lock.pinSet -> Pin
             else -> Open
         }
+
+        /** [of] with Settings' gate as [SettingsUnlock] has it now: the same answer on every route. */
+        fun now(lock: AppLockSettings?, pinGiven: Boolean): SignOutGate = of(lock, SettingsUnlock.unlocked.value, pinGiven)
     }
 }

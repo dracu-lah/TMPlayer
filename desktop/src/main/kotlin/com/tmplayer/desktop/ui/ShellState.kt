@@ -160,6 +160,9 @@ class ShellState(
      */
     var settingsUnlocked by mutableStateOf(false)
 
+    /** A sign out runs (SEC-08): both sign out hosts, the menu's and Settings' page, ask nothing more until it ends. */
+    var signingOut by mutableStateOf(false)
+
     /**
      * The Settings page to open on next, set by [openSettings] and taken by Settings once it is
      * shown (after its PIN, when the lock asks for one).

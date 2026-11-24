@@ -170,10 +170,18 @@ export async function switchTo(id: string) {
         saveBook(B.setActive(freshBook(), id))
         // The page reloads: the guard stays held until it has gone, so a late press cannot start a second reload.
         reloadInto(id)
+        // A reload that never came lets go after a while (SEC-10), and so does a page the back/forward cache brought back.
+        switchGuard.releaseAfter(10_000)
     } catch (e) {
         switchGuard.release()
         throw e
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) switchGuard.release()
+    })
 }
 
 /** Free bytes for this site, or null when the browser does not say. */
