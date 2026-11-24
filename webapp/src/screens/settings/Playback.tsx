@@ -3,7 +3,7 @@ import { TranslateIcon } from '@hugeicons/core-free-icons'
 import { settings, setSetting } from '../../store'
 import { api } from '../../tg/rpc'
 import { t } from '../../i18n'
-import { msoneOn, stateLine } from '../../msoneFlag'
+import { stateLine } from '../../msoneFlag'
 import { health, knownHealth, type Health } from '../../player/msone'
 import { ActionRow, Choices, TvPanel } from '../../ui/SettingsParts'
 import { removeSubmaker, setSubmakerBase, submakerSet } from '../../submakerBase'
@@ -16,15 +16,6 @@ export function Playback() {
             <div class="set-card set-blocks">
                 <Rewind />
             </div>
-            <Show when={msoneOn()}>
-                <div class="set-card">
-                    <MsoneRow />
-                </div>
-            </Show>
-            <div class="set-card set-blocks">
-                <h3 class="set-card-title">{t('online.title')}</h3>
-                <SubmakerBlock />
-            </div>
         </>
     )
 }
@@ -34,7 +25,7 @@ export function Playback() {
  * keeps only the cleaned address (submakerBase.ts) and says nothing of it but Set or Not set. The field is a
  * password field and is emptied the moment the link is taken.
  */
-function SubmakerBlock() {
+export function SubmakerBlock() {
     const [text, setText] = createSignal('')
     const [invalid, setInvalid] = createSignal(false)
     const save = (e: Event) => {
@@ -116,7 +107,7 @@ function useMsoneHealth() {
     return { state, checking, check }
 }
 
-function MsoneRow() {
+export function MsoneRow() {
     const m = useMsoneHealth()
     return (
         <ActionRow

@@ -1,6 +1,6 @@
 import { createEffect, For, Match, Show, Switch } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, HardDriveIcon, Home03Icon, InformationCircleIcon, LockKeyholeIcon, PaintBoardIcon, PlayIcon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, HardDriveIcon, Home03Icon, InformationCircleIcon, LockKeyholeIcon, PaintBoardIcon, PlayIcon, SubtitleIcon as SubtitlesIcon } from '@hugeicons/core-free-icons'
 import { OLD_PAGES, pageFor, type PageId, type RowContext } from '../ui/settingsMap'
 import { rowDomId, SettingsSearch, showingResults, useRowTarget } from './SettingsFind'
 import { settings } from '../store'
@@ -17,10 +17,11 @@ import { About } from './settings/About'
 import { HomePage, Library } from './settings/Home'
 import { LanguageBlock } from './settings/Language'
 import { Playback } from './settings/Playback'
+import { SubtitlesPage } from './settings/Subtitles'
 import { Privacy } from './settings/Privacy'
 import { SignOut } from './settings/SignOut'
 import { ProfileMenuButton, RemoveAllButton } from '../ui/Profiles'
-import { LayoutChoices, ThemeChoices } from './settings/shared'
+import { LayoutChoices, LookChoices, ThemeChoices } from './settings/shared'
 import { StoragePage } from './settings/Storage'
 import { Support } from './settings/Support'
 import { TvSettings } from './settings/Tv'
@@ -37,6 +38,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
     },
     { id: 'home', icon: Home03Icon, title: () => t('settings.page_home_library'), summary: () => t('settings.page_home_library_summary') },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
+    { id: 'subtitles', icon: SubtitlesIcon, title: () => t('settings.page_subtitles_audio'), summary: () => t('settings.subtitle_style') },
     { id: 'privacy', icon: LockKeyholeIcon, title: () => t('settings.page_privacy_lock'), summary: () => (syncOn() ? t('syncplace.switch_on') : t('syncplace.switch_off')) },
     { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
     { id: 'about', icon: InformationCircleIcon, title: () => t('settings.page_about'), summary: () => t('about.licence_line') },
@@ -212,6 +214,9 @@ function PageBody(props: { id: PageId }) {
             <Match when={props.id === 'playback'}>
                 <Playback />
             </Match>
+            <Match when={props.id === 'subtitles'}>
+                <SubtitlesPage />
+            </Match>
             <Match when={props.id === 'privacy'}>
                 <Privacy />
             </Match>
@@ -243,6 +248,9 @@ function Appearance() {
             </div>
             <div class="set-card set-blocks">
                 <LanguageBlock />
+            </div>
+            <div class="set-card set-blocks">
+                <LookChoices />
             </div>
         </>
     )

@@ -75,9 +75,12 @@ dialog.profiles:not([open]) { display: none; }
   .profile-avatar .profile-initial { font-size: 2.125rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .profile-avatar { transition: none; }
-  .profile-tile:focus-visible .profile-avatar, .profile-tile:active .profile-avatar { transform: none; }
+  html:not([data-motion="full"]) .profile-avatar { transition: none; }
+  html:not([data-motion="full"]) .profile-tile:focus-visible .profile-avatar, html:not([data-motion="full"]) .profile-tile:active .profile-avatar { transform: none; }
 }
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .profile-avatar { transition: none; }
+html[data-motion="reduce"] .profile-tile:focus-visible .profile-avatar, html[data-motion="reduce"] .profile-tile:active .profile-avatar { transform: none; }
 
 /* The TV: the remote's ring on the focused picture, everything by --dp. */
 html[data-form=tv] .profiles { gap: calc(var(--dp) * 20); }

@@ -6,7 +6,7 @@
 // `node --test`.
 
 /** The pages of Settings on the web, in the list's order. */
-export const PAGE_IDS = ['appearance', 'home', 'playback', 'privacy', 'storage', 'about'] as const
+export const PAGE_IDS = ['appearance', 'home', 'playback', 'subtitles', 'privacy', 'storage', 'about'] as const
 export type PageId = (typeof PAGE_IDS)[number]
 
 /** Addresses that were pages once: Home and Library are one page now (Home and library). */
@@ -24,6 +24,7 @@ export const PAGE_TITLES: Readonly<Record<PageId, string>> = {
     appearance: 'settings.appearance',
     home: 'settings.page_home_library',
     playback: 'settings.playback',
+    subtitles: 'settings.page_subtitles_audio',
     privacy: 'settings.page_privacy_lock',
     storage: 'web.settings_storage',
     about: 'settings.page_about',
@@ -68,6 +69,8 @@ const defs: MapRow[] = [
     { id: 'theme', page: 'appearance', core: true, title: 'settings.theme' },
     { id: 'layout', page: 'appearance', core: true, title: 'settings.layout', shown: (c) => c.form !== 'phone' && !c.layoutFixed },
     { id: 'language', page: 'appearance', core: true, title: 'settings.language' },
+    { id: 'reduce_motion', page: 'appearance', core: false, title: 'settings.reduce_motion', details: ['settings.reduce_motion_on', 'settings.reduce_motion_off'] },
+    { id: 'high_contrast', page: 'appearance', core: true, title: 'settings.high_contrast', details: ['settings.high_contrast_detail'] },
 
     { id: 'home_carousel', page: 'home', core: true, title: 'settings.home_carousel' },
     { id: 'home_continue', page: 'home', core: true, title: 'settings.home_continue' },
@@ -81,8 +84,9 @@ const defs: MapRow[] = [
     { id: 'clear_history', page: 'home', core: true, title: 'browse.clear_history' },
 
     { id: 'resume_rewind', page: 'playback', core: true, title: 'settings.resume_rewind' },
-    { id: 'msone', page: 'playback', core: true, title: 'msone.title', shown: (c) => c.msone },
-    { id: 'submaker_base', page: 'playback', core: true, title: 'submaker.settings_title', details: ['submaker.settings_message'] },
+    { id: 'subtitle_style', page: 'subtitles', core: true, title: 'settings.subtitle_style' },
+    { id: 'msone', page: 'subtitles', core: true, title: 'msone.title', shown: (c) => c.msone },
+    { id: 'submaker_base', page: 'subtitles', core: true, title: 'submaker.settings_title', details: ['submaker.settings_message'] },
 
     { id: 'resume_sync', page: 'privacy', core: true, title: 'settings.resume_sync' },
     { id: 'resume_sync_delete', page: 'privacy', core: true, title: 'settings.resume_sync_delete', shown: (c) => c.sync || c.syncFile },

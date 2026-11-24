@@ -304,7 +304,11 @@
 .pc-panel:dir(rtl) { --panel-from: -100%; }
 .pc-panel.opening { animation: panel-in 150ms cubic-bezier(.2, 0, 0, 1); }
 @keyframes panel-in { from { transform: translateX(var(--panel-from)); } }
-@media (prefers-reduced-motion: reduce) { .pc-panel.opening { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .pc-panel.opening { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .pc-panel.opening { animation: none; }
 /* The keyboard's place in a menu line is a white ring, not only the faint wash the pointer's hover gives (the wash alone is 8% white: too weak to find). */
 .pc-entry:focus-visible, .pc-choice:focus-visible, .pc-panel-back:focus-visible, .pc-bookmark:focus-visible, .pc-msone-pick:focus-visible, .pc-loader-back:focus-visible { box-shadow: inset 0 0 0 2px #fff; }
 .pc-panel-head { display: flex; align-items: center; gap: 4px; min-height: 56px; padding: 0 4px 0 16px; border-bottom: 1px solid var(--line); flex: none; }
@@ -523,9 +527,12 @@
 .pc-switch[aria-checked="true"] .pc-sw::after { transform: translateX(14px); background: var(--on-accent); }
 
 @media (prefers-reduced-motion: reduce) {
-  .pc-card-wait, .pc-card-tile, .pc-card-pic, .pc-layer, .pc-top, .pc-bottom > *, .pc-play-glyph, .pc-menu, .pc-note, .pc-wave, .pc-chevrons i, .pc-sheet-scrim { animation: none !important; transition: none !important; }
-  .pc[data-variant="phone"] .pc-top, .pc[data-variant="phone"] .pc-bottom > * { transform: none; }
+  html:not([data-motion="full"]) .pc-card-wait, html:not([data-motion="full"]) .pc-card-tile, html:not([data-motion="full"]) .pc-card-pic, html:not([data-motion="full"]) .pc-layer, html:not([data-motion="full"]) .pc-top, html:not([data-motion="full"]) .pc-bottom > *, html:not([data-motion="full"]) .pc-play-glyph, html:not([data-motion="full"]) .pc-menu, html:not([data-motion="full"]) .pc-note, html:not([data-motion="full"]) .pc-wave, html:not([data-motion="full"]) .pc-chevrons i, html:not([data-motion="full"]) .pc-sheet-scrim { animation: none !important; transition: none !important; }
+  html:not([data-motion="full"]) .pc[data-variant="phone"] .pc-top, html:not([data-motion="full"]) .pc[data-variant="phone"] .pc-bottom > * { transform: none; }
 }
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .pc-card-wait, html[data-motion="reduce"] .pc-card-tile, html[data-motion="reduce"] .pc-card-pic, html[data-motion="reduce"] .pc-layer, html[data-motion="reduce"] .pc-top, html[data-motion="reduce"] .pc-bottom > *, html[data-motion="reduce"] .pc-play-glyph, html[data-motion="reduce"] .pc-menu, html[data-motion="reduce"] .pc-note, html[data-motion="reduce"] .pc-wave, html[data-motion="reduce"] .pc-chevrons i, html[data-motion="reduce"] .pc-sheet-scrim { animation: none !important; transition: none !important; }
+html[data-motion="reduce"] .pc[data-variant="phone"] .pc-top, html[data-motion="reduce"] .pc[data-variant="phone"] .pc-bottom > * { transform: none; }
 
 /* MSone's sheet: a wait, a state or failure with its ways on, or the releases found. */
 .pc-msone { padding: 0 0 8px; }
@@ -609,7 +616,11 @@
 }
 .player[data-variant="tv"] .pc-loader-words { padding: 0 48px 27px; }
 .player[data-variant="tv"] .pc-loader-back { display: none; }
-@media (prefers-reduced-motion: reduce) { .pc-loader-art { animation: pc-loader-fade 600ms ease-out; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .pc-loader-art { animation: pc-loader-fade 600ms ease-out; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .pc-loader-art { animation: pc-loader-fade 600ms ease-out; }
 
 /* SubMaker: the line over the picture while a translation runs, and the notes in its picker. It sits under the notice's place and stays out of the seek bar's way. */
 .pc-submaker-job {

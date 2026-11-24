@@ -46,6 +46,8 @@ export interface Settings {
     homeStarred: boolean
     /** Recent searches are kept to pick again (the apps' `remember_searches`), on by default. */
     rememberSearches: boolean
+    reduceMotion: 'auto' | 'on' | 'off'
+    contrast: 'auto' | 'on' | 'off'
     /** The order of Home's rows (the apps' HomeOrder): row keys, comma separated; empty is Home's own order. */
     homeOrder: string
 }
@@ -78,6 +80,8 @@ const DEFAULTS: Settings = {
     homeRecent: true,
     homeStarred: true,
     rememberSearches: true,
+    reduceMotion: 'auto',
+    contrast: 'auto',
     homeOrder: '',
 }
 
@@ -283,6 +287,17 @@ function savedTheme(): Theme {
     return DEFAULTS.theme
 }
 
+/** Reduce motion and High contrast on the page: `html[data-motion]` is reduce or full, `html[data-contrast]` high or off; Automatic leaves both off the element and the system's own query decides (styles.css). */
+function applyLook(s: { reduceMotion: Settings['reduceMotion']; contrast: Settings['contrast'] }) {
+    const root = document.documentElement
+    if (s.reduceMotion === 'on') root.dataset.motion = 'reduce'
+    else if (s.reduceMotion === 'off') root.dataset.motion = 'full'
+    else delete root.dataset.motion
+    if (s.contrast === 'on') root.dataset.contrast = 'high'
+    else if (s.contrast === 'off') root.dataset.contrast = 'off'
+    else delete root.dataset.contrast
+}
+
 function applyTheme(theme: Theme) {
     const root = document.documentElement
     if (theme === 'system') delete root.dataset.theme
@@ -322,6 +337,7 @@ export async function loadSettings() {
     await loadTitles()
     await loadCopies()
     applyTheme(settings().theme)
+    applyLook(settings())
 }
 
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
@@ -329,6 +345,7 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
     setSettings(next)
     write('settings', next)
     if (key === 'theme') applyTheme(value as Theme)
+    if (key === 'reduceMotion' || key === 'contrast') applyLook(next)
 }
 
 // Where each video was left, and what was watched
@@ -1275,6 +1292,7 @@ export async function clearAll() {
     setAddedIdsSignal(new Set<number>())
     setAddedModeSignal('unanswered')
     applyTheme(DEFAULTS.theme)
+    applyLook(DEFAULTS)
 }
 
 /**

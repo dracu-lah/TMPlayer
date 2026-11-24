@@ -21,6 +21,12 @@
   --on-error: #690005;
   /* Tone.outline (outlineVariant): hairlines and the floating border */
   --line: #2e3337;
+  /* The edge of a field or an outlined button: 3:1 against the surfaces (WCAG 1.4.11), where --line is only a hairline. */
+  --field-line: #6b7479;
+  /* What High contrast puts in place of --muted, --line and --field-line (data-contrast, or prefers-contrast: more). */
+  --muted-hc: #d7dde1;
+  --line-hc: #8a949a;
+  --field-line-hc: #a7b0b5;
   --caution: #f5a524;
   --shadow: 0 6px 20px rgba(0, 0, 0, .45);
   color-scheme: dark;
@@ -53,6 +59,10 @@
     --error: #ba1a1a;
     --on-error: #ffffff;
     --line: #c0c8cd;
+    --field-line: #6a7479;
+    --muted-hc: #1f2629;
+    --line-hc: #6a7479;
+    --field-line-hc: #4d575c;
     --shadow: 0 6px 20px rgba(0, 0, 0, .14);
     color-scheme: light;
   }
@@ -73,6 +83,10 @@
   --error: #ba1a1a;
   --on-error: #ffffff;
   --line: #c0c8cd;
+  --field-line: #6a7479;
+  --muted-hc: #1f2629;
+  --line-hc: #6a7479;
+  --field-line-hc: #4d575c;
   --shadow: 0 6px 20px rgba(0, 0, 0, .14);
   color-scheme: light;
 }
@@ -85,6 +99,11 @@
   --dialog: #1a1d1f;
   --line: #26292c;
 }
+/* High contrast (WP-60): Automatic follows the system (prefers-contrast: more), On and Off are the viewer's own word. Second lines, hairlines and field edges come forward. */
+@media (prefers-contrast: more) {
+  :root:not([data-contrast="off"]) { --muted: var(--muted-hc) !important; --line: var(--line-hc) !important; --field-line: var(--field-line-hc) !important; }
+}
+:root[data-contrast="high"] { --muted: var(--muted-hc) !important; --line: var(--line-hc) !important; --field-line: var(--field-line-hc) !important; }
 
 * { box-sizing: border-box; }
 /* Text sizes are rem (WP-55): they follow the browser's and the phone's text size. 100%, never a px value, so the choice is kept. */
@@ -114,6 +133,10 @@ h1, h2, h3, p { margin: 0; }
 dialog { overscroll-behavior: contain; }
 /* After a navigation focus moves to the page's heading or the page itself (WP-57): it needs no ring, it is not a control. */
 main.page:focus, main.page h1:focus { outline: none; }
+/* Settings, Subtitles and audio (WP-60): a field's heading over its choices, and the preview over the page's ground. */
+.set-field { display: grid; gap: 8px; }
+.set-field-title { margin: 0; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--muted); }
+.look-preview { display: grid; place-items: center; min-height: 72px; padding: 12px; border-radius: var(--r-m); background: linear-gradient(135deg, #3a4a55, #1b2329); text-align: center; }
 /* Recent searches (WP-59): chips under an empty search box. */
 .search-recents { display: grid; gap: 8px; margin: 8px 0 16px; }
 .search-recents-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -159,13 +182,13 @@ a.link { color: var(--accent); text-decoration: none; display: inline-block; pad
 /* An icon and its words on one row, centred on each other, wherever the button sits (the TV's Settings is not .set). */
 .danger-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  align-self: start; background: none; color: var(--error); border: 1px solid var(--line); border-radius: 999px;
+  align-self: start; background: none; color: var(--error); border: 1px solid var(--field-line); border-radius: 999px;
   min-height: 44px; padding: 10px 24px; font-weight: 500; transition: transform var(--fast) var(--ease), background var(--fast);
 }
 .danger-button:hover { background: var(--surface-high); }
 /* Text fields; a tick box keeps its own size (the Add chats picker's rows drew it full width). */
 input:not([type=range]):not([type=radio]):not([type=checkbox]) {
-  font: inherit; font-size: 1rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  font: inherit; font-size: 1rem; color: var(--fg); background: var(--surface); border: 1px solid var(--field-line);
   border-radius: var(--r-m); padding: 11px 14px; width: 100%; outline: none;
 }
 /* The ring is the border in the accent plus a 1 px line outside it: two pixels, clear on every surface. */
@@ -261,8 +284,10 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
 .toast { animation: toast-in 160ms ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 @media (prefers-reduced-motion: reduce) {
-  .toast { animation: none; }
+  html:not([data-motion="full"]) .toast { animation: none; }
 }
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .toast { animation: none; }
 /* The status line (ui/WorkStatus.tsx, WP-98): a quiet line in the page, or a pill in the offline line's place. */
 .work-status-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-height: 28px; margin: 0 0 8px; color: var(--muted); font-size: 0.875rem; line-height: 1.25rem; }
 .work-status-line p { margin: 0; }
@@ -271,7 +296,11 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
 .work-status-line.is-failed, .work-status-line.is-partial { color: var(--fg); }
 .work-spinner { flex: none; width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--accent); border-top-color: transparent; animation: spin 800ms linear infinite; }
 /* A still arc of 270 degrees under reduced motion: the words say the state (3.10 spec). */
-@media (prefers-reduced-motion: reduce) { .work-spinner { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .work-spinner { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .work-spinner { animation: none; }
 .work-status.pill .work-status-line {
   position: fixed; z-index: 6; bottom: calc(86px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
   width: max-content; max-width: calc(100vw - 32px); min-height: 0; margin: 0; padding: 6px 14px; flex-wrap: nowrap;
@@ -404,7 +433,7 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 /* Search */
 .search-field {
   display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 0 16px; height: 52px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--field-line); border-radius: 999px; color: var(--muted);
   max-width: 720px;
 }
 .search-field:focus-within { border-color: var(--accent); }
@@ -443,7 +472,13 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 .continue-card:active .continue-art { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) { .continue-card:hover .continue-art, .continue-card:focus-visible .continue-art { transform: scale(1.03); } }
 .strip.waiting .continue-art { background: var(--surface-high); animation: waiting 1.2s ease-in-out infinite alternate; }
-@media (prefers-reduced-motion: reduce) { .strip.waiting .continue-art { animation: none; } .continue-art { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .strip.waiting .continue-art { animation: none; }
+  html:not([data-motion="full"]) .continue-art { transition: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .strip.waiting .continue-art { animation: none; }
+html[data-motion="reduce"] .continue-art { transition: none; }
 
 /* A chat's info page (ChatInfoSheet): the picture, the name, the kind and members, @username, the description and the t.me link, in one centred column. */
 .avatar.huge { width: 96px; height: 96px; font-size: 2.375rem; }
@@ -573,9 +608,12 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 :root { --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 14.5s3.5 3.5 4 4.5c0 0 6.5-11.5 10-14'/%3E%3C/svg%3E"); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-highlight, .card-art, .nav-cell, .icon * { transition: none !important; }
-  .card:hover .card-art { transform: none; }
+  html:not([data-motion="full"]) .nav-highlight, html:not([data-motion="full"]) .card-art, html:not([data-motion="full"]) .nav-cell, html:not([data-motion="full"]) .icon * { transition: none !important; }
+  html:not([data-motion="full"]) .card:hover .card-art { transform: none; }
 }
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .nav-highlight, html[data-motion="reduce"] .card-art, html[data-motion="reduce"] .nav-cell, html[data-motion="reduce"] .icon * { transition: none !important; }
+html[data-motion="reduce"] .card:hover .card-art { transform: none; }
 
 /* Sign in */
 .signin {
@@ -598,7 +636,11 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .loader.tiny { width: 18px; height: 18px; border-width: 2px; }
 .loader.on-white { color: #111; }
 @keyframes boot-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .loader { animation-duration: 2s; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .loader { animation-duration: 2s; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .loader { animation-duration: 2s; }
 .qr-layout { display: flex; flex-direction: column; gap: 16px; }
 .qr-side { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .qr-text { display: flex; flex-direction: column; gap: 14px; }
@@ -886,7 +928,11 @@ a.detail-round { text-decoration: none; }
 .player { position: relative; display: block; container-type: inline-size; background: #000; color: #fff; outline: none; overflow: hidden; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .spinner { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; border: 4px solid rgba(255,255,255,.2); border-top-color: #fff; animation: spin 800ms linear infinite; pointer-events: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .spinner { animation-duration: 2s; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .spinner { animation-duration: 2s; }
 
 /* Long lists: only the rows near the screen are drawn, each placed where it would be. */
 .vgrid { position: relative; width: 100%; }
@@ -990,7 +1036,13 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .upi-id { text-align: center; font-size: 1rem; overflow-wrap: anywhere; user-select: all; }
 .confirm-buttons { display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
 button.primary.danger { background: var(--error); color: var(--bg); }
-@media (prefers-reduced-motion: reduce) { .round-button.spinning .icon { animation-duration: 2s; } .pop-menu { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .round-button.spinning .icon { animation-duration: 2s; }
+  html:not([data-motion="full"]) .pop-menu { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .round-button.spinning .icon { animation-duration: 2s; }
+html[data-motion="reduce"] .pop-menu { animation: none; }
 
 /*
  * Home's rows: a heading with the arrows (a mouse only) and See all, and a strip of portrait cards
@@ -1019,7 +1071,11 @@ button.primary.danger { background: var(--error); color: var(--bg); }
 .strip.waiting { overflow: hidden; }
 .strip.waiting .card-art { background: var(--surface-high); animation: waiting 1.2s ease-in-out infinite alternate; }
 @keyframes waiting { from { opacity: .55; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .strip.waiting .card-art { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .strip.waiting .card-art { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .strip.waiting .card-art { animation: none; }
 
 /* The first run: nothing anywhere yet. */
 .first-run { padding: 24px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--surface); display: flex; flex-direction: column; gap: 8px; align-items: start; max-width: 560px; }
@@ -1116,7 +1172,11 @@ button.version-copy { display: block; width: 100%; min-height: 44px; padding: 6p
 button.version-copy:hover, button.version-copy:focus-visible { background: var(--surface-high); outline: none; }
 .set-version { padding: 0 16px; }
 button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
-@media (prefers-reduced-motion: reduce) { .you-menu { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .you-menu { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .you-menu { animation: none; }
 
 /* Favourites and History: the heading and its line, History's tabs as chips, each day under its date. */
 .library-head { margin: 0 0 12px; }
@@ -1154,7 +1214,7 @@ html[data-pull] { overscroll-behavior-y: contain; }
 .downloads-card-title { font-size: 1.25rem; line-height: 1.75rem; font-weight: 500; color: var(--fg); }
 .empty-disc { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-high); color: var(--accent); }
 /* A link or a button alike: as a <button> it would keep the browser's grey fill and system font. */
-.outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+.outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--field-line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
 .outline-button:hover { background: var(--surface); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -1276,7 +1336,13 @@ html[data-pull] { overscroll-behavior-y: contain; }
 }
 /* Only the top's shade stays, for the mark and name over the picture: the foot is the picture's own fade. */
 :root[data-form="desktop"] .hero-fade { background: linear-gradient(rgba(0, 0, 0, .35), transparent 22%); }
-@media (prefers-reduced-motion: reduce) { .hero-wait, .hero-fill, .hero-frame, .hero-pic, .hero-text.swapping, .hero-text.leaving { animation: none; } .hero-arrow-slot { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .hero-wait, html:not([data-motion="full"]) .hero-fill, html:not([data-motion="full"]) .hero-frame, html:not([data-motion="full"]) .hero-pic, html:not([data-motion="full"]) .hero-text.swapping, html:not([data-motion="full"]) .hero-text.leaving { animation: none; }
+  html:not([data-motion="full"]) .hero-arrow-slot { transition: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .hero-wait, html[data-motion="reduce"] .hero-fill, html[data-motion="reduce"] .hero-frame, html[data-motion="reduce"] .hero-pic, html[data-motion="reduce"] .hero-text.swapping, html[data-motion="reduce"] .hero-text.leaving { animation: none; }
+html[data-motion="reduce"] .hero-arrow-slot { transition: none; }
 
 /* The title logo (TitleLogo): its slot as tall as a logo may be while one is coming or drawn, a
    soft block in it while it loads, the logo kept to its own shape at the slot's start. */
@@ -1304,7 +1370,11 @@ html[data-pull] { overscroll-behavior-y: contain; }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]):not([data-theme="black"]):not([data-form="tv"]) .title-logo.bright { filter: brightness(0); opacity: .88; }
 }
-@media (prefers-reduced-motion: reduce) { .title-logo-skeleton, .title-logo { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .title-logo-skeleton, html:not([data-motion="full"]) .title-logo { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .title-logo-skeleton, html[data-motion="reduce"] .title-logo { animation: none; }
 
 /* A card's one score (the apps' CardScore): TMDB's mark and number in a dark pill at the art's bottom end. */
 .card-score {
@@ -1360,7 +1430,7 @@ button.primary.danger:disabled { opacity: .4; }
 .card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 0.8125rem; }
 .card-menu a.menu-row { text-decoration: none; box-sizing: border-box; }
 /* The link to copy by hand (ui/tgLinks.ts), when the browser refused the clipboard: one line, selected, scrolls sideways. */
-.link-field { box-sizing: border-box; width: 100%; margin: 4px 0 8px; padding: 10px 12px; font: inherit; font-size: 0.875rem; color: inherit; background: var(--surface-high); border: 1px solid var(--line); border-radius: var(--r-md, 12px); text-overflow: ellipsis; }
+.link-field { box-sizing: border-box; width: 100%; margin: 4px 0 8px; padding: 10px 12px; font: inherit; font-size: 0.875rem; color: inherit; background: var(--surface-high); border: 1px solid var(--field-line); border-radius: var(--r-md, 12px); text-overflow: ellipsis; }
 .link-sheet .link-field { width: calc(100% - 32px); margin: 16px; }
 .link-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 
@@ -1380,7 +1450,11 @@ button.primary.danger:disabled { opacity: .4; }
 .choice-row[aria-current='true'] .choice-text small:first-of-type { color: var(--accent); }
 .choice-story { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .choice-others { display: flex; gap: 12px; align-items: center; min-height: 44px; font-size: 0.875rem; }
-@media (prefers-reduced-motion: reduce) { .choice-row { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .choice-row { transition: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .choice-row { transition: none; }
 
 /* A trailer in YouTube's own player over the video's page (ui/TrailerSheet.tsx): the player 16:9, never wider than the screen or taller than most of it. */
 .trailer-sheet { width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -1416,10 +1490,27 @@ button.trailer-close, .trailer-fallback a.button { min-height: 48px; min-width: 
 .list-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .list-card > .link { align-self: flex-start; }
 .list-name { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; font-size: 0.8125rem; color: var(--muted); }
-.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 1rem; }
+.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--field-line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 1rem; }
 .list-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Last, so it beats every rule above it: pictures and the sign-in tick arrive at once instead of fading or popping in. */
 @media (prefers-reduced-motion: reduce) {
-  .card-art img, .continue-img, .detail-backdrop, .cast-face img, .chat-picture img, .qr-tick { animation: none; }
+  html:not([data-motion="full"]) .card-art img, html:not([data-motion="full"]) .continue-img, html:not([data-motion="full"]) .detail-backdrop, html:not([data-motion="full"]) .cast-face img, html:not([data-motion="full"]) .chat-picture img, html:not([data-motion="full"]) .qr-tick { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .card-art img, html[data-motion="reduce"] .continue-img, html[data-motion="reduce"] .detail-backdrop, html[data-motion="reduce"] .cast-face img, html[data-motion="reduce"] .chat-picture img, html[data-motion="reduce"] .qr-tick { animation: none; }
+
+/*
+ * Forced colours (Windows high contrast, WP-60): what a background colour alone says gets a border or a
+ * system colour, so the current place, the chosen choice and the progress do not vanish.
+ */
+@media (forced-colors: active) {
+  .nav-highlight { background: none; border: 2px solid Highlight; }
+  .nav-cell[aria-current] { color: Highlight; }
+  .set .segmented label.on { border: 2px solid Highlight; background: none; }
+  .card-progress, .pill-progress { background: Canvas; border: 1px solid CanvasText; }
+  .card-progress > div, .pill-progress > div { background: Highlight; forced-color-adjust: none; }
+  [aria-checked=true] > .switch { background: Highlight; border-color: Highlight; forced-color-adjust: none; }
+  .recent-chip { border-color: CanvasText; }
+  button.primary { border: 1px solid ButtonText; }
 }

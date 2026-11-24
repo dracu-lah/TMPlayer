@@ -10,4 +10,8 @@
   cursor: pointer; animation: note-in 120ms ease-out;
 }
 .pc-zoom-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .pc-zoom-chip { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .pc-zoom-chip { animation: none; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .pc-zoom-chip { animation: none; }

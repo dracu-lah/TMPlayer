@@ -28,7 +28,11 @@
 .fb-busy { display: flex; align-items: center; gap: 12px; }
 .fb-spinner { width: 24px; height: 24px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: fb-spin 900ms linear infinite; }
 @keyframes fb-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .fb-spinner { animation-duration: 3s; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .fb-spinner { animation-duration: 3s; }
+}
+/* The same, when Reduce motion is On in Settings (WP-60). */
+html[data-motion="reduce"] .fb-spinner { animation-duration: 3s; }
 /* FB-7K3Q-M4XP: large and monospace, so it can be read out across the room. */
 .fb-code { font: 700 2rem/2.5rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 2px; text-align: center; color: var(--accent); user-select: all; overflow-wrap: anywhere; }
 .fb-ways { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 12px; }

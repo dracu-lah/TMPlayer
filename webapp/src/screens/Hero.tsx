@@ -1,3 +1,4 @@
+import { reducedMotion } from '../ui/motion'
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { A, useNavigate } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon, InformationCircleIcon, PauseIcon, PlayIcon } from '@hugeicons/core-free-icons'
@@ -97,7 +98,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     const onMotion = () => setReduced(motion.matches)
     motion.addEventListener?.('change', onMotion)
     onCleanup(() => motion.removeEventListener?.('change', onMotion))
-    const still = () => reduced()
+    const still = () => (reduced(), reducedMotion())
     // The desktop turns pages by its dots, keys, drag and swipe, with no arrow buttons (D1); the phone keeps them.
     const arrows = () => form() !== 'desktop'
     const paused = () => over() || within() || held() || touchShown()

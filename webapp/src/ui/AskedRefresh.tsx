@@ -9,6 +9,7 @@ import { Icon } from './Icon'
 import { t } from '../i18n'
 import { form } from '../form'
 import { online } from '../net'
+import { reducedMotion } from './motion'
 import { createAskedRefresh, onReturnAfterHidden, pullReleases, pullShown } from './askedRefresh'
 import { idle, type WorkStatus } from './workStatus'
 
@@ -48,7 +49,6 @@ export function RefreshButton(props: { busy: boolean; onRefresh: () => void }) {
     )
 }
 
-const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
  * Pull down from the top of the page to refresh, in the phone form only (a mouse, a keyboard and a remote
