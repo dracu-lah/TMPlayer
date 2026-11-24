@@ -4,7 +4,7 @@
 // Delete list, Sign out. Run on the phone, the desktop and Safari forms; the TV has its own walk below.
 import { mkdirSync } from 'node:fs'
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
-import { fakeCase, noSizeFloor, openClips, openDetail } from './helpers'
+import { fakeCase, noSizeFloor, openClips, openDetail, openTvSettingsPage } from './helpers'
 
 const SHOTS = `${process.cwd()}/../design/web-gaps/WB8`
 
@@ -234,8 +234,9 @@ test.describe('TV remote', () => {
         }
         const label = () => page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') ?? '')
         await expect.poll(() => page.evaluate(() => document.activeElement?.tagName ?? '')).not.toBe('BODY')
-        // Clear history is under Home and library, after Account, Playback, Downloads and Appearance (WP-78): the walk goes on to it.
-        for (let i = 0; i < 160 && (await label()) !== 'history-label'; i++) await press('ArrowDown')
+        // Clear history is on the Home and library page of the rail (WP-88): open it, then walk down to the button.
+        await openTvSettingsPage(page, 'home')
+        for (let i = 0; i < 60 && (await label()) !== 'history-label'; i++) await press('ArrowDown')
         expect(await label()).toBe('history-label')
         await press('Enter')
         await expect(page.getByRole('dialog', { name: 'Clear history?' })).toBeVisible()

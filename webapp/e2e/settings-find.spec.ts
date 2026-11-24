@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { mkdirSync } from 'node:fs'
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { openTvSettingsPage } from './helpers'
 
 type Catalog = Record<string, Record<string, string>>
 const catalog = (tag: string): Catalog => JSON.parse(readFileSync(new URL(`../../core/src/commonMain/resources/i18n/${tag}.json`, import.meta.url), 'utf8'))
@@ -228,7 +229,7 @@ test.describe('on a desktop', () => {
 test.describe('on a TV', () => {
     test.use(IN.tv)
 
-    test('there is no box, one page, a way to a row by its address, and What is new', async ({ page }, info) => {
+    test('there is no box, a rail of pages, a way to a row by its address, and What is new', async ({ page }, info) => {
         await setting(page, 'tmplayer-layout', 'tv')
         await page.goto('/settings#posters')
         await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
@@ -237,6 +238,8 @@ test.describe('on a TV', () => {
         await expect(page.locator('#row-posters')).toHaveClass(/set-found/)
         await page.goto('/settings/library')
         await expect(page).toHaveURL(/\/settings$/)
+        // What's new is on the rail's Help page (WP-88).
+        await openTvSettingsPage(page, 'help')
         const news = page.getByRole('button', { name: "What's new" })
         await news.scrollIntoViewIfNeeded()
         await news.focus()

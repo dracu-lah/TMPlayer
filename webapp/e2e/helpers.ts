@@ -110,3 +110,17 @@ export async function mockSplitShow(page: Page, asked: string[], picture: Buffer
 
 /** The form this project runs in: its name says (`phone-390`, `desktop-1280`, `webkit-iphone`); the rest are auto-detected desktops. */
 export const isPhoneProject = (name: string) => name.startsWith('phone') || name.includes('iphone')
+
+/**
+ * On the TV's Settings (a rail of pages and a pane beside it): opens a page the way a remote does, with
+ * the rail's item for it focused and Right, which shows that page and puts the remote on its first item.
+ * A hash cannot do it: the pane follows the rail's focus after a moment.
+ */
+export async function openTvSettingsPage(page: Page, id: 'account' | 'playback' | 'subtitles' | 'storage' | 'appearance' | 'home' | 'help' | 'about') {
+    const item = page.locator(`.tv-rail [data-rail="${id}"]`)
+    await expect(item).toBeVisible()
+    await item.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(item).toHaveAttribute('aria-current', 'page')
+    await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('.tv-pane'))).toBe(true)
+}

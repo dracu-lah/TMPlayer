@@ -36,6 +36,13 @@ function allowLines(): Allow[] {
 async function audit(page: Page): Promise<Finding[]> {
     return page.evaluate(async () => {
         const out: { rule: string; node: string; detail: string }[] = []
+        // A page under load is still moving (a row rising, a focus growing) when the rules read it: wait for what ends, then measure.
+        for (let i = 0; i < 3; i++) {
+            const ending = document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+            if (!ending.length) break
+            await Promise.all(ending.map((a) => a.finished.catch(() => null)))
+            await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+        }
         const vw = innerWidth
         const vh = innerHeight
         const dp = Math.min(vw / 960, vh / 540)

@@ -5,7 +5,7 @@
 import { mkdirSync } from 'node:fs'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test'
-import { fakeCase, noSizeFloor } from './helpers'
+import { fakeCase, noSizeFloor, openTvSettingsPage } from './helpers'
 
 const SHOTS = `${process.cwd()}/../design/web-gaps/WB11`
 const INBOX = 'https://inbox.test/v1/feedback'
@@ -407,6 +407,7 @@ test.describe('on the TV, with the remote', () => {
     test('OK on Report a problem opens the form with a QR code beside it; typing needs OK, Back closes and returns the focus', async ({ page }, info) => {
         const posts = await inbox(page)
         await tvPage(page, false)
+        await openTvSettingsPage(page, 'help')
         const row = page.getByRole('button', { name: 'Report a problem' })
         await row.focus()
         await press(page, 'Enter')
@@ -445,6 +446,7 @@ test.describe('on the TV, with the remote', () => {
 
     test('with no inbox the TV shows the QR code and the e-mail line, and Close', async ({ page }, info) => {
         await tvPage(page, true)
+        await openTvSettingsPage(page, 'help')
         const row = page.getByRole('button', { name: 'Request a feature' })
         await row.focus()
         await press(page, 'Enter')

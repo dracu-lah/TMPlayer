@@ -427,6 +427,12 @@ export function createFocusMap(host: Host) {
                 const first = page && listDefault(page)
                 if (first) return first
                 if (tries > 20 && !stopgap) {
+                    // The page put the remote on an item itself (Settings, on the row an address names): it stays there.
+                    const now = document.activeElement
+                    if (now && now !== document.body && page?.contains(now)) {
+                        stopWaiting()
+                        return null
+                    }
                     stopgap = pageDefault()
                     if (stopgap) focus(stopgap)
                 }

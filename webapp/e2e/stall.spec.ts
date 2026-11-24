@@ -76,7 +76,9 @@ for (const form of FORMS) {
             await shot(page, `${form.name}-not-started`)
             // The bytes come: Try again opens it again and it plays. Nothing restarted by itself before.
             await fakeCase(context)
-            await sheet.getByRole('button', { name: 'Try again' }).click()
+            // The read the worker still holds may be answered the moment the case changes, and the sheet then goes by itself
+            // before the press lands: the press is tried while the sheet stands, and the video must play either way.
+            await sheet.getByRole('button', { name: 'Try again' }).click({ timeout: 4_000 }).catch(() => {})
             await playsPast(page, 0.5)
             await expect(page.locator('.pc-status')).toHaveCount(0)
         })

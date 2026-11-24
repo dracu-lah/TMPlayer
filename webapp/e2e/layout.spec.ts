@@ -54,23 +54,29 @@ test.describe('detection table', () => {
 })
 
 test('the Settings choice wins, survives a reload and is set before the page runs', async ({ page, context }) => {
-    await page.goto('/settings')
+    await page.goto('/settings/appearance')
     const html = page.locator('html')
     await expect(page.getByRole('radio', { name: 'Desktop' })).toBeChecked()
     await expect(page.getByRole('radio', { name: 'Phone' })).toHaveCount(0)
     await expect(page.getByRole('radio', { name: 'Auto', exact: true })).toHaveCount(0)
-    // Each form draws Settings in its own way (the TV's one long page, a list of pages elsewhere), so the choice is pressed, not checked: the radio is a new one by the time the form has changed.
+    // Each form draws Settings in its own way (the TV's rail and pane, a list of pages elsewhere), so the choice is pressed, not checked: the radio is a new one by the time the form has changed.
     // A press can land on the old radio while the page redraws for the last choice, so a press is tried again until the form follows.
+    // The TV opens on its Account page: the rail's Appearance and language item brings the choice up.
+    const appearance = async () => {
+        if ((await html.getAttribute('data-form')) === 'tv') await page.locator('.tv-rail [data-rail="appearance"]').click()
+    }
     const choose = (name: string) =>
         expect(async () => {
+            await appearance()
             await page.getByRole('radio', { name }).click({ force: true })
             await expect(html).toHaveAttribute('data-form', name.toLowerCase(), { timeout: 2000 })
         }).toPass({ timeout: 15_000 })
     for (const name of ['TV', 'Desktop']) await choose(name)
     await choose('TV')
     await page.reload()
-    await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
     await expect(html).toHaveAttribute('data-form', 'tv')
+    await appearance()
+    await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
     // The inline script has set it before any module ran.
     const seen = await context.newPage().then(async (p) => {
         await p.addInitScript(() => document.addEventListener('DOMContentLoaded', () => ((window as any).early = document.documentElement.dataset.form)))
@@ -87,6 +93,7 @@ test('?tv=1 and ?tv=0 in the address choose TV and Desktop, Settings leaves Layo
     await expect(html).toHaveAttribute('data-form', 'tv')
     await page.goto('/settings')
     await expect(html).toHaveAttribute('data-form', 'tv')
+    await page.locator('.tv-rail [data-rail="appearance"]').click()
     await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'TV' })).toHaveCount(0)
     // Another tab, opened with a plain address: the choice stays, and Settings offers it again. The
@@ -95,6 +102,7 @@ test('?tv=1 and ?tv=0 in the address choose TV and Desktop, Settings leaves Layo
     const other = await context.newPage()
     await other.goto('/settings')
     await expect(other.locator('html')).toHaveAttribute('data-form', 'tv')
+    await other.locator('.tv-rail [data-rail="appearance"]').click()
     await expect(other.getByRole('radio', { name: 'TV' })).toBeChecked()
     await other.goto('/?tv=0')
     await expect(other.locator('html')).toHaveAttribute('data-form', 'desktop')

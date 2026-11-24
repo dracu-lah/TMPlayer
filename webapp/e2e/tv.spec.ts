@@ -2,7 +2,7 @@
 // sizes: focus comes back to the item that was open after Back, after a menu and after a dialog.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { fakeCase, mockSplitShow } from './helpers'
+import { fakeCase, mockSplitShow, openTvSettingsPage } from './helpers'
 
 /** The layout set to TV and two chats starred, written where the app keeps them before it starts. */
 async function tv(page: Page) {
@@ -747,10 +747,9 @@ for (const size of [
             await page.goto('/settings')
             await expect.poll(() => focused(page)).not.toBe('')
             const on = () => page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') ?? '')
-            // Down walks the page's panels; Clear history sits left of the Rewind choices under the sync switch, so Down
-            // from that switch lands on Rewind (nearest in line) and Up from there reaches the button.
-            for (let i = 0; i < 80 && (await on()) !== 'history-label' && (await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name)) !== 'rewind'; i++) await press(page, 'ArrowDown')
-            for (let i = 0; i < 4 && (await on()) !== 'history-label'; i++) await press(page, 'ArrowUp')
+            // Clear history is on the rail's Home and library page (WP-88): open it, then Down walks the pane to the button.
+            await openTvSettingsPage(page, 'home')
+            for (let i = 0; i < 60 && (await on()) !== 'history-label'; i++) await press(page, 'ArrowDown')
             expect(await on()).toBe('history-label')
             await press(page, 'Enter')
             // Clear history asks first (HX59): the question opens on Cancel, Right reaches the red button.
@@ -760,6 +759,9 @@ for (const size of [
             await expect(page.locator('.toast button')).toBeVisible()
             // The toast never takes the remote.
             expect(await on()).toBe('history-label')
+            // Back from the pane is the rail (WP-88), Back from the rail the bar.
+            await press(page, 'Backspace')
+            expect(await page.evaluate(() => !!document.activeElement?.closest('.tv-rail'))).toBe(true)
             await press(page, 'Backspace')
             const barItem = await focused(page)
             await press(page, 'ArrowUp')

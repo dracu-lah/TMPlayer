@@ -285,6 +285,8 @@ html[data-form=tv] .icon-button { width: calc(var(--dp) * 40); height: calc(var(
 html[data-form=tv] .icon-button .icon, html[data-form=tv] .round-button .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
 html[data-form=tv] .icon-button:hover { background: none; }
 html[data-form=tv][data-tv-keys] .icon-button:focus, html[data-form=tv][data-tv-keys] .round-button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+/* Home's Refresh stands on the safe edge: it grows to the right, so the focus scale does not take it past the edge (tv-checklist safeArea). */
+html[data-form=tv] .refresh-button { transform-origin: left center; }
 html[data-form=tv][data-tv-keys] .star.on:focus { color: var(--on-focus-fill); }
 
 /*

@@ -5,7 +5,7 @@
 // sideways, a screenshot each for design/web-gaps/WB12.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
-import { noSizeFloor, openCard, openClips, playsPast } from './helpers'
+import { noSizeFloor, openCard, openClips, openTvSettingsPage, playsPast } from './helpers'
 
 type Catalog = Record<string, Record<string, string>>
 const catalog = (tag: string): Catalog => JSON.parse(readFileSync(new URL(`../../core/src/commonMain/resources/i18n/${tag}.json`, import.meta.url), 'utf8'))
@@ -135,9 +135,11 @@ test.describe('one engine', () => {
         await page.evaluate(() => localStorage.setItem('tmplayer-layout', 'tv'))
         await page.goto('/settings')
         await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+        // The language list is on the Appearance and language page of the rail (WP-88): Right from its item enters the pane.
+        await openTvSettingsPage(page, 'appearance')
         const automatic = page.locator('.lang-option').first()
         await expect(automatic).toBeVisible()
-        // Down from the bar until the remote is on the list.
+        // Down from the pane's top until the remote is on the list.
         const onList = () => page.evaluate(() => !!document.activeElement?.classList.contains('lang-option'))
         for (let i = 0; i < 30 && !(await onList()); i++) await page.keyboard.press('ArrowDown')
         // Into the list where the remote came down, then left along the first row to Automatic.

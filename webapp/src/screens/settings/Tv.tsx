@@ -60,7 +60,8 @@ export function TvSettings() {
     const [page, setPage] = createSignal<PageId>(firstPage(location.hash))
     let timer = 0
     onCleanup(() => clearTimeout(timer))
-    // The remote passing an item selects its page once it rests there; OK selects at once.
+    // The remote passing an item selects its page once it rests there; OK selects at once. Focus leaving the item (a row an
+    // address names, taking the remote in the first moment) drops the page it was about to show: the address's page stays.
     const follow = (id: PageId, now = false) => {
         clearTimeout(timer)
         if (now) setPage(id)
@@ -107,6 +108,7 @@ export function TvSettings() {
                             data-rail={r.id}
                             aria-current={page() === r.id ? 'page' : undefined}
                             onFocus={() => follow(r.id)}
+                            onBlur={() => clearTimeout(timer)}
                             onClick={() => follow(r.id, true)}
                             ref={(el) => el.addEventListener('tvmove', railMove, true)}
                         >
