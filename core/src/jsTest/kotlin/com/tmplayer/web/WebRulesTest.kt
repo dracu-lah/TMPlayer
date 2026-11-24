@@ -810,7 +810,9 @@ class WebRulesTest {
         val n = whatsNew()
         assertEquals(ReleaseHighlights.VERSION, n.version)
         assertTrue(n.changelog.startsWith("https://"))
-        assertEquals(ReleaseHighlights.highlights.size, n.highlights.size)
+        assertEquals(ReleaseHighlights.highlightsFor(ReleaseHighlights.Form.Web).size, n.highlights.size)
+        assertEquals(n.highlights.size, n.sections.sumOf { it.lines.size })
+        assertTrue(n.sections.all { it.title.isNotBlank() })
         assertTrue(n.highlights.isNotEmpty() && n.highlights.all { it.isNotBlank() })
         isPlain(n)
     }

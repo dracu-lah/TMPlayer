@@ -1383,17 +1383,31 @@ fun settingsSearch(query: String, form: String, only: Array<String>?): Array<Str
 
 private const val SETTINGS_QUERY_MAX = 80
 
-/** What the apps' "What's new" sheet says: the release its highlights describe, the full changelog's address and the lines in the language the rules speak. */
+/** One heading of the "What's new" sheet and the lines under it. */
+interface WebWhatsNewSection {
+    val title: String
+    val lines: Array<String>
+}
+
+/**
+ * What the apps' "What's new" sheet says: the release its highlights describe, the full changelog's
+ * address and the lines in the language the rules speak, for the web's own form (no remote keys, no
+ * desktop window): grouped under headings in [sections], flat in [highlights].
+ */
 interface WebWhatsNew {
     val version: String
     val changelog: String
     val highlights: Array<String>
+    val sections: Array<WebWhatsNewSection>
 }
 
 fun whatsNew(): WebWhatsNew = plain(
     "version" to ReleaseHighlights.VERSION,
     "changelog" to ReleaseHighlights.CHANGELOG,
-    "highlights" to ReleaseHighlights.highlights.toTypedArray(),
+    "highlights" to ReleaseHighlights.highlightsFor(ReleaseHighlights.Form.Web).toTypedArray(),
+    "sections" to ReleaseHighlights.sectionsFor(ReleaseHighlights.Form.Web).map {
+        plain<WebWhatsNewSection>("title" to it.title, "lines" to it.lines.toTypedArray())
+    }.toTypedArray(),
 )
 
 // ---- Search by topic name (U14) ---------------------------------------------------------------------

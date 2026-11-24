@@ -132,6 +132,8 @@ test('what is new is the apps sheet: a version, an address and lines', () => {
     assert.match(n.version, /^\d+\.\d+\.\d+$/)
     assert.match(n.changelog, /^https:\/\//)
     assert.ok(n.highlights.length >= 3 && n.highlights.every((h) => h.trim() && !h.startsWith('whatsnew.')))
+    assert.ok(n.sections.length >= 2 && n.sections.every((x) => x.title.trim() && x.lines.length > 0))
+    assert.equal(n.sections.reduce((sum, x) => sum + x.lines.length, 0), n.highlights.length)
 })
 
 // WP-78: the order and the names of core's SettingsGroup.

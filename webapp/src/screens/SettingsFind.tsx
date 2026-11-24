@@ -352,16 +352,23 @@ export function AboutNews(props: { variant: 'row' | 'tv'; icon: IconData; change
                     <dialog class="confirm whatsnew" ref={dialog} aria-labelledby="whatsnew-title" onClick={(e) => { if (e.target === dialog) close() }}>
                         <h2 id="whatsnew-title">{t('whatsnew.title', { version: n().version })}</h2>
                         <p class="muted">{t('whatsnew.subtitle')}</p>
-                        <ul class="whatsnew-list">
-                            <For each={n().highlights}>
-                                {(line) => (
-                                    <li>
-                                        <Icon icon={CheckmarkCircle02Icon} size={22} class="whatsnew-tick" />
-                                        <span>{line}</span>
-                                    </li>
-                                )}
-                            </For>
-                        </ul>
+                        <For each={n().sections}>
+                            {(section) => (
+                                <>
+                                    <h3 class="whatsnew-heading">{section.title}</h3>
+                                    <ul class="whatsnew-list">
+                                        <For each={section.lines}>
+                                            {(line) => (
+                                                <li>
+                                                    <Icon icon={CheckmarkCircle02Icon} size={22} class="whatsnew-tick" />
+                                                    <span>{line}</span>
+                                                </li>
+                                            )}
+                                        </For>
+                                    </ul>
+                                </>
+                            )}
+                        </For>
                         <div class="confirm-buttons whatsnew-buttons">
                             <a class="link" href={n().changelog} target="_blank" rel="noopener">{t('whatsnew.full_changelog')}</a>
                             <button class="primary" type="button" onClick={close}>{t('common.close')}</button>

@@ -14,6 +14,7 @@
 .set-found:focus { outline: 2px solid var(--accent); }
 
 .whatsnew { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.whatsnew-heading { font-size: 1rem; font-weight: 600; margin: 16px 0 8px; }
 .whatsnew-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .whatsnew-list li { display: flex; align-items: flex-start; gap: 12px; overflow-wrap: anywhere; }
 .whatsnew-tick { flex: none; color: var(--accent); margin-top: 1px; }

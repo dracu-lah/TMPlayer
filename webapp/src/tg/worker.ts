@@ -447,10 +447,15 @@ export const api = {
     },
 
     /** What the apps' "What's new" sheet says, in the language `tag`. */
-    async whatsNew(_: Ctx, tag: string, url: string | null): Promise<{ version: string; changelog: string; highlights: string[] }> {
+    async whatsNew(_: Ctx, tag: string, url: string | null): Promise<{ version: string; changelog: string; highlights: string[]; sections: { title: string; lines: string[] }[] }> {
         return inLanguage(tag, url, (r) => {
             const n = r.whatsNew()
-            return { version: n.version, changelog: n.changelog, highlights: [...n.highlights] }
+            return {
+                version: n.version,
+                changelog: n.changelog,
+                highlights: [...n.highlights],
+                sections: [...n.sections].map((x) => ({ title: x.title, lines: [...x.lines] })),
+            }
         })
     },
 
