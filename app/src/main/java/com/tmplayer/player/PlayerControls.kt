@@ -15,6 +15,7 @@ import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.TimeBar
 import com.tmplayer.R
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.recommendedControlsTimeout
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
 
@@ -1271,7 +1272,41 @@ class PlayerControls(
         val quick = resumeHideMs?.takeIf { SystemClock.uptimeMillis() - resumedAt < RESUME_ECHO_MS }
         if (quick == null) resumeHideMs = null
         val after = quick ?: timeoutMs
-        if (after > 0) container.postDelayed(hide, after)
+        // A screen reader walks the row slower than a thumb: the system's own time for controls
+        // (3x below Android 10), and the row stays while the reader's focus is on one of its parts.
+        val reader = accessibility?.takeIf { it.isTouchExplorationEnabled || it.isEnabled }
+        if (reader != null && readerFocusInRow) return
+        val wait = if (after > 0 && reader != null) reader.recommendedControlsTimeout(after) else after
+        if (wait > 0) container.postDelayed(hide, wait)
+    }
+
+    private val accessibility: android.view.accessibility.AccessibilityManager? =
+        runCatching { container.context.getSystemService(android.view.accessibility.AccessibilityManager::class.java) }.getOrNull()
+
+    /** True while TalkBack or Switch Access has its focus on a part of the row. */
+    private var readerFocusInRow = false
+
+    init {
+        container.setAccessibilityDelegate(object : View.AccessibilityDelegate() {
+            override fun onRequestSendAccessibilityEvent(
+                host: ViewGroup,
+                child: View,
+                event: android.view.accessibility.AccessibilityEvent,
+            ): Boolean {
+                when (event.eventType) {
+                    android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED -> {
+                        readerFocusInRow = true
+                        container.removeCallbacks(hide)
+                    }
+                    android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED -> {
+                        readerFocusInRow = false
+                        // The focus moved on or out: the row gets its time again.
+                        container.post { poke() }
+                    }
+                }
+                return super.onRequestSendAccessibilityEvent(host, child, event)
+            }
+        })
     }
 
     /** The time the row stays after a resume, in place of [timeoutMs]; see [resumed]. */

@@ -404,8 +404,9 @@
             <TextView
                 android:id="@+id/times_position"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
+                android:gravity="center_vertical"
                 android:textColor="#B8FFFFFF"
                 android:textSize="@dimen/player_text_small" />
 
@@ -416,7 +417,8 @@
                 android:background="?android:attr/selectableItemBackground"
                 android:contentDescription="Show the time remaining"
                 android:minWidth="48dp"
-                android:gravity="end"
+                android:minHeight="48dp"
+                android:gravity="center_vertical|end"
                 android:paddingStart="8dp"
                 android:textColor="#B8FFFFFF"
                 android:textSize="@dimen/player_text_small" />
@@ -774,7 +776,8 @@
             <TextView
                 android:id="@+id/control_copy"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_control_pill"
                 android:clickable="true"
@@ -784,6 +787,7 @@
                 android:focusable="true"
                 android:fontFamily="sans-serif-medium"
                 android:gravity="center_vertical"
+                android:ellipsize="end"
                 android:maxLines="1"
                 android:nextFocusUp="@id/controls_timebar"
                 android:paddingStart="12dp"
@@ -798,7 +802,8 @@
             <TextView
                 android:id="@+id/control_episodes"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_control_pill"
                 android:clickable="true"
@@ -808,6 +813,7 @@
                 android:focusable="true"
                 android:fontFamily="sans-serif-medium"
                 android:gravity="center_vertical"
+                android:ellipsize="end"
                 android:maxLines="1"
                 android:nextFocusUp="@id/controls_timebar"
                 android:paddingStart="12dp"

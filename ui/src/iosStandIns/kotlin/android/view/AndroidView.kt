@@ -776,6 +776,17 @@ open class View(context: Context?, attrs: AttributeSet?, @Suppress("UNUSED_PARAM
 
     fun sendAccessibilityEvent(eventType: Int) {}
 
+    /** What a screen reader asks of a view group; the iOS port has no events to send. */
+    open class AccessibilityDelegate {
+        open fun onRequestSendAccessibilityEvent(host: ViewGroup, child: View, event: android.view.accessibility.AccessibilityEvent): Boolean = true
+    }
+
+    private var readerDelegate: AccessibilityDelegate? = null
+
+    fun setAccessibilityDelegate(delegate: AccessibilityDelegate?) {
+        readerDelegate = delegate
+    }
+
     fun playSoundEffect(soundConstant: Int) {}
 
     fun setOnApplyWindowInsetsListener(listener: Any?) {}

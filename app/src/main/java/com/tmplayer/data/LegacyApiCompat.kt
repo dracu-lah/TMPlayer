@@ -86,3 +86,21 @@ fun webViewInstalled(context: Context): Boolean = runCatching {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_WEBVIEW)
     }
 }.getOrDefault(false)
+
+/**
+ * How long a row of controls stays up for someone using TalkBack or Switch Access: the
+ * "Time to take action" setting the system recommends (Android 10 and newer), else three times
+ * [timeoutMs] while touch exploration is on, since a screen reader walks the row far slower than
+ * a thumb. Nothing on: [timeoutMs] as it is.
+ */
+fun android.view.accessibility.AccessibilityManager.recommendedControlsTimeout(timeoutMs: Long): Long =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        getRecommendedTimeoutMillis(
+            timeoutMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS,
+        ).toLong().coerceAtLeast(timeoutMs)
+    } else if (isTouchExplorationEnabled) {
+        timeoutMs * 3
+    } else {
+        timeoutMs
+    }

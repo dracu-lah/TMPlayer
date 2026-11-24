@@ -348,3 +348,6 @@ fun Context.startForegroundServiceCompat(intent: Intent) {
 fun Context.hasPictureInPicture(): Boolean = false
 
 fun videoFollowsTransforms(videoView: android.view.View?): Boolean = true
+
+/** VoiceOver has its own timing; the row keeps its own (WP-64 reads VoiceOver). */
+fun android.view.accessibility.AccessibilityManager.recommendedControlsTimeout(timeoutMs: Long): Long = timeoutMs
