@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
@@ -124,7 +125,7 @@ class DownloadsTabBarTest {
     }
 
     private fun downloadsButton(running: Int) =
-        rule.onNodeWithContentDescription(if (running > 0) "${L.navDownloads}, $running" else L.navDownloads)
+        rule.onNodeWithContentDescription(if (running > 0) L.navInProgress(L.navDownloads, running.toString()) else L.navDownloads)
 
     @Test
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
@@ -145,6 +146,27 @@ class DownloadsTabBarTest {
         show(running = 0, current = TouchDestination.Home)
         rule.onAllNodesWithTag(BAR_BADGE_TAG, useUnmergedTree = true).assertCountEquals(0)
         assertTrue(rule.onAllNodesWithText("0", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `TalkBack hears one group of four places, each with its own, and the count as in progress`() {
+        show(running = 2, current = TouchDestination.Home)
+        val group = androidx.compose.ui.test.SemanticsMatcher("a collection of 4 in one row") {
+            val info = it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.CollectionInfo)
+            info != null && info.rowCount == 1 && info.columnCount == 4
+        }
+        rule.onNode(group).assertExists()
+        for ((index, name) in listOf(L.browseTabHome, L.browseTabChats, L.commonSearch).withIndex()) {
+            val item = rule.onNodeWithContentDescription(name).fetchSemanticsNode().config
+                .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.CollectionItemInfo)
+            assertEquals(name, index, item?.columnIndex)
+        }
+        val last = downloadsButton(2).fetchSemanticsNode().config
+            .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.CollectionItemInfo)
+        assertEquals(3, last?.columnIndex)
+        assertTrue(L.navInProgress(L.navDownloads, "2").contains("2"))
+        assertTrue("no middle dot or bare number", !L.navInProgress(L.navDownloads, "2").contains('\u00b7'))
     }
 
     @Test

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,6 +90,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -875,21 +880,29 @@ private fun FloatingBar(
                     .background(Tone.accent.copy(alpha = 0.16f)),
             )
             val buttons: @Composable () -> Unit = {
-                BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome)
-                BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats)
-                BarButton(TmIcons.Search, s.commonSearch, false, onSearch, role = Role.Button, modifier = searchShared)
+                BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome, index = 0, vertical = vertical)
+                BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats, index = 1, vertical = vertical)
+                BarButton(TmIcons.Search, s.commonSearch, false, onSearch, role = Role.Button, modifier = searchShared, index = 2, vertical = vertical)
                 BarButton(
                     TmIcons.Download,
                     s.navDownloads,
                     current == TouchDestination.Downloads,
                     onDownloads,
                     badge = downloading,
+                    index = 3,
+                    vertical = vertical,
                 )
             }
+            // One group of four (WP-17): TalkBack says the bar's size and each button's place in it.
+            val group = Modifier
+                .selectableGroup()
+                .semantics {
+                    collectionInfo = if (vertical) CollectionInfo(BAR_BUTTONS, 1) else CollectionInfo(1, BAR_BUTTONS)
+                }
             if (vertical) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
+                Column(group, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
+                Row(group, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
             }
           }
         }
@@ -1103,7 +1116,11 @@ private fun BarButton(
     modifier: Modifier = Modifier,
     /** A count over the icon's top end (Downloads running); 0 draws none. */
     badge: Int = 0,
+    /** Its place among the bar's [BAR_BUTTONS], for the screen reader. */
+    index: Int = 0,
+    vertical: Boolean = false,
 ) {
+    val s = LocalStrings.current
     val press = remember { MutableInteractionSource() }
     Column(
         modifier
@@ -1112,8 +1129,9 @@ private fun BarButton(
             .clip(HIGHLIGHT_SHAPE)
             .clickable(interactionSource = press, indication = ripple(), role = role, onClick = onClick)
             .semantics {
-                // The count is read with the name ("Downloads, 2 running"), not as a stray number.
-                contentDescription = if (badge > 0) "$label, $badge" else label
+                // The count is read with the name ("Downloads, 2 in progress"), not as a stray number.
+                contentDescription = if (badge > 0) s.navInProgress(label, badge.toString()) else label
+                collectionItemInfo = if (vertical) CollectionItemInfo(index, 1, 0, 1) else CollectionItemInfo(0, 1, index, 1)
                 if (role == Role.Tab) selected = chosen
                 this.role = role
             },
@@ -1457,6 +1475,9 @@ private val RAIL_MARGIN = 12.dp
 
 /** Between two of the bar's buttons. */
 private val BAR_SPACING = 4.dp
+
+/** The floating bar's buttons: Home, Chats, Search, Downloads. */
+private const val BAR_BUTTONS = 4
 private val PICTURE = 30.dp
 internal val BAR_SHADOW = 8.dp
 private val POPOVER_WIDTH = 208.dp

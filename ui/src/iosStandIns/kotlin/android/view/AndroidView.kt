@@ -779,7 +779,16 @@ open class View(context: Context?, attrs: AttributeSet?, @Suppress("UNUSED_PARAM
     /** What a screen reader asks of a view group; the iOS port has no events to send. */
     open class AccessibilityDelegate {
         open fun onRequestSendAccessibilityEvent(host: ViewGroup, child: View, event: android.view.accessibility.AccessibilityEvent): Boolean = true
+
+        /** Where a screen reader's description of [host] can be changed (its class name, state). */
+        open fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {}
     }
+
+    /** What a screen reader reads of this View; a subclass adds to [info]. */
+    open fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {}
+
+    /** A screen reader performing [action] (Android's id, 4096 forward, 8192 backward); false when unhandled. */
+    open fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean = false
 
     private var readerDelegate: AccessibilityDelegate? = null
 

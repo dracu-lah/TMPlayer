@@ -288,6 +288,15 @@ class PlayerControls(
 
     private val hide = Runnable { hideAnimated() }
 
+    /** True once a stall has lasted [BUFFERING_SPOKEN_MS] and the play disc says so to a screen reader. */
+    private var bufferingSpoken = false
+    private val speakBuffering = Runnable {
+        if (!buffering || bufferingSpoken) return@Runnable
+        bufferingSpoken = true
+        // The disc is a polite live region (its layout), so the new state is spoken once.
+        renderPlayPause()
+    }
+
     private val tick = object : Runnable {
         override fun run() {
             if (!visible) return
@@ -817,6 +826,22 @@ class PlayerControls(
         wire(more) { onMore(more) }
         timeText.isFocusable = true
         timeText.isClickable = true
+        // TalkBack (WP-17): a button that says what OK does ([renderClock] names it) and, as its state,
+        // where the video stands. The state is worked out when a reader asks, not on every tick.
+        timeText.setAccessibilityDelegate(object : View.AccessibilityDelegate() {
+            override fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = "android.widget.Button"
+                val exo = player() ?: return
+                val clock = Translator.messages.formatter
+                val state = L.playerPositionOf(clock.clock(exo.currentPosition), clock.clock(exo.duration.takeIf { it > 0 } ?: 0L))
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    info.stateDescription = state
+                } else {
+                    info.contentDescription = "${info.contentDescription}, $state"
+                }
+            }
+        })
         // Focus fills the readout with a white pill and darkens its text, the buttons' own cue in
         // the readout's shape; the bar's faint pill was lost over a bright frame.
         timeText.setBackgroundResource(R.drawable.bg_tv_focus_pill)
@@ -924,6 +949,14 @@ class PlayerControls(
     /** Mid-play buffering: the phone swaps the play glyph for a spinner in the same disc. */
     fun setBuffering(value: Boolean) {
         buffering = value
+        // A screen reader hears "Buffering" only once a stall lasts half a second (WP-17), on every form factor.
+        container.removeCallbacks(speakBuffering)
+        if (value) {
+            container.postDelayed(speakBuffering, BUFFERING_SPOKEN_MS)
+        } else if (bufferingSpoken) {
+            bufferingSpoken = false
+            renderPlayPause()
+        }
         if (isTv) return
         centerBuffering.visibility = if (value) View.VISIBLE else View.GONE
         centerIcon.visibility = if (value) View.INVISIBLE else View.VISIBLE
@@ -1365,7 +1398,7 @@ class PlayerControls(
         centerIcon.setShowsPlay(!playing, animate = animate && centerDrawn && visible)
         centerDrawn = true
         describe(centerPlay, if (playing) L.commonPause else L.commonPlay)
-        val state = if (playing) L.playerPlaying else L.playerPaused
+        val state = if (bufferingSpoken) L.playerBuffering else if (playing) L.playerPlaying else L.playerPaused
         if (ViewCompat.getStateDescription(centerPlay) != state) ViewCompat.setStateDescription(centerPlay, state)
     }
 
@@ -1393,6 +1426,8 @@ class PlayerControls(
                 Translator.messages.formatter.clock(duration)
             }
             time.text = "${Translator.messages.formatter.clock(position)} / $end" + loopBadge() + chapterBadge(position)
+            // What OK on the readout does, the phone's total says the same (below).
+            describe(time, if (showRemaining) L.playerShowTotalLength else L.playerShowTimeRemaining)
             return
         }
         timesPosition.text = Translator.messages.formatter.clock(position) + loopBadge() + chapterBadge(position)
@@ -1462,6 +1497,9 @@ class PlayerControls(
 
         /** The seconds the back and forward buttons name and jump ([Skip.BUTTON_MS]). */
         const val SKIP_SECONDS = (Skip.BUTTON_MS / 1000).toInt()
+
+        /** How long a stall lasts before a screen reader is told "Buffering": short ones stay silent. */
+        const val BUFFERING_SPOKEN_MS = 500L
 
         /** The figure inside the skip buttons' arrow, in dp (not sp: it must stay inside the circle). */
         const val SEEK_FIGURE_DP = 10f

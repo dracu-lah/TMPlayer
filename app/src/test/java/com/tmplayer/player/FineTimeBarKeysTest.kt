@@ -140,14 +140,21 @@ class FineTimeBarKeysTest {
     }
 
     @Test
-    fun `TalkBack's scroll action still moves by the fixed increment after a key scrub`() {
+    fun `TalkBack's scroll action moves 10 s after a key scrub, and the keys keep their stride`() {
         load(durationMs = 120 * 60_000L, positionMs = 0)
         hold(KeyEvent.KEYCODE_DPAD_RIGHT, repeats = 1)
         idle(1_500)
         commits.clear()
         bar.setPosition(10_000L)
         bar.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
-        assertEquals(listOf(10_000L + Skip.BAR_MS), commits)
+        assertEquals(listOf(10_000L + Skip.BUTTON_MS), commits)
+        // The 10 s was for that action alone: a keyboard's key still strides by the fixed increment.
+        commits.clear()
+        bar.remoteSteps = false
+        bar.setPosition(0L)
+        hold(KeyEvent.KEYCODE_DPAD_RIGHT, repeats = 1)
+        idle(1_500)
+        assertEquals(listOf(Skip.BAR_MS), commits)
     }
 
     @Test

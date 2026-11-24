@@ -5,6 +5,9 @@ import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.DefaultTimeBar
 
@@ -51,6 +54,45 @@ class FineTimeBar @JvmOverloads constructor(
     override fun setDuration(duration: Long) {
         durationMs = duration
         super.setDuration(duration)
+    }
+
+    private var positionMs = 0L
+
+    override fun setPosition(position: Long) {
+        positionMs = position
+        super.setPosition(position)
+    }
+
+    /**
+     * What TalkBack reads (WP-17): the app's own name for the bar and "12:03 of 1:42:10" as its
+     * state, in place of Media3's bare position. Worked out when a reader asks, never on a tick, so
+     * a playing video sends no stream of state changes. Below Android 11 the state rides in the name.
+     */
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        val clock = Translator.messages.formatter
+        val state = if (durationMs > 0) L.playerPositionOf(clock.clock(positionMs), clock.clock(durationMs)) else clock.clock(positionMs)
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            info.contentDescription = L.playerSeekBar
+            info.stateDescription = state
+        } else {
+            info.contentDescription = L.playerSeekBar + ", " + state
+        }
+    }
+
+    /**
+     * TalkBack's scroll forward and back move by the 10 s of the skip buttons ([Skip.BUTTON_MS]), not
+     * by the 30 s stride the keys keep. Media3 reads the increment as it handles the action, so it is
+     * swapped for that call alone.
+     */
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean {
+        if (action != ACTION_SCROLL_FORWARD && action != ACTION_SCROLL_BACKWARD) return super.performAccessibilityAction(action, arguments)
+        super.setKeyTimeIncrement(Skip.BUTTON_MS)
+        return try {
+            super.performAccessibilityAction(action, arguments)
+        } finally {
+            if (accessibilityIncrementMs > 0L) super.setKeyTimeIncrement(accessibilityIncrementMs)
+        }
     }
 
     /**
@@ -126,3 +168,7 @@ class FineTimeBar @JvmOverloads constructor(
         lastRate = null
     }
 }
+
+/** Android's accessibility scroll actions (AccessibilityNodeInfo.ACTION_SCROLL_FORWARD and BACKWARD). */
+private const val ACTION_SCROLL_FORWARD = 4096
+private const val ACTION_SCROLL_BACKWARD = 8192

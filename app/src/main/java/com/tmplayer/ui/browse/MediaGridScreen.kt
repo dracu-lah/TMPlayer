@@ -221,6 +221,8 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.tmplayer.ui.components.ProgressLine
 import com.tmplayer.ui.components.ProgressLineInset
 import com.tmplayer.ui.components.TileBadge
@@ -2512,12 +2514,23 @@ internal fun VideoTile(
  * the desktop it is read here, as the animated colour always was.
  */
 @Composable
-internal fun TileCaption(text: String, style: androidx.compose.ui.text.TextStyle, ink: androidx.compose.ui.graphics.ColorProducer) {
+internal fun TileCaption(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    ink: androidx.compose.ui.graphics.ColorProducer,
+    /** What a screen reader says in place of [text], where the drawn separators would be read out (WP-17). */
+    description: String? = null,
+) {
+    // Callers that join their facts with the middle dot get commas for a screen reader without saying so.
+    val read = remember(text, description) {
+        description ?: text.takeIf { '\u00b7' in it }?.replace(Regex("\\s*\u00b7\\s*"), ", ")
+    }
+    val spoken = if (read == null) Modifier else Modifier.semantics { contentDescription = read }
     if (isTouch()) {
-        M3Text(text, style = style, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        M3Text(text, style = style, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = spoken)
     } else {
         // The television's scale already holds every caption style at 14 sp or more (TvTypeScale).
-        androidx.compose.foundation.text.BasicText(text, style = style, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        androidx.compose.foundation.text.BasicText(text, style = style, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = spoken)
     }
 }
 
@@ -2940,7 +2953,7 @@ private fun MetaLine(
 ) {
     val s = LocalStrings.current
     // Worked out once per change of what it says, not on every composition of the tile.
-    val text = remember(item, watched, finished, poster, s) {
+    val facts = remember(item, watched, finished, poster, s) {
         val year = if (poster) item.parsedName.year else null
         val duration = s.formatter.duration(item.durationSec.toLong())
         // A tile standing for several copies says how many rather than one copy's size.
@@ -2957,14 +2970,17 @@ private fun MetaLine(
             // On a video's card the quality is here rather than a second badge on the picture.
             com.tmplayer.data.QualityRead.of(item)?.takeIf { !poster },
             resume,
-        ).joinToString("  ·  ")
+        )
     }
+    // Drawn with the middle dot, read with commas: a screen reader says "middle dot" for the mark.
+    val text = remember(facts) { facts.joinToString("  ·  ") }
+    val spoken = remember(facts) { facts.joinToString(", ") }
     val style = if (isTouch()) {
         if (poster) M3MaterialTheme.typography.labelSmall else M3MaterialTheme.typography.labelMedium
     } else {
         if (poster) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
     }
-    TileCaption(text, style, ink)
+    TileCaption(text, style, ink, description = spoken)
 }
 
 /** No overscan to clear on a phone, so the margin is only what keeps art off the bezel. */
