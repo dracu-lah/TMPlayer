@@ -52,3 +52,21 @@ export function versionState(input: { updateReady: boolean; checking: boolean; l
     if (input.lastChecked !== null && input.lastChecked > 0) return 'upToDate'
     return 'none'
 }
+
+/**
+ * The compact release number the menus show: "v1.28.7" from "1.28.7", "v1.28.7-beta.2" or a tag as
+ * the build read it (vite.config.ts appRelease). A build suffix is dropped (the full detail stays
+ * in Settings, About); anything that is not a number of the form X.Y or X.Y.Z gives '' and the
+ * caller shows "web" in its place, never a made up number.
+ */
+export function compactVersion(raw: unknown): string {
+    if (typeof raw !== 'string') return ''
+    const m = /^v?(\d{1,4}\.\d{1,4}(?:\.\d{1,4})?)(?![\d.])/.exec(raw.trim())
+    return m ? `v${m[1]}` : ''
+}
+
+/** True when a drag down of [dy] px over [ms] ms (the sheet's handle) is a dismissal: far enough, or a quick flick. */
+export function dragCloses(dy: number, ms: number): boolean {
+    if (!Number.isFinite(dy) || !Number.isFinite(ms) || dy <= 0) return false
+    return dy >= 96 || (dy >= 32 && ms > 0 && dy / ms >= 0.6)
+}

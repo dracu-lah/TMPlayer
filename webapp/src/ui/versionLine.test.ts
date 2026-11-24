@@ -3,7 +3,7 @@
 // `node --test src/ui/versionLine.test.ts`
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { BUILD_MAX, DEVICE_MAX, VERSION_MAX, copyText, shown, versionState, webVersionFacts } from './versionLine.ts'
+import { BUILD_MAX, DEVICE_MAX, VERSION_MAX, compactVersion, copyText, dragCloses, shown, versionState, webVersionFacts } from './versionLine.ts'
 
 const SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
 
@@ -47,4 +47,21 @@ test('the state follows the service worker: a waiting version wins, then a look 
     // Never checked, no service worker (the TV build): the version alone, never a false "Up to date".
     assert.equal(versionState({ updateReady: false, checking: false, lastChecked: null }), 'none')
     assert.equal(versionState({ updateReady: false, checking: false, lastChecked: 0 }), 'none')
+})
+
+test('the compact version is "v" and the digits, a build suffix dropped, and nothing made up', () => {
+    assert.equal(compactVersion('1.28.7'), 'v1.28.7')
+    assert.equal(compactVersion('v1.28.7-beta.2'), 'v1.28.7')
+    assert.equal(compactVersion(' v1.29 '), 'v1.29')
+    for (const bad of ['', 'web', 'dev', 'main', 'v1', '1.2.3.4', 'x1.2.3', null, undefined, 7, {}]) assert.equal(compactVersion(bad), '', String(bad))
+})
+
+test('a drag down on the sheet grip closes it when far or quick, never up or on garbage', () => {
+    assert.equal(dragCloses(120, 900), true)
+    assert.equal(dragCloses(40, 40), true)
+    assert.equal(dragCloses(40, 900), false)
+    assert.equal(dragCloses(-200, 10), false)
+    assert.equal(dragCloses(0, 0), false)
+    assert.equal(dragCloses(Number.NaN, 10), false)
+    assert.equal(dragCloses(100, Number.POSITIVE_INFINITY), false)
 })

@@ -26,7 +26,7 @@ import { StoragePage } from './settings/Storage'
 import { Support } from './settings/Support'
 import { TvSettings } from './settings/Tv'
 import { dot } from '../ui/dot'
-import { VersionFooter } from '../ui/VersionFooter'
+import { VersionFooter, VersionMark } from '../ui/VersionFooter'
 
 /** The app's pages (SettingsGroup, WP-08) that the web has something to put in, in the apps' order (ui/settingsMap.ts PAGE_IDS). */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
@@ -113,7 +113,10 @@ function Pages() {
             <Switch>
                 <Match when={wide()}>
                     <header class="set-head">
-                        <h1 class="page-title">{t('nav.settings')}</h1>
+                        <h1 class="page-title set-title-mark">
+                            <VersionMark />
+                            {t('nav.settings')}
+                        </h1>
                         <p class="muted">{t('settings.saves_as_you_go')}</p>
                     </header>
                     <div class="set-panes">
@@ -138,7 +141,10 @@ function Pages() {
                 <Match when={true}>
                     <header class="set-bar">
                         <BackButton onClick={() => back(navigate)} />
-                        <h1>{t('nav.settings')}</h1>
+                        <h1 class="set-title-mark">
+                            <VersionMark />
+                            {t('nav.settings')}
+                        </h1>
                     </header>
                     <PageList selected={null} />
                 </Match>
@@ -162,10 +168,6 @@ function PageList(props: { selected: PageId | null }) {
             <AccountHeader />
             <SettingsSearch context={rowContext} icons={PAGE_ICONS} />
             <Show when={!showingResults()}>
-                {/* The version, the build and the update state, quietly; a press copies them (WP-104). */}
-                <div class="set-version">
-                    <VersionFooter look="line" />
-                </div>
                 <div class="set-card">
                     <For each={PAGES}>
                         {(p) => (
@@ -182,6 +184,10 @@ function PageList(props: { selected: PageId | null }) {
             <SignOut />
             <RemoveAllButton />
             <p class="muted small set-foot">{t('auth.unofficial')}</p>
+            {/* The TMPlayer icon and the version, the very last line of the list (landscape and the two panes too); a press opens About, the update state is a chip beside it. */}
+            <div class="set-version set-version-foot">
+                <VersionFooter look="chip" />
+            </div>
         </nav>
     )
 }

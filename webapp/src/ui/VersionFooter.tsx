@@ -1,11 +1,14 @@
-// The version line (WP-104) where the web shows it: the You menu's last line, the TV account menu's,
-// the top of Settings and About's masthead. One component, four looks; the facts and the update
-// state come from ui/versionLine.ts and the service worker's own news (install.ts), and a press
-// copies "TMPlayer web (<sha>, <day>) <browser on system>" for support. Nothing here sends anything.
-import { createMemo, createSignal, onCleanup, Show } from 'solid-js'
+// The version line (WP-104) where the web shows it: the account menu's last line, the TV account menu's,
+// the foot of Settings' main list and About's masthead. One component, five looks. The menus and the
+// Settings list show the compact row: the TMPlayer icon and "v1.28.7", and a press opens About, where
+// the full line stays. The facts and the update state come from ui/versionLine.ts and the service
+// worker's own news (install.ts), and a press on the full line copies
+// "TMPlayer web (<sha>, <day>) <browser on system>" for support. Nothing here sends anything.
+import { createMemo, createSignal, Match, onCleanup, Show, Switch } from 'solid-js'
+import { A } from '@solidjs/router'
 import { applyUpdate, checking, installed, lastChecked, updateReady } from '../install'
 import { t } from '../i18n'
-import { copyText, shown, versionState, webVersionFacts, type VersionState } from './versionLine'
+import { compactVersion, copyText, shown, versionState, webVersionFacts, type VersionState } from './versionLine'
 
 /** How long the line says "Version details copied" before the version returns. */
 const COPIED_MS = 2000
@@ -13,7 +16,15 @@ const COPIED_MS = 2000
 /** The facts of this build: "web", the commit and day it was built, and the browser. */
 export const facts = () => webVersionFacts(__APP_BUILD__, __APP_BUILT__, typeof navigator === 'undefined' ? '' : navigator.userAgent, installed())
 
-/** The state beside the version, from the service worker's news. */
+/** The compact release as the menus show it: "v1.28.7", or "web" when the build knows no number. */
+export const compact = (): string => compactVersion(typeof __APP_RELEASE__ === 'string' ? __APP_RELEASE__ : '') || 'web'
+
+/** The TMPlayer icon beside the compact version (decorative: the row's own name carries the words). */
+export function VersionMark() {
+    return <img class="version-mark" src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="16" height="16" aria-hidden="true" draggable={false} />
+}
+
+/** The state beside the version, from the service worker's own news. */
 export const state = (): VersionState => versionState({ updateReady: updateReady(), checking: checking(), lastChecked: lastChecked() })
 
 /** The words for [s], or '' when the version stands alone. */
@@ -31,11 +42,14 @@ export function lineText(withAvailable = true): string {
 const canCopy = () => typeof navigator !== 'undefined' && !!navigator.clipboard?.writeText
 
 /**
- * [look] "menu" is the You menu's last line (a `menuitem` the arrows reach), "tv" the TV menu's row
- * (`.tv-menu-row`, which OK presses), "line" a quiet line of its own (Settings, About) and "text" the
- * same words with nothing to press (the TV's Settings, where the menu's footer is the copy target).
+ * [look] "menu" is the account menu's last line (a `menuitem` the arrows reach) and "chip" the foot of
+ * Settings' main list: the icon and "v1.28.7", a press opens About, and the update state is a chip of
+ * its own beside it. "tv" is the TV menu's row (`.tv-menu-row`, which OK presses, and which still
+ * copies the support text), "line" the quiet full line of About and "text" the same words with
+ * nothing to press (the TV's Settings, where the menu's footer is the copy target).
+ * [onOpen] runs before the press goes to About (the menu closes itself).
  */
-export function VersionFooter(props: { look: 'menu' | 'tv' | 'line' | 'text' }) {
+export function VersionFooter(props: { look: 'menu' | 'chip' | 'tv' | 'line' | 'text'; onOpen?: () => void }) {
     const [copied, setCopied] = createSignal(false)
     let timer: ReturnType<typeof setTimeout> | undefined
     onCleanup(() => clearTimeout(timer))
@@ -50,26 +64,59 @@ export function VersionFooter(props: { look: 'menu' | 'tv' | 'line' | 'text' }) 
         clearTimeout(timer)
         timer = setTimeout(() => setCopied(false), COPIED_MS)
     }
+    const small = () => props.look === 'menu' || props.look === 'chip' || props.look === 'tv'
     // The text is the live region: it changes once, to the confirmation, and a second press leaves it.
-    // The menu keeps "Update available" for its own button under the line.
     const words = () => (
         <span class="version-text" aria-live="polite">
-            {copied() ? t('about.version_copied') : lineText(props.look !== 'menu')}
+            {copied() ? t('about.version_copied') : small() ? compact() : lineText(true)}
         </span>
     )
+    const marked = () => (
+        <>
+            <VersionMark />
+            {words()}
+        </>
+    )
     const press = createMemo(() => props.look !== 'text' && canCopy())
+    const label = () => t('about.version_short', { version: compact() })
+    // "Update available" (a button) or the quiet state (words), beside the compact version.
+    const chip = () => {
+        const s = state()
+        return s === 'none' ? null : s === 'available' ? (
+            <button type="button" class="version-state available" role={props.look === 'menu' ? 'menuitem' : undefined} onClick={() => applyUpdate()}>
+                {t('update.state_available_plain')}
+            </button>
+        ) : (
+            <span class="version-state">{stateWords(s)}</span>
+        )
+    }
     return (
-        <Show
-            when={press()}
-            fallback={
-                <p class="version-line" classList={{ 'you-version': props.look === 'menu', 'tv-version': props.look === 'tv' || props.look === 'text' }} data-version-line>
-                    {words()}
-                </p>
-            }
-        >
-            <Show
-                when={props.look === 'menu'}
-                fallback={
+        <Switch>
+            <Match when={props.look === 'menu'}>
+                <div class="you-foot">
+                    <A class="you-row you-version" role="menuitem" href="/settings/about" aria-label={label()} title={label()} data-version-line onClick={() => props.onOpen?.()}>
+                        {marked()}
+                    </A>
+                    <Show when={state() === 'available'}>{chip()}</Show>
+                </div>
+            </Match>
+            <Match when={props.look === 'chip'}>
+                <div class="version-chip-row">
+                    <A class="version-chip" href="/settings/about" aria-label={label()} title={label()} data-version-line>
+                        {marked()}
+                    </A>
+                    {chip()}
+                </div>
+            </Match>
+            <Match when={true}>
+                <Show
+                    when={press()}
+                    fallback={
+                        <p class="version-line" classList={{ 'tv-version': props.look === 'tv' || props.look === 'text' }} data-version-line>
+                            {small() ? marked() : words()}
+                        </p>
+                    }
+                >
                     <button
                         type="button"
                         class={props.look === 'tv' ? 'tv-menu-row tv-version version-line version-copy' : 'version-line version-copy'}
@@ -78,19 +125,10 @@ export function VersionFooter(props: { look: 'menu' | 'tv' | 'line' | 'text' }) 
                         data-version-line
                         onClick={() => void copy()}
                     >
-                        {words()}
-                    </button>
-                }
-            >
-                <button type="button" class="you-row you-version" role="menuitem" title={t('about.version_copy')} data-version-line onClick={() => void copy()}>
-                    {words()}
-                </button>
-                <Show when={state() === 'available' && !copied()}>
-                    <button type="button" class="you-row you-update" role="menuitem" onClick={() => applyUpdate()}>
-                        {t('update.state_available_plain')}
+                        {small() ? marked() : words()}
                     </button>
                 </Show>
-            </Show>
-        </Show>
+            </Match>
+        </Switch>
     )
 }

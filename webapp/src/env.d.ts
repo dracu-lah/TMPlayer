@@ -7,6 +7,8 @@ declare const __LOG_UPLOAD_URL__: string
 /** The commit this build came from, 7 characters (`dev` when unknown), and the UTC day it was built (vite.config.ts): the version line's build (ui/versionLine.ts). */
 declare const __APP_BUILD__: string
 declare const __APP_BUILT__: string
+/** The release number without a suffix ("1.28.7"), or '' when the build knows none: the compact version row (ui/versionLine.ts compactVersion). */
+declare const __APP_RELEASE__: string
 
 interface Window {
     ManagedMediaSource?: typeof MediaSource

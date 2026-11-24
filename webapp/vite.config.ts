@@ -325,6 +325,22 @@ function appBuild(): string {
     } catch {}
     return 'dev'
 }
+/**
+ * The release number the compact version row shows ("v1.28.7"): TM_VERSION when the build is given
+ * one, a tag build's own name, else the newest `v*` tag of the checkout; '' when none is known and
+ * the row says "web". Only digits are kept, so a branch name or a tag's suffix never reaches the page.
+ */
+function appRelease(): string {
+    const pick = (raw: string) => /^v?(\d{1,4}\.\d{1,4}(?:\.\d{1,4})?)(?![\d.])/.exec(raw.trim())?.[1] ?? ''
+    const given = pick(process.env.TM_VERSION ?? '') || pick(process.env.GITHUB_REF_TYPE === 'tag' ? (process.env.GITHUB_REF_NAME ?? '') : '')
+    if (given) return given
+    try {
+        const tag = execFileSync('git', ['describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*'], { cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', 'pipe', 'ignore'] }).toString()
+        return pick(tag)
+    } catch {
+        return ''
+    }
+}
 let tvBuild = false
 const licences = notices(() => (tvBuild ? [coreJs()] : []))
 
@@ -341,6 +357,7 @@ export default defineConfig(({ mode }) => {
             __LOG_UPLOAD_URL__: JSON.stringify(secret('LOG_UPLOAD_URL')),
             __APP_BUILD__: JSON.stringify(appBuild()),
             __APP_BUILT__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+            __APP_RELEASE__: JSON.stringify(appRelease()),
         },
         css: tv ? { postcss: { plugins: [legacyCss()] } } : {},
         worker: { format: tv ? 'iife' : 'es', plugins: () => (tv ? [tvLegacy(true), ...licences.worker()] : licences.worker()) },
