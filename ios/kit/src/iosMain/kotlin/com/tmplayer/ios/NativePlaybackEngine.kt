@@ -62,7 +62,22 @@ internal class NativePlaybackEngine(private val engine: VideoEngine) : PlaybackE
     /** Where the seek in flight was sent, until the engine says it landed. */
     private val seekTarget = MutableStateFlow<Long?>(null)
 
+    /** The engine's AirPlay and picture in picture, handed to the Android player's rows for the video now open. */
+    private val external = (engine as? ExternalPlaybackEngine)?.let { ExternalControls(it) }
+
+    private class ExternalControls(private val engine: ExternalPlaybackEngine) : android.app.IosExternalPlayback.Controls {
+        override val usesApplePlayer: Boolean get() = engine.usesApplePlayer
+        override fun showAirPlayPicker() = engine.showAirPlayPicker()
+        override fun startPictureInPicture(): Boolean = engine.startPictureInPicture()
+        override fun stopPictureInPicture() = engine.stopPictureInPicture()
+        override fun setAutoPictureInPicture(on: Boolean) = engine.setAutoPictureInPicture(on)
+    }
+
     override suspend fun open(data: MediaData, startAtMs: Long, prefs: OpenPrefs) {
+        external?.let { controls ->
+            android.app.IosExternalPlayback.controls = controls
+            (engine as? ExternalPlaybackEngine)?.onPictureInPictureChanged = { android.app.IosExternalPlayback.pictureInPictureChanged(it) }
+        }
         val reports = EngineReports(this)
         current.value = reports
         seekTarget.value = null
@@ -288,6 +303,10 @@ internal class NativePlaybackEngine(private val engine: VideoEngine) : PlaybackE
     }
 
     override fun close() {
+        if (external != null && android.app.IosExternalPlayback.controls === external) {
+            android.app.IosExternalPlayback.controls = null
+            android.app.IosExternalPlayback.pictureInPictureChanged(false)
+        }
         current.value = null
         seekTarget.value = null
         _subtitleText.value = null

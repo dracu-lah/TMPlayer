@@ -116,6 +116,8 @@ enum class PhoneMenuEntry {
     /** First and set apart with its icon: the line people come to the menu for (user, 2026-10-18). */
     LockScreen,
     PictureInPicture,
+    /** AirPlay's list of screens (iOS only, WP-31): for a file of Apple's player's; the line says why not for mpv's. */
+    AirPlay,
     /**
      * Every shape as a page (HX16): the row's button (on a phone held sideways) steps them a press
      * at a time and the pinch only the first three, so this is where any one is a tap away.
@@ -195,6 +197,7 @@ fun PhoneMenuEntry.label(
 ): String = when (this) {
     PhoneMenuEntry.LockScreen -> L.playerLockScreen
     PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
+    PhoneMenuEntry.AirPlay -> L.playerAirplay
     PhoneMenuEntry.PictureShape -> shape?.let { L.commonWithDetail(L.playerPictureShape, it.label) } ?: L.playerPictureShape
     PhoneMenuEntry.ResetZoom -> L.playerResetZoom
     PhoneMenuEntry.Stereo -> stereo?.let { L.commonWithDetail(L.playerStereo, it) } ?: L.playerStereo
@@ -414,7 +417,8 @@ object PlayerMenu {
      * shape while a pinch has the picture enlarged. [otherEngine] adds Try the other engine, as on
      * the television. [repeatVideo] adds Repeat this video under the A-B repeat (a video, not sound
      * alone, which has its own repeat in the list). [addToList] offers "Add to a list" under Mark as
-     * watched (a video from a message; see [tvEntries]). The lock stays first: the line people come here for.
+     * watched (a video from a message; see [tvEntries]). [airPlay] is iOS's AirPlay line, after
+     * picture in picture (never on Android; a chat that restricts saving leaves it out). The lock stays first: the line people come here for.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
@@ -438,9 +442,11 @@ object PlayerMenu {
         rotatePicture: Boolean = false,
         playerVolume: Boolean = false,
         addToList: Boolean = false,
+        airPlay: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
+        if (airPlay) add(PhoneMenuEntry.AirPlay)
         if (pictureShape) add(PhoneMenuEntry.PictureShape)
         if (pictureShape && zoomed) add(PhoneMenuEntry.ResetZoom)
         if (rotatePicture) add(PhoneMenuEntry.RotatePicture)

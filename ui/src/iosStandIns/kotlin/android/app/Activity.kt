@@ -34,8 +34,21 @@ open class Activity : ContextWrapper(null) {
 
     open fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {}
 
-    /** Picture in picture is left out on iOS (maintainer, 2026-11-11): its settings are kept, nothing else. */
-    open fun setPictureInPictureParams(params: PictureInPictureParams) {}
+    /**
+     * Picture in picture on iOS is Apple's player's (WP-31, [IosExternalPlayback]): the request that
+     * keeps the system's automatic entry in step with playback goes to the engine, and this
+     * activity hears when the corner window opens or closes.
+     */
+    open fun setPictureInPictureParams(params: PictureInPictureParams) {
+        watchPictureInPicture()
+        IosExternalPlayback.controls?.setAutoPictureInPicture(params.autoEnter)
+    }
+
+    private fun watchPictureInPicture() {
+        IosExternalPlayback.onPictureInPictureChanged = { active ->
+            onPictureInPictureModeChanged(active, resources.configuration)
+        }
+    }
 
     /**
      * Android 13's switch for the recents picture (HX88): nothing here; iOS's app switcher picture
@@ -62,12 +75,13 @@ open class Activity : ContextWrapper(null) {
 
     private var finishing = false
     open val isFinishing: Boolean get() = finishing
-    open val isInPictureInPictureMode: Boolean get() = false
+    open val isInPictureInPictureMode: Boolean get() = IosExternalPlayback.pictureInPictureActive
     /** Closes the activity, as Android's: the shell takes it off the screen and ends its lifecycle. */
     open fun finish() {
         val close = shellFinish ?: return
         if (finishing) return
         finishing = true
+        IosExternalPlayback.onPictureInPictureChanged = null
         close()
     }
     open fun recreate() = Unit
@@ -78,7 +92,10 @@ open class Activity : ContextWrapper(null) {
         if (android.Manifest.permission.POST_NOTIFICATIONS in permissions) IosNotifications.ask { }
     }
     open fun shouldShowRequestPermissionRationale(permission: String): Boolean = false
-    open fun enterPictureInPictureMode(params: Any?): Boolean = false
+    open fun enterPictureInPictureMode(params: Any?): Boolean {
+        watchPictureInPicture()
+        return IosExternalPlayback.startPictureInPicture()
+    }
     open fun runOnUiThread(action: java.lang.Runnable) = android.os.Handler().post(action).let { }
     override val applicationContext: Context get() = this
 
@@ -221,12 +238,17 @@ class PendingIntent private constructor() {
 
 class LocaleManager
 
-/** Picture in picture's settings, Android's; kept, as iOS shows no picture in picture (maintainer, 2026-11-11). */
-class PictureInPictureParams private constructor() {
+/** Picture in picture's settings, Android's; only the automatic entry reaches iOS's player (WP-31). */
+class PictureInPictureParams private constructor(internal val autoEnter: Boolean) {
     class Builder {
+        private var autoEnter = false
+
         fun setAspectRatio(aspectRatio: android.util.Rational?): Builder = this
 
-        fun setAutoEnterEnabled(autoEnterEnabled: Boolean): Builder = this
+        fun setAutoEnterEnabled(autoEnterEnabled: Boolean): Builder {
+            autoEnter = autoEnterEnabled
+            return this
+        }
 
         fun setSeamlessResizeEnabled(seamlessResizeEnabled: Boolean): Builder = this
 
@@ -236,6 +258,6 @@ class PictureInPictureParams private constructor() {
 
         fun setTitle(title: CharSequence?): Builder = this
 
-        fun build(): PictureInPictureParams = PictureInPictureParams()
+        fun build(): PictureInPictureParams = PictureInPictureParams(autoEnter)
     }
 }

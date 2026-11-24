@@ -60,6 +60,21 @@ fun Context.hasPictureInPicture(): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
 
+/** AirPlay is iOS's: the More panel's row exists there alone (WP-31, AndroidSystemOnIos.kt has the iOS answer). */
+@Suppress("unused")
+fun Context.hasAirPlay(): Boolean = false
+
+/** Opens iOS's AirPlay list for the video playing; false where there is none, or for a file it cannot take. */
+@Suppress("unused")
+fun Context.showAirPlayPicker(): Boolean = false
+
+/**
+ * Why a refused picture in picture request cannot be done, in words, where the reason is known:
+ * only iOS has one (a file of mpv's, not Apple's player's). Android refuses without saying, as before.
+ */
+@Suppress("unused")
+fun Context.pictureInPictureRefusal(): String? = null
+
 /**
  * Whether a scale or a move set on the views around [videoView] carries the video with it, which
  * the player's pinch zoom is (PictureZoom). A TextureView is drawn with the rest of the window and

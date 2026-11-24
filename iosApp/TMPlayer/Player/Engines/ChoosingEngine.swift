@@ -49,6 +49,9 @@ final class ChoosingEngine: NSObject, VideoEngine {
     private var audioDelay: Int64 = 0
     private var abLoop: (Int64, Int64)?
 
+    /// Told, on the main thread, when the corner window opens or closes (ExternalPlaybackEngine).
+    var onPictureInPictureChanged: ((KotlinBoolean) -> Void)?
+
     /// Whether Apple's player may take files at all: on unless launched with `-appleEngine NO`.
     private let appleAllowed = UserDefaults.standard.object(forKey: "appleEngine") == nil || UserDefaults.standard.bool(forKey: "appleEngine")
 
@@ -57,6 +60,7 @@ final class ChoosingEngine: NSObject, VideoEngine {
         view.add(mpv.surface)
         view.add(apple.surface)
         view.show(mpv.surface)
+        apple.onPictureInPictureChanged = { [weak self] active in self?.onPictureInPictureChanged?(active) }
         apple.onCannotPlay = { [weak self] reason in self?.appleCannotPlay(reason) }
         apple.onFailedWhilePlaying = { [weak self] reason, atMs in
             guard let self, self.active === self.apple else { return }
@@ -366,6 +370,28 @@ final class ChoosingEngine: NSObject, VideoEngine {
                 self.addSubtitleWhenOpen(path, tries: tries - 1)
             }
         }
+    }
+}
+
+/// AirPlay and picture in picture belong to Apple's player (WP-31): while mpv holds the video the
+/// player's rows say so instead (`usesApplePlayer` false).
+extension ChoosingEngine: ExternalPlaybackEngine {
+    var usesApplePlayer: Bool { active === apple }
+
+    func showAirPlayPicker() {
+        if active === apple { apple.showAirPlayPicker() }
+    }
+
+    func startPictureInPicture() -> Bool {
+        active === apple && apple.startPictureInPicture()
+    }
+
+    func stopPictureInPicture() {
+        apple.stopPictureInPicture()
+    }
+
+    func setAutoPictureInPicture(on: Bool) {
+        apple.setAutoPictureInPicture(on: on)
     }
 }
 

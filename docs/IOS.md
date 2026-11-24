@@ -94,9 +94,41 @@ Both read the video from TDLib while it downloads (`TdStreamProtocol.swift`, `Ap
 
 ### Not in scope
 
-Not on iPhone and iPad yet: casting (Google Cast, DLNA, AirPlay video), Picture in Picture, downloads
+Not on iPhone and iPad yet: casting (Google Cast, DLNA), downloads
 while the app is in the background, crash reports (Sentry's Android SDK), the in-app updater
 (AltStore or SideStore offers updates), Android TV features. Videos only, as everywhere in TMPlayer.
+
+### AirPlay and picture in picture (WP-31, 2026-11-24)
+
+For the files Apple's player plays (MP4 and MOV), the player's More panel has an **AirPlay** line and
+**Picture in picture**; both belong to AVPlayer, so for a file mpv plays (an MKV, say) the line is
+still there and says why not when pressed ("AirPlay works for MP4 and MOV videos", "Picture in
+picture works for MP4 and MOV videos"). The web has no cast (Remote Playback cannot cast an MSE or
+service worker stream, and relaying bytes is ruled out by Telegram's terms).
+
+- `AppleEngine.swift`: `allowsExternalPlayback` and `usesExternalPlaybackWhileExternalScreenIsActive`
+  on the AVPlayer; an `AVRoutePickerView` the surface holds in its corner out of sight, which the
+  row presses (`showAirPlayPicker`); an `AVPictureInPictureController` on the same `AVPlayerLayer`
+  (`startPictureInPicture`, the delegate reports opening and closing). The background observer keeps
+  the layer on the player while the corner window is up, the picture is on an AirPlay screen, or the
+  system may open the window by itself and the video plays; otherwise it detaches it as before, so
+  the sound goes on.
+- `ChoosingEngine.swift` implements `ExternalPlaybackEngine` (`ios/kit/.../VideoEngine.kt`) and answers
+  for the engine playing; `NativePlaybackEngine` hands it to `android.app.IosExternalPlayback`
+  (`ui/src/iosStandIns`), which the Android player reaches through `hasAirPlay`,
+  `showAirPlayPicker`, `pictureInPictureRefusal` (`LegacyApiCompat.kt`, with iOS twins in
+  `AndroidSystemOnIos.kt`; Android answers false or null) and the activity's
+  `enterPictureInPictureMode`, `setPictureInPictureParams` (the "Picture in picture when leaving"
+  setting reaches `canStartPictureInPictureAutomaticallyFromInline`) and `onPictureInPictureModeChanged`.
+- Rules: the AirPlay line is left out where the chat restricts saving (and until that is known),
+  and for a stream while offline (a saved video plays from the phone); the audio session is
+  `.playback` and `UIBackgroundModes` has `audio` already (`PlaybackAudio.swift`, `Info.plist`); a PIN
+  profile's Now Playing is the existing `NowPlaying.kt`'s.
+- Not verifiable on Linux: the Swift (Mac), `ios/kit` (its cinterop does not build on Linux), and
+  AirPlay of a video streamed from Telegram, which AVPlayer reads through a custom resource loader
+  (`AppleStreamLoader`): the receiver cannot open that address, so iOS may mirror instead of
+  handing the stream over. A saved video (a file path) has no such limit. Check on an iPhone with
+  an Apple TV, and picture in picture with the screen locked and from the Home screen.
 
 ## Identifiers
 
@@ -597,7 +629,7 @@ Found while bringing the port over; fixed ones are listed under the next heading
   `HostConfigurationTest` (`./gradlew :ui:iosSimulatorArm64Test`), and a VoiceOver pass on an iPhone.
 - **Support links on iOS** (`SUPPORT_LINKS = true`): fine for a sideloaded app; an App Store build
   would have to drop them.
-- **Not ported:** casting, Picture in Picture, background downloads, crash reports (see "Not in scope").
+- **Not ported:** casting (AirPlay and Picture in Picture are, for Apple's player's files), background downloads, crash reports (see "Not in scope").
 
 ### Fixed while importing
 

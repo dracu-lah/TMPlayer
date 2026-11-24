@@ -464,7 +464,7 @@ class PlayerMorePanel(
 
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
-        LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
+        LockScreen, PictureInPicture, AirPlay, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
         PlayerVolume, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, AddToList, ReportStutter, ReportWrongPicture, RemoteKeys,
@@ -553,6 +553,7 @@ class PlayerMorePanel(
         return when (kind) {
             Kind.LockScreen -> Line(kind, s.playerLockScreen, TmIcons.Lock, if (host.tv) s.playerHoldOkToUnlock else null)
             Kind.PictureInPicture -> Line(kind, s.playerPictureInPicture, ImageVector.vectorResource(R.drawable.ic_pip), null)
+            Kind.AirPlay -> Line(kind, s.playerAirplay, ImageVector.vectorResource(R.drawable.ic_airplay), null)
             Kind.PlaybackDetails -> Line(kind, s.playerPlaybackDetails, TmIcons.Info, null)
             Kind.StartOver -> Line(kind, s.playerStartOver, TmIcons.Refresh, null)
             Kind.PictureShape -> Line(kind, s.playerPictureShape, TmIcons.AspectRatio, host.shape().label)

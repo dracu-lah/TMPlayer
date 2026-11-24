@@ -249,7 +249,17 @@ class PlayerMenuTest {
                 addToList = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, addToList = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, addToList = true, airPlay = true).toSet())
+    }
+
+    @Test
+    fun `AirPlay is an iOS line after picture in picture and never on by default`() {
+        assertFalse(PhoneMenuEntry.AirPlay in PlayerMenu.phoneEntries(true, true, true, true))
+        val withIt = PlayerMenu.phoneEntries(true, true, true, true, airPlay = true)
+        assertEquals(withIt.indexOf(PhoneMenuEntry.PictureInPicture) + 1, withIt.indexOf(PhoneMenuEntry.AirPlay))
+        assertEquals("AirPlay", PhoneMenuEntry.AirPlay.label())
+        // Without picture in picture the line still stands, right after the lock.
+        assertEquals(1, PlayerMenu.phoneEntries(false, true, true, true, airPlay = true).indexOf(PhoneMenuEntry.AirPlay))
     }
 
     @Test

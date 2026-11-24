@@ -1,4 +1,5 @@
 import AVFoundation
+import AVKit
 import TMPlayerKit
 import UIKit
 
@@ -8,8 +9,11 @@ import UIKit
 /// ChoosingEngine gives it those files and mpv the rest; what it cannot do (Volume boost, night
 /// mode, downmix, delays, a subtitle file, 3D) makes ChoosingEngine hand the video to mpv.
 ///
-/// Telegram's stream and Android's data sources reach it through AppleStreamLoader. AirPlay is off,
-/// as every way of casting is on iOS.
+/// Telegram's stream and Android's data sources reach it through AppleStreamLoader. AirPlay and
+/// picture in picture are Apple's player's alone (WP-31, `ExternalPlaybackEngine`): the player's More
+/// panel asks ChoosingEngine for them, and an MKV in mpv says why it has neither. AirPlay is iOS's
+/// list of screens (an AVRoutePickerView the surface holds out of sight, pressed by the row) with
+/// external playback allowed; the corner window is an AVPictureInPictureController on the same layer.
 final class AppleEngine: NSObject, VideoEngine {
     private let view = AppleSurfaceView()
     private var player: AVPlayer?
@@ -23,6 +27,12 @@ final class AppleEngine: NSObject, VideoEngine {
     private var timeObserver: Any?
     private var loopObserver: Any?
     private var legible: AVPlayerItemLegibleOutput?
+    private var pip: AVPictureInPictureController?
+    /// Whether the system may open the corner window by itself when the app goes away while this plays.
+    private var autoPip = false
+
+    /// Told, on the main thread, when the corner window opens (true) or closes (false).
+    var onPictureInPictureChanged: ((KotlinBoolean) -> Void)?
 
     // The reports of the file now open, set on the main thread, read from any.
     private let reportsLock = NSLock()
@@ -66,11 +76,21 @@ final class AppleEngine: NSObject, VideoEngine {
         // A layer with a player stops the video in the background; without one the sound goes on,
         // which is the player's to decide (the rules: an engine does not pause by itself).
         lifecycle.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.view.playerLayer.player = nil
+            guard let self, !self.keepsPictureInBackground else { return }
+            self.view.playerLayer.player = nil
         })
         lifecycle.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.view.playerLayer.player = self?.player
         })
+    }
+
+    /// Whether the layer stays on the player in the background: the corner window is up, the system
+    /// is about to open it (it may, and the video is playing), or the picture is on an AirPlay screen.
+    private var keepsPictureInBackground: Bool {
+        guard let player else { return false }
+        if player.isExternalPlaybackActive { return true }
+        guard let pip else { return false }
+        return pip.isPictureInPictureActive || (autoPip && pip.isPictureInPicturePossible && player.timeControlStatus == .playing)
     }
 
     /// Where playback stands, for a hand over to mpv.
@@ -309,6 +329,41 @@ final class AppleEngine: NSObject, VideoEngine {
         DispatchQueue.global(qos: .userInitiated).async { PlaybackAudio.deactivate() }
     }
 
+    // AirPlay and picture in picture (ExternalPlaybackEngine, through ChoosingEngine)
+
+    /// iOS's list of AirPlay screens, over the player: the route picker the surface holds is pressed
+    /// for the viewer, as the system's own button would be.
+    func showAirPlayPicker() {
+        view.routePicker.subviews.compactMap { $0 as? UIButton }.first?.sendActions(for: .touchUpInside)
+    }
+
+    /// The corner window, once the picture is on screen; false while it is not possible (not ready,
+    /// the feature off in Settings, or no video track).
+    func startPictureInPicture() -> Bool {
+        guard let pip, pip.isPictureInPicturePossible else { return false }
+        pip.startPictureInPicture()
+        return true
+    }
+
+    func stopPictureInPicture() {
+        pip?.stopPictureInPicture()
+    }
+
+    func setAutoPictureInPicture(on: Bool) {
+        autoPip = on
+        pip?.canStartPictureInPictureAutomaticallyFromInline = on
+    }
+
+    /// The controller is made once for the layer and follows whatever player the layer holds.
+    private func preparePictureInPicture() {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        if pip == nil, let controller = AVPictureInPictureController(playerLayer: view.playerLayer) {
+            controller.delegate = self
+            pip = controller
+        }
+        pip?.canStartPictureInPictureAutomaticallyFromInline = autoPip
+    }
+
     // Opening
 
     /// Whether Apple's player decodes every track of the file: a format it reads with a track it
@@ -363,7 +418,9 @@ final class AppleEngine: NSObject, VideoEngine {
         self.legible = legible
 
         let player = AVPlayer(playerItem: item)
-        player.allowsExternalPlayback = false
+        // AirPlay: the picture goes to the screen the viewer picked (or the mirrored one) from iOS's list.
+        player.allowsExternalPlayback = true
+        player.usesExternalPlaybackWhileExternalScreenIsActive = true
         player.actionAtItemEnd = .pause
         player.volume = Float(max(0, min(100, options.volume))) / 100
         player.isMuted = options.muted
@@ -371,6 +428,7 @@ final class AppleEngine: NSObject, VideoEngine {
         self.item = item
         self.player = player
         view.playerLayer.player = UIApplication.shared.applicationState == .background ? nil : player
+        preparePictureInPicture()
         watch(item: item, player: player, durationMs: Int64((duration.seconds.finiteOr(0) * 1000).rounded()), startAtMs: startAtMs, options: options)
     }
 
@@ -505,6 +563,8 @@ final class AppleEngine: NSObject, VideoEngine {
         notices.forEach(NotificationCenter.default.removeObserver)
         notices.removeAll()
         player?.pause()
+        // The corner window goes with the video it showed.
+        if pip?.isPictureInPictureActive == true { pip?.stopPictureInPicture() }
         player?.replaceCurrentItem(with: nil)
         view.playerLayer.player = nil
         player = nil
@@ -622,6 +682,27 @@ final class AppleEngine: NSObject, VideoEngine {
     }
 }
 
+extension AppleEngine: AVPictureInPictureControllerDelegate {
+    func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
+        onPictureInPictureChanged?(KotlinBoolean(value: true))
+    }
+
+    func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
+        onPictureInPictureChanged?(KotlinBoolean(value: false))
+    }
+
+    func pictureInPictureController(_ controller: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
+        tmLogWarning("engines", "Picture in picture did not start: %@", error.localizedDescription)
+        onPictureInPictureChanged?(KotlinBoolean(value: false))
+    }
+
+    /// The viewer tapped the corner window to come back: the player screen is still there, so
+    /// there is nothing to rebuild.
+    func pictureInPictureController(_ controller: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
+        completionHandler(true)
+    }
+}
+
 extension AppleEngine: AVPlayerItemLegibleOutputPushDelegate {
     /// The text subtitle due now, handed to the player as plain text, as the rules ask of an engine
     /// without ASS markup.
@@ -640,6 +721,18 @@ extension AppleEngine: AVPlayerItemLegibleOutputPushDelegate {
 final class AppleSurfaceView: UIView {
     let playerLayer = AVPlayerLayer()
 
+    /// iOS's AirPlay button, kept in the corner out of sight and out of VoiceOver: the player's own
+    /// row opens its list (AppleEngine.showAirPlayPicker), and an iPad anchors the list here.
+    let routePicker: AVRoutePickerView = {
+        let picker = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+        picker.prioritizesVideoDevices = true
+        picker.alpha = 0.02
+        picker.isUserInteractionEnabled = false
+        picker.isAccessibilityElement = false
+        picker.accessibilityElementsHidden = true
+        return picker
+    }()
+
     var scale: CoreVideoScale = CoreVideoScale.fit { didSet { setNeedsLayout() } }
     var zoom: (Double, Double, Double) = (0, 0, 0) { didSet { setNeedsLayout() } }
     var videoSize: CGSize = .zero { didSet { setNeedsLayout() } }
@@ -649,12 +742,15 @@ final class AppleSurfaceView: UIView {
         backgroundColor = .black
         clipsToBounds = true
         layer.addSublayer(playerLayer)
+        addSubview(routePicker)
     }
 
     required init?(coder: NSCoder) { fatalError("not from a storyboard") }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        routePicker.frame = CGRect(x: max(0, bounds.width - 60), y: 16, width: 44, height: 44)
+        bringSubviewToFront(routePicker)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let area = bounds

@@ -2114,6 +2114,8 @@
   },
   "player": {
     "add_bookmark": "Add bookmark",
+    "airplay": "AirPlay",
+    "airplay_not_for_this_file": "AirPlay works for MP4 and MOV videos",
     "already_downloading": "Already downloading",
     "already_in_downloads": "Already in Downloads",
     "always_on_top": "Always on top",
@@ -2448,6 +2450,7 @@
     "picture_shape_now": "Picture shape: {shape}",
     "pieces_first_missing": "Part 1 of {total} is not in this chat. This video is cut into {total} parts and only plays from the first.",
     "pieces_up_to": "Part {number} of {total} is not in this chat, so the video plays up to it.",
+    "pip_not_for_this_file": "Picture in picture works for MP4 and MOV videos",
     "play": "Play",
     "play_anyway": "Play anyway",
     "play_from_start": "Play from start",

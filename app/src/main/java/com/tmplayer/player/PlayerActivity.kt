@@ -75,7 +75,10 @@ import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.CopyHandoff
 import com.tmplayer.data.VideoCopies
 import com.tmplayer.data.copyQuality
+import com.tmplayer.data.hasAirPlay
 import com.tmplayer.data.hasPictureInPicture
+import com.tmplayer.data.pictureInPictureRefusal
+import com.tmplayer.data.showAirPlayPicker
 import com.tmplayer.data.videoFollowsTransforms
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.LocalVideo
@@ -7953,7 +7956,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The overflow menu's and the row's picture in picture: straight into the corner. */
     private fun enterPictureInPictureNow() {
         if (!hasPictureInPicture()) return
-        runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
+        val entered = runCatching { enterPictureInPictureMode(pictureInPictureParams()) }.getOrDefault(false)
+        // Where the reason is known (iOS: a file of mpv's has no corner window) it is said, not dropped.
+        if (!entered) pictureInPictureRefusal()?.let { showGestureFeedback(it) }
+    }
+
+    /** iOS's AirPlay list for this video; for a file Apple's player does not play, the line that says why. */
+    private fun showAirPlay() {
+        if (!showAirPlayPicker()) showGestureFeedback(L.playerAirplayNotForThisFile)
     }
 
     /**
@@ -8092,6 +8102,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             rotatePicture = stereoOffered(),
             playerVolume = !castUp(),
             addToList = hasMessage(),
+            // Not where the chat restricts saving (the cast rule), not before that is known, and not
+            // for a stream while offline (a saved video plays from the phone).
+            airPlay = hasAirPlay() && savable == true &&
+                (downloadedVideo != null || NetworkMonitor.status.value != NetworkStatus.Offline),
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -8185,6 +8199,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         when (entry) {
             PhoneMenuEntry.LockScreen -> lockScreen()
             PhoneMenuEntry.PictureInPicture -> enterPictureInPictureNow()
+            PhoneMenuEntry.AirPlay -> showAirPlay()
             PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
             PhoneMenuEntry.NightMode -> toggleNightMode()
             PhoneMenuEntry.EvenVolume -> toggleEvenVolume()

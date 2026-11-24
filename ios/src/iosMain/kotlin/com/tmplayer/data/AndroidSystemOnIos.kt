@@ -344,8 +344,20 @@ fun Context.startForegroundServiceCompat(intent: Intent) {
     startForegroundService(intent)
 }
 
-/** Picture in picture needs AVKit's player, which mpv does not draw into (docs/IOS.md). */
-fun Context.hasPictureInPicture(): Boolean = false
+/**
+ * Picture in picture is AVKit's, so only Apple's player's files (MP4 and MOV) can do it, not mpv's:
+ * the device says whether it does the feature at all, and the row for a file of mpv's says why not
+ * when it is pressed (WP-31, docs/IOS.md).
+ */
+fun Context.hasPictureInPicture(): Boolean = android.app.IosExternalPlayback.pictureInPictureSupported
+
+/** The AirPlay row is always on iOS; for a file of mpv's it says [com.tmplayer.i18n.L.playerAirplayNotForThisFile] when pressed. */
+fun Context.hasAirPlay(): Boolean = true
+
+fun Context.showAirPlayPicker(): Boolean = android.app.IosExternalPlayback.showAirPlayPicker()
+
+fun Context.pictureInPictureRefusal(): String? =
+    if (android.app.IosExternalPlayback.appliesToThisVideo) null else com.tmplayer.i18n.L.playerPipNotForThisFile
 
 fun videoFollowsTransforms(videoView: android.view.View?): Boolean = true
 

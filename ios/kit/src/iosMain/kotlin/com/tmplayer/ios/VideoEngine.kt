@@ -113,6 +113,31 @@ interface VideoEngine {
     fun close()
 }
 
+/**
+ * What Apple's player alone does (WP-31), on an engine that holds it: AirPlay to a TV and picture
+ * in picture. The engine the player sees (ChoosingEngine) implements it and answers for the engine
+ * playing; [usesApplePlayer] is false while mpv holds the video, and then the other commands do
+ * nothing. The player reaches it through android.app.IosExternalPlayback, from the More panel's rows.
+ */
+interface ExternalPlaybackEngine {
+    /** True while Apple's player holds the video: AirPlay and picture in picture work for it alone. */
+    val usesApplePlayer: Boolean
+
+    /** Opens iOS's list of AirPlay screens, over the player. */
+    fun showAirPlayPicker()
+
+    /** Starts the corner window; false when it cannot be started. */
+    fun startPictureInPicture(): Boolean
+
+    fun stopPictureInPicture()
+
+    /** Whether the system may start the corner window by itself when the app goes away while this plays. */
+    fun setAutoPictureInPicture(on: Boolean)
+
+    /** Called on the main thread when the corner window opens (true) or closes (false). */
+    var onPictureInPictureChanged: ((Boolean) -> Unit)?
+}
+
 /** The values the commands take for "none". */
 object EngineValues {
     /** For [VideoEngine.selectTrack]: no track of that type. */
