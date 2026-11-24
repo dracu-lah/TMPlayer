@@ -110,6 +110,12 @@ object BackgroundChecks {
     const val EXTRA_OPEN_CHAT = "com.tmplayer.extra.OPEN_CHAT"
     fun schedule(context: Context) = Unit
 
+    /**
+     * iOS posts no downloads, episodes, new video or update notices yet (only the player's fixed "Playback
+     * stopped" line), so Settings does not list a Notifications page of switches that do nothing (WP-38).
+     */
+    val postsNotices: Boolean get() = false
+
     /** Whether iOS lets the app post, as Android's check of its permission and switch. */
     fun canNotify(context: Context): Boolean = android.app.IosNotifications.allowed
 }
@@ -127,17 +133,17 @@ object AppLocales {
     fun adopt(context: Context, saved: String): String? = null
 }
 
+/** Android 12's per-app night mode for the chosen theme (WP-44). iOS draws the theme itself, so nothing here. */
+object AppNightMode {
+    fun apply(context: Context, choice: ThemeChoice) = Unit
+}
+
 /**
  * Transfers in progress and done. iOS shows them on the Downloads screen; a finished one is also
  * said in the app, as Android does when it cannot post to the shade.
  */
 class AndroidTransferNotifier(@Suppress("UNUSED_PARAMETER") context: Context) : com.tmplayer.platform.TransferNotifier {
     override fun begin(id: Long, kind: com.tmplayer.platform.TransferNotifier.Kind, title: String) = Unit
-/** Android 12's per-app night mode for the chosen theme (WP-44). iOS draws the theme itself, so nothing here. */
-object AppNightMode {
-    fun apply(context: Context, choice: ThemeChoice) = Unit
-}
-
     override fun progress(id: Long, done: Long, total: Long?, bytesPerSecond: Long?) = Unit
     override fun complete(id: Long, title: String, body: String, open: com.tmplayer.platform.TransferNotifier.OpenTarget?) {
         announce(title)

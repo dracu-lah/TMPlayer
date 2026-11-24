@@ -70,7 +70,13 @@ internal class SettingsNeeds(
     private val playNext: Boolean,
     private val channels: Boolean,
 ) {
-    fun met(row: SettingsRow): Boolean = when (row.need) {
+    fun met(row: SettingsRow): Boolean {
+        // No Notifications page on a build that posts no notices (iOS, WP-38): its rows are not searched for either.
+        if (row.group == com.tmplayer.data.SettingsGroup.Notifications && !com.tmplayer.data.BackgroundChecks.postsNotices) return false
+        return needMet(row)
+    }
+
+    private fun needMet(row: SettingsRow): Boolean = when (row.need) {
         null, SettingsNeed.Advanced -> true
         SettingsNeed.Vlc -> vlc
         SettingsNeed.Android12 -> android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S

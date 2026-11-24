@@ -593,7 +593,8 @@ fun SettingsScreen(
     var page by rememberSaveable {
         mutableStateOf(
             if (!remoteHere) {
-                initialPage
+                // Not the Notifications page where there is none to list (iOS, WP-38): a stored or asked-for one opens the list.
+                initialPage?.takeUnless { it == SettingsPage.Notifications && !com.tmplayer.data.BackgroundChecks.postsNotices }
             } else {
                 initialPage?.takeIf { it.railItem in railPages } ?: SettingsRail.entry(railPages)
             },
@@ -2704,8 +2705,8 @@ fun SettingsScreen(
                             onClick = { showPage(SettingsPage.Privacy) },
                         )
                     }
-                    // A phone's only: a TV posts no notifications (CP76).
-                    if (touch) {
+                    // A phone's only: a TV posts no notifications (CP76), and an iPhone posts none yet (WP-38).
+                    if (touch && com.tmplayer.data.BackgroundChecks.postsNotices) {
                         item {
                             ActionRow(
                                 title = titleOf(SettingsPage.Notifications),

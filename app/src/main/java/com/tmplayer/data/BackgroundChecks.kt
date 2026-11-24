@@ -167,6 +167,13 @@ class BackgroundChecks : JobService() {
             }
         }
 
+        /**
+         * Whether this build posts notices a person can switch (downloads, episodes, new videos, updates):
+         * Settings lists the Notifications page only then. Android does; iOS posts one fixed "Playback
+         * stopped" line and nothing else yet, so its twin of this says no (WP-38).
+         */
+        val postsNotices: Boolean get() = true
+
         /** Whether a notification posted now would be seen: allowed, and on Android 13, granted. */
         fun canNotify(context: Context): Boolean {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
