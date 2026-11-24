@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { entryId, fromFile, lineKeyOf, missingLines, toFile } from './listsFile.ts'
+import { entryId, fromFile, lineKeyOf, mergeInput, missingLines, toFile } from './listsFile.ts'
 import { tdlibMessageId } from './format.ts'
-import type { ListsDoc } from '../ui/lists.ts'
+import { merge, type ListsDoc } from '../ui/lists.ts'
 
 const item = (chatId: number, messageId: number, title = 'T') => ({ chatId, messageId, title, name: title, chat: 'C', size: 9, duration: 30, fileName: 'f.mkv' }) as unknown as ListsDoc['lines'][number]['item']
 
@@ -79,4 +79,16 @@ test('the lines this device lacks are the ones to read, newest first, minus what
     })
     const miss = missingLines(file, doc())
     assert.deepEqual(miss.map((e) => e.msg), [20])
+})
+
+test('a restore never takes a list or line away, whatever removals the file carries (SEC2-02)', () => {
+    const now = 1_000_000
+    const file = fromFile({ lists: [], entries: [], removed: [{ list: 'abcd12', at: now }, { list: 'abcd12', at: now, entry: `-100_${tdlibMessageId(7)}` }] })
+    assert.equal(file.removed.length, 2)
+    const restored = merge(doc(), mergeInput(file, [], false), now)
+    assert.deepEqual(restored.lists.map((l) => l.id), ['abcd12'])
+    assert.equal(restored.lines.length, 2)
+    // A sync between this viewer's own devices still applies them.
+    const synced = merge(doc(), mergeInput(file, [], true), now)
+    assert.equal(synced.lists.some((l) => l.id === 'abcd12'), false)
 })

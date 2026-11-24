@@ -70,6 +70,6 @@ export async function planRestore(text: string, now = Date.now()): Promise<Resto
 /** Writes the plan into the stores. Returns how many places and lines changed. */
 export async function restore(plan: RestorePlan): Promise<number> {
     const applied = await applyLocal(plan.change, localWriter)
-    const lines = plan.read.lists === undefined ? 0 : await syncMergeLists(plan.read.lists, (c, m) => api.video(c, m), RESTORE_LINES)
+    const lines = plan.read.lists === undefined ? 0 : await syncMergeLists(plan.read.lists, (c, m) => api.video(c, m), RESTORE_LINES, false)
     return applied.changes + lines + restoreSearches(plan.read.searches)
 }

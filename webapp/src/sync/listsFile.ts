@@ -4,7 +4,7 @@
 // (`<chat>_<message>` for a video, `<chat>_s:<show>` for a show). Pure: no stores, no Telegram.
 // Until WP-56 the web carried this part of a file through untouched and never read it, so a list
 // made on the web did not reach the apps and the apps' lists did not show here.
-import { cleanName, isId, MAX_LINES, MAX_LISTS, MAX_REMOVALS, type ListGone, type ListInfo, type ListsDoc } from '../ui/lists.ts'
+import { cleanName, isId, MAX_LINES, MAX_LISTS, MAX_REMOVALS, type ListGone, type ListInfo, type ListLine, type ListsDoc } from '../ui/lists.ts'
 import { tdlibMessageId, webMessageId } from './format.ts'
 
 type Json = Record<string, unknown>
@@ -119,6 +119,15 @@ export function fromFile(raw: unknown): FromFile {
         if (key) removed.push({ list, entry: key, at })
     }
     return { lists, entries, removed }
+}
+
+/**
+ * What a merge takes from `file`: its lists, the `lines` read from Telegram and, for a sync only,
+ * its removals. A restore (`removals` false) adds and never takes away, so a backup that carries
+ * removals (the apps', or a crafted one) cannot delete this viewer's lists or lines.
+ */
+export function mergeInput(file: FromFile, lines: ListLine[], removals: boolean): ListsDoc {
+    return { lists: file.lists, lines, removed: removals ? file.removed : [] }
 }
 
 /** The lines of `file` that this device's `doc` does not have, newest first (the ones to read from Telegram). */
