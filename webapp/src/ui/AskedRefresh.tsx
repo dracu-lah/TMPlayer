@@ -12,6 +12,7 @@ import { online } from '../net'
 import { reducedMotion } from './motion'
 import { createAskedRefresh, onReturnAfterHidden, pullReleases, pullShown } from './askedRefresh'
 import { idle, type WorkStatus } from './workStatus'
+import { onGlobal } from './globalInput'
 
 export function useAskedRefresh(run: () => Promise<unknown>) {
     const [status, setStatus] = createSignal<WorkStatus>(idle)
@@ -80,16 +81,16 @@ export function PullToRefresh(props: { onRefresh: () => void }) {
             setShown(0)
             if (go) props.onRefresh()
         }
-        window.addEventListener('touchstart', start, { passive: true })
-        window.addEventListener('touchmove', move, { passive: true })
-        window.addEventListener('touchend', end, { passive: true })
-        window.addEventListener('touchcancel', end, { passive: true })
+        // Not while the profile is locked (HX88): onGlobal is the one way to listen to the whole page.
+        const off = [
+            onGlobal(window, 'touchstart', start, { passive: true }),
+            onGlobal(window, 'touchmove', move, { passive: true }),
+            onGlobal(window, 'touchend', end, { passive: true }),
+            onGlobal(window, 'touchcancel', end, { passive: true }),
+        ]
         onCleanup(() => {
             delete root.dataset.pull
-            window.removeEventListener('touchstart', start)
-            window.removeEventListener('touchmove', move)
-            window.removeEventListener('touchend', end)
-            window.removeEventListener('touchcancel', end)
+            for (const f of off) f()
         })
     })
     return (
