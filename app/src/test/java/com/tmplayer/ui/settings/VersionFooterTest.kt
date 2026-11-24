@@ -102,25 +102,30 @@ class VersionFooterTest {
             rule.onAllNodes(androidx.compose.ui.test.hasClickAction() and hasText(lineText(), substring = true)).fetchSemanticsNodes().isNotEmpty())
     }
 
+    /** The rail item of that name: the pinned header says the open page's name too (WP-07). */
+    private fun firstItem(text: String) =
+        rule.onNode(hasText(text) and androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.settings.SETTINGS_HEADER_TAG).not())
+
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `the television's line is read only and moves no row`() {
         settings(tv = true)
-        val line = rule.onNodeWithTag(VERSION_NOTE_TAG)
+        // The line sits in the pinned header, which a screen reader reads as one heading (WP-90), so it is found unmerged.
+        val line = rule.onNodeWithTag(VERSION_NOTE_TAG, useUnmergedTree = true)
         line.assertExists()
         val node = line.fetchSemanticsNode()
         assertFalse("no click action", node.config.contains(SemanticsActions.OnClick))
         assertFalse("no focus stop", node.config.contains(SemanticsActions.RequestFocus))
         val first = L.messages.text(com.tmplayer.data.SettingsGroup.Playback.title)
-        val before = rule.onNode(hasText(first)).fetchSemanticsNode().boundsInRoot.top
+        val before = firstItem(first).fetchSemanticsNode().boundsInRoot.top
         val lineHeight = line.fetchSemanticsNode().boundsInRoot.height
         // The longest state text on the same line, drawn afresh: one line, and the first row stays where it was.
         Updates.enabled = false
         generation++
         rule.waitForIdle()
-        assertEquals(lineHeight, rule.onNodeWithTag(VERSION_NOTE_TAG).fetchSemanticsNode().boundsInRoot.height, 0.5f)
+        assertEquals(lineHeight, rule.onNodeWithTag(VERSION_NOTE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.height, 0.5f)
         assertTrue(rule.onAllNodes(hasText(lineText() + ", " + L.updateStateOff)).fetchSemanticsNodes().isNotEmpty())
-        val after = rule.onNode(hasText(first)).fetchSemanticsNode().boundsInRoot.top
+        val after = firstItem(first).fetchSemanticsNode().boundsInRoot.top
         assertEquals(before, after, 0.5f)
     }
 
