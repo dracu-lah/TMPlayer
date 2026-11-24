@@ -86,10 +86,12 @@ object ChatOrder {
         current: MediaItem,
         sort: VideoSort,
         fits: (MediaItem) -> Boolean = { true },
+        /** A further test for the way forward only (WP-32's "skip watched"): Previous still goes back to what was played. */
+        fitsNext: (MediaItem) -> Boolean = { true },
         fetch: suspend (anchor: Long, newer: Boolean) -> Window?,
     ): EpisodeSteps {
         val way = wayOf(sort)
-        val next = lookUp(current, way, fits, fetch)
+        val next = lookUp(current, way, { fits(it) && fitsNext(it) }, fetch)
         val previous = lookUp(current, opposite(way), fits, fetch)
         return EpisodeSteps(previous = previous, next = next)
     }

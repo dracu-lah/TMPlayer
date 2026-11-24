@@ -140,6 +140,7 @@ object Backups {
         "app_typeface" to Kind.TEXT,
         "autoplay_next" to Kind.BOOL,
         "play_chat_order" to Kind.BOOL,
+        "play_all_skip_watched" to Kind.BOOL,
         "keep_next_shows" to Kind.TEXT,
         "keep_repeat" to Kind.BOOL,
         "background_audio" to Kind.BOOL,

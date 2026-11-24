@@ -65,6 +65,9 @@ interface PlayerMedia {
     /** The episodes either side of this one. */
     suspend fun episodes(): Episodes
 
+    /** True while this video is part of a Play all or Shuffle run (WP-32): the press is the request to play on, whatever Autoplay says. */
+    val playsAll: Boolean get() = false
+
     /**
      * Where this video's intro, recap and credits are, for the skip button: asked of the online
      * lookups once per video, and empty without asking anybody when they are off. A file on disk
@@ -180,9 +183,20 @@ class TelegramPlayerMedia(
     private val indexed: suspend (chatId: Long, messageId: Long) -> File? = { chatId, messageId ->
         DownloadIndex.fileFor(DesktopServices.settings, chatId, messageId)
     },
+    /**
+     * The Play all or Shuffle press this video started or carries on (WP-32): taken from the grid's press once,
+     * then handed to the next video's player by [episode], so the run follows its own order whatever the
+     * "Play the chat in order" setting says.
+     */
+    private val run: com.tmplayer.data.PlayAll.Request? = com.tmplayer.data.PlayAll.take(item.chatId, item.messageId),
 ) : PlayerMedia {
 
     override val fromTelegram: Boolean get() = true
+
+    override val playsAll: Boolean get() = run != null && run.mode != com.tmplayer.data.PlayAll.Mode.Off
+
+    /** The pages a chat's Shuffle has read, kept for the whole run (data only, see [com.tmplayer.data.PlayAll.ShufflePool]). */
+    private var shufflePool: com.tmplayer.data.PlayAll.ShufflePool? = run?.pool
 
     private val _savable = MutableStateFlow(item.canBeSaved)
     override val savable: StateFlow<Boolean> = _savable.asStateFlow()
@@ -544,6 +558,8 @@ class TelegramPlayerMedia(
      * names no episode, not even a bare "E5", is a film and asks nothing.
      */
     override suspend fun episodes(): Episodes {
+        // Play all or Shuffle: the press decides what follows, not the video's name or the setting.
+        run?.takeIf { it.mode != com.tmplayer.data.PlayAll.Mode.Off }?.let { return playAllSteps(it) }
         val tag = EpisodeNeighbours.tagOf(item)
         val show = EpisodeNeighbours.showOf(item) ?: return chatOrder()
         if (item.chatId == 0L) return Episodes(current = tag)
@@ -568,10 +584,52 @@ class TelegramPlayerMedia(
      * the setting off or for a video with no chat; a chat that cannot be asked leaves
      * it as a film is: the video ends on its last frame.
      */
-    private suspend fun chatOrder(): Episodes {
+    /**
+     * What follows this video in a Play all or Shuffle run (WP-32, WP-87): a list's queue is read from memory, a
+     * chat's order is [chatOrder] forced on, and a chat's Shuffle steps through one [com.tmplayer.data.PlayAll.ShufflePool].
+     */
+    private suspend fun playAllSteps(press: com.tmplayer.data.PlayAll.Request): Episodes {
+        val mode = press.mode
+        if (mode.ofList) {
+            val steps = com.tmplayer.data.PlayAll.listSteps(press.queue, item, if (mode.shuffled) press.seed else 0L)
+            return Episodes(current = EpisodeNeighbours.tagOf(item), previous = steps.previous, next = steps.next)
+        }
+        if (item.chatId == 0L) return Episodes()
+        if (!mode.shuffled) return chatOrder(force = true)
+        val settings = DesktopServices.settings
+        val session = Td.awaitAuthorizedSession()
+        val repository = ChatRepository(session.client)
+        val min = runCatching { settings.minSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MIN)
+        val max = runCatching { settings.maxSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MAX)
+        val topic = item.topicId.takeIf { it != 0 }
+            ?: runCatching { repository.topicOf(item.chatId, item.messageId) }.getOrDefault(0)
+        val unseen = unwatchedTest()
+        val pool = shufflePool ?: com.tmplayer.data.PlayAll.ShufflePool(
+            press.seed,
+            { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) && unseen(it) },
+        ).also { shufflePool = it }
+        val steps = pool.steps(item) { anchor, newer ->
+            runCatching { repository.videoWindow(item.chatId, anchor, newer, topic) }
+                .onFailure { Logger.w(TAG, "Shuffle lookup failed", it) }.getOrNull()
+        }
+        return Episodes(current = EpisodeNeighbours.tagOf(item), previous = steps.previous, next = steps.next)
+    }
+
+    /**
+     * "Play all skips watched videos" (WP-32): a test that is true for every video when the setting is off, and
+     * for a video not yet watched when it is on. The watched ticks are read once here, for one step.
+     */
+    private suspend fun unwatchedTest(): (MediaItem) -> Boolean {
+        val skip = runCatching { DesktopServices.settings.playAllSkipWatchedNow() }.getOrDefault(false)
+        if (!skip) return { true }
+        val seen = runCatching { DesktopServices.watched.watched.first().keys }.getOrDefault(emptySet())
+        return { item -> com.tmplayer.data.ProgressKeys.of(item.chatId, item.messageId) !in seen }
+    }
+
+    private suspend fun chatOrder(force: Boolean = false): Episodes {
         if (item.chatId == 0L) return Episodes()
         val settings = DesktopServices.settings
-        if (!runCatching { settings.playChatOrderNow() }.getOrDefault(false)) return Episodes()
+        if (!force && !runCatching { settings.playChatOrderNow() }.getOrDefault(false)) return Episodes()
         val session = Td.awaitAuthorizedSession()
         val repository = ChatRepository(session.client)
         val sort = runCatching { settings.videoSort(item.chatId).first() }.getOrDefault(com.tmplayer.data.VideoSort.DEFAULT)
@@ -579,14 +637,18 @@ class TelegramPlayerMedia(
         val max = runCatching { settings.maxSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MAX)
         val topic = item.topicId.takeIf { it != 0 }
             ?: runCatching { repository.topicOf(item.chatId, item.messageId) }.getOrDefault(0)
-        return com.tmplayer.data.ChatOrder.steps(item, sort, fits = { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) }) { anchor, newer ->
+        val unseen = if (force) unwatchedTest() else ({ _: MediaItem -> true })
+        return com.tmplayer.data.ChatOrder.steps(item, sort, fits = { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) }, fitsNext = unseen) { anchor, newer ->
             runCatching { repository.videoWindow(item.chatId, anchor, newer, topic) }
                 .onFailure { Logger.w(TAG, "Chat order lookup failed", it) }.getOrNull()
         }
     }
 
     override fun episode(other: MediaItem): PlayerMedia =
-        TelegramPlayerMedia(other, chatTitle, downloads, cache, downloadFirst, indexed)
+        TelegramPlayerMedia(
+            other, chatTitle, downloads, cache, downloadFirst, indexed,
+            run?.let { com.tmplayer.data.PlayAll.Request(other.chatId, other.messageId, it.mode, it.seed, it.queue, shufflePool) },
+        )
 
     override suspend fun messageLink(): String? = runCatching {
         Td.client.getMessageLink(item.chatId, item.messageId, 0, 0, "", false, false).valueOrNull?.link

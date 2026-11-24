@@ -1441,6 +1441,16 @@ internal fun BrowseScreen(
             onDetails = { record -> showDetail(record.toMediaItem(), record.chatTitle) },
             onMessage = onMessage,
             onDismiss = { openList = null },
+            // Play all and Shuffle (WP-32): the list's own order, or a seeded one, the first video opened at once
+            // (not through its page, whatever "Open the video's page first" says: the press asked to play).
+            onPlay = { list, shuffle ->
+                val press = com.tmplayer.data.PlayAllLists.request(list.records, shuffle, com.tmplayer.data.PlayAll.newSeed(System.nanoTime()))
+                val first = press?.let { p -> list.records.firstOrNull { it.chatId == p.chatId && it.messageId == p.messageId && !it.isShow } }
+                if (press != null && first != null) {
+                    com.tmplayer.data.PlayAll.arm(press)
+                    onOpenWatchLater(first)
+                }
+            },
         )
     }
 

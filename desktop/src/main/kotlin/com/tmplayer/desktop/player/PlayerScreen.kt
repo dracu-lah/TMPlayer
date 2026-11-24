@@ -723,7 +723,8 @@ fun PlayerScreen(
             if (named != found) episodes = named
         }
         launch { tdlibVersion = current.tdlibVersion() }
-        autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+        // A Play all or Shuffle run goes on whatever Autoplay says (WP-32); the menu's switch still stops it.
+        autoplayNext = current.playsAll || runCatching { settings.autoplayNextNow() }.getOrDefault(true)
         keepRepeat = runCatching { settings.keepRepeatNow() }.getOrDefault(false)
         repeatVideo = com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)
         showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)

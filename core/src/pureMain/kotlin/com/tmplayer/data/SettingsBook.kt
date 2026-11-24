@@ -281,6 +281,10 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
 
     suspend fun setPlayChatOrder(value: Boolean) = kv.edit { it[PLAY_CHAT_ORDER] = value }
 
+    val playAllSkipWatched: Flow<Boolean> = read { it.flag(PLAY_ALL_SKIP_WATCHED) ?: false }
+
+    suspend fun setPlayAllSkipWatched(value: Boolean) = kv.edit { it[PLAY_ALL_SKIP_WATCHED] = value }
+
     val keepRepeat: Flow<Boolean> = read { it.flag(KEEP_REPEAT) ?: false }
 
     suspend fun setKeepRepeat(value: Boolean) = kv.edit { it[KEEP_REPEAT] = value }
@@ -464,6 +468,7 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         const val MAX_SIZE = "max_size_bytes"
         const val AUTOPLAY_NEXT = "autoplay_next"
         const val PLAY_CHAT_ORDER = "play_chat_order"
+        const val PLAY_ALL_SKIP_WATCHED = "play_all_skip_watched"
         const val KEEP_REPEAT = "keep_repeat"
         const val LAST_CHAT = "last_chat"
         const val RECENT_SEARCHES = "recent_searches"

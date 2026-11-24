@@ -406,6 +406,7 @@ fun SettingsScreen(
     val removeAfterWatching by settings.removeAfterWatching.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val playChatOrder by settings.playChatOrder.collectAsStateWithLifecycle(initialValue = false)
+    val playAllSkipWatched by settings.playAllSkipWatched.collectAsStateWithLifecycle(initialValue = false)
     val keepRepeat by settings.keepRepeat.collectAsStateWithLifecycle(initialValue = false)
     val resumeRewindMs by settings.resumeRewindMs.collectAsStateWithLifecycle(initialValue = ResumeRewind.DEFAULT_MS)
     val detailFirst by settings.detailFirst.collectAsStateWithLifecycle(initialValue = true)
@@ -1447,6 +1448,16 @@ fun SettingsScreen(
                         icon = TmIcons.Layers,
                         checked = playChatOrder,
                         onToggle = { scope.launch { settings.setPlayChatOrder(!playChatOrder) } },
+                    )
+                }
+                // Play all and Shuffle past what was watched (WP-32): the way forward only.
+                item {
+                    ToggleRow(
+                        title = s.settingsPlayAllSkipWatched,
+                        subtitle = if (playAllSkipWatched) s.settingsPlayAllSkipWatchedOn else s.settingsPlayAllSkipWatchedOff,
+                        icon = TmIcons.CheckCircle,
+                        checked = playAllSkipWatched,
+                        onToggle = { scope.launch { settings.setPlayAllSkipWatched(!playAllSkipWatched) } },
                     )
                 }
                 item {

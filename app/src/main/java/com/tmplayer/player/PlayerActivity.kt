@@ -6335,7 +6335,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val max = runCatching { settings.maxSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MAX)
             val topic = here.topicId.takeIf { it != 0 }
                 ?: com.tmplayer.data.runCatchingCancellable { repository.topicOf(chatId, messageId) }.getOrDefault(0)
-            val fits = { item: MediaItem -> com.tmplayer.data.SizeFilter.matches(item.sizeBytes, min, max) }
+            // "Play all skips watched videos" (WP-32): the way forward of a Play all or Shuffle run goes past what
+            // was watched. The ticks are read once for this step; Previous still goes back to what was played.
+            val seen = if (force && runCatching { settings.playAllSkipWatchedNow() }.getOrDefault(false)) {
+                runCatching { watchedStore.watched.first().keys }.getOrDefault(emptySet())
+            } else {
+                emptySet()
+            }
+            val unseen = { item: MediaItem -> seen.isEmpty() || com.tmplayer.data.ProgressKeys.of(item.chatId, item.messageId) !in seen }
+            val fits = { item: MediaItem -> com.tmplayer.data.SizeFilter.matches(item.sizeBytes, min, max) && unseen(item) }
             // Locals only in the reader: the activity's chatId field would tie this screen to it.
             val chat = chatId
             val fetch: suspend (Long, Boolean) -> com.tmplayer.data.ChatOrder.Window? = { anchor, newer ->
@@ -6347,7 +6355,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 val pool = shufflePool ?: com.tmplayer.data.PlayAll.ShufflePool(playAllSeed, fits).also { shufflePool = it }
                 pool.steps(here, fetch)
             } else {
-                com.tmplayer.data.ChatOrder.steps(current = here, sort = sort, fits = fits, fetch = fetch)
+                com.tmplayer.data.ChatOrder.steps(
+                    current = here,
+                    sort = sort,
+                    fits = { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) },
+                    fitsNext = unseen,
+                    fetch = fetch,
+                )
             }
             if (steps.previous == null && steps.next == null) return@launch
             _episodes.value = steps

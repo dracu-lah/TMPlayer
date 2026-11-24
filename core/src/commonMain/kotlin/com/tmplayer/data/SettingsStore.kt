@@ -354,6 +354,7 @@ private val PLAYBACK_STATS = booleanPreferencesKey("playback_stats")
 
 // Play the chat in order, and Repeat this video (EG-F30, EG-F52): see [ChatOrder] and [RepeatVideo].
 private val PLAY_CHAT_ORDER = booleanPreferencesKey("play_chat_order")
+private val PLAY_ALL_SKIP_WATCHED = booleanPreferencesKey("play_all_skip_watched")
 private val KEEP_REPEAT = booleanPreferencesKey("keep_repeat")
 
 // The app-wide languages, under the series memory. See [TrackPreferences].
@@ -425,11 +426,11 @@ private fun videoFacetsKey(chatId: Long) = stringPreferencesKey("vfacets_$chatId
 private fun delayKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("delay_${chatId}_$messageId")
 
-/**
 /** One video's own subtitle look ("This video only", WP-29): this device, per video, never in a backup. */
 private fun videoSubtitleKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("substyle_${chatId}_$messageId")
 
+/**
  * The same line again, for the Downloads screen.
  *
  * It cannot read the resume history instead: a video is written there only once three minutes of it
@@ -750,6 +751,19 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     suspend fun playChatOrderNow(): Boolean = prefs.data.first()[PLAY_CHAT_ORDER] ?: false
+
+    /**
+     * Whether Play all and Shuffle go past videos already watched (WP-32): off by default, so a press plays
+     * what the grid shows; on, the next video is the next one not yet watched. Only the way forward skips:
+     * Previous goes back to what was just played.
+     */
+    val playAllSkipWatched: Flow<Boolean> = read { it[PLAY_ALL_SKIP_WATCHED] ?: false }
+
+    suspend fun setPlayAllSkipWatched(value: Boolean) {
+        prefs.edit { it[PLAY_ALL_SKIP_WATCHED] = value }
+    }
+
+    suspend fun playAllSkipWatchedNow(): Boolean = prefs.data.first()[PLAY_ALL_SKIP_WATCHED] ?: false
 
     /** Whether Repeat this video stays on when the next video starts; off by default (decision D9). */
     val keepRepeat: Flow<Boolean> = read { it[KEEP_REPEAT] ?: false }
@@ -2452,20 +2466,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
-    // ---- tracks, per series -----------------------------------------------------------------
-
-    /**
-     * The audio track and the subtitles this series was last watched with.
-     *
-     * Per series rather than per file, because the choice belongs to the show and the file id
-     * changes with every episode. Per series rather than app-wide, because the answer differs
-     * between shows: subtitles on for one, off for another, and neither should overwrite the other.
-     *
-     * A video that is not part of a series is keyed by its own name, so this is a no-op for it.
-     */
-    suspend fun trackChoice(series: String): TrackChoice {
-        val prefs = prefs.data.first()
-        val key = seriesKey(series)
     /**
      * The subtitle look this one video has of its own (WP-29 "This video only"), or null when it follows
      * the look of every video. This device only: a look chosen for one video on one screen is not worth
@@ -2482,6 +2482,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
+    // ---- tracks, per series -----------------------------------------------------------------
+
+    /**
+     * The audio track and the subtitles this series was last watched with.
+     *
+     * Per series rather than per file, because the choice belongs to the show and the file id
+     * changes with every episode. Per series rather than app-wide, because the answer differs
+     * between shows: subtitles on for one, off for another, and neither should overwrite the other.
+     *
+     * A video that is not part of a series is keyed by its own name, so this is a no-op for it.
+     */
+    suspend fun trackChoice(series: String): TrackChoice {
+        val prefs = prefs.data.first()
+        val key = seriesKey(series)
         return TrackChoice(
             audioLanguage = prefs[audioKey(key)]?.takeIf { it.isNotBlank() },
             textLanguage = prefs[textKey(key)]?.takeIf { it.isNotBlank() },

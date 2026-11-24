@@ -65,6 +65,8 @@ internal fun ListPage(
     onDetails: (WatchLaterRecord) -> Unit,
     onMessage: (String) -> Unit,
     onDismiss: () -> Unit,
+    /** Play all and Shuffle for the shown list (WP-32): the host arms the run and plays the first video. */
+    onPlay: ((VisibleList, Boolean) -> Unit)? = null,
 ) {
     val touch = isTouch()
     val s = LocalStrings.current
@@ -81,6 +83,7 @@ internal fun ListPage(
                 store = store,
                 onMessage = onMessage,
                 sides = sides,
+                onPlay = onPlay,
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))

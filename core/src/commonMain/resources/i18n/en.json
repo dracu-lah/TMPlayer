@@ -3373,6 +3373,9 @@
     "picture_in_picture_leave": "Picture in picture when leaving the app",
     "picture_in_picture_leave_off": "Off: leaving the app pauses the video, or keeps only the sound going if background audio is on. The Picture in picture button still works",
     "picture_in_picture_leave_on": "On: going Home or to another app while a video plays shrinks it into a small window",
+    "play_all_skip_watched": "Play all skips watched videos",
+    "play_all_skip_watched_off": "Off: Play all and Shuffle include videos you have watched",
+    "play_all_skip_watched_on": "On: Play all and Shuffle go past videos you have watched",
     "play_chat_order": "After a video that is not an episode",
     "play_chat_order_off": "Stop at the end of the video",
     "play_chat_order_on": "Play the next video in the chat's order, after a short countdown you can stop",
@@ -3955,11 +3958,11 @@
     "size_medium": "Medium",
     "size_small": "Small",
     "smaller": "Smaller",
+    "this_video_only": "This video only",
+    "this_video_only_detail": "Other videos keep the look you chose for all of them",
     "weight": "Weight",
     "weight_bold": "Bold",
     "weight_regular": "Regular"
-    "this_video_only": "This video only",
-    "this_video_only_detail": "Other videos keep the look you chose for all of them",
   },
   "support": {
     "any_amount": "Any amount counts, and the smallest one is not a small thing. Support it if it is useful to you.",

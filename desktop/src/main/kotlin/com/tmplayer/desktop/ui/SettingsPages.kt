@@ -216,6 +216,7 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
     val scope = rememberCoroutineScope()
     val autoplay by settings.autoplayNext.collectAsState(initial = true)
     val playChatOrder by settings.playChatOrder.collectAsState(initial = false)
+    val playAllSkipWatched by settings.playAllSkipWatched.collectAsState(initial = false)
     val keepRepeat by settings.keepRepeat.collectAsState(initial = false)
     val detailFirst by settings.detailFirst.collectAsState(initial = true)
     val touchPrefs by settings.touchPrefs.collectAsState(initial = TouchPrefs())
@@ -228,6 +229,10 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
     // After a video that is not an episode, and whether Repeat this video outlasts it (EG-F30, EG-F52).
     Toggle(s.settingsPlayChatOrder, if (playChatOrder) s.settingsPlayChatOrderOn else s.settingsPlayChatOrderOff, playChatOrder, icon = TmIcons.Layers) {
         scope.launch { settings.setPlayChatOrder(it) }
+    }
+    // Play all and Shuffle past what was watched (WP-32).
+    Toggle(s.settingsPlayAllSkipWatched, if (playAllSkipWatched) s.settingsPlayAllSkipWatchedOn else s.settingsPlayAllSkipWatchedOff, playAllSkipWatched, icon = TmIcons.CheckCircle) {
+        scope.launch { settings.setPlayAllSkipWatched(it) }
     }
     Toggle(s.settingsKeepRepeat, if (keepRepeat) s.settingsKeepRepeatOn else s.settingsKeepRepeatOff, keepRepeat, icon = TmIcons.Repeat) {
         scope.launch { settings.setKeepRepeat(it) }

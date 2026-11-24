@@ -51,6 +51,15 @@ internal fun ListsPage(
         store = state.watched.lists,
         onMessage = { state.notices.tryEmit(it) },
         sides = PaddingValues(horizontal = side),
+        // Play all and Shuffle (WP-32): the player follows the list's order, or the seeded one, past the first video.
+        onPlay = { list, shuffle ->
+            val press = com.tmplayer.data.PlayAllLists.request(list.records, shuffle, com.tmplayer.data.PlayAll.newSeed(System.nanoTime()))
+            val first = press?.let { p -> list.records.firstOrNull { it.chatId == p.chatId && it.messageId == p.messageId && !it.isShow } }
+            if (press != null && first != null) {
+                com.tmplayer.data.PlayAll.arm(press)
+                state.openPlayer(first.toMediaItem(), startFromBeginning = false)
+            }
+        },
         modifier = Modifier.fillMaxSize().padding(top = 8.dp).testTag(DESKTOP_LIST_PAGE_TAG),
         top = {
             BarTooltip(s.commonBack, null, below = true) {

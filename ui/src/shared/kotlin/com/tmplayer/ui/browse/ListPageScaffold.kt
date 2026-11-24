@@ -44,6 +44,7 @@ import com.tmplayer.data.ListCard
 import com.tmplayer.data.ListPages
 import com.tmplayer.data.ListsStore
 import com.tmplayer.data.NamedListRules
+import com.tmplayer.data.PlayAllLists
 import com.tmplayer.data.VisibleList
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
@@ -75,6 +76,11 @@ fun ListPageScaffold(
     gap: Dp = 12.dp,
     /** Above the heading: a phone's back button, say. */
     top: (@Composable () -> Unit)? = null,
+    /**
+     * Play all and Shuffle for the shown list (WP-32, WP-87), `shuffle` true for the second: the host arms
+     * [com.tmplayer.data.PlayAll] with [PlayAllLists.queue] and opens the first video. Null leaves both out.
+     */
+    onPlay: ((list: VisibleList, shuffle: Boolean) -> Unit)? = null,
     grid: @Composable ColumnScope.(list: VisibleList, cards: List<ListCard>, actions: ListPageActions) -> Unit,
 ) {
     val s = LocalStrings.current
@@ -158,6 +164,10 @@ fun ListPageScaffold(
             // Wraps: Rename, On Home and Delete in one line ran off a narrow phone at a large font.
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(Modifier.padding(sides), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Play all and Shuffle lead the list's buttons: what a list is for (a list of one video has no Shuffle).
+                val playable = PlayAllLists.playable(shown.records)
+                if (onPlay != null && playable >= 1) CopyChip(s.browsePlayAll, chosen = false, onClick = { onPlay(shown, false) })
+                if (onPlay != null && playable >= 2) CopyChip(s.browseShuffle, chosen = false, onClick = { onPlay(shown, true) })
                 CopyChip(s.listsRename, chosen = false, onClick = { renaming = shown })
                 CopyChip(s.listsOnHome, chosen = shown.info.home, onClick = { actions.setHome(shown.info.id, !shown.info.home) }, description = "${s.listsOnHome}: ${if (shown.info.home) s.commonOn else s.commonOff}")
                 CopyChip(s.listsDelete, chosen = false, onClick = { deleting = shown }, modifier = Modifier.focusRequester(deleteFocus))
