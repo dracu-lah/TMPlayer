@@ -228,6 +228,8 @@ object SettingsMap {
         val mouse = g
         row("mouse_hold_speed", mouse, "settings.hold_speed", D, listOf("settings.hold_speed_detail_desktop"))
         row("wheel_seeks", mouse, "settings.wheel_seeks", D, onOff("settings.wheel_seeks"))
+        // Esc outside full screen leaves the video, or does nothing (WP-47): a stray Esc cannot close one.
+        row("esc_leaves_video", mouse, "settings.esc_leaves_video", D, onOff("settings.esc_leaves_video"))
         row("software_decoding", g, "settings.software_decoding", D, listOf("settings.software_decoding_detail"))
 
         val sub = SettingsGroup.Subtitles
@@ -284,7 +286,7 @@ object SettingsMap {
         row("layout", a, "interface.layout", PTD, desktopTitle = "settings.layout")
         row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"), keywords = true)
         row("lighter_pictures", a, "settings.lighter_pictures", PT, onOff("settings.lighter_pictures"))
-        row("reduce_motion", a, "settings.reduce_motion", PT, onOff("settings.reduce_motion"))
+        row("reduce_motion", a, "settings.reduce_motion", PTD, onOff("settings.reduce_motion"))
         row("high_contrast_focus", a, "settings.high_contrast_focus", T, listOf("settings.high_contrast_focus_detail"))
         row("start_fullscreen", a, "settings.start_fullscreen", D, onOff("settings.start_fullscreen"))
         row("compact_nav", a, "settings.compact_nav", D)
@@ -354,6 +356,8 @@ object SettingsMap {
         row("report_problem", help, "settings.report_problem", PTD, listOf("settings.report_problem_detail", "settings.report_problem_detail_inbox"), from = was2)
         // HX64: an idea, written in the app with the build's inbox, else on GitHub's feature request page.
         row("request_feature", help, "settings.request_feature", PTD, listOf("settings.request_feature_detail"), from = was2)
+        // The shell's keys, as a sheet (WP-51): a window with a keyboard has them, a phone and a TV do not.
+        row("keyboard_shortcuts", help, "settings.keyboard_shortcuts", D)
         // Was the last row of the category list, a page of its own; now one row of Help that opens it.
         row("setup_choices", help, "settings.redo_setup_choices", PTD, listOf("setup.choices_summary"))
         row("troubleshooting", help, "settings.page_troubleshooting", PTD, listOf("settings.page_troubleshooting_summary"))

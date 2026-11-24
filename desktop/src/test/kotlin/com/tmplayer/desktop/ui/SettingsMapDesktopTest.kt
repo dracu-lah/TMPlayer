@@ -90,12 +90,15 @@ class SettingsMapDesktopTest {
 
     private val pageTitles = SettingsGroup.entries.map { L.messages.text(it.title) }.toSet()
 
+    /** The pages the list beside a page names; Help's rows that open Troubleshooting and Setup choices are rows, not these. */
+    private val listedTitles = SettingsGroup.entries.filter { it.listed }.map { L.messages.text(it.title) }.toSet()
+
     @Test
     fun `every page draws its rows and only those`() {
         val problems = mutableListOf<String>()
         for (category in SettingsCategory.entries - SettingsCategory.SetupChoices) {
             // The wide layout draws the list beside the page: the pages' own names are not rows.
-            val seen = drawn(category).toSet() - pageTitles
+            val seen = drawn(category).toSet() - listedTitles
             val rows = SettingsMap.on(DeviceForm.Desktop, category.group)
             val expected = rows.filter { it.need == null || it.need == SettingsNeed.Updates }.map { L.messages.text(it.titleOn(DeviceForm.Desktop)) }
             val known = rows.flatMap { row -> row.titlesOn(DeviceForm.Desktop).map { L.messages.text(it) } }.toSet()
@@ -116,7 +119,10 @@ class SettingsMapDesktopTest {
             assertTrue("$title comes before the decoder: $rows", rows.indexOf(title) < rows.indexOf(decoder))
         }
         // No page of its own for the mouse, and Home's rows sit with the library's.
-        assertEquals(listOf("Playback", "Subtitles", "Storage", "Notifications", "Appearance", "Account", "Library", "About", "SetupChoices"), SettingsCategory.entries.map { it.name })
+        assertEquals(
+            listOf("Accounts", "Playback", "Subtitles", "Storage", "Appearance", "Library", "Privacy", "Notifications", "Help", "Troubleshooting", "SetupChoices", "About"),
+            SettingsCategory.entries.map { it.name },
+        )
         val library = drawn(SettingsCategory.Library) - pageTitles
         assertTrue("Home's rows and the library's on one page: $library", L.messages.text("settings.home_carousel") in library && L.messages.text("settings.open_last_chat") in library)
     }
@@ -126,9 +132,13 @@ class SettingsMapDesktopTest {
         val pages = drawn(null).filter { it in pageTitles }.distinct()
         val order = SettingsGroup.entries.map { L.messages.text(it.title) }.filter { it in pages }
         assertEquals(order, pages)
-        assertEquals(L.messages.text(SettingsGroup.Playback.title), pages.first())
+        // Account first (WP-08), and the pages under Help are not in the list.
+        assertEquals(L.messages.text(SettingsGroup.Accounts.title), pages.first())
+        assertEquals(SettingsMap.pages(DeviceForm.Desktop).map { L.messages.text(it.title) }, pages)
+        assertTrue(settingsCategories.none { it.parent != null })
         for (link in SettingsLink.entries.filter { DeviceForm.Desktop in it.forms }) {
-            assertTrue("$link", L.messages.text(link.group.title) in pages)
+            // A link into a page under Help lands on it from Help's row, so Help is the listed page.
+            assertTrue("$link", L.messages.text((link.group.parent ?: link.group).title) in pages)
         }
         // Setup choices' "Also in" goes where the shared links say.
         assertEquals(SettingsCategory.Library, SettingsCategory.holding(SetupStep.Posters))
@@ -165,10 +175,58 @@ class SettingsMapDesktopTest {
     }
 
     @Test
+    fun `a stored page name from before WP-08 opens the page its rows went to`() {
+        assertEquals(SettingsCategory.Privacy, SettingsCategory.fromStored("Account"))
+        assertEquals(SettingsCategory.Library, SettingsCategory.fromStored("Home"))
+        assertEquals(SettingsCategory.Playback, SettingsCategory.fromStored("Mouse"))
+        assertEquals(SettingsCategory.Accounts, SettingsCategory.fromStored("Accounts"))
+        assertEquals(null, SettingsCategory.fromStored("Nowhere"))
+        // Every page names the group of the same name, and the two under Help hang from it.
+        for (category in SettingsCategory.entries) assertEquals(category.name, category.group.name)
+        assertEquals(SettingsCategory.Help, SettingsCategory.Troubleshooting.parent)
+        assertEquals(SettingsCategory.Help, SettingsCategory.SetupChoices.parent)
+        assertEquals(null, SettingsCategory.Help.parent)
+    }
+
+    @Test
+    fun `Privacy and lock says once where Sign out and the devices went, and a press goes there`() = runComposeUiTest {
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Surface(Modifier.fillMaxSize(), color = Tone.background) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Privacy) }
+            }
+        }
+        waitForIdle()
+        mainClock.advanceTimeBy(500)
+        waitForIdle()
+        val line = hasText("Moved to Account") and hasClickAction()
+        assertTrue("the hint is up", onAllNodes(line).fetchSemanticsNodes().isNotEmpty())
+        onNode(line).performClick()
+        waitForIdle()
+        mainClock.advanceTimeBy(500)
+        waitForIdle()
+        assertTrue("the Account page is open on its rows", onAllNodesWithText("Sign out of Telegram").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun `Help opens Troubleshooting under it and Esc comes back`() = runComposeUiTest {
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Surface(Modifier.fillMaxSize(), color = Tone.background) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Help) }
+            }
+        }
+        waitForIdle()
+        onNode(hasText("Keyboard shortcuts") and hasClickAction()).assertExists()
+        onNode(hasText("Troubleshooting") and hasClickAction() and hasText("Logs, the playback test and the proxy", substring = true)).performClick()
+        waitForIdle()
+        assertTrue("its rows are there", onAllNodesWithText("Proxy").fetchSemanticsNodes().isNotEmpty())
+        assertTrue("and Help's are not", onAllNodesWithText("Report a problem").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun `Playback has a line that opens the add a TV dialog`() = runComposeUiTest {
         setContent {
             TmMaterialTheme(dark = true) {
-                Surface(Modifier.fillMaxSize(), color = Tone.background) { SettingsPage(shell, "2.0.0") }
+                Surface(Modifier.fillMaxSize(), color = Tone.background) { SettingsPage(shell, "2.0.0", initialCategory = SettingsCategory.Playback) }
             }
         }
         waitForIdle()

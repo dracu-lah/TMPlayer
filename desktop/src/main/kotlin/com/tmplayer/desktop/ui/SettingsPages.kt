@@ -485,12 +485,11 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
  * their own on the list before.
  */
 @Composable
-internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onKidsChats: () -> Unit) {
+internal fun PrivacyRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onKidsChats: () -> Unit) {
     val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val appLock by settings.appLock.collectAsState(initial = AppLockSettings())
-    var confirmSignOut by remember { mutableStateOf(false) }
 
     Group(s.lockTitle)
     if (!appLock.pinSet) {
@@ -548,6 +547,19 @@ internal fun AccountRows(state: ShellState, onPin: (DesktopPinFlow) -> Unit, onK
             }
         }
     }
+}
+
+/**
+ * Account (WP-08): who is signed in, where (the devices), keeping the place on every device, the
+ * profiles on this computer and Sign out, which asks first. The page is behind Settings' PIN, so a
+ * profile's sign out stays behind it too.
+ */
+@Composable
+internal fun AccountRows(state: ShellState) {
+    val s = LocalStrings.current
+    val settings = state.settings
+    val scope = rememberCoroutineScope()
+    var confirmSignOut by remember { mutableStateOf(false) }
     Group(s.settingsAccountSignedIn)
     // Where the account is signed in, and ending a session (CP83): behind this page's PIN.
     Action(s.settingsDevices, s.settingsDevicesDetail, TmIcons.Phone) { com.tmplayer.ui.settings.DevicesScreenState.open = true }
@@ -697,12 +709,11 @@ internal fun ProfileRows(state: ShellState) {
 }
 
 /**
- * About and help: the version and its updates (only where this build updates itself), the backup,
-
- * then help, privacy and About TMPlayer, and the privacy note at the end, as the phone's page has them.
+ * Downloads and data, under the storage rows (WP-08): the backup, to a file and back. Settings,
+ * lists and resume points, never the Telegram sign in.
  */
 @Composable
-internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Unit) {
+internal fun BackupRows(state: ShellState, version: String) {
     val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
@@ -712,15 +723,149 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     val backups = remember(settings, state.watched, version) {
         BackupService(settings, state.watched, OnlineMetadata.current?.store, version, bookmarks = state.bookmarks)
     }
+    Group(s.backupSection)
+    Action(s.backupBackUp, s.backupBackUpDetail, TmIcons.Download) {
+        scope.launch {
+            val file = FilePicker.save(s.backupSaveTitle, backups.fileName(), "json") ?: return@launch
+            val saved = withContext(Dispatchers.IO) { runCatching { file.writeText(backups.export()) }.isSuccess }
+            toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed)
+        }
+    }
+    Action(s.backupRestore, s.backupRestoreDetail, TmIcons.Refresh) {
+        scope.launch {
+            val file = FilePicker.open(s.backupPickTitle, "json") ?: return@launch
+            val text = withContext(Dispatchers.IO) {
+                // No backup comes near this; a video picked by mistake is not read whole.
+                runCatching { file.takeIf { it.length() <= 32L * 1024 * 1024 }?.readText() }.getOrNull()
+            }
+            if (text == null) {
+                toast(s.backupReadFailed)
+                return@launch
+            }
+            when (val read = backups.read(text)) {
+                is BackupRead.Ok -> {
+                    val plan = backups.plan(read.backup)
+                    if (plan.nothing) toast(s.backupRestoreNothing) else restorePlan = plan
+                }
+                else -> BackupWords.refusal(read)?.let { toast(it) }
+            }
+        }
+    }
+
+    restorePlan?.let { plan ->
+        ConfirmDialog(
+            title = s.backupRestoreTitle,
+            message = BackupWords.restoreMessage(plan),
+            detail = s.backupRestoreUntouched,
+            confirmLabel = s.backupRestoreConfirm,
+            destructive = false,
+            onConfirm = {
+                restorePlan = null
+                scope.launch {
+                    val done = runCatching { backups.restore(plan.backup) }.isSuccess
+                    toast(if (done) s.backupRestored else s.backupReadFailed)
+                }
+            },
+            onDismiss = { restorePlan = null },
+        )
+    }
+}
+
+/**
+ * Help (WP-08): the tour, what is new, the ways to reach the developer, the keyboard sheet, and the
+ * two pages under it, Redo setup choices and Troubleshooting.
+ */
+@Composable
+internal fun HelpRows(state: ShellState, onOpenPage: (SettingsCategory) -> Unit) {
+    val s = LocalStrings.current
+    val settings = state.settings
+    val scope = rememberCoroutineScope()
+    var whatsNew by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<com.tmplayer.data.FeedbackReport.Kind?>(null) }
+    Action(s.settingsTour, s.settingsTourBody, TmIcons.Help) { scope.launch { settings.openTour() } }
+    Action(s.settingsWhatsNew, s.settingsWhatsNewDetail(WhatsNew.VERSION), TmIcons.StarOutline) { whatsNew = true }
+    Action(s.settingsChangelog, s.settingsChangelogDetail, TmIcons.List, end = RowEnd.External) {
+        OpenExternal.browse(WhatsNew.CHANGELOG)
+    }
+    val inbox = com.tmplayer.data.FeedbackReports.available
+    Action(s.settingsReportProblem, if (inbox) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail, TmIcons.Bug) {
+        reporting = com.tmplayer.data.FeedbackReport.Kind.Problem
+    }
+    // HX64: an idea, written here with the inbox, else on GitHub's feature request page.
+    Action(s.settingsRequestFeature, s.settingsRequestFeatureDetail, TmIcons.Send) {
+        reporting = com.tmplayer.data.FeedbackReport.Kind.Feature
+    }
+    // The shell's keys, as the sheet "?" and F1 open (WP-51).
+    Action(s.settingsKeyboardShortcuts, s.keysShellTitle, TmIcons.List) { state.shortcutsOpen = true }
+    Action(s.settingsRedoSetupChoices, s.setupChoicesSummary, TmIcons.Checklist) { onOpenPage(SettingsCategory.SetupChoices) }
+    Action(s.settingsPageTroubleshooting, s.settingsPageTroubleshootingSummary, TmIcons.Logs) { onOpenPage(SettingsCategory.Troubleshooting) }
+
+    if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
+    reporting?.let { kind -> FeedbackPopup(onClose = { reporting = null }, kind = kind) }
+}
+
+/**
+ * Troubleshooting, under Help (WP-08): the proxy for a network where Telegram is blocked, the logs
+ * to attach to a report, and for developers the name report.
+ */
+@Composable
+internal fun TroubleshootingRows(state: ShellState) {
+    val s = LocalStrings.current
+    val settings = state.settings
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    val developerOptions by settings.developerOptions.collectAsState(initial = false)
+    // A proxy (CP77), for a network where Telegram is blocked: the connecting help's own screen.
+    val proxyOn by com.tmplayer.data.Td.proxyOn.collectAsState()
+    Action(s.proxyTitle, if (proxyOn) s.proxyInUse else s.proxySettingsDetailOff, TmIcons.Wifi) {
+        com.tmplayer.ui.connect.ProxyScreenState.open = true
+    }
+    // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
+    Action(s.logsSave, s.logsSaveDetail, TmIcons.Logs, end = RowEnd.None) {
+        scope.launch {
+            val lines = withContext(Dispatchers.IO) { DesktopLog.recentLines(LogExport.MAX_LINES) }
+            if (lines.isEmpty()) {
+                toast(s.logsEmpty)
+                return@launch
+            }
+            val file = FilePicker.save(s.logsSaveTitle, LogExport.fileName(), "txt") ?: return@launch
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    val known = LogExport.knownNames(settings, state.watched)
+                    file.writeText(LogExport.report(desktopFeedbackFacts(), lines, known))
+                }.isSuccess
+            }
+            toast(if (saved) s.logsSavedTo(file.absolutePath) else s.logsFailed)
+        }
+    }
+    // Developers only (see DevOptions): how the last chat's file names were read.
+    if (developerOptions || DevOptions.forced) {
+        Action(s.logsNameReport, s.logsNameReportDetail, TmIcons.Checklist, end = RowEnd.None) {
+            scope.launch {
+                val file = withContext(Dispatchers.IO) { runCatching { saveNameCheck() } }
+                file.onSuccess { toast(if (it == null) s.logsNameReportEmpty else s.logsNameReportSaved(it.absolutePath)) }
+                    .onFailure { toast(s.logsFailed) }
+            }
+        }
+    }
+}
+
+/**
+ * About (WP-08): the version and its updates (only where this build updates itself), the licence
+ * and notices, Support and About TMPlayer, and the privacy note at the end.
+ */
+@Composable
+internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Unit) {
+    val s = LocalStrings.current
+    val settings = state.settings
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
     val testVersions by settings.updateTestVersions.collectAsState(initial = false)
     var askTestVersions by remember { mutableStateOf(false) }
     val updateState by Updates.state.collectAsState()
-    val developerOptions by settings.developerOptions.collectAsState(initial = false)
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     var supporting by remember { mutableStateOf(false) }
-    var whatsNew by remember { mutableStateOf(false) }
-    var reporting by remember { mutableStateOf<com.tmplayer.data.FeedbackReport.Kind?>(null) }
 
     state.extras.updates?.let { updates ->
         Group(s.settingsVersion)
@@ -796,101 +941,6 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
         )
     }
 
-    // To a file and back: settings, lists and resume points, never the Telegram sign in. Here
-    // rather than on Library since 2026-11-01: it is the whole account's, not the library's.
-    Group(s.backupSection)
-    Action(s.backupBackUp, s.backupBackUpDetail, TmIcons.Download) {
-        scope.launch {
-            val file = FilePicker.save(s.backupSaveTitle, backups.fileName(), "json") ?: return@launch
-            val saved = withContext(Dispatchers.IO) { runCatching { file.writeText(backups.export()) }.isSuccess }
-            toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed)
-        }
-    }
-    Action(s.backupRestore, s.backupRestoreDetail, TmIcons.Refresh) {
-        scope.launch {
-            val file = FilePicker.open(s.backupPickTitle, "json") ?: return@launch
-            val text = withContext(Dispatchers.IO) {
-                // No backup comes near this; a video picked by mistake is not read whole.
-                runCatching { file.takeIf { it.length() <= 32L * 1024 * 1024 }?.readText() }.getOrNull()
-            }
-            if (text == null) {
-                toast(s.backupReadFailed)
-                return@launch
-            }
-            when (val read = backups.read(text)) {
-                is BackupRead.Ok -> {
-                    val plan = backups.plan(read.backup)
-                    if (plan.nothing) toast(s.backupRestoreNothing) else restorePlan = plan
-                }
-                else -> BackupWords.refusal(read)?.let { toast(it) }
-            }
-        }
-    }
-
-    restorePlan?.let { plan ->
-        ConfirmDialog(
-            title = s.backupRestoreTitle,
-            message = BackupWords.restoreMessage(plan),
-            detail = s.backupRestoreUntouched,
-            confirmLabel = s.backupRestoreConfirm,
-            destructive = false,
-            onConfirm = {
-                restorePlan = null
-                scope.launch {
-                    val done = runCatching { backups.restore(plan.backup) }.isSuccess
-                    toast(if (done) s.backupRestored else s.backupReadFailed)
-                }
-            },
-            onDismiss = { restorePlan = null },
-        )
-    }
-    Group(s.settingsHelp)
-    // A proxy (CP77), for a network where Telegram is blocked: the connecting help's own screen.
-    val proxyOn by com.tmplayer.data.Td.proxyOn.collectAsState()
-    Action(s.proxyTitle, if (proxyOn) s.proxyInUse else s.proxySettingsDetailOff, TmIcons.Wifi) {
-        com.tmplayer.ui.connect.ProxyScreenState.open = true
-    }
-    Action(s.settingsTour, s.settingsTourBody, TmIcons.Help) { scope.launch { settings.openTour() } }
-    Action(s.settingsWhatsNew, s.settingsWhatsNewDetail(WhatsNew.VERSION), TmIcons.StarOutline) { whatsNew = true }
-    Action(s.settingsChangelog, s.settingsChangelogDetail, TmIcons.List, end = RowEnd.External) {
-        OpenExternal.browse(WhatsNew.CHANGELOG)
-    }
-    val inbox = com.tmplayer.data.FeedbackReports.available
-    Action(s.settingsReportProblem, if (inbox) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail, TmIcons.Bug) {
-        reporting = com.tmplayer.data.FeedbackReport.Kind.Problem
-    }
-    // HX64: an idea, written here with the inbox, else on GitHub's feature request page.
-    Action(s.settingsRequestFeature, s.settingsRequestFeatureDetail, TmIcons.Send) {
-        reporting = com.tmplayer.data.FeedbackReport.Kind.Feature
-    }
-    // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
-    Action(s.logsSave, s.logsSaveDetail, TmIcons.Logs, end = RowEnd.None) {
-        scope.launch {
-            val lines = withContext(Dispatchers.IO) { DesktopLog.recentLines(LogExport.MAX_LINES) }
-            if (lines.isEmpty()) {
-                toast(s.logsEmpty)
-                return@launch
-            }
-            val file = FilePicker.save(s.logsSaveTitle, LogExport.fileName(), "txt") ?: return@launch
-            val saved = withContext(Dispatchers.IO) {
-                runCatching {
-                    val known = LogExport.knownNames(settings, state.watched)
-                    file.writeText(LogExport.report(desktopFeedbackFacts(), lines, known))
-                }.isSuccess
-            }
-            toast(if (saved) s.logsSavedTo(file.absolutePath) else s.logsFailed)
-        }
-    }
-    // Developers only (see DevOptions): how the last chat's file names were read.
-    if (developerOptions || DevOptions.forced) {
-        Action(s.logsNameReport, s.logsNameReportDetail, TmIcons.Checklist, end = RowEnd.None) {
-            scope.launch {
-                val file = withContext(Dispatchers.IO) { runCatching { saveNameCheck() } }
-                file.onSuccess { toast(if (it == null) s.logsNameReportEmpty else s.logsNameReportSaved(it.absolutePath)) }
-                    .onFailure { toast(s.logsFailed) }
-            }
-        }
-    }
     Action(s.settingsLawfulUse, s.settingsLawfulUseDetail, TmIcons.Gavel, end = RowEnd.External) {
         OpenExternal.browse(About.LEGAL)
     }
@@ -911,8 +961,6 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     )
 
     if (supporting) SupportPopup(onClose = { supporting = false }, onStarred = { Background.scope.launch { runCatching { settings.markSupportStarred() } } })
-    if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
-    reporting?.let { kind -> FeedbackPopup(onClose = { reporting = null }, kind = kind) }
 }
 
 /**

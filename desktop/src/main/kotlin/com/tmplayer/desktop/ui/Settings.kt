@@ -107,24 +107,25 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Settings' pages, in the list's order: grouped by what the viewer is trying to do (U20,
- * 2026-11-15), the same names and order as the shared [SettingsGroup], less the television's
- * launcher. The mouse in the player (the phone's Player gestures, for a pointer) is a heading of
- * [Playback], and Home's rows are on [Library], called Home and library (Raju pass 2, 11.1). [Subtitles] is Subtitles and audio, [Account] Privacy and lock;
- * Setup choices is last, as Redo setup choices, so the wide layout opens on Playback.
+ * Settings' pages, the shared [SettingsGroup]'s names in its order (WP-08, WP-77): Account first
+ * (who is signed in, devices, profiles, sign out), then Playback, Subtitles and audio, Downloads
+ * and data (with the backup), Appearance and language, Home and library, Privacy and lock,
+ * Notifications, Help and About. [Troubleshooting] and [SetupChoices] are pages under Help, opened
+ * from its rows and not listed. The mouse in the player is a heading of [Playback], and Home's rows
+ * are on [Library]; a television's launcher rows are not on a computer.
  */
 enum class SettingsCategory {
-    Playback, Subtitles, Storage, Notifications, Appearance, Account, Library, About, SetupChoices;
+    Accounts, Playback, Subtitles, Storage, Appearance, Library, Privacy, Notifications, Help, Troubleshooting, SetupChoices, About;
 
-    /**
-     * The shared group this page is. Read through the stored names, as the desktop's own "Account"
-     * page is still Privacy and lock until the desktop follows the new order (WP-77, which moves its
-     * rows to the pages of [SettingsGroup] and drops this).
-     */
-    val group: SettingsGroup get() = SettingsGroup.fromStored(name) ?: SettingsGroup.Privacy
+    /** The shared group this page is: the same name. */
+    val group: SettingsGroup get() = SettingsGroup.of(name) ?: SettingsGroup.Help
+
+    /** The page this one opens from (Help for Troubleshooting and Setup choices), or null for a listed page. */
+    val parent: SettingsCategory? get() = group.parent?.let { of(it) }
 
     internal val icon: androidx.compose.ui.graphics.vector.ImageVector
         get() = when (this) {
+            Accounts -> TmIcons.Account
             SetupChoices -> TmIcons.Checklist
             Appearance -> TmIcons.Palette
             Playback -> TmIcons.Play
@@ -132,7 +133,9 @@ enum class SettingsCategory {
             Library -> TmIcons.Home
             Notifications -> TmIcons.Bell
             Storage -> TmIcons.Download
-            Account -> TmIcons.Lock
+            Privacy -> TmIcons.Lock
+            Help -> TmIcons.Help
+            Troubleshooting -> TmIcons.Logs
             About -> TmIcons.Info
         }
 
@@ -144,8 +147,14 @@ enum class SettingsCategory {
         fun holding(step: SetupStep): SettingsCategory? =
             com.tmplayer.ui.settings.settingsLinkFor(step, DeviceForm.Desktop)?.let { of(it.group) }
 
-        /** The page for [group]; null for the television's own page. */
+        /** The page for [group]. */
         fun of(group: SettingsGroup): SettingsCategory? = entries.firstOrNull { it.name == group.name }
+
+        /**
+         * The page a name stored by an earlier version means (a name WP-08 retired maps to where it
+         * went: the desktop's "Account" was Privacy and lock), or null for a name nobody used.
+         */
+        fun fromStored(name: String): SettingsCategory? = SettingsGroup.fromStored(name)?.let { of(it) }
     }
 }
 
@@ -153,7 +162,7 @@ enum class SettingsCategory {
  * The pages this build's Settings lists, in order: every one on the desktop. The browser build
  * sets its own shorter list at start (com.tmplayer.web.Main), for the pages it has.
  */
-var settingsCategories: List<SettingsCategory> = SettingsCategory.entries
+var settingsCategories: List<SettingsCategory> = SettingsCategory.entries.filter { it.group.listed }
 
 /**
  * A page's line in the list in place of the desktop's, for a build whose page holds less: the
@@ -166,6 +175,7 @@ var settingsSummaryOverride: (SettingsCategory) -> String? = { null }
 internal fun titleOf(category: SettingsCategory): String {
     val s = LocalStrings.current
     return when (category) {
+        SettingsCategory.Accounts -> s.settingsGroupAccount
         SettingsCategory.SetupChoices -> s.settingsRedoSetupChoices
         SettingsCategory.Appearance -> s.settingsPageAppearance
         SettingsCategory.Playback -> s.settingsPlayback
@@ -173,8 +183,10 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.Library -> s.settingsPageHomeLibrary
         SettingsCategory.Notifications -> s.settingsPageNotifications
         SettingsCategory.Storage -> s.settingsPageDownloadsData
-        SettingsCategory.Account -> s.settingsPagePrivacyLock
-        SettingsCategory.About -> s.settingsPageAbout
+        SettingsCategory.Privacy -> s.settingsPagePrivacyLock
+        SettingsCategory.Help -> s.settingsHelp
+        SettingsCategory.Troubleshooting -> s.settingsPageTroubleshooting
+        SettingsCategory.About -> s.settingsGroupAbout
     }
 }
 
@@ -242,7 +254,7 @@ fun SettingsPage(
         openName = asked.name
         onInitialTaken()
     }
-    val open = openName?.let { name -> SettingsCategory.entries.firstOrNull { it.name == name } }
+    val open = openName?.let { name -> SettingsCategory.fromStored(name) }
     // The search box over the list (U20): its words, kept while a page found by it is open, and
     // the row it is taking the viewer to.
     var searchQuery by com.tmplayer.ui.components.rememberVisitQuery(keep = open != null)
@@ -272,6 +284,17 @@ fun SettingsPage(
     // What Esc does: back to the list from a page in the narrow layout, nothing otherwise.
     val escape = remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    // A search hit or a "Moved to" line: the page the row is on now, open on it.
+    val goToRow: (SettingsRow) -> Unit = { row ->
+        SettingsCategory.of(row.group)?.let { category ->
+            aboutView = null
+            cameFromStep = null
+            jumpTo = null
+            seek.aim(row, DeviceForm.Desktop, strings)
+            openName = category.name
+        }
+    }
+
     val pages = SettingsPages(
         state = state,
         version = version,
@@ -289,6 +312,13 @@ fun SettingsPage(
         onPin = { pinFlow = it },
         onKidsChats = { pickingKidsChats = true },
         onShowAbout = { aboutView = AboutView.Links },
+        onOpenPage = { page ->
+            aboutView = null
+            cameFromStep = null
+            jumpTo = null
+            openName = page.name
+        },
+        onMoved = goToRow,
     )
 
     LaunchedEffect(open, jumpTo) {
@@ -326,6 +356,8 @@ fun SettingsPage(
         val wide = maxWidth >= TWO_PANE_FROM
         // The About sub page open, when About and help is the page shown.
         val about = aboutView?.takeIf { (open ?: if (wide) settingsCategories.first() else null) == SettingsCategory.About }
+        // Troubleshooting and Setup choices open under Help: Back and Esc go there, and the list keeps Help lit.
+        val listed = open?.parent ?: open
         val aboutBack: () -> Unit = { aboutView = if (aboutView == AboutView.Notices) AboutView.Links else null }
         val aboutPage: @Composable (AboutView) -> Unit = { view ->
             AboutContent(
@@ -337,8 +369,13 @@ fun SettingsPage(
         }
         val closePage: () -> Unit = {
             val back = cameFromStep
+            val up = open?.parent
             if (back != null && open != SettingsCategory.SetupChoices) {
                 openName = SettingsCategory.SetupChoices.name
+            } else if (up != null) {
+                cameFromStep = null
+                returnTo = up
+                openName = up.name
             } else {
                 cameFromStep = null
                 returnTo = open
@@ -362,7 +399,7 @@ fun SettingsPage(
                     state = state,
                     version = version,
                     account = account,
-                    selected = if (wide) open ?: settingsCategories.first() else null,
+                    selected = if (wide) listed ?: settingsCategories.first() else null,
                     focus = categoryFocus,
                     onOpen = { category ->
                         // About and help from the list is its own page again, not the sub page.
@@ -374,15 +411,7 @@ fun SettingsPage(
                     query = searchQuery,
                     onQuery = { searchQuery = it },
                     searchFocus = searchFocus,
-                    onHit = { row ->
-                        SettingsCategory.of(row.group)?.let { category ->
-                            aboutView = null
-                            cameFromStep = null
-                            jumpTo = null
-                            seek.aim(row, DeviceForm.Desktop, strings)
-                            openName = category.name
-                        }
-                    },
+                    onHit = goToRow,
                 )
             }
             if (wide) {
@@ -401,12 +430,17 @@ fun SettingsPage(
                                         SubPageTitle(about.title(), about.backLabel(), aboutBack)
                                         aboutPage(about)
                                     } else {
-                                        Text(
-                                            titleOf(shown),
-                                            style = MaterialTheme.typography.headlineSmall,
-                                            color = Tone.text,
-                                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
-                                        )
+                                        val up = shown.parent
+                                        if (up != null) {
+                                            SubPageTitle(titleOf(shown), titleOf(up), closePage)
+                                        } else {
+                                            Text(
+                                                titleOf(shown),
+                                                style = MaterialTheme.typography.headlineSmall,
+                                                color = Tone.text,
+                                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
+                                            )
+                                        }
                                         pages.Content(shown)
                                     }
                                 }
@@ -462,6 +496,8 @@ fun SettingsPage(
             escape.value = when {
                 about != null -> aboutBack
                 !wide && open != null -> closePage
+                // A page under Help goes back to Help in either layout.
+                open?.parent != null -> closePage
                 else -> null
             }
         }
@@ -580,6 +616,9 @@ private fun CategoryList(
     SettingsColumn(Modifier.padding(top = 4.dp), dividerStart = SettingsDividerStart) {
         settingsCategories.forEach { category ->
             val summary = when (category) {
+                SettingsCategory.Accounts -> s.settingsGroupAccountSummary
+                SettingsCategory.Help -> s.settingsGroupHelpSummary
+                SettingsCategory.Troubleshooting -> s.settingsPageTroubleshootingSummary
                 SettingsCategory.SetupChoices -> s.setupChoicesSummary
                 // Plain facts, "Dark · English" (UX review, 2026-10-27).
                 SettingsCategory.Appearance -> s.settingsPageAppearanceSummary(theme = theme.label, language = com.tmplayer.ui.i18n.languageShortName(language))
@@ -597,10 +636,10 @@ private fun CategoryList(
                 SettingsCategory.Storage -> disk?.takeIf { it.totalBytes > 0 }?.let {
                     s.settingsStorageFree(StorageRelocationPlan.size(it.freeBytes), StorageRelocationPlan.size(it.totalBytes))
                 } ?: s.settingsGroupStorageSummaryDesktop
-                SettingsCategory.Account -> if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacyLockSummary
+                SettingsCategory.Privacy -> if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacySummary
                 // An update waiting is said here as well as inside, in the same colour, so it is
                 // not hidden one level down.
-                SettingsCategory.About -> offered?.let { UpdateWords.settingsRow(it) } ?: s.settingsGroupAboutSummary(version)
+                SettingsCategory.About -> offered?.let { UpdateWords.settingsRow(it) } ?: s.settingsGroupAboutPageSummary(version)
             }
             val caution = category == SettingsCategory.About && offered != null
             Setting(
@@ -630,6 +669,10 @@ internal class SettingsPages(
     val onPin: (DesktopPinFlow) -> Unit,
     val onKidsChats: () -> Unit,
     val onShowAbout: () -> Unit,
+    /** Opens a page under Help (Troubleshooting, Setup choices) from one of Help's rows. */
+    val onOpenPage: (SettingsCategory) -> Unit = {},
+    /** Opens the page a row moved to, on that row: a "Moved to" line was pressed. */
+    val onMoved: (SettingsRow) -> Unit = {},
 ) {
     @Composable
     fun Content(category: SettingsCategory) {
@@ -641,6 +684,8 @@ internal class SettingsPages(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             else -> SettingsColumn(Modifier.padding(vertical = 4.dp), dividerStart = SettingsDividerStart) {
+                // For one release, the rows that left this page say where they went (WP-08, WP-77).
+                MovedToRows(state, category, onMoved)
                 when (category) {
                     SettingsCategory.Appearance -> AppearanceRows(state)
                     SettingsCategory.Playback -> PlaybackRows(state, jumps)
@@ -652,8 +697,15 @@ internal class SettingsPages(
                         LibraryRows(state, chatList, jumps)
                     }
                     SettingsCategory.Notifications -> NotificationRows(state)
-                    SettingsCategory.Storage -> StorageGroup(state, jumps)
-                    SettingsCategory.Account -> AccountRows(state, onPin, onKidsChats)
+                    SettingsCategory.Storage -> {
+                        StorageGroup(state, jumps)
+                        // To a file and back, with the downloads and data (WP-08).
+                        BackupRows(state, version)
+                    }
+                    SettingsCategory.Accounts -> AccountRows(state)
+                    SettingsCategory.Privacy -> PrivacyRows(state, onPin, onKidsChats)
+                    SettingsCategory.Help -> HelpRows(state, onOpenPage)
+                    SettingsCategory.Troubleshooting -> TroubleshootingRows(state)
                     SettingsCategory.About -> AboutRows(state, version, onShowAbout)
                     SettingsCategory.SetupChoices -> Unit
                 }
@@ -682,6 +734,29 @@ private fun desktopSearchRows(state: ShellState): List<SettingsRow> {
             }
         }
     }
+}
+
+/**
+ * The "Moved to {page}" lines at the top of a page whose rows moved in WP-08 (Privacy and lock,
+ * Library, About), from the shared map's aliases: one line for each page the rows went to, naming
+ * them, and a press opens that page on the first. Shown once per old page (the hint registry, WP-68,
+ * so never when the tour was skipped twice), for one release, and only for rows this build draws.
+ */
+@Composable
+private fun MovedToRows(state: ShellState, old: SettingsCategory, onOpen: (SettingsRow) -> Unit) {
+    val s = LocalStrings.current
+    val drawn = desktopSearchRows(state).map { it.id }.toSet()
+    val moved = SettingsMap.movedFrom(DeviceForm.Desktop, old.group).filter { it.id in drawn }
+    if (moved.isEmpty()) return
+    val lines = moved.groupBy { it.group }.entries.sortedBy { it.key.ordinal }
+    com.tmplayer.ui.components.OneTimeHint(state.settings, com.tmplayer.data.HintIds.moved(old.name), label = "", maxShows = 1, draw = {
+        for ((group, rows) in lines) {
+            val titles = rows.map { s.messages.text(it.titleOn(DeviceForm.Desktop)) }
+            val shown = titles.take(3).joinToString(", ") + if (titles.size > 3) "…" else ""
+            val page = SettingsCategory.of(group) ?: return@OneTimeHint
+            Action(shown, s.settingsAlsoInMoved(titleOf(page)), TmIcons.ChevronRight) { onOpen(rows.first()) }
+        }
+    })
 }
 
 /** A query longer than any title is somebody's paste, not a search. */
