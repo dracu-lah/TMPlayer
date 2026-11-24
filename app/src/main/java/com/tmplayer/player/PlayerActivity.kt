@@ -76,6 +76,7 @@ import com.tmplayer.data.CopyHandoff
 import com.tmplayer.data.VideoCopies
 import com.tmplayer.data.copyQuality
 import com.tmplayer.data.hasAirPlay
+import com.tmplayer.data.setExternalPlaybackAllowed
 import com.tmplayer.data.hasPictureInPicture
 import com.tmplayer.data.pictureInPictureRefusal
 import com.tmplayer.data.showAirPlayPicker
@@ -320,8 +321,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * carried in on the intent is believed at once; a true is not, because Continue watching and
      * the downloads list build their items from records that never knew, so it is asked again. A
      * question Telegram cannot answer counts as yes, which is how the player behaved before.
+     * Each change also tells iOS's AirPlay whether the video may go to another screen (SEC2-01).
      */
-    private var savable: Boolean? = null
+    private val externalPlayback = ExternalPlaybackVerdict { setExternalPlaybackAllowed(it) }
+    private var savable: Boolean?
+        get() = externalPlayback.savable
+        set(value) {
+            externalPlayback.savable = value
+        }
 
     /** The failure sheet's way out, and the video's own name on it. */
     private var statusBack: android.widget.Button? = null

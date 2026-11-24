@@ -30,6 +30,8 @@ final class AppleEngine: NSObject, VideoEngine {
     private var pip: AVPictureInPictureController?
     /// Whether the system may open the corner window by itself when the app goes away while this plays.
     private var autoPip = false
+    /// Whether this video may go to an AirPlay screen (SEC2-01, `setExternalPlaybackAllowed`); false until the player knows.
+    private var externalAllowed = false
 
     /// Told, on the main thread, when the corner window opens (true) or closes (false).
     var onPictureInPictureChanged: ((KotlinBoolean) -> Void)?
@@ -354,6 +356,20 @@ final class AppleEngine: NSObject, VideoEngine {
         pip?.canStartPictureInPictureAutomaticallyFromInline = on
     }
 
+    /// The player's savable verdict (SEC2-01): AirPlay of any kind only while it is true. Turned off
+    /// while the video is on another screen, it pauses first, so a restricted video does not go on
+    /// playing there.
+    func setExternalPlaybackAllowed(on: Bool) {
+        externalAllowed = on
+        if let player { applyExternalPlayback(to: player) }
+    }
+
+    private func applyExternalPlayback(to player: AVPlayer) {
+        if !externalAllowed && player.isExternalPlaybackActive { player.pause() }
+        player.allowsExternalPlayback = externalAllowed
+        player.usesExternalPlaybackWhileExternalScreenIsActive = externalAllowed
+    }
+
     /// The controller is made once for the layer and follows whatever player the layer holds.
     private func preparePictureInPicture() {
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
@@ -418,9 +434,12 @@ final class AppleEngine: NSObject, VideoEngine {
         self.legible = legible
 
         let player = AVPlayer(playerItem: item)
-        // AirPlay: the picture goes to the screen the viewer picked (or the mirrored one) from iOS's list.
-        player.allowsExternalPlayback = true
-        player.usesExternalPlaybackWhileExternalScreenIsActive = true
+        // AirPlay: the picture goes to the screen the viewer picked from iOS's list, but only once the
+        // player says the chat allows saving (SEC2-01): Control Center's route button reaches AVPlayer
+        // without the More panel's row. Off until then.
+        player.allowsExternalPlayback = false
+        player.usesExternalPlaybackWhileExternalScreenIsActive = false
+        applyExternalPlayback(to: player)
         player.actionAtItemEnd = .pause
         player.volume = Float(max(0, min(100, options.volume))) / 100
         player.isMuted = options.muted

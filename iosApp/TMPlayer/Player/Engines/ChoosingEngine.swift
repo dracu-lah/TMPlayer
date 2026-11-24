@@ -393,6 +393,10 @@ extension ChoosingEngine: ExternalPlaybackEngine {
     func setAutoPictureInPicture(on: Bool) {
         apple.setAutoPictureInPicture(on: on)
     }
+
+    func setExternalPlaybackAllowed(on: Bool) {
+        apple.setExternalPlaybackAllowed(on: on)
+    }
 }
 
 /// The surface the player sees: the engines' views stacked in it, the one playing shown.

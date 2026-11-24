@@ -356,6 +356,11 @@ fun Context.hasAirPlay(): Boolean = true
 
 fun Context.showAirPlayPicker(): Boolean = android.app.IosExternalPlayback.showAirPlayPicker()
 
+/** The engine's AirPlay follows the player's savable verdict: off until the chat is known to allow saving (SEC2-01). */
+fun Context.setExternalPlaybackAllowed(on: Boolean) {
+    android.app.IosExternalPlayback.externalPlaybackAllowed = on
+}
+
 fun Context.pictureInPictureRefusal(): String? =
     if (android.app.IosExternalPlayback.appliesToThisVideo) null else com.tmplayer.i18n.L.playerPipNotForThisFile
 

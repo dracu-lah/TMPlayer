@@ -27,10 +27,32 @@ object IosExternalPlayback {
 
         /** Whether the system may start the corner window by itself when the app goes away while this plays. */
         fun setAutoPictureInPicture(on: Boolean)
+
+        /**
+         * Whether AVPlayer may send the video to an AirPlay screen at all (SEC2-01): the route button in
+         * Control Center and on the lock screen reach the player without the More panel's row. False
+         * pauses a video already on another screen.
+         */
+        fun setExternalPlaybackAllowed(on: Boolean)
     }
 
-    /** The engine of the video now open; null between videos. Set on the main thread. */
+    /** The engine of the video now open; null between videos. Set on the main thread; told [externalPlaybackAllowed] at once. */
     var controls: Controls? = null
+        set(value) {
+            field = value
+            value?.setExternalPlaybackAllowed(externalPlaybackAllowed)
+        }
+
+    /**
+     * The player's verdict for the video now open: true only once the chat is known to allow saving
+     * (the cast rule), false before that and for a restricted chat. Set by the player on the main thread
+     * whenever the verdict changes, and handed to the engine.
+     */
+    var externalPlaybackAllowed: Boolean = false
+        set(value) {
+            field = value
+            controls?.setExternalPlaybackAllowed(value)
+        }
 
     /** Whether the corner window is up now; set by the engine on the main thread. */
     var pictureInPictureActive: Boolean = false

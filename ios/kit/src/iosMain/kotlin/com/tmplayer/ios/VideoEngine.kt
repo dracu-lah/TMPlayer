@@ -134,6 +134,12 @@ interface ExternalPlaybackEngine {
     /** Whether the system may start the corner window by itself when the app goes away while this plays. */
     fun setAutoPictureInPicture(on: Boolean)
 
+    /**
+     * Whether Apple's player may send the video to an AirPlay screen at all, from any button (SEC2-01):
+     * false until the player knows the chat allows saving. False pauses a video already on another screen.
+     */
+    fun setExternalPlaybackAllowed(on: Boolean)
+
     /** Called on the main thread when the corner window opens (true) or closes (false). */
     var onPictureInPictureChanged: ((Boolean) -> Unit)?
 }

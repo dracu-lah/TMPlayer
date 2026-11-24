@@ -71,6 +71,7 @@ internal class NativePlaybackEngine(private val engine: VideoEngine) : PlaybackE
         override fun startPictureInPicture(): Boolean = engine.startPictureInPicture()
         override fun stopPictureInPicture() = engine.stopPictureInPicture()
         override fun setAutoPictureInPicture(on: Boolean) = engine.setAutoPictureInPicture(on)
+        override fun setExternalPlaybackAllowed(on: Boolean) = engine.setExternalPlaybackAllowed(on)
     }
 
     override suspend fun open(data: MediaData, startAtMs: Long, prefs: OpenPrefs) {

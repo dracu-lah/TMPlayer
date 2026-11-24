@@ -107,7 +107,14 @@ picture works for MP4 and MOV videos"). The web has no cast (Remote Playback can
 service worker stream, and relaying bytes is ruled out by Telegram's terms).
 
 - `AppleEngine.swift`: `allowsExternalPlayback` and `usesExternalPlaybackWhileExternalScreenIsActive`
-  on the AVPlayer; an `AVRoutePickerView` the surface holds in its corner out of sight, which the
+  on the AVPlayer, false when the player is made and set to the player's savable verdict
+  (`setExternalPlaybackAllowed`, from `PlayerActivity`'s `savable` through `ExternalPlaybackVerdict`
+  and `IosExternalPlayback.externalPlaybackAllowed`, SEC2-01): Control Center's and the lock screen's
+  route button reach AVPlayer without the More panel's row, so a chat that restricts saving, or one
+  not asked yet, never plays on an AirPlay screen; a verdict that turns false while the video is on
+  one pauses it. Screen mirroring is the system's and stays out of scope (it shows the whole screen,
+  as for any app). Mac check: a restricted chat's MP4, Control Center's route button lists the Apple
+  TV but the video stays on the phone; a savable one goes over; an `AVRoutePickerView` the surface holds in its corner out of sight, which the
   row presses (`showAirPlayPicker`); an `AVPictureInPictureController` on the same `AVPlayerLayer`
   (`startPictureInPicture`, the delegate reports opening and closing). The background observer keeps
   the layer on the player while the corner window is up, the picture is on an AirPlay screen, or the

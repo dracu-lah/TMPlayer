@@ -64,6 +64,14 @@ fun Context.hasPictureInPicture(): Boolean =
 @Suppress("unused")
 fun Context.hasAirPlay(): Boolean = false
 
+/**
+ * Whether the open video may go to another screen through AirPlay, whichever button asks (the More
+ * panel's row, Control Center, the lock screen): iOS's alone (SEC2-01, AndroidSystemOnIos.kt has the
+ * iOS answer); Android has no such route and nothing to tell.
+ */
+@Suppress("unused", "UNUSED_PARAMETER")
+fun Context.setExternalPlaybackAllowed(on: Boolean) = Unit
+
 /** Opens iOS's AirPlay list for the video playing; false where there is none, or for a file it cannot take. */
 @Suppress("unused")
 fun Context.showAirPlayPicker(): Boolean = false
