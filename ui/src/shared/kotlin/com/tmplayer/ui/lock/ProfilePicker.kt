@@ -298,7 +298,7 @@ private fun ProfileTileView(
                 photo = tile.photo,
                 size = size,
                 modifier = Modifier
-                    .focusRing(focused, CircleShape)
+                    .focusRing(focused, CircleShape, filled = false)
                     .then(if (manage) Modifier.border(2.dp, Tone.muted, CircleShape) else Modifier),
             )
             if (tile.locked || manage) {

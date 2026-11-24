@@ -3485,7 +3485,7 @@ internal fun TickRow(label: String, checked: Boolean, onToggle: () -> Unit) {
             // A 48 dp target and focus rect (F-17).
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(Corner.Small))
-            .focusRing(focused, RoundedCornerShape(Corner.Small))
+            .focusRing(focused, RoundedCornerShape(Corner.Small), filled = false)
             .toggleable(
                 value = checked,
                 interactionSource = interactions,

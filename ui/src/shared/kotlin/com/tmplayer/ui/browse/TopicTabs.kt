@@ -166,7 +166,7 @@ private fun TopicFindField(value: String, onValue: (String) -> Unit, tv: Boolean
             .widthIn(min = 140.dp, max = if (tv) 260.dp else 200.dp)
             .clip(shape)
             .background(if (editing && tv) Tone.surfaceHigh else Tone.surface)
-            .focusRing(focused || (editing && tv), shape)
+            .focusRing(focused || (editing && tv), shape, filled = false)
             .then(
                 if (tv) {
                     Modifier

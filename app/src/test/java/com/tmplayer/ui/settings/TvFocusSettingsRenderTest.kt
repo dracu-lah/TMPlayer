@@ -50,8 +50,9 @@ import java.io.File
 /**
  * The television's Appearance page with the remote on a row, in Light, Dark and Pure black, with and
  * without High contrast focus: the frames in `build/device-test/review/`, and (WP-06) a pixel read
- * of the ring on the focused row's top edge, which must be [com.tmplayer.ui.theme.focusRingColor]
- * and which a row the remote is not on must not have. The rows draw the shared
+ * of the focused row's top edge: ONE indicator (user, 2026-11-25), the fill alone
+ * ([com.tmplayer.ui.theme.Tone.focusFill]) and with High contrast focus the fill and the ring in
+ * [com.tmplayer.ui.theme.focusRingColor]; a row the remote is not on has neither. The rows draw the shared
  * [com.tmplayer.ui.theme.focusRingOnTv] (the Row role of `FocusRole`); the picker line is read back
  * through in [TvFocusRenderTest]. Its own class: a Settings page left in the process throws the
  * focus requests of the next test off.
@@ -81,6 +82,7 @@ class TvFocusSettingsRenderTest {
 
     /** The ring's colour as the theme on screen draws it, read from inside the composition. */
     private var ringColour: Color = Color.Unspecified
+    private var fillColour: Color = Color.Unspecified
 
     /**
      * The television's Appearance page with the remote on a row (its landing row, then one down):
@@ -97,7 +99,8 @@ class TvFocusSettingsRenderTest {
         activity.setContent {
             TMPlayerTheme {
                 val ring = com.tmplayer.ui.theme.focusRingColor()
-                androidx.compose.runtime.SideEffect { ringColour = ring }
+                val fill = Tone.focusFill
+                androidx.compose.runtime.SideEffect { ringColour = ring; fillColour = fill }
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
                     com.tmplayer.ui.settings.SettingsScreen(
                         chats = emptyList(),
@@ -132,7 +135,7 @@ class TvFocusSettingsRenderTest {
         }
         val frame = capture(activity)
         save("focus-tv-${page.name.lowercase()}-${if (high) "high" else "standard"}-settings.png", frame)
-        assertRing(activity, frame, "${page.name} ${if (high) "high contrast" else "standard"}")
+        assertRing(activity, frame, "${page.name} ${if (high) "high contrast" else "standard"}", high)
     }
 
     /** Every semantics node under [node], the node itself first. */
@@ -157,24 +160,29 @@ class TvFocusSettingsRenderTest {
         }
     }
 
-    /** The ring's colour on the row's top edge: a pixel of it in the first 14 px of the middle column. */
-    private fun ringOnTopEdge(frame: Bitmap, bounds: androidx.compose.ui.geometry.Rect): Boolean {
-        val ring = ringColour
+    /** [colour] on the row's top edge: a pixel of it in the first 14 px of the middle column. */
+    private fun colourOnTopEdge(frame: Bitmap, bounds: androidx.compose.ui.geometry.Rect, colour: Color): Boolean {
         val x = bounds.center.x.toInt().coerceIn(0, frame.width - 1)
         return (0 until 14).any { dy ->
             val y = (bounds.top.toInt() + dy).coerceIn(0, frame.height - 1)
             val c = Color(frame.getPixel(x, y))
-            kotlin.math.abs(c.red - ring.red) < 0.02f && kotlin.math.abs(c.green - ring.green) < 0.02f && kotlin.math.abs(c.blue - ring.blue) < 0.02f
+            kotlin.math.abs(c.red - colour.red) < 0.02f && kotlin.math.abs(c.green - colour.green) < 0.02f && kotlin.math.abs(c.blue - colour.blue) < 0.02f
         }
     }
 
-    private fun assertRing(activity: ComponentActivity, frame: Bitmap, what: String) {
+    private fun assertRing(activity: ComponentActivity, frame: Bitmap, what: String, high: Boolean) {
         val rows = rowsOf(activity)
         val focused = rows.filter { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Focused) == true }
         val others = rows.filter { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Focused) != true }
         assertTrue("$what: one row has the remote", focused.isNotEmpty())
-        assertTrue("$what: the focused row draws the ring ($ringColour)", focused.any { ringOnTopEdge(frame, it.boundsInWindow) })
-        assertTrue("$what: a row the remote is not on has no ring", others.isNotEmpty() && others.none { ringOnTopEdge(frame, it.boundsInWindow) })
+        assertTrue("$what: the focused row is filled ($fillColour)", focused.any { colourOnTopEdge(frame, it.boundsInWindow, fillColour) })
+        // The ring is drawn only when the viewer asked for High contrast focus; in daylight the ring colour is the fill's own.
+        if (high) {
+            assertTrue("$what: the focused row draws the ring ($ringColour)", focused.any { colourOnTopEdge(frame, it.boundsInWindow, ringColour) })
+        } else if (ringColour != fillColour) {
+            assertTrue("$what: the focused row is the fill alone, no ring ($ringColour)", focused.none { colourOnTopEdge(frame, it.boundsInWindow, ringColour) })
+        }
+        assertTrue("$what: a row the remote is not on has no ring or fill", others.isNotEmpty() && others.none { colourOnTopEdge(frame, it.boundsInWindow, ringColour) || colourOnTopEdge(frame, it.boundsInWindow, fillColour) })
     }
 
     /** A window the remote works in: out of touch mode and holding focus, as on a television. */

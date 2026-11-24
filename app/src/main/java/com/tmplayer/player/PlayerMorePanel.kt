@@ -1006,7 +1006,7 @@ private fun KeyRow(key: String, does: String, modifier: Modifier) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
             .background(background)
-            .focusRing(focused, RoundedCornerShape(Corner.Medium))
+            .focusRing(focused, RoundedCornerShape(Corner.Medium), filled = false)
             .focusable(interactionSource = interactions)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {

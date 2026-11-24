@@ -64,9 +64,9 @@ import kotlin.math.abs
  *
  * - the layout rect is the same focused and at rest;
  * - every pixel that changes under focus is inside that rect (a ring is drawn in, never out);
- * - where the recipe draws a ring ([FocusRole.Row] always, [FocusRole.Button] in the Light theme and
- *   under High contrast) it shows at the edge and stands 3:1 off the fill it sits on; where it
- *   does not (a button in the Dark theme), the fill swap alone carries the focus.
+ * - the recipe draws a ring only under High contrast ([FocusRole.Row] and [FocusRole.Button]); there
+ *   it shows at the edge and stands 3:1 off the fill it sits on; everywhere else the fill swap
+ *   alone carries the focus (one indicator per control).
  *
  * Frames of the buttons and the dialog are written to `build/device-test/review/` too.
  */
@@ -173,7 +173,7 @@ class AboutTvFocusRenderTest {
 
     private fun assertNoRing(ux: TvUxChecklist, name: String, m: Pair2) {
         val (edge, fill, _) = ringAndFill(ux, m)
-        assertTrue("$name: no ring in the Dark theme, edge $edge fill $fill", contrastRatio(edge, fill) < 1.5f)
+        assertTrue("$name: no ring, only the fill: edge $edge fill $fill", contrastRatio(edge, fill) < 1.5f)
     }
 
     // ----- About -------------------------------------------------------------------------------
@@ -186,9 +186,9 @@ class AboutTvFocusRenderTest {
         for ((name, other) in listOf(L.supportBuyCoffee to L.supportSponsorGithub, L.supportSponsorGithub to L.supportBuyCoffee)) {
             val m = measure(ux, name, other)
             assertStaysInside(ux, name, m)
-            // The row role: the fill and the ring on a television, in every theme.
-            assertTrue(FocusRole.Row.recipe.ringShown(style, dark))
-            assertRing(ux, name, m)
+            // The row role: the fill alone on a television, a ring only under High contrast.
+            assertEquals(style.highContrast, FocusRole.Row.recipe.ringShown(style, dark))
+            if (style.highContrast) assertRing(ux, name, m) else assertNoRing(ux, name, m)
         }
     }
 

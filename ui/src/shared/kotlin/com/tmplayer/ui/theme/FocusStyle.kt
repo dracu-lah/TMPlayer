@@ -60,21 +60,25 @@ class FocusStyle(
         /** The phone's and the desktop's focus, unchanged. */
         val Standard = FocusStyle(ring = Focus.Ring, edge = Focus.Edge, scale = Motion.FocusScale)
 
-        /** A television's ring: a pixel thicker than [Standard] at 1080p and clearly more than that at 720p. */
-        val TvRing = 3.dp
+        /**
+         * A television's ring, only for a control with no fill of its own and never more than 2 dp
+         * (user, 2026-11-25: "thick borders everywhere"). A control that fills under focus shows the
+         * fill alone, so there is never a ring on top of a fill.
+         */
+        val TvRing = 2.dp
 
-        /** A television's edge round a tile. */
-        val TvEdge = 4.dp
+        /** A television's edge round a tile: the same thin line. */
+        val TvEdge = 2.dp
 
         /**
-         * A television's scale. 1.07 of a 208 dp tile is 7.3 dp a side, inside the
+         * A television's scale. 1.04 of a 208 dp tile is 4.2 dp a side, well inside the
          * [Tv.FocusClearance] a row leaves round its tiles.
          */
-        const val TvScale = 1.07f
+        const val TvScale = 1.04f
 
-        /** The same, with the contrast switch on (see [FocusStyle]). */
+        /** The same, with the contrast switch on (see [FocusStyle]): the one place a ring is drawn on a fill. */
         private val TvHighContrast = FocusStyle(
-            ring = 4.dp, edge = 5.dp, scale = TvScale, highContrast = true, outer = 2.dp, inner = 1.dp, tv = true,
+            ring = 3.dp, edge = 3.dp, scale = TvScale, highContrast = true, outer = 1.dp, inner = 1.dp, tv = true,
         )
 
         private val TvStandard = FocusStyle(ring = TvRing, edge = TvEdge, scale = TvScale, tv = true)
@@ -83,6 +87,14 @@ class FocusStyle(
         fun tv(highContrast: Boolean): FocusStyle = if (highContrast) TvHighContrast else TvStandard
     }
 }
+
+/**
+ * The width of a hand-drawn focus stroke on a control with no fill: [phone] where the phone and the
+ * desktop have always drawn it, at most [FocusStyle.edge] on a television (2 dp).
+ */
+@Composable
+@ReadOnlyComposable
+fun focusStrokeWidth(phone: Dp): Dp = LocalFocusStyle.current.let { if (it.tv) minOf(phone, it.edge) else phone }
 
 /** The focus style of this tree; the television's theme provides its own. */
 val LocalFocusStyle = staticCompositionLocalOf { FocusStyle.Standard }
@@ -125,34 +137,42 @@ object FocusContrast {
 }
 
 /**
- * A ring around whatever the remote is on, for when the fill alone is not enough.
+ * ONE focus indicator per control on a television (user, 2026-11-25: a fill with a second ring a few
+ * pixels outside it looked ugly). The rule every screen follows through this modifier:
  *
- * In daylight [Tone.focusFill] is a pale blue, a 1.24:1 step on near-white and well under the 3:1
- * a control is meant to stand out by, so an outline in the accent carries the signal the fill
- * cannot.
+ * - a control that fills under focus ([filled], the default: a pill, a chip, a row, a button) shows
+ *   the fill ([Tone.focusFill] with [Tone.onFocusFill] on it) and nothing else. Only the High
+ *   contrast focus switch adds the ring, as a thing the viewer asked for;
+ * - a control with no fill (a card, a tile, a text field, a scroll pane: [filled] false, or a
+ *   [color] passed) draws one [FocusStyle.ring] stroke, 2 dp, flush with its edge, no gap.
  *
- * In the dark theme [Tone.focusFill] is already a bright block against a near-black screen, but
- * that block alone cannot tell "focused" apart from a control that is merely chosen or otherwise
- * lit the same way (HX42: a Home banner pill with no fill change at all had no focus mark once
- * Reduce motion turned its scale off). The ring there is [Tone.onFocusFill], Material's own
- * contrast-guaranteed ink for that fill, rather than the accent again: a ring in the same hue as
- * the block it sits on would still read as invisible.
- *
- * [color] is for the few rows with no fill under focus (they pass the accent). The width is [FocusStyle.ring]; with the television's High contrast focus the contrasting line
- * and keyline are drawn with it.
+ * On the phone and the desktop (keyboard focus) nothing changed: the ring in [focusRingColor].
  */
 @Composable
-fun Modifier.focusRing(focused: Boolean, shape: Shape, color: Color = focusRingColor()): Modifier =
-    if (focused && FocusVisibility.visible) focusStroke(shape, color, LocalFocusStyle.current.ring) else this
+fun Modifier.focusRing(
+    focused: Boolean,
+    shape: Shape,
+    color: Color = Color.Unspecified,
+    filled: Boolean = true,
+): Modifier {
+    if (!focused || !FocusVisibility.visible) return this
+    val style = LocalFocusStyle.current
+    if (!style.tv) return focusStroke(shape, if (color.isSpecified) color else focusRingColor(), style.ring)
+    return when {
+        color.isSpecified -> focusStroke(shape, color, style.ring)
+        !filled -> focusStroke(shape, Tone.accent, style.ring)
+        style.highContrast -> focusStroke(shape, focusRingColor(), style.ring)
+        else -> this
+    }
+}
 
 /**
- * [focusRing] on a television only. For a pill or a row that fills under focus on every device but
- * whose fill alone is a 1.24:1 step on the light page: the phone and the desktop keep their fill,
- * the television adds the ring it needs from the sofa.
+ * [focusRing] for a pill or a row that fills under focus on every device: on a television the fill
+ * is the whole indicator (a ring only with High contrast focus), so this is the same as
+ * [focusRingOnHighContrast]. Kept for the call sites that name the intent.
  */
 @Composable
-fun Modifier.focusRingOnTv(focused: Boolean, shape: Shape): Modifier =
-    if (LocalFocusStyle.current.tv) focusRing(focused, shape) else this
+fun Modifier.focusRingOnTv(focused: Boolean, shape: Shape): Modifier = focusRingOnHighContrast(focused, shape)
 
 /**
  * [focusRing] on a television with High contrast focus on, and nothing otherwise. For the pills
@@ -161,7 +181,9 @@ fun Modifier.focusRingOnTv(focused: Boolean, shape: Shape): Modifier =
  */
 @Composable
 fun Modifier.focusRingOnHighContrast(focused: Boolean, shape: Shape): Modifier =
-    if (LocalFocusStyle.current.let { it.tv && it.highContrast }) focusRing(focused, shape) else this
+    if (focused && FocusVisibility.visible && LocalFocusStyle.current.let { it.tv && it.highContrast }) {
+        focusStroke(shape, focusRingColor(), LocalFocusStyle.current.ring)
+    } else this
 
 /**
  * The same for a tile, a card or a chat row (no fill of its own under focus): [FocusStyle.edge]
@@ -213,9 +235,11 @@ private fun Modifier.focusStroke(shape: Shape, color: Color, width: Dp): Modifie
 fun Modifier.focusDrawn(focused: State<Boolean>, ring: Color, shape: Shape, fill: Color = Color.Unspecified): Modifier {
     val style = LocalFocusStyle.current
     val dark = LocalDarkTheme.current
+    // One indicator: on a television a fill is the whole focus (a ring only under High contrast).
+    val ringOn = !(style.tv && fill.isSpecified && !style.highContrast)
     return drawWithCache {
         val outline = shape.createOutline(size, layoutDirection, this)
-        val ringPx = min(ceil(style.ring.toPx()), ceil(size.minDimension / 2))
+        val ringPx = if (!ringOn) 0f else min(ceil(style.ring.toPx()), ceil(size.minDimension / 2))
         val outerPx = if (style.highContrast) ceil(style.outer.toPx()) else 0f
         val innerPx = if (style.highContrast) ceil(style.inner.toPx()) else 0f
         val outer = FocusInk.outer(dark)
@@ -286,13 +310,15 @@ private fun DrawScope.band(outline: Outline, color: Color, inset: Float, width: 
  *
  * | Role | Focused | Selected, not focused |
  * | --- | --- | --- |
- * | [Tile] | scale [FocusStyle.scale] (1.07) inside [Tv.FocusClearance], [FocusStyle.edge] edge | a tick badge |
- * | [Row] | fill and [focusRingOnTv], no scale | a tick |
- * | [Button] | fill swap, ring added in Light and under High contrast, no scale | a tick |
- * | [BarPill] (a bar pill or a tab) | fill swap, ring under High contrast only | the selected indicator |
+ * | [Tile] | scale [FocusStyle.scale] (1.04) inside [Tv.FocusClearance], one [FocusStyle.edge] (2 dp) edge | a tick badge |
+ * | [Row] | the fill alone (a ring only under High contrast), no scale | a tick |
+ * | [Button] | the fill swap alone (a ring only under High contrast), no scale | a tick |
+ * | [BarPill] (a bar pill or a tab) | the fill swap alone (a ring only under High contrast) | the selected indicator |
  * | [Avatar] | ring and halo on a 48 dp focus rect | a tick badge |
- * | [BrandButton] | outer ring in the accent, 3 dp outside the brand colour, in reserved [Tv.FocusClearance] | none |
- * | [RailItem] | fill and ring | a 3 dp leading accent bar and SemiBold, over muted rest text |
+ * | [BrandButton] | one flush 2 dp ring in the accent, no gap | none |
+ * | [RailItem] | the fill alone (a ring only under High contrast) | a 3 dp leading accent bar and SemiBold, over muted rest text |
+ *
+ * ONE indicator per control: a fill, or a ring for a control with no fill, never both.
  *
  * Selected and focused never share a look, so both can show at once: a chosen option is a tick,
  * never the focus fill. High contrast: every ring thickens through [FocusStyle] (the contrasting
@@ -317,9 +343,9 @@ enum class FocusRole {
     val recipe: FocusRecipe
         get() = when (this) {
             Tile -> FocusRecipe(scales = true, fills = false, ring = RingRule.Edge, selected = SelectedLook.Tick)
-            Row -> FocusRecipe(scales = false, fills = true, ring = RingRule.OnTv, selected = SelectedLook.Tick)
+            Row -> FocusRecipe(scales = false, fills = true, ring = RingRule.HighContrastOnly, selected = SelectedLook.Tick)
             Button -> FocusRecipe(
-                scales = false, fills = true, ring = RingRule.LightAndHighContrast, selected = SelectedLook.Tick,
+                scales = false, fills = true, ring = RingRule.HighContrastOnly, selected = SelectedLook.Tick,
             )
             BarPill -> FocusRecipe(
                 scales = false, fills = true, ring = RingRule.HighContrastOnly, selected = SelectedLook.Indicator,
@@ -328,10 +354,10 @@ enum class FocusRole {
                 scales = true, fills = false, ring = RingRule.Halo, selected = SelectedLook.Tick, rect = 48.dp,
             )
             BrandButton -> FocusRecipe(
-                scales = false, fills = false, ring = RingRule.Outside, selected = SelectedLook.None, ringOffset = 3.dp,
+                scales = false, fills = false, ring = RingRule.Outside, selected = SelectedLook.None,
             )
             RailItem -> FocusRecipe(
-                scales = false, fills = true, ring = RingRule.OnTv, selected = SelectedLook.AccentBar,
+                scales = false, fills = true, ring = RingRule.HighContrastOnly, selected = SelectedLook.AccentBar,
             )
         }
 }
@@ -341,20 +367,17 @@ enum class RingRule {
     /** A tile's [FocusStyle.edge] in the accent, always. */
     Edge,
 
-    /** [FocusStyle.ring] on a television, whatever the theme ([focusRingOnTv]). */
-    OnTv,
-
-    /** [FocusStyle.ring] in the Light theme and under High contrast; the Dark fill carries it alone. */
-    LightAndHighContrast,
-
-    /** [FocusStyle.ring] under High contrast only ([focusRingOnHighContrast]): the calm fill swap otherwise. */
+    /**
+     * [FocusStyle.ring] under High contrast only ([focusRingOnHighContrast]): a role that fills shows
+     * the fill alone otherwise, so a control never has a fill and a ring at once.
+     */
     HighContrastOnly,
 
     /** An avatar's ring in the accent, with a [FocusRecipe.HaloWidth] halo outside it. */
     Halo,
 
     /**
-     * A ring that sits [FocusRecipe.offset] outside the shape, on the page and not on a fill, so it
+     * A ring flush with the shape's edge (no gap), on the page and not on a fill, so it
      * is the accent in both themes: [focusRingColor] in the dark theme is the ink for a fill and
      * is 1.5:1 against the page there.
      */
@@ -426,8 +449,6 @@ class FocusRecipe(
      */
     fun ringShown(style: FocusStyle, dark: Boolean): Boolean = when (ring) {
         RingRule.Edge, RingRule.Halo, RingRule.Outside -> true
-        RingRule.OnTv -> style.tv
-        RingRule.LightAndHighContrast -> style.tv && (!dark || style.highContrast)
         RingRule.HighContrastOnly -> style.tv && style.highContrast
     }
 
@@ -452,9 +473,16 @@ class FocusRecipe(
  * every role to 3:1 without composing anything and the two cannot drift.
  */
 object FocusPalette {
-    fun fill(s: ColorScheme, dark: Boolean): Color = if (dark) s.primary else s.primaryContainer
+    /**
+     * The fill. On a television in daylight it is the accent itself, not the pale container: the
+     * fill is the only indicator there (no ring beside it), and the pale blue is a 1.24:1 step on a
+     * near-white page.
+     */
+    fun fill(s: ColorScheme, dark: Boolean, tv: Boolean = false): Color =
+        if (dark || tv) s.primary else s.primaryContainer
 
-    fun onFill(s: ColorScheme, dark: Boolean): Color = if (dark) s.onPrimary else s.onPrimaryContainer
+    fun onFill(s: ColorScheme, dark: Boolean, tv: Boolean = false): Color =
+        if (dark || tv) s.onPrimary else s.onPrimaryContainer
 
     /** [focusRingColor]: the ink on the fill in the dark theme, the accent in daylight. */
     fun ring(s: ColorScheme, dark: Boolean): Color = if (dark) s.onPrimary else s.primary
@@ -469,6 +497,6 @@ object FocusPalette {
      * The colour of a role's selected mark: the accent while not focused, never [fill]. While the
      * role is focused too, the mark moves to [onFill] so it stays visible on the fill.
      */
-    fun selectedMark(s: ColorScheme, dark: Boolean, focused: Boolean): Color =
-        if (focused) onFill(s, dark) else s.primary
+    fun selectedMark(s: ColorScheme, dark: Boolean, focused: Boolean, tv: Boolean = false): Color =
+        if (focused) onFill(s, dark, tv) else s.primary
 }

@@ -367,7 +367,7 @@ private fun NoticesScreen(onBack: () -> Unit) {
                                 true
                             }
                             .focusable(interactionSource = interactions)
-                            .focusRing(focused, RoundedCornerShape(Corner.Large))
+                            .focusRing(focused, RoundedCornerShape(Corner.Large), filled = false)
                     },
                 )
                 .padding(horizontal = if (touch) PhonePad.Side + 16.dp else Tv.SafeH),

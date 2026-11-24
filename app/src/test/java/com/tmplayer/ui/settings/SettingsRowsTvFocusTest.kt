@@ -28,6 +28,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.unit.Dp
@@ -86,6 +87,7 @@ class SettingsRowsTvFocusTest {
     private var ringColour: Color = Color.Unspecified
     private var mutedColour: Color = Color.Unspecified
     private var surfaceColour: Color = Color.Unspecified
+    private var fillColour: Color = Color.Unspecified
 
     private fun show(page: SettingsPage) {
         FormFactor.override(true)
@@ -94,7 +96,8 @@ class SettingsRowsTvFocusTest {
                 val ring = focusRingColor()
                 val muted = Tone.muted
                 val surface = Tone.surface
-                SideEffect { ringColour = ring; mutedColour = muted; surfaceColour = surface }
+                val fill = Tone.focusFill
+                SideEffect { ringColour = ring; mutedColour = muted; surfaceColour = surface; fillColour = fill }
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
                     SettingsScreen(chats = emptyList(), onLoggedOut = {}, initialPage = page, accountFolders = emptyList())
                 }
@@ -360,45 +363,47 @@ class SettingsRowsTvFocusTest {
     // ---- the ring ----------------------------------------------------------------------------
 
     /**
-     * Whether the row titled [title] has a pixel of the ring's colour on its top edge: scanned down
-     * the row's middle column over the outer band, the ring and the keyline of High contrast.
+     * The distinct colours down the row titled [title]'s middle column over its top 10 px, past
+     * the outermost pixel (anti-aliasing): a fill alone is one colour, a fill with a ring is two or more.
      */
-    private fun ringOnTopEdge(title: String): Boolean {
+    private fun topEdgeColours(title: String): Set<Int> {
         val image = rule.onNode(row(title)).captureToImage().toPixelMap()
-        val ring = ringColour
         val x = image.width / 2
-        return (0 until minOf(14, image.height)).any { y ->
-            val c = image[x, y]
-            abs(c.red - ring.red) < 0.02f && abs(c.green - ring.green) < 0.02f && abs(c.blue - ring.blue) < 0.02f
-        }
+        return (2 until minOf(10, image.height)).map { y -> image[x, y].toArgb() }.toSet()
     }
 
-    private fun ringIn(theme: ThemeChoice, high: Boolean) {
+    /** One indicator per row (user, 2026-11-25): the fill alone, or with High contrast focus the ring bands too. */
+    private fun indicatorIn(theme: ThemeChoice, high: Boolean) {
         runBlocking { settings.setThemeChoice(theme); settings.setHighContrastFocus(high) }
         show(SettingsPage.Appearance)
         // Language and the row under it are both on screen at the top of the page: the remote is on the first.
         focus("Language")
         rule.waitForIdle()
-        assertTrue("the focused row draws the ring ($theme, high contrast $high)", ringOnTopEdge("Language"))
-        assertTrue("a row the remote is not on does not ($theme, high contrast $high)", !ringOnTopEdge("Theme"))
+        val focusedColours = topEdgeColours("Language")
+        if (high) {
+            assertTrue("High contrast focus adds its ring bands to the fill ($theme): $focusedColours", focusedColours.size >= 2)
+        } else {
+            assertTrue("the focused row is the fill alone, no ring on it ($theme): $focusedColours", focusedColours == setOf(fillColour.toArgb()))
+        }
+        assertTrue("a row the remote is not on has no fill ($theme, high contrast $high)", fillColour.toArgb() !in topEdgeColours("Theme"))
     }
 
     @Test
-    fun `a focused row draws the ring in the Light theme`() = ringIn(ThemeChoice.Light, high = false)
+    fun `a focused row is the fill alone in the Light theme`() = indicatorIn(ThemeChoice.Light, high = false)
 
     @Test
-    fun `a focused row draws the ring in the Dark theme`() = ringIn(ThemeChoice.Dark, high = false)
+    fun `a focused row is the fill alone in the Dark theme`() = indicatorIn(ThemeChoice.Dark, high = false)
 
     @Test
-    fun `a focused row draws the ring with High contrast focus`() = ringIn(ThemeChoice.Dark, high = true)
+    fun `a focused row adds the ring bands with High contrast focus`() = indicatorIn(ThemeChoice.Dark, high = true)
 
     @Test
-    fun `a focused stepper draws the ring too`() {
+    fun `a focused stepper is the fill alone too`() {
         runBlocking { settings.setThemeChoice(ThemeChoice.Light) }
         show(SettingsPage.Appearance)
         focus("Typeface")
         rule.waitForIdle()
-        assertTrue("the stepper draws the ring", ringOnTopEdge("Typeface"))
+        assertTrue("the stepper draws one indicator: ${topEdgeColours("Typeface")}", topEdgeColours("Typeface") == setOf(fillColour.toArgb()))
     }
 
     @Test

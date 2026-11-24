@@ -85,7 +85,7 @@ fun <T> TabSwitch(
             .height(IntrinsicSize.Min)
             .clip(outer)
             .background(Tone.background)
-            .focusRing(focused, outer)
+            .focusRing(focused, outer, filled = false)
             .semantics {
                 contentDescription = label ?: choices.joinToString(", ") { title(it) }
                 selected?.let { stateDescription = title(it) }

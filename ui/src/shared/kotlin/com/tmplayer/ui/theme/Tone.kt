@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.luminance
  *
  * Read at the point of use. These are cheap: one composition-local lookup and a branch.
  */
+/** How strong a border at rest is on a television, against the phone's full outline. */
+internal const val TV_REST_OUTLINE_ALPHA = 0.5f
+
 object Tone {
 
     /** Behind everything. */
@@ -62,12 +65,12 @@ object Tone {
      */
     val focusFill: Color
         @Composable @ReadOnlyComposable get() =
-            FocusPalette.fill(M3.colorScheme, LocalDarkTheme.current)
+            FocusPalette.fill(M3.colorScheme, LocalDarkTheme.current, LocalFocusStyle.current.tv)
 
     /** What to write on [focusFill]. */
     val onFocusFill: Color
         @Composable @ReadOnlyComposable get() =
-            FocusPalette.onFill(M3.colorScheme, LocalDarkTheme.current)
+            FocusPalette.onFill(M3.colorScheme, LocalDarkTheme.current, LocalFocusStyle.current.tv)
 
     /**
      * The colour every long gradient fades into: the background itself, at full alpha, so a
@@ -112,10 +115,15 @@ object Tone {
         @Composable @ReadOnlyComposable get() =
             M3.colorScheme.background
 
-    /** Hairlines and borders. */
+    /**
+     * Hairlines and borders. On a television a border at rest is a faint 1 dp line, half as strong
+     * (user, 2026-11-25: "thick borders everywhere"): the surface tone already separates a card,
+     * a row or a dialog from the page, and the focus indicator is the thing that must stand out.
+     */
     val outline: Color
         @Composable @ReadOnlyComposable get() =
-            M3.colorScheme.outlineVariant
+            if (LocalFocusStyle.current.tv) M3.colorScheme.outlineVariant.copy(alpha = TV_REST_OUTLINE_ALPHA)
+            else M3.colorScheme.outlineVariant
 
     /** Something failed, or the press about to happen cannot be taken back. */
     val danger: Color

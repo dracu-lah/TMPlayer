@@ -17,8 +17,9 @@ import org.junit.Test
  * [FocusContrast]'s), the selected look is a different thing from the focus fill and shows at the
  * same time as it, and the button and row roles do not scale.
  *
- * The one deliberate exception is the user's 2026-11-01 rule: a bar pill or tab is a calm fill swap
- * with no ring, so in Light without High contrast its fill is the signal and only has to differ.
+ * One indicator per control (user, 2026-11-25): a role that fills shows the fill alone and draws a
+ * ring only under High contrast, so the television's daylight fill is the accent itself and has to
+ * stand 3:1 off the page by itself.
  */
 class FocusRecipeTest {
 
@@ -47,40 +48,37 @@ class FocusRecipeTest {
         val r = role.recipe
         var best = 0f
         if (r.ringShown(style, dark)) best = maxOf(best, FocusContrast.againstSurface(FocusPalette.ringFor(role, s, dark), surface))
-        if (r.fills) best = maxOf(best, FocusContrast.againstSurface(FocusPalette.fill(s, dark), surface))
+        if (r.fills) best = maxOf(best, FocusContrast.againstSurface(FocusPalette.fill(s, dark, style.tv), surface))
         return best
     }
-
-    /** True for the one look that is a fill swap alone and may be under 3:1: a calm bar pill in daylight. */
-    private fun calm(role: FocusRole, dark: Boolean, style: FocusStyle) = !role.recipe.ringShown(style, dark) && role.recipe.fills && !dark
 
     @Test
     fun `focused and rest frames differ by 3 to 1 at the edge, in every role, theme and focus style`() = each { name, role, s, dark, style ->
         for (surface in surfaces(s)) {
             val got = focusedEdge(role, s, dark, style, surface)
-            if (calm(role, dark, style)) {
-                assertEquals("$name is the calm pill", FocusRole.BarPill, role)
-                assertTrue("$name calm fill must differ from the page: $got", got > 1.05f)
-            } else {
-                atLeast("$name against a surface", got)
-            }
+            atLeast("$name against a surface", got)
         }
     }
 
     @Test
     fun `a ring on a fill stands out from the fill`() = each { name, role, s, dark, style ->
         if (role.recipe.fills && role.recipe.ringShown(style, dark)) {
-            atLeast("$name ring on the fill", FocusContrast.againstSurface(FocusPalette.ring(s, dark), FocusPalette.fill(s, dark)))
+            // The ring or, with High contrast, its keyline next to the fill.
+            val onFill = maxOf(
+                FocusContrast.againstSurface(FocusPalette.ring(s, dark), FocusPalette.fill(s, dark, style.tv)),
+                FocusContrast.againstSurface(FocusInk.inner(dark), FocusPalette.fill(s, dark, style.tv)),
+            )
+            atLeast("$name ring on the fill", onFill)
         }
     }
 
     @Test
-    fun `the ink on the fill reads on it`() = each { name, role, s, dark, _ ->
-        if (role.recipe.fills) atLeast("$name ink on the fill", FocusContrast.againstSurface(FocusPalette.onFill(s, dark), FocusPalette.fill(s, dark)))
+    fun `the ink on the fill reads on it`() = each { name, role, s, dark, style ->
+        if (role.recipe.fills) atLeast("$name ink on the fill", FocusContrast.againstSurface(FocusPalette.onFill(s, dark, style.tv), FocusPalette.fill(s, dark, style.tv)))
     }
 
     @Test
-    fun `the selected look differs from rest and from the focus fill, and shows with it`() = each { name, role, s, dark, _ ->
+    fun `the selected look differs from rest and from the focus fill, and shows with it`() = each { name, role, s, dark, style ->
         val r = role.recipe
         if (r.selected == SelectedLook.None) return@each
         // Differs from the rest frame: the accent mark stands out from the page.
@@ -90,7 +88,7 @@ class FocusRecipeTest {
         assertFalse("$name selected must not use the focus ring", r.selected.usesRing)
         if (r.selected != SelectedLook.Tick) assertTrue("$name selected mark has a thickness", r.selected.mark > 0.dp)
         // Both at once: the mark still shows on the fill.
-        if (r.fills) atLeast("$name selected mark on the fill", FocusContrast.againstSurface(FocusPalette.selectedMark(s, dark, focused = true), FocusPalette.fill(s, dark)))
+        if (r.fills) atLeast("$name selected mark on the fill", FocusContrast.againstSurface(FocusPalette.selectedMark(s, dark, focused = true, tv = style.tv), FocusPalette.fill(s, dark, style.tv)))
     }
 
     @Test
@@ -127,29 +125,40 @@ class FocusRecipeTest {
     }
 
     @Test
-    fun `the button ring is added in light and under High contrast, a row's on every television`() {
+    fun `a button, a row and a rail item draw the fill alone, a ring only under High contrast`() {
         val plain = FocusStyle.tv(highContrast = false)
         val high = FocusStyle.tv(highContrast = true)
-        assertTrue(FocusRole.Button.recipe.ringShown(plain, dark = false))
-        assertFalse(FocusRole.Button.recipe.ringShown(plain, dark = true))
-        assertTrue(FocusRole.Button.recipe.ringShown(high, dark = true))
-        for (dark in listOf(true, false)) {
-            assertTrue(FocusRole.Row.recipe.ringShown(plain, dark))
-            assertFalse(FocusRole.Row.recipe.ringShown(FocusStyle.Standard, dark))
+        for (role in listOf(FocusRole.Button, FocusRole.Row, FocusRole.RailItem, FocusRole.BarPill)) {
+            for (dark in listOf(true, false)) {
+                assertFalse("${role.name} plain, dark=$dark", role.recipe.ringShown(plain, dark))
+                assertTrue("${role.name} high contrast, dark=$dark", role.recipe.ringShown(high, dark))
+                assertFalse("${role.name} on the phone", role.recipe.ringShown(FocusStyle.Standard, dark))
+            }
         }
+    }
+
+    @Test
+    fun `one indicator per control, a fill never comes with a ring unless High contrast asks for one`() {
+        for ((name, style) in styles) for (dark in listOf(true, false)) for (role in FocusRole.entries) {
+            val r = role.recipe
+            if (r.fills && r.ringShown(style, dark)) assertTrue("$name ${role.name}: a fill and a ring", style.highContrast)
+        }
+    }
+
+    @Test
+    fun `a television's ring and edge are 2 dp at most and a tile grows 1_04 at most`() {
+        val plain = FocusStyle.tv(highContrast = false)
+        assertEquals(2.dp, plain.ring)
+        assertEquals(2.dp, plain.edge)
+        assertTrue(plain.scale <= 1.04f)
     }
 
     @Test
     fun `the avatar, the brand button and the rail carry their numbers`() {
         assertEquals(48.dp, FocusRole.Avatar.recipe.rect)
-        assertEquals(3.dp, FocusRole.BrandButton.recipe.ringOffset)
-        for ((name, style) in styles) {
-            val r = FocusRole.BrandButton.recipe
-            assertTrue("$name: the offset ring fits the reserved clearance", r.offset(style) + style.ring + style.outer <= Tv.FocusClearance)
-            assertTrue("$name: a gap is kept", r.offset(style) >= 2.dp)
-        }
-        assertEquals(3.dp, FocusRole.BrandButton.recipe.offset(FocusStyle.tv(false)))
-        assertEquals(2.dp, FocusRole.BrandButton.recipe.offset(FocusStyle.tv(true)))
+        // No gap ring (user, 2026-11-25): the brand button's ring is flush with its edge.
+        assertEquals(0.dp, FocusRole.BrandButton.recipe.ringOffset)
+        for ((_, style) in styles) assertEquals(0.dp, FocusRole.BrandButton.recipe.offset(style))
         assertEquals(SelectedLook.None, FocusRole.BrandButton.recipe.selected)
         assertEquals(SelectedLook.AccentBar, FocusRole.RailItem.recipe.selected)
         assertEquals(3.dp, FocusRecipe.RailBar)
@@ -168,10 +177,12 @@ class FocusRecipeTest {
 
     @Test
     fun `the palette is the one Tone reads`() {
-        // Tone.focusFill, Tone.onFocusFill and focusRingColor call FocusPalette (one source). Fill is primary in the dark theme and primaryContainer in daylight; the ring is
-        // the ink on the fill in the dark and the accent in daylight.
+        // Tone.focusFill, Tone.onFocusFill and focusRingColor call FocusPalette (one source). Fill is primary in the dark theme and
+        // on a television, primaryContainer in daylight on the phone; the ring is the ink on the fill in the dark and the accent in daylight.
         val s = TmSchemes.of(dark = false, black = false, Accent.entries.first())
         assertEquals(s.primaryContainer, FocusPalette.fill(s, dark = false))
+        assertEquals(s.primary, FocusPalette.fill(s, dark = false, tv = true))
+        assertEquals(s.onPrimary, FocusPalette.onFill(s, dark = false, tv = true))
         assertEquals(s.primary, FocusPalette.ring(s, dark = false))
         val d = TmSchemes.of(dark = true, black = false, Accent.entries.first())
         assertEquals(d.primary, FocusPalette.fill(d, dark = true))

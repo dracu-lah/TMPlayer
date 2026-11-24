@@ -119,9 +119,9 @@ fun TmButton(
  * TV Material's button grows 1.1 times under focus, so in a full width list, a dialog or a row of
  * buttons beside the screen's edge it spilled past its column and was cut. Here it never grows
  * ([FocusRole.Button]: no scale, a press sinks it to 0.98) and shows focus the way the recipe says:
- * the fill swap (`Tone.focusFill`, in the colours the callers pass), plus a ring in the Light theme
- * and under High contrast ([focusRingOnTvButton]). TV Material's own focus border is switched off,
- * so the only ring is the one [FocusStyle] draws inside the button's bounds.
+ * the fill swap alone (`Tone.focusFill`, in the colours the callers pass), plus a ring under High
+ * contrast only ([focusRingOnTvButton]). TV Material's own focus border is switched off, so a
+ * button never draws a fill and a ring at once.
  *
  * Every TV Material clickable goes through here: `TvButtonImportGuardTest` fails on any other.
  */
@@ -159,9 +159,8 @@ private fun TvButtonBase(
 private const val PRESSED_SCALE = 0.98f
 
 /**
- * The [FocusRole.Button] ring on a television: [FocusStyle.ring] round the pill, inside its bounds,
- * in the Light theme (where the pale fill is a 1.24:1 step on the page) and under High contrast
- * (with its outer line and keyline); nothing in the Dark theme, whose fill carries the focus alone.
+ * The [FocusRole.Button] ring on a television: only under High contrast (with its outer line and
+ * keyline), round the pill inside its bounds; otherwise the fill carries the focus alone.
  */
 @Composable
 private fun Modifier.focusRingOnTvButton(focused: Boolean): Modifier {

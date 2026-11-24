@@ -539,7 +539,7 @@ internal fun DetailFacts(
                 if (remote) {
                     // Read as one block by a screen reader: every fact and the synopsis in order (WP-90).
                     Modifier.semantics(mergeDescendants = true) { role = Role.Button }
-                        .focusRing(focused, shape).focusable(interactionSource = interactions)
+                        .focusRing(focused, shape, filled = false).focusable(interactionSource = interactions)
                 } else {
                     Modifier
                 },

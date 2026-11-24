@@ -73,7 +73,7 @@ class FocusContrastTest {
     }
 
     @Test
-    fun `the television's focus is thicker and bigger than the phone's, and high contrast more so`() {
+    fun `the television's focus is thin (2 dp, 1_04) and high contrast adds to it`() {
         val phone = FocusStyle.Standard
         val tv = FocusStyle.tv(highContrast = false)
         val high = FocusStyle.tv(highContrast = true)
@@ -81,7 +81,9 @@ class FocusContrastTest {
         assertEquals(3.dp, phone.edge)
         assertEquals(1.05f, phone.scale, 0f)
         assertTrue(!phone.tv && !phone.highContrast)
-        assertTrue(tv.ring > phone.ring && tv.edge > phone.edge && tv.scale > phone.scale)
+        assertTrue(tv.ring <= phone.ring && tv.edge < phone.edge && tv.scale <= 1.04f)
+        assertEquals(2.dp, tv.ring)
+        assertEquals(2.dp, tv.edge)
         assertTrue(tv.tv && !tv.highContrast)
         assertTrue(high.ring > tv.ring && high.edge > tv.edge && high.highContrast && high.tv)
         assertTrue(high.outer > 0.dp && high.inner > 0.dp && high.outer >= high.inner)

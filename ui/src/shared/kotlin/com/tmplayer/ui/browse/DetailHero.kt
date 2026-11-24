@@ -436,7 +436,7 @@ fun Synopsis(
         modifier = modifier
             .clip(shape)
             .background(if (focused) Tone.surfaceHigh else Color.Transparent)
-            .focusRing(focused, shape)
+            .focusRing(focused, shape, filled = false)
             .then(
                 if (pressable) {
                     Modifier.clickable(interactionSource = interactions, indication = if (tv) null else LocalIndication.current, role = Role.Button) { open = !open }

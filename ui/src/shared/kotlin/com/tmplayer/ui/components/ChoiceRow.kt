@@ -94,7 +94,7 @@ fun ChoiceRow(
         modifier
             .heightIn(min = if (detail == null && tags.isEmpty()) 56.dp else 72.dp)
             .clip(shape)
-            .focusRing(focused, shape)
+            .focusRing(focused, shape, filled = false)
             .then(target)
             .padding(horizontal = LocalChoiceInset.current, vertical = 2.dp)
             .alpha(if (enabled) 1f else DISABLED_ALPHA),

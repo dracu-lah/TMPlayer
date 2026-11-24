@@ -215,7 +215,7 @@ fun TitleTick(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clip(shape)
-            .focusRing(focused, shape)
+            .focusRing(focused, shape, filled = false)
             .toggleable(
                 value = checked,
                 interactionSource = interactions,

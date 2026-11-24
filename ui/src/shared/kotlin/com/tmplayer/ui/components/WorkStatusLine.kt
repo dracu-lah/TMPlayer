@@ -342,7 +342,7 @@ fun WorkStatusLine(
                     if (wordsFocused && !it.isFocused) holding = false
                     wordsFocused = it.isFocused
                 }
-                .focusRing(wordsFocused, WORDS_SHAPE)
+                .focusRing(wordsFocused, WORDS_SHAPE, filled = false)
                 // Focusable only while it holds the focus Try again handed it.
                 .focusable(enabled = holding)
                 .padding(horizontal = if (holding) 8.dp else 0.dp)
