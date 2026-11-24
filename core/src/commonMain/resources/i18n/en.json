@@ -2336,7 +2336,7 @@
     "key_digits": "0 to 9",
     "key_digits_does": "Jump to that tenth of the video; 5 is halfway",
     "key_down": "Down, controls up",
-    "key_down_does": "The button row: subtitles, audio, speed, picture shape (a press steps through Fit, Crop and Stretch), and More at the end",
+    "key_down_does": "The button row: subtitles, audio, speed, picture shape (a press steps through Original, Fill and Stretch), and More at the end",
     "key_hold_ok": "Hold OK, controls down",
     "key_hold_ok_does": "After 1.5 seconds, choose another app to open the video in. With the controls up OK is a plain press",
     "key_hold_ok_locked": "Hold OK, screen locked",

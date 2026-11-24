@@ -15,7 +15,8 @@ import kotlin.math.roundToInt
  */
 object PlaybackSpeed {
 
-    val CHOICES = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+    /** The tiles of the speed page; 2.5 and 3 are there (WP-30) since the page and the memory both reach 4. */
+    val CHOICES = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 
     const val DEFAULT = 1f
 
