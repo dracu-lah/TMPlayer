@@ -50,6 +50,11 @@ open class DefaultTrackSelector(@Suppress("UNUSED_PARAMETER") context: android.c
 
             override fun setPreferredAudioLanguage(language: String?): Builder = apply { super.setPreferredAudioLanguage(language) }
 
+            // The ordered lists of Settings (WP-80), first match winning, kept as this Builder so the chain goes on.
+            override fun setPreferredTextLanguages(vararg languages: String): Builder = apply { super.setPreferredTextLanguages(*languages) }
+
+            override fun setPreferredAudioLanguages(vararg languages: String): Builder = apply { super.setPreferredAudioLanguages(*languages) }
+
             override fun build(): Parameters = Parameters(this)
         }
     }
