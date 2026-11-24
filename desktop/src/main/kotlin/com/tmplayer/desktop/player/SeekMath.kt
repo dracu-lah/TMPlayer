@@ -78,6 +78,17 @@ object SeekMath {
         else -> null
     }
 
+    /**
+     * What one wheel event does once [stepper] has counted it (WP-48): the action of
+     * [wheelAction], once for each whole step the event completed (none for the small deltas of a
+     * trackpad swipe until they add up, two at most for one event).
+     */
+    fun wheelActions(stepper: WheelStepper, dx: Float, dy: Float, shift: Boolean, wheelSeeks: Boolean, nowMs: Long): List<PlayerAction> {
+        val (sx, sy) = stepper.feed(dx, dy, nowMs)
+        val action = wheelAction(sx.toFloat(), sy.toFloat(), shift, wheelSeeks) ?: return emptyList()
+        return List(maxOf(abs(sy), if (sy == 0) abs(sx) else 0)) { action }
+    }
+
     /** ] and [: a tenth at a time, rounded so 1.1 does not become 1.0999999. */
     fun fineSpeed(current: Float, up: Boolean): Float {
         val next = current + if (up) FINE_SPEED_STEP else -FINE_SPEED_STEP

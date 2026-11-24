@@ -1731,6 +1731,7 @@ fun PlayerScreen(
 
     val dispatchNow by rememberUpdatedState(::dispatch)
     val wheelSeeksNow by rememberUpdatedState(desktop.wheelSeeks)
+    val wheelStepper = remember { WheelStepper() }
 
     fun loadSubtitle(path: String) {
         if (phase != Phase.Playing) return
@@ -1989,8 +1990,10 @@ fun PlayerScreen(
                         zoomStep(-delta.y, event.changes.firstOrNull()?.position)
                         return@onPointerEvent
                     }
-                    SeekMath.wheelAction(delta.x, delta.y, event.keyboardModifiers.pointerShift, wheelSeeksNow)
-                        ?.let(dispatchNow)
+                    // Counted into whole steps (WP-48): a trackpad swipe is dozens of small deltas.
+                    val at = event.changes.firstOrNull()?.uptimeMillis ?: System.currentTimeMillis()
+                    SeekMath.wheelActions(wheelStepper, delta.x, delta.y, event.keyboardModifiers.pointerShift, wheelSeeksNow, at)
+                        .forEach(dispatchNow)
                 }
                 // Hidden with the controls only while a video plays: the loading, end and error
                 // sheets have no controls to bring it back with, and the sheets are for the mouse.
