@@ -54,6 +54,11 @@ enum class PlayerMenuEntry {
     /** Repeat this video (EG-F52): a switch; off again when another video starts, and not with the A-B repeat. */
     RepeatVideo,
     /**
+     * The chapters as a page (WP-26): each with its name and start, the one playing ticked, OK
+     * jumps. Only for a file with two or more ([Chapters.listable]).
+     */
+    Chapters,
+    /**
      * A chaptered file only ([MkvChapters]). Lines rather than keys, as the frame steps are: Left
      * and Right on the bare picture jump and on the bar travel, and 1.16.0's key model stays.
      */
@@ -137,6 +142,8 @@ enum class PhoneMenuEntry {
     AbLoop,
     /** Repeat this video, as on the television: a switch that leaves the panel up. */
     RepeatVideo,
+    /** The chapters as a page, as on the television: only for a file with two or more. */
+    Chapters,
     /** A chaptered file only, as on the television. */
     NextChapter,
     PreviousChapter,
@@ -200,6 +207,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
     PhoneMenuEntry.AbLoop -> PlayerMenu.loopLabel(loop)
     PhoneMenuEntry.RepeatVideo -> L.playerRepeatVideo
+    PhoneMenuEntry.Chapters -> L.playerChapters
     PhoneMenuEntry.NextChapter -> L.playerChapterNext
     PhoneMenuEntry.PreviousChapter -> L.playerChapterPrevious
     PhoneMenuEntry.NextFrame -> L.playerFrameNext
@@ -260,7 +268,8 @@ object PlayerMenu {
      * by its message. Their lines sit with the repeat and the frame steps, the other ways of
      * working through one moment of a video.
      *
-     * [chapters] is whether the file has chapter marks, which adds the chapter steps.
+     * [chapters] is whether the file has chapter marks, which adds the chapter steps; [chapterList]
+     * is whether it has enough of them for a page of the chapters (WP-26, [Chapters.listable]).
      *
      * [stereo] is whether 3D video is offered: not while a cast plays it, and
      * [pictureShape] the same for the shapes' page. [reportStutter] is false on a cast. [copyLinkAtTime] is false for a chat that restricts saving, a video with no message and one built from pieces.
@@ -287,6 +296,7 @@ object PlayerMenu {
         paused: Boolean = false,
         bookmarks: Boolean = false,
         chapters: Boolean = false,
+        chapterList: Boolean = false,
         stereo: Boolean = false,
         pictureShape: Boolean = false,
         reportStutter: Boolean = false,
@@ -319,6 +329,7 @@ object PlayerMenu {
         // Playback
         add(PlayerMenuEntry.AbLoop)
         if (repeatVideo) add(PlayerMenuEntry.RepeatVideo)
+        if (chapterList) add(PlayerMenuEntry.Chapters)
         if (chapters) {
             add(PlayerMenuEntry.NextChapter)
             add(PlayerMenuEntry.PreviousChapter)
@@ -359,7 +370,7 @@ object PlayerMenu {
         PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.VolumeBoost, PlayerMenuEntry.NightMode,
         PlayerMenuEntry.EvenVolume,
         -> PlayerMenuGroup.Sound
-        PlayerMenuEntry.RepeatVideo, PlayerMenuEntry.AbLoop, PlayerMenuEntry.NextChapter,
+        PlayerMenuEntry.RepeatVideo, PlayerMenuEntry.AbLoop, PlayerMenuEntry.Chapters, PlayerMenuEntry.NextChapter,
         PlayerMenuEntry.PreviousChapter, PlayerMenuEntry.NextFrame, PlayerMenuEntry.PreviousFrame,
         PlayerMenuEntry.OtherEngine, PlayerMenuEntry.StartOver, PlayerMenuEntry.AddBookmark,
         PlayerMenuEntry.Bookmarks, PlayerMenuEntry.MarkIntro, PlayerMenuEntry.RemoveIntroMark,
@@ -394,7 +405,7 @@ object PlayerMenu {
      * it; [openInAnotherApp] false for a chat that restricts saving; [markWatched]
      * needs a message to point at, and so does [bookmarks]; [saveToDownloads] only while the video
      * can still become one; [paused] adds the frame steps. Lines rather than buttons, so the row
-     * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
+     * CP37 cleared stays clear. [chapters] adds the chapter steps and [chapterList] the page of them. [saveFrame] is false for a
      * chat that restricts saving (or while that is still being asked), whose frames stay in it.
      * [pictureShape] is whether there is a picture to shape (not a cast), and
      * [stereo] offers 3D video beside it; Speed follows them. [reportStutter] adds Report stutter
@@ -413,6 +424,7 @@ object PlayerMenu {
         paused: Boolean = false,
         bookmarks: Boolean = false,
         chapters: Boolean = false,
+        chapterList: Boolean = false,
         saveFrame: Boolean = false,
         pictureShape: Boolean = false,
         stereo: Boolean = false,
@@ -441,6 +453,7 @@ object PlayerMenu {
         add(PhoneMenuEntry.SleepTimer)
         add(PhoneMenuEntry.AbLoop)
         if (repeatVideo) add(PhoneMenuEntry.RepeatVideo)
+        if (chapterList) add(PhoneMenuEntry.Chapters)
         if (chapters) {
             add(PhoneMenuEntry.NextChapter)
             add(PhoneMenuEntry.PreviousChapter)

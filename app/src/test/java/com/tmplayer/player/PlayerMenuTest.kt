@@ -52,6 +52,23 @@ class PlayerMenuTest {
     }
 
     @Test
+    fun `the chapters page comes only with two or more chapters, in the Playback group before the steps`() {
+        assertFalse(PlayerMenuEntry.Chapters in PlayerMenu.tvEntries(pictureInPicture = true, chapters = true))
+        assertFalse(PhoneMenuEntry.Chapters in PlayerMenu.phoneEntries(true, true, true, true, chapters = true))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, chapters = true, chapterList = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.Chapters) + 1, tv.indexOf(PlayerMenuEntry.NextChapter))
+        assertEquals(PlayerMenuGroup.Playback, PlayerMenu.groupOf(PlayerMenuEntry.Chapters))
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, chapters = true, chapterList = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.Chapters) + 1, phone.indexOf(PhoneMenuEntry.NextChapter))
+        assertEquals("Chapters", PhoneMenuEntry.Chapters.label())
+        // A video with no chapters keeps the menu exactly as it was.
+        assertEquals(
+            PlayerMenu.tvEntries(pictureInPicture = true),
+            PlayerMenu.tvEntries(pictureInPicture = true, chapters = false, chapterList = false),
+        )
+    }
+
+    @Test
     fun `the chapter steps come only with a chaptered file, after the repeat line`() {
         assertFalse(PlayerMenuEntry.NextChapter in PlayerMenu.tvEntries(pictureInPicture = true))
         val tv = PlayerMenu.tvEntries(pictureInPicture = true, chapters = true)
@@ -118,6 +135,7 @@ class PlayerMenuTest {
             paused = true,
             bookmarks = true,
             chapters = true,
+            chapterList = true,
             stereo = true,
             pictureShape = true,
             reportStutter = true,
@@ -145,6 +163,7 @@ class PlayerMenuTest {
                 paused = true,
                 bookmarks = true,
                 chapters = true,
+                chapterList = true,
                 stereo = true,
                 pictureShape = true,
                 reportStutter = true,
@@ -230,7 +249,7 @@ class PlayerMenuTest {
                 addToList = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, addToList = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, addToList = true).toSet())
     }
 
     @Test
@@ -403,6 +422,7 @@ class PlayerMenuTest {
         paused = true,
         bookmarks = true,
         chapters = true,
+        chapterList = true,
         stereo = true,
         pictureShape = true,
         reportStutter = true,

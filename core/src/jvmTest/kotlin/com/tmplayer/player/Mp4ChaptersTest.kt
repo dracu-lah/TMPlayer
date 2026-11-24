@@ -204,4 +204,11 @@ class Mp4ChaptersTest {
         assertEquals(listOf(Chapter(0, "Only")), runBlocking { FileChapters.read(null, reader(file)) })
         assertTrue(runBlocking { FileChapters.read(null, reader(ByteArray(64))) }.isEmpty())
     }
+
+    @Test
+    fun `an unsorted chpl list with a repeated time is sorted and kept once`() {
+        val nero = chpl(900_000L to "Credits", 0L to "Intro", 900_000L to "Again", 312_500L to "Part two")
+        val file = faststart(emptyList(), emptyList(), nero = nero, referenced = false)
+        assertEquals(listOf(0L, 312_500L, 900_000L), read(file).map { it.startMs })
+    }
 }

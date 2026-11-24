@@ -56,4 +56,4 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-export type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'submaker' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | null
+export type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | 'submaker' | 'chatsubs' | 'goto' | 'rotate' | 'boost' | 'link' | 'chapters' | null

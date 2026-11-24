@@ -150,7 +150,7 @@ internal data class Flash(val kind: Kind, val text: String, val id: Long) {
     enum class Kind { SeekBack, SeekForward, Text, Volume }
 }
 
-internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep, Options, SubtitleStyle, Bookmarks, Copies, Stereo, ChatSubtitles }
+internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep, Options, SubtitleStyle, Bookmarks, Copies, Stereo, ChatSubtitles, Chapters }
 
 /** Where an open menu hangs: at the cursor for a right click, or under a button. */
 internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offset = Offset.Zero) {
@@ -172,7 +172,7 @@ internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offse
         MenuPage.Audio -> if (anchor == Anchor.Audio) null else MenuPage.Main
         MenuPage.Subtitles -> if (anchor == Anchor.Subtitles) null else MenuPage.Main
         MenuPage.Speed -> if (anchor == Anchor.Speed) null else MenuPage.Main
-        MenuPage.Sleep -> MenuPage.Options
+        MenuPage.Sleep, MenuPage.Chapters -> MenuPage.Options
         MenuPage.Options, MenuPage.Shape, MenuPage.Bookmarks, MenuPage.Copies, MenuPage.Stereo -> MenuPage.Main
         MenuPage.SubtitleStyle -> if (anchor == Anchor.Subtitles) MenuPage.Subtitles else MenuPage.Main
         MenuPage.ChatSubtitles -> MenuPage.Subtitles
@@ -2105,6 +2105,11 @@ fun PlayerScreen(
                         MenuAction.ToggleRepeatVideo -> toggleRepeatVideo()
                         is MenuAction.Stereo -> setStereo(action.stereo)
                         is MenuAction.Sleep -> setSleepTimer(action.minutes)
+                        is MenuAction.Chapter -> {
+                            jumpTo(action.startMs)
+                            val index = Chapters.at(status.chapters, action.startMs)
+                            if (index >= 0) showFlash(Flash.Kind.Text, Chapters.label(status.chapters, index))
+                        }
                         is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
                         is MenuAction.AudioDelay -> stepAudioDelay(action.direction)
                         is MenuAction.SubtitleLook -> setSubtitleStyle(action.style)

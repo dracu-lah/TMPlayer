@@ -193,6 +193,9 @@ internal sealed interface MenuAction {
     /** Minutes from now, [SleepTimer.END_OF_VIDEO], or null to turn the timer off. */
     data class Sleep(val minutes: Int?) : MenuAction
 
+    /** The Chapters page's pick (WP-26): play from the start of the chapter at [startMs]. */
+    data class Chapter(val startMs: Long) : MenuAction
+
     /** One step later (1) or earlier (-1), or 0 for back in step. The menu stays open for more. */
     data class SubtitleDelay(val direction: Int) : MenuAction
     data class AudioDelay(val direction: Int) : MenuAction
@@ -1164,6 +1167,10 @@ internal fun PlayerMenu(
                 Entry(s.playerGoToTime, trailing = s.playerKeyCommandG(commandKey(s))) { pick(MenuAction.Do(PlayerAction.GoToTime)) }
                 // An episode only: two presses, the start and the end; the menu closes so the picture shows.
                 if (markIntro != null) Entry(markIntro, trailing = "O") { pick(MenuAction.Do(PlayerAction.MarkIntro)) }
+                // The chapters as a page (WP-26), from two marks; the steps stay beside it.
+                if (Chapters.listable(status.chapters)) {
+                    Entry(s.playerChapters, trailing = Chapters.labelAt(status.chapters, status.positionMs)) { page(MenuPage.Chapters) }
+                }
                 // A chaptered file only; the menu stays open for the next step, as the frame steps do.
                 if (status.chapters.isNotEmpty()) {
                     Entry(s.playerChapterNext) { onAction(MenuAction.Do(PlayerAction.ChapterStep(forward = true))) }
@@ -1236,6 +1243,15 @@ internal fun PlayerMenu(
                 }
                 SleepTimer.CHOICES.forEach { minutes ->
                     Entry(SleepTimer.label(minutes)) { pick(MenuAction.Sleep(minutes)) }
+                }
+            }
+            MenuPage.Chapters -> {
+                // Sorted and de-duplicated by the page's own guard; the one playing is ticked and the
+                // time is a figure, kept left to right in a right-to-left language.
+                Chapters.rows(status.chapters, status.positionMs).forEach { row ->
+                    Entry(row.title, checked = row.current, detail = "\u2066" + s.messages.formatter.clock(row.startMs) + "\u2069") {
+                        pick(MenuAction.Chapter(row.startMs))
+                    }
                 }
             }
             MenuPage.Speed -> PlaybackSpeed.CHOICES.forEach { speed ->
@@ -1394,6 +1410,7 @@ private fun menuPageTitle(page: MenuPage, s: Strings): String = when (page) {
     MenuPage.Subtitles -> s.playerSubtitles
     MenuPage.ChatSubtitles -> s.tracksInChat
     MenuPage.Speed -> s.playerPlaybackSpeed
+    MenuPage.Chapters -> s.playerChapters
 }
 
 /**

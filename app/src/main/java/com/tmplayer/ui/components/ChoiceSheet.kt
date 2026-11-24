@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -403,6 +406,32 @@ fun ColumnScope.ChoiceList(content: @Composable ColumnScope.() -> Unit) {
                 .then(if (touch) Modifier.bleed(PANEL_PAD_TOUCH) else Modifier)
                 .verticalScroll(scroll)
                 .padding(vertical = if (touch) 0.dp else Tv.FocusClearance),
+            verticalArrangement = Arrangement.spacedBy(if (touch) 0.dp else 6.dp),
+            content = content,
+        )
+    }
+}
+
+/**
+ * [ChoiceList] for a list that can be long (the player's chapters, up to hundreds): only the lines
+ * on screen are composed. The same padding and divider rules as [ChoiceList]; the caller owns
+ * [state] (to start on a line, and to jump by Page keys with `pageKeys`).
+ */
+@Composable
+fun ColumnScope.ChoiceLazyList(state: LazyListState, content: LazyListScope.() -> Unit) {
+    val touch = isTouch()
+    val scrolls = LocalListScrolls.current
+    val outgrown = state.canScrollForward || state.canScrollBackward
+    SideEffect { if (scrolls != null && scrolls.value != outgrown) scrolls.value = outgrown }
+    CompositionLocalProvider(LocalChoiceInset provides if (touch) PANEL_PAD_TOUCH else 20.dp) {
+        LazyColumn(
+            state = state,
+            modifier = Modifier
+                .weight(1f, fill = false)
+                // A lazy list cannot be measured without a bound: never let one reach past the screen's height.
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp)
+                .then(if (touch) Modifier.bleed(PANEL_PAD_TOUCH) else Modifier),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = if (touch) 0.dp else Tv.FocusClearance),
             verticalArrangement = Arrangement.spacedBy(if (touch) 0.dp else 6.dp),
             content = content,
         )

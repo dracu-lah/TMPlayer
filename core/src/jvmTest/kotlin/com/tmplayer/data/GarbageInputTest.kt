@@ -969,6 +969,13 @@ class GarbageInputTest {
                 })
                 UserSkipMarks.segmentsFor("1:1", "k", 1_400_000)
             }
+            survive("Chapters.rows", text) {
+                val random = Random(text.hashCode())
+                val marks = List(random.nextInt(0, 8)) {
+                    com.tmplayer.player.Chapter(random.nextLong(-5_000, 2_000_000), if (it % 2 == 0) text else null)
+                }
+                com.tmplayer.player.Chapters.rows(marks, random.nextLong(-5_000, 2_000_000))
+            }
             survive("SkipSession.chapters", text) {
                 SkipSession().apply {
                     chapters(listOf(com.tmplayer.player.Chapter(Random(text.hashCode()).nextLong(-5, 2_000_000), text)))

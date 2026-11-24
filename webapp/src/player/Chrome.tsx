@@ -10,7 +10,7 @@ import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, v
 import { SHAPES } from './shape'
 import { percent, zoomed } from './zoom'
 import './zoom.css'
-import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric } from './chapters'
+import { chapterAt, chapterListable, chapterMarks, chapterNext, chapterPrevious, chapterRows, isGeneric } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
 import { MsoneSheet } from './msone-sheet'
@@ -973,6 +973,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Entry icon={RepeatIcon} text={t('player.repeat_video')} trailing={repeatOn() ? t('common.on') : t('common.off')} onClick={toggleRepeatVideo} />
                         <Entry text={t('settings.keep_repeat')} trailing={keepRepeat() ? t('common.on') : t('common.off')} onClick={() => changeKeepRepeat(!keepRepeat())} />
                         <Entry text={t('settings.play_chat_order')} trailing={chatOrder() ? t('common.on') : t('common.off')} onClick={() => changeChatOrder(!chatOrder())} />
+                        {/* The chapters as a page (WP-26), from two marks; the steps stay beside it. */}
+                        <Show when={chapterListable(chapters())}>
+                            <Entry text={t('player.chapters')} trailing={chapterTextAt(v.currentTime) ?? undefined} onClick={() => setSheet('chapters')} />
+                        </Show>
                         <Show when={chapters().length}>
                             <Entry text={t('player.chapter_next')} trailing={plain() ? undefined : `${t(MAC ? 'keys.cmd' : 'keys.ctrl')}+Right`} onClick={() => (setSheet(null), stepChapter(true))} />
                             <Entry text={t('player.chapter_previous')} trailing={plain() ? undefined : `${t(MAC ? 'keys.cmd' : 'keys.ctrl')}+Left`} onClick={() => (setSheet(null), stepChapter(false))} />
@@ -994,6 +998,21 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         </Show>
                         <For each={SLEEP_CHOICES}>
                             {(m) => <Choice text={sleepLabel(m)} on={sleepPick() === m && (sleepAt() !== null || sleepEnd())} phone={phone()} onClick={() => (setSleep(m), setSheet(null))} />}
+                        </For>
+                    </Pick>
+                </Match>
+                <Match when={sheet() === 'chapters'}>
+                    <Pick title={t('player.chapters')} panel onBack={() => setSheet('options')}>
+                        <For each={chapterRows(chapters(), v.currentTime, (number) => t('player.chapter_untitled', { number }))}>
+                            {(row) => (
+                                <Choice
+                                    text={row.title}
+                                    detail={`\u2066${clock(row.start)}\u2069`}
+                                    on={row.current}
+                                    phone={phone()}
+                                    onClick={() => (setSheet(null), seekTo(row.start), flash(chapterTextAt(row.start) ?? row.title))}
+                                />
+                            )}
                         </For>
                     </Pick>
                 </Match>

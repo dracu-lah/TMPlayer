@@ -5,6 +5,9 @@ import com.tmplayer.i18n.L
 /** One chapter mark of the file: where it starts, and its name when the file gives one. */
 data class Chapter(val startMs: Long, val title: String? = null)
 
+/** One line of the Chapters page: its place in the sorted list, its words, where it starts, and whether it is the one playing. */
+data class ChapterRow(val index: Int, val title: String, val startMs: Long, val current: Boolean)
+
 /**
  * Chapter navigation, the way mpv and every disc player do it: forward goes to the next mark,
  * back goes to the start of the chapter playing, or to the one before when that start was only
@@ -27,6 +30,31 @@ object Chapters {
      * chapter just jumped to still counts as the one playing.
      */
     const val LANDING_SLACK_MS = 1_000L
+
+    /** The Chapters page is offered from this many marks: one mark is only the start of the video. */
+    const val LIST_FROM = 2
+
+    /** Whether the file has enough chapters for a page of them. */
+    fun listable(chapters: List<Chapter>): Boolean = chapters.size >= LIST_FROM
+
+    /**
+     * The lines of the Chapters page: sorted by start, one per start (a file that lists two marks at
+     * one time keeps the first), a start below zero taken as zero, and a chapter with no name worth
+     * showing numbered ("Chapter 3"). [positionMs] marks the one playing; none is marked before
+     * the first mark. The parsers sort already, and the desktop's mpv gives its own order: this is
+     * the page's own guard, so a broken file shows a list that still reads and jumps.
+     */
+    fun rows(chapters: List<Chapter>, positionMs: Long): List<ChapterRow> {
+        val sorted = chapters
+            .map { Chapter(it.startMs.coerceAtLeast(0L), it.title) }
+            .sortedBy { it.startMs }
+            .distinctBy { it.startMs }
+        val playing = at(sorted, positionMs)
+        return sorted.mapIndexed { index, chapter ->
+            val name = chapter.title?.trim()?.takeIf { it.isNotEmpty() }
+            ChapterRow(index, name ?: L.playerChapterUntitled(index + 1), chapter.startMs, index == playing)
+        }
+    }
 
     /** The chapter playing at [positionMs], or -1 before the first mark. */
     fun at(chapters: List<Chapter>, positionMs: Long): Int =

@@ -163,4 +163,11 @@ class MkvChaptersTest {
         assertEquals("Chapter 2 of 3: Part A", Chapters.labelAt(list, 100_000))
         assertEquals(null, Chapters.labelAt(listOf(Chapter(10_000, null)), 0))
     }
+
+    @Test
+    fun `two chapters at one time keep one, and an unsorted list is sorted`() {
+        val bytes = file(info, chapters(edition(atom(90_000, "Late"), atom(0, "Early"), atom(90_000, "Same time"))), cluster)
+        val found = (MkvChapters.readHead(bytes) as MkvChapters.Head.Found).chapters
+        assertEquals(listOf(0L, 90_000L), found.map { it.startMs })
+    }
 }

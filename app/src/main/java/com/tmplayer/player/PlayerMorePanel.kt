@@ -157,6 +157,12 @@ interface PlayerMoreHost {
     /** Between the two presses of Mark this as the intro: the line then asks for the end. */
     fun introMarking(): Boolean = false
     fun chapter(): String?
+
+    /** The file's chapters and the moment playing (WP-26), for the Chapters page; none for a file without. */
+    fun chapterList(): List<ChapterRow> = emptyList()
+
+    /** The Chapters page's OK: play from the start of the chapter at [startMs]. */
+    fun jumpToChapter(startMs: Long) = Unit
     fun watched(): Boolean
 
     /** The engine playing now ("ExoPlayer", "VLC"), the Try the other engine line's detail (PR2). */
@@ -222,6 +228,7 @@ class PlayerMorePanel(
         data object KeyboardKeys : Page
         data object Rotation : Page
         data object Volume : Page
+        data object Chapters : Page
         class Details(val title: String, val lines: List<String>) : Page
         class Bookmarks(val actions: BookmarkSheetActions) : Page
 
@@ -458,7 +465,7 @@ class PlayerMorePanel(
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
         LockScreen, PictureInPicture, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
-        PlayerVolume, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, NextChapter, PreviousChapter,
+        PlayerVolume, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, AddToList, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
@@ -575,6 +582,7 @@ class PlayerMorePanel(
                 )
             }
             Kind.RepeatVideo -> Line(kind, s.playerRepeatVideo, TmIcons.Repeat, if (host.repeatVideo()) s.commonOn else s.commonOff)
+            Kind.Chapters -> Line(kind, s.playerChapters, TmIcons.List, host.chapter())
             // The chapter playing under the step, so a step is a choice and not a guess.
             Kind.NextChapter -> Line(kind, s.playerChapterNext, TmIcons.SkipNext, host.chapter())
             Kind.PreviousChapter -> Line(kind, s.playerChapterPrevious, TmIcons.SkipPrevious, null)
@@ -616,6 +624,7 @@ class PlayerMorePanel(
             Kind.RemoteKeys -> Page.Keys
             Kind.RotatePicture -> Page.Rotation
             Kind.PlayerVolume -> Page.Volume
+            Kind.Chapters -> Page.Chapters
             Kind.Bookmarks -> host.bookmarks()?.let { Page.Bookmarks(it) }
             Kind.AddToList -> host.addToList()?.let { Page.Lists(it) }
             Kind.PlaybackDetails -> host.playbackDetails()?.let { (title, lines) -> Page.Details(title, lines) }
@@ -724,6 +733,16 @@ class PlayerMorePanel(
                         volume = next
                         host.setPlayerVolume(next)
                     },
+                    onDismiss = ::back,
+                    onClose = ::close,
+                )
+            }
+            // A chapter chosen is the end of the errand: the jump is made and the panel closes.
+            Page.Chapters -> {
+                val rows = remember { host.chapterList() }
+                ChaptersSheet(
+                    rows = rows,
+                    onPick = { row -> close(); host.jumpToChapter(row.startMs) },
                     onDismiss = ::back,
                     onClose = ::close,
                 )

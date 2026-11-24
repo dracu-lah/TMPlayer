@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.togetherWith
 import com.tmplayer.ui.components.pressScale
 import com.tmplayer.ui.icons.TmIcons
@@ -45,12 +47,16 @@ import com.tmplayer.ui.browse.copyDetail
 import com.tmplayer.ui.browse.copyHeading
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.components.ChoiceLine
+import com.tmplayer.ui.components.ChoiceLazyList
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.FocusOnOpen
 import com.tmplayer.ui.components.LocalChoiceFullScreen
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.pageKeys
+import com.tmplayer.ui.components.pageTile
+import com.tmplayer.ui.components.rememberPageTiles
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.FloatingTone
@@ -977,5 +983,44 @@ internal fun PlaybackDetailsSheet(title: String, lines: List<String>, onClose: (
             }
         }
         FocusOnOpen(closeFocus)
+    }
+}
+
+/**
+ * The file's chapters (WP-26), each with its name and where it starts, the one playing ticked and
+ * focused. A chapter chosen plays from its start ([onPick]). Lazy, so a file with hundreds of marks
+ * composes the screenful; on a television Page Up and Page Down move a screenful (the same keys as
+ * every long list). Times stay left to right in a right-to-left language.
+ */
+@Composable
+internal fun ChaptersSheet(
+    rows: List<ChapterRow>,
+    onPick: (ChapterRow) -> Unit,
+    onDismiss: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val touch = isTouch()
+    val focus = remember { FocusRequester() }
+    val playing = rows.indexOfFirst { it.current }.coerceAtLeast(0)
+    // Starts one line above the chapter playing, so it is in view with the one before it.
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (playing - 1).coerceAtLeast(0))
+    val tiles = rememberPageTiles()
+    val clock = Translator.messages.formatter::clock
+    ChoiceSheet(title = s.playerChapters, onDismiss = onDismiss, onClose = onClose, ignoreRelease = !touch, fullScreen = true) {
+        Column(Modifier.weight(1f, fill = false).pageKeys(state, tiles)) {
+            ChoiceLazyList(state) {
+                itemsIndexed(rows, key = { _, row -> row.index }) { index, row ->
+                    ChoiceLine(
+                        title = row.title,
+                        // The time is a figure: left to right inside a right-to-left line.
+                        detail = "\u2066" + clock(row.startMs) + "\u2069",
+                        selected = row.current,
+                        modifier = Modifier.pageTile(tiles, row.index).then(if (index == playing) Modifier.focusRequester(focus) else Modifier),
+                    ) { onPick(row) }
+                }
+            }
+        }
+        FocusOnOpen(focus)
     }
 }

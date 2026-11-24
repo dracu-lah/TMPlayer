@@ -8080,6 +8080,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             paused = isPaused(),
             bookmarks = hasMessage(),
             chapters = chapters.isNotEmpty(),
+            chapterList = Chapters.listable(chapters),
             // Only once the chat is known to allow saving: a protected chat's frames stay in it.
             saveFrame = savable == true,
             // A picture to shape, as for 3D: not while a cast plays it.
@@ -8106,6 +8107,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             paused = isPaused(),
             bookmarks = hasMessage(),
             chapters = chapters.isNotEmpty(),
+            chapterList = Chapters.listable(chapters),
             stereo = stereoOffered(),
             pictureShape = stereoOffered(),
             reportStutter = stutterReportable(),
@@ -8139,6 +8141,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun chapter(): String? =
             if (chapters.isEmpty()) null
             else Chapters.labelAt(chapters, playing?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
+        override fun chapterList(): List<ChapterRow> =
+            if (Chapters.listable(chapters)) Chapters.rows(chapters, playing?.currentPosition ?: 0L) else emptyList()
+        override fun jumpToChapter(startMs: Long) = jumpToChapterStart(startMs)
         override fun watched() = onWatchedList
         override fun engineNow(): String? = if (vlcEngine != null) L.settingsEngineVlc else L.settingsEngineExoplayer
         override fun bookmarks() = if (hasMessage()) bookmarkActions() else null
@@ -8205,7 +8210,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
             PhoneMenuEntry.RotatePicture, PhoneMenuEntry.PlayerVolume,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
-            PhoneMenuEntry.AddToList,
+            PhoneMenuEntry.AddToList, PhoneMenuEntry.Chapters,
             -> Unit
         }
     }
@@ -8241,6 +8246,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // Pages of the panel itself, opened there.
             PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys, PlayerMenuEntry.Speed, PlayerMenuEntry.PictureShape,
             PlayerMenuEntry.RotatePicture, PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.AddToList,
+            PlayerMenuEntry.Chapters,
             -> Unit
         }
     }
@@ -8487,6 +8493,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val at = IntArray(2)
         chip.getLocationInWindow(at)
         return rawX >= at[0] && rawX < at[0] + chip.width && rawY >= at[1] && rawY < at[1] + chip.height
+    }
+
+    /** The Chapters page's OK (WP-26): play from the start of the chapter chosen, and say which it is. */
+    private fun jumpToChapterStart(startMs: Long) {
+        val exo = playing ?: return
+        exo.seekTo(startMs.coerceAtLeast(0L))
+        val index = Chapters.at(chapters, startMs)
+        if (index >= 0) showGestureFeedback(Chapters.label(chapters, index))
     }
 
     /** The menus' chapter lines: the next chapter, or the start of this one, as [Chapters] has it. */

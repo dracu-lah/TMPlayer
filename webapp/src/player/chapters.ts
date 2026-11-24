@@ -41,6 +41,42 @@ export function chapterMarks(chapters: Chapter[], duration: number): number[] {
     return [...new Set(chapters.map((c) => c.start).filter((s) => s > 0 && (duration <= 0 || s < duration)))]
 }
 
+/** Chapters.LIST_FROM: the page of chapters is offered from this many marks. */
+export const CHAPTER_LIST_FROM = 2
+
+/** Chapters.listable. */
+export const chapterListable = (chapters: Chapter[]): boolean => chapters.length >= CHAPTER_LIST_FROM
+
+/** One line of the Chapters page. */
+export interface ChapterRow {
+    index: number
+    title: string
+    /** Seconds from the start. */
+    start: number
+    current: boolean
+}
+
+/**
+ * Chapters.rows: the page's lines, sorted by start, one per start, a start below zero taken as
+ * zero, a mark that is not a number left out, and a chapter with no name numbered ("Chapter 3",
+ * by `untitled`). The one playing is marked; none before the first mark.
+ */
+export function chapterRows(chapters: Chapter[], position: number, untitled: (number: number) => string): ChapterRow[] {
+    const seen = new Set<number>()
+    const sorted = chapters
+        .filter((c) => Number.isFinite(c.start))
+        .map((c) => ({ start: Math.max(0, c.start), title: c.title }))
+        .sort((a, b) => a.start - b.start)
+        .filter((c) => (seen.has(c.start) ? false : (seen.add(c.start), true)))
+    const playing = chapterAt(sorted as Chapter[], position)
+    return sorted.map((c, index) => ({
+        index,
+        title: c.title?.trim() || untitled(index + 1),
+        start: c.start,
+        current: index === playing,
+    }))
+}
+
 /** A name a person wrote, not the muxer's "Chapter 3". */
 export const isGeneric = (name: string) => /^chapter\s*\d+$/i.test(name.trim())
 

@@ -2132,6 +2132,8 @@
     "chapter_next": "Next chapter",
     "chapter_of": "Chapter {number} of {total}",
     "chapter_previous": "Previous chapter",
+    "chapter_untitled": "Chapter {number}",
+    "chapters": "Chapters",
     "checking_savable": "Still checking this video with Telegram",
     "clicks_ignored": "Clicks on the video are ignored",
     "clicks_work": "Clicks on the video work again",
