@@ -2,6 +2,19 @@ package com.tmplayer.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +70,8 @@ fun CustomAccentPicker(initial: Int?, onPick: (Int) -> Unit, onDismiss: () -> Un
     val shown by animateColorAsState(roles.primary, Motion.standard(Motion.Fast), label = "customAccent")
     val adjusted = remember(seed) { TmCustomAccent.adjusted(seed) }
     val step = rememberStepTick()
+    // A remote has no slider that fits it: a television gets sixteen colours to take and a hue to nudge (WP-11).
+    val tv = !isTouch()
     TmAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.accentCustomTitle) },
@@ -73,6 +88,16 @@ fun CustomAccentPicker(initial: Int?, onPick: (Int) -> Unit, onDismiss: () -> Un
                     ) {
                         Text(s.commonPlay, color = roles.onPrimary, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold))
                     }
+                }
+                if (tv) {
+                    TvAccentControls(
+                        hue = hue,
+                        strength = strength,
+                        onHue = { next -> if (next != hue) step(); hue = next },
+                        onPreset = { next -> step(); hue = next; strength = TV_STRENGTH },
+                    )
+                    if (adjusted) Text(s.accentCustomAdjusted, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+                    return@Column
                 }
                 Text(s.accentCustomHue, style = MaterialTheme.typography.labelMedium, color = Tone.muted)
                 Box {
@@ -113,6 +138,86 @@ fun CustomAccentPicker(initial: Int?, onPick: (Int) -> Unit, onDismiss: () -> Un
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.commonCancel) } },
     )
 }
+
+/**
+ * The television's way to a colour of your own (WP-11): [PRESETS] hues round the wheel at the app's
+ * own strength as 48 dp swatches the remote walks, and under them a fine hue that Left and Right
+ * move by [FINE_STEP] degrees. The first preset takes the remote as the dialog opens. A colour is
+ * then taken (or Cancelled) with the dialog's buttons, as on a phone.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun TvAccentControls(hue: Float, strength: Float, onHue: (Float) -> Unit, onPreset: (Float) -> Unit) {
+    val s = LocalStrings.current
+    val first = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    Text(s.accentPresets, style = MaterialTheme.typography.labelLarge, color = Tone.muted)
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        repeat(PRESETS) { index ->
+            val presetHue = index * (360f / PRESETS)
+            val chosen = kotlin.math.abs(hue - presetHue) < (180f / PRESETS)
+            val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            val focused by interactions.collectIsFocusedAsState()
+            Box(
+                Modifier
+                    .size(TV_SWATCH)
+                    .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
+                    .border(if (focused) 3.dp else 2.dp, if (focused) Tone.text else if (chosen) Tone.accent else Color.Transparent, CircleShape)
+                    .padding(5.dp)
+                    .clip(CircleShape)
+                    .background(Color.hsl(presetHue, TV_STRENGTH, SEED_LIGHTNESS))
+                    .semantics {
+                        contentDescription = "${presetHue.toInt()}\u00B0"
+                        this.selected = chosen
+                    }
+                    .clickable(interactionSource = interactions, indication = null, role = Role.RadioButton) { onPreset(presetHue) },
+            )
+        }
+    }
+    Text(s.accentFineHue, style = MaterialTheme.typography.labelLarge, color = Tone.muted)
+    val rowInteractions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val rowFocused by rowInteractions.collectIsFocusedAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(if (rowFocused) 3.dp else 1.dp, if (rowFocused) Tone.text else Tone.surfaceHigh, RoundedCornerShape(12.dp))
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onHue(wrapHue(hue - FINE_STEP)); true }
+                    Key.DirectionRight -> { onHue(wrapHue(hue + FINE_STEP)); true }
+                    else -> false
+                }
+            }
+            .focusable(interactionSource = rowInteractions)
+            .semantics { contentDescription = s.accentFineHue; stateDescription = "${hue.toInt()}" }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("\u2039", style = MaterialTheme.typography.titleLarge, color = Tone.muted)
+        Text("${hue.toInt()}\u00B0", style = MaterialTheme.typography.titleMedium, color = Tone.text)
+        Text("\u203A", style = MaterialTheme.typography.titleLarge, color = Tone.muted)
+    }
+}
+
+/** A hue kept inside the wheel, from 0 up to but not including 360. */
+internal fun wrapHue(hue: Float): Float = ((hue % 360f) + 360f) % 360f
+
+/** Sixteen colours round the wheel, one every 22.5 degrees. */
+internal const val PRESETS = 16
+
+/** The fine hue's step on a television. */
+internal const val FINE_STEP = 15f
+
+/** The strength the presets are taken at: the app's own tone, between grey and the loudest. */
+private const val TV_STRENGTH = 0.7f
+
+private val TV_SWATCH = 48.dp
 
 /** Where a first pick starts: a calm blue-violet, unlike Telegram's own so the change is seen. */
 private const val DEFAULT_SEED = 0xFF7C5CFF.toInt()

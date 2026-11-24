@@ -103,6 +103,8 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import com.tmplayer.ui.components.ChoiceColumns
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -4043,6 +4045,12 @@ private fun FocusRow(
 private fun SubtitleStyleDialog(style: SubtitleStyle, onChange: (SubtitleStyle) -> Unit, onClose: () -> Unit) {
     val s = LocalStrings.current
     val touch = isTouch()
+    // A television gets the groups on the left and the open group's options on the right (WP-11),
+    // not one list of thirty lines.
+    if (!touch) {
+        TvSubtitleStyle(style, onChange, onClose)
+        return
+    }
     val first = remember { FocusRequester() }
     ChoiceSheet(title = s.settingsSubtitleStyle, onDismiss = onClose, onClose = onClose) {
         // Fixed above the choices, so it stays in view while they scroll. On a television it is
@@ -4157,6 +4165,180 @@ private fun SubtitleStyleDialog(style: SubtitleStyle, onChange: (SubtitleStyle) 
             ) { onChange(SubtitleStyle()) }
         }
         FocusOnOpen(first)
+    }
+}
+
+/** The groups of the television's Subtitle style, in the order of the phone's sheet. */
+private enum class StyleGroup { Size, Colour, Box, Edge, Font, Weight, Position, Reset }
+
+/**
+ * Settings, Subtitle style on a television (WP-11): the preview pinned on top, the groups down the
+ * leading side (each saying what it is set to) and the open group's options beside them. The remote
+ * opens on the chosen size; Right from a group goes to that group's chosen option, Left from an
+ * option back to its group, Back closes to the row. Each option is saved as it is taken, as on a
+ * phone, and the preview shows it at once.
+ */
+@Composable
+private fun TvSubtitleStyle(style: SubtitleStyle, onChange: (SubtitleStyle) -> Unit, onClose: () -> Unit) {
+    val s = LocalStrings.current
+    var group by rememberSaveable { mutableStateOf(StyleGroup.Size) }
+    // The box takes the edge's place (the box is what separates the text), so the group goes while it is on.
+    val groups = StyleGroup.entries.filter { it != StyleGroup.Edge || !style.box }
+    val open = if (group in groups) group else StyleGroup.Box
+    val chosen = remember(open) { FocusRequester() }
+    val groupFocus = remember { StyleGroup.entries.associateWith { FocusRequester() } }
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val towardsOptions = if (rtl) Key.DirectionLeft else Key.DirectionRight
+    val towardsGroups = if (rtl) Key.DirectionRight else Key.DirectionLeft
+    fun title(g: StyleGroup) = when (g) {
+        StyleGroup.Size -> s.settingsSubtitleSize
+        StyleGroup.Colour -> s.subtitlesColour
+        StyleGroup.Box -> s.settingsSubtitleBox
+        StyleGroup.Edge -> s.subtitlesEdge
+        StyleGroup.Font -> s.subtitlesFace
+        StyleGroup.Weight -> s.subtitlesWeight
+        StyleGroup.Position -> s.settingsSubtitlePosition
+        StyleGroup.Reset -> s.subtitlesDefaultLook
+    }
+    val percent = com.tmplayer.i18n.Translator.messages.formatter
+    fun hex(argb: Int) = "#" + (argb and 0xFFFFFF).toString(16).uppercase().padStart(6, '0')
+    // A fine size, one of the sixteen colours or a fine height (WP-29) says its figure, not the preset under it.
+    fun now(g: StyleGroup): String? = when (g) {
+        StyleGroup.Size -> if (style.sizePercent > 0) percent.scalePercent(style.fineSizePercent) else style.size.label
+        StyleGroup.Colour -> if (style.customColour != 0) hex(style.customColour) else style.colour.label
+        StyleGroup.Box -> style.boxLevel.label
+        StyleGroup.Edge -> style.edge.label
+        StyleGroup.Font -> style.face.label
+        StyleGroup.Weight -> if (style.bold) s.subtitlesWeightBold else s.subtitlesWeightRegular
+        StyleGroup.Position -> if (style.positionPercent >= 0) percent.scalePercent(style.positionNowPercent) else style.position.label
+        StyleGroup.Reset -> null
+    }
+    ChoiceSheet(title = s.settingsSubtitleStyle, onDismiss = onClose, onClose = onClose) {
+        // Pinned above the two lists, so the change shows where the remote is looking.
+        SubtitlePreview(
+            style,
+            Modifier
+                .padding(bottom = 8.dp)
+                .widthIn(max = 240.dp)
+                .align(Alignment.CenterHorizontally),
+        )
+        ChoiceColumns(
+            start = {
+                groups.forEach { g ->
+                    com.tmplayer.ui.components.ChoiceLine(
+                        title = title(g),
+                        detail = now(g),
+                        selected = g == open,
+                        modifier = Modifier
+                            .focusRequester(groupFocus.getValue(g))
+                            .onFocusChanged { if (it.isFocused) group = g }
+                            .onPreviewKeyEvent { event ->
+                                if (event.key == towardsOptions) {
+                                    if (event.type == KeyEventType.KeyDown) runCatching { chosen.requestFocus() }
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
+                    ) { runCatching { chosen.requestFocus() } }
+                }
+            },
+            end = {
+                val toGroups = Modifier.onPreviewKeyEvent { event ->
+                    if (event.key == towardsGroups) {
+                        if (event.type == KeyEventType.KeyDown) runCatching { groupFocus.getValue(open).requestFocus() }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                @Composable
+                fun option(
+                    titleText: String,
+                    selected: Boolean?,
+                    detail: String? = null,
+                    enabled: Boolean = true,
+                    icon: ImageVector? = null,
+                    // The line Right lands on when no preset is ticked (a fine size or height, WP-29).
+                    target: Boolean = selected == true,
+                    pick: () -> Unit,
+                ) {
+                    com.tmplayer.ui.components.ChoiceLine(
+                        title = titleText,
+                        detail = detail,
+                        selected = selected,
+                        icon = icon,
+                        enabled = enabled,
+                        modifier = (if (target) Modifier.focusRequester(chosen) else Modifier).then(toGroups),
+                        onClick = pick,
+                    )
+                }
+                when (open) {
+                    StyleGroup.Size -> {
+                        SubtitleSize.entries.forEach { o ->
+                            option(o.label, o == style.size && style.sizePercent == 0) { onChange(style.copy(size = o, sizePercent = 0)) }
+                        }
+                        // The fine size beside the presets (WP-29): 50 to 250 per cent in tens.
+                        val fine = percent.scalePercent(style.fineSizePercent)
+                        option(s.subtitlesSmaller, null, detail = fine, icon = TmIcons.Remove, enabled = style.fineSizePercent > SubtitleStyle.SIZE_MIN, target = style.sizePercent > 0) {
+                            onChange(style.stepSize(-1))
+                        }
+                        option(s.subtitlesLarger, null, detail = fine, icon = TmIcons.Add, enabled = style.fineSizePercent < SubtitleStyle.SIZE_MAX) {
+                            onChange(style.stepSize(1))
+                        }
+                    }
+                    StyleGroup.Colour -> {
+                        com.tmplayer.player.SubtitleColour.entries.forEach { o ->
+                            option(o.label, o == style.colour && style.customColour == 0) { onChange(style.copy(colour = o, customColour = 0)) }
+                        }
+                        // The sixteen colours (WP-29), a line each under the remote; the pinned preview shows the hue.
+                        SubtitleStyle.CUSTOM_COLOURS.forEach { argb ->
+                            option(hex(argb), style.customColour == argb) { onChange(style.copy(customColour = argb)) }
+                        }
+                    }
+                    StyleGroup.Box -> com.tmplayer.player.SubtitleBox.entries.forEach { o ->
+                        option(
+                            o.label,
+                            o == style.boxLevel,
+                            detail = when (o) {
+                                com.tmplayer.player.SubtitleBox.Off -> s.settingsSubtitleBoxOff
+                                com.tmplayer.player.SubtitleBox.Medium -> s.settingsSubtitleBoxOn
+                                else -> null
+                            },
+                        ) { onChange(style.copy(boxLevel = o)) }
+                    }
+                    StyleGroup.Edge -> com.tmplayer.player.SubtitleEdge.entries.forEach { o -> option(o.label, o == style.edge) { onChange(style.copy(edge = o)) } }
+                    StyleGroup.Font -> com.tmplayer.player.SubtitleFace.entries.forEach { o -> option(o.label, o == style.face) { onChange(style.copy(face = o)) } }
+                    StyleGroup.Weight -> {
+                        option(s.subtitlesWeightRegular, !style.bold) { onChange(style.copy(bold = false)) }
+                        option(s.subtitlesWeightBold, style.bold) { onChange(style.copy(bold = true)) }
+                    }
+                    StyleGroup.Position -> {
+                        SubtitlePosition.entries.forEach { o ->
+                            option(o.label, o == style.position && style.positionPercent < 0) { onChange(style.copy(position = o, positionPercent = -1)) }
+                        }
+                        // The fine height (WP-29): 0 to 30 per cent up from the bottom.
+                        val height = percent.scalePercent(style.positionNowPercent)
+                        option(s.subtitlesLower, null, detail = height, icon = TmIcons.Remove, enabled = style.positionNowPercent > 0, target = style.positionPercent >= 0) {
+                            onChange(style.stepPosition(-1))
+                        }
+                        option(s.subtitlesHigher, null, detail = height, icon = TmIcons.Add, enabled = style.positionNowPercent < SubtitleStyle.POSITION_MAX) {
+                            onChange(style.stepPosition(1))
+                        }
+                    }
+                    // Greyed out (still focusable) while the look is the default one.
+                    StyleGroup.Reset -> com.tmplayer.ui.components.ChoiceLine(
+                        title = s.subtitlesDefaultLook,
+                        detail = s.subtitlesDefaultLookDetail,
+                        icon = TmIcons.Refresh,
+                        enabled = !style.isDefault,
+                        modifier = Modifier.focusRequester(chosen).then(toGroups),
+                    ) { onChange(SubtitleStyle()) }
+                }
+            },
+        )
+        // The chosen size first: the question is "which size", the rest is a Right away.
+        FocusOnOpen(chosen)
     }
 }
 

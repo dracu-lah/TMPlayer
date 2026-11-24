@@ -60,6 +60,11 @@ fun TvConfirm(
     focusConfirm: Boolean = false,
     /** The outside service the question is about (HX93): its badge replaces the icon, drawn only. */
     service: Service? = null,
+    /**
+     * A field in [extra] that takes the remote first (WP-11): a key to type. The question is the
+     * field, so the remote starts there instead of on a button.
+     */
+    focusField: FocusRequester? = null,
 ) {
     val cancelFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
@@ -186,7 +191,7 @@ fun TvConfirm(
             }
         }
 
-        LaunchedEffect(Unit) { runCatching { (if (focusConfirm) confirmFocus else cancelFocus).requestFocus() } }
+        LaunchedEffect(Unit) { runCatching { (focusField ?: if (focusConfirm) confirmFocus else cancelFocus).requestFocus() } }
     }
 }
 

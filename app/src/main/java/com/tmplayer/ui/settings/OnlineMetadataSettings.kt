@@ -13,6 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -186,6 +188,7 @@ fun MetadataKeyDialog(onClose: () -> Unit) {
     val s = LocalStrings.current
     val online = OnlineMetadata.current ?: return onClose()
     var key by remember { mutableStateOf(online.store.now.ownKey) }
+    val field = remember { FocusRequester() }
     TvConfirm(
         title = s.metadataKeyTitle,
         message = MetaWords.keyMessage(online.buildHasKey),
@@ -193,6 +196,7 @@ fun MetadataKeyDialog(onClose: () -> Unit) {
         confirmLabel = s.commonOk,
         destructive = false,
         icon = TmIcons.Lock,
+        focusField = field,
         onDismiss = onClose,
         onConfirm = {
             online.setOwnKey(key)
@@ -203,7 +207,7 @@ fun MetadataKeyDialog(onClose: () -> Unit) {
                 value = key,
                 onValueChange = { key = it },
                 placeholder = s.metadataKey,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(field),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
             )
         },
@@ -216,6 +220,7 @@ fun OmdbKeyDialog(onClose: () -> Unit) {
     val s = LocalStrings.current
     val online = OnlineMetadata.current ?: return onClose()
     var key by remember { mutableStateOf(online.store.now.omdbKey) }
+    val field = remember { FocusRequester() }
     TvConfirm(
         title = s.metadataOmdbKeyTitle,
         message = MetaWords.omdbKeyMessage(online.buildHasOmdbKey),
@@ -223,6 +228,7 @@ fun OmdbKeyDialog(onClose: () -> Unit) {
         confirmLabel = s.commonOk,
         destructive = false,
         icon = TmIcons.Lock,
+        focusField = field,
         onDismiss = onClose,
         onConfirm = {
             online.setOmdbKey(key)
@@ -233,7 +239,7 @@ fun OmdbKeyDialog(onClose: () -> Unit) {
                 value = key,
                 onValueChange = { key = it },
                 placeholder = s.metadataOmdbKey,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(field),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
             )
         },

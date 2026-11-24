@@ -72,10 +72,11 @@ class BackupTest {
         old.settings.rememberTopic(-1003L, 42)
         old.settings.saveResumePosition(-100L, 5L, 600_000L, 3_600_000L, resumeLine(updatedAt = 500))
         old.watched.markWatched(watchedRecord(1, at = 10, manual = true))
-        old.metadata.update { it.copy(enabled = true, ownKey = "secret-tmdb-key", trailersInApp = false) }
+        old.metadata.update { it.copy(enabled = true, ownKey = "secret-tmdb-key", omdbKey = "secret-omdb-key", trailersInApp = false) }
 
         val text = old.service().export()
         assertFalse("no API key in the file", text.contains("secret-tmdb-key"))
+        assertFalse("no OMDb key in the file either (WP-11: typed on the device, never carried)", text.contains("secret-omdb-key"))
         assertFalse("no device path in the file", text.contains("/data/user/0"))
         assertFalse("crash reports are a per device consent", text.contains("crash_reports"))
 
@@ -108,6 +109,7 @@ class BackupTest {
         assertNull(resumed.localPath)
         assertTrue(fresh.watched.history.first().single().manual)
         assertEquals(MetaSettings(enabled = true, trailersInApp = false), fresh.metadata.now)
+        assertEquals("a restore brings no key", "", fresh.metadata.now.omdbKey + fresh.metadata.now.ownKey)
     }
 
     @Test
