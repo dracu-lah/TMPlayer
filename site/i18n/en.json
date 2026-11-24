@@ -568,6 +568,7 @@
     "sign_in_shot_caption__b1": "TMPlayer's own sign-in screen on the TV",
     "linux_s1": "Make the AppImage executable with the line above, then open it.",
     "full_steps": "Full install steps",
+    "warning_help": "Windows or macOS warns first?",
     "more_files": "More files and older versions",
     "updates_from_obtainium": "Updates through Obtainium, and Android's plans for 2027",
     "or": "or",

@@ -64,6 +64,7 @@ Every English page has a Markdown copy of its text, without navigation: add `ind
 ## Optional
 
 - [Security](https://tmplayer.org/security/): how releases are built and how to check a download
+- [Install warnings](https://tmplayer.org/install-warnings/): what Windows SmartScreen and macOS Gatekeeper say about the unsigned installers, and the steps to open them once (More info, Run anyway; Done, Open Anyway in Privacy and Security), plus the PowerShell line and the Terminal command that skip the clicks
 - [Privacy](https://tmplayer.org/privacy/): what stays on the device and which services it contacts (including YouTube's embedded trailer player, loaded only after a trailer is opened, and the skip intro databases TheIntroDB, IntroDB, AniSkip, anime-skip.com and arm.haglund.dev, which get only ids), and what the sync file in your own Saved Messages, or in a private channel of your own with only you in it, holds (version 3 adds bookmarks and corrections)
 - [Lawful use](https://tmplayer.org/legal/): use it only with content you own or may access
 - [Support](https://tmplayer.org/support/): Buy Me a Coffee, GitHub Sponsors, starring and sharing; all voluntary, nothing is locked

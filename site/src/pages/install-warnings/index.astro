@@ -1,0 +1,136 @@
+---
+// /install-warnings/: what Windows SmartScreen and macOS Gatekeeper say about the TMPlayer installers
+// and how to open them anyway (WP-53, decision D6: the free help page now; signing only when it is
+// funded). English only. The windows in the steps are drawn stand-ins in the site's style
+// (components/warnings/Mock.astro), not screenshots of an operating system.
+import Base from '../../layouts/Base.astro';
+import BgArt from '../../components/BgArt.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import ToTop from '../../components/ToTop.astro';
+import Icon from '../../components/Icon.astro';
+import PageHead from '../../components/PageHead.astro';
+import JsonLd from '../../components/JsonLd.astro';
+import { breadcrumb } from '../../components/breadcrumb';
+import Band from '../../components/Band.astro';
+import Steps from '../../components/Steps.astro';
+import Step from '../../components/Step.astro';
+import Panel from '../../components/Panel.astro';
+import Mock from '../../components/warnings/Mock.astro';
+import MoreHelp from '../../components/guides/MoreHelp.astro';
+import { ENGLISH } from '../../i18n/langs';
+import { text } from '../../i18n/t';
+
+Astro.locals.lang = ENGLISH;
+---
+<Base path="/install-warnings/" title="Windows or macOS warns about TMPlayer: how to open it" description="Windows SmartScreen says Windows protected your PC, macOS says TMPlayer was not opened. What it means and the steps to open the installer, one time.">
+  <JsonLd slot="head" data={breadcrumb(['Install warnings', '/install-warnings/'])} />
+  <BgArt />
+  <Header />
+
+  <main id="main">
+    <PageHead lede="TMPlayer is not code signed or notarized yet, so Windows and macOS stop and ask before the first run. Here is what that means and the few clicks that get past it." updated="/install-warnings/">
+      <Fragment slot="crumbs"><a href="/">{text(ENGLISH, 'common.home')}</a><span aria-hidden="true">/</span>Install warnings</Fragment>
+      <Fragment slot="title">When Windows or macOS <em>warns you</em></Fragment>
+      <Fragment slot="actions">
+        <a class="btn btn-filled" href="/download/"><Icon name="download-btn" /> {text(ENGLISH, 'home.download_tmplayer')}</a>
+        <a class="btn btn-outline" href="/security/">Check the file first <Icon name="arrow-right-sm" /></a>
+      </Fragment>
+      <nav class="platform-jump" aria-label="On this page">
+        <a href="#why">What the warning means</a>
+        <a href="#windows">Windows</a>
+        <a href="#macos">Mac</a>
+        <a href="#ladder">If it still will not open</a>
+      </nav>
+    </PageHead>
+
+    <Band wave tonal id="why" title="What the warning means" sub="It is about who published the file, not about what is inside it.">
+      <div class="section-body prose-band" data-reveal>
+        <p>Both systems keep a list of publishers they know. A publisher gets on it by paying for a certificate every year (Windows) or for an Apple Developer account and a review of each build (macOS). TMPlayer is a free, open source player, and until someone funds that, its files are not on those lists. So the first time you open one, the system says it cannot vouch for it. It has not found anything wrong.</p>
+        <p>What you can do instead is check the file yourself: every release is built by GitHub from the public source, and the <a href="/security/#verify">security page</a> shows how to compare the SHA-256 of what you downloaded. Do that first if you like, then follow the steps for your computer. The drawings below are made for this page, not screenshots of your system, so the wording on your screen may differ a little by version.</p>
+        <p>TMPlayer plays the videos already in your own Telegram chats, nothing else. What it does and does not do is on the <a href="/legal/">legal page</a>.</p>
+      </div>
+    </Band>
+
+    <Band wave id="windows" title="Windows: SmartScreen" sub="Windows 10 and 11, the installer you downloaded in a browser.">
+      <Steps rail>
+        <Step id="win-1" title="Keep the download if your browser asks">
+          <p>Edge and Chrome may say the file is not commonly downloaded. In Edge open the download's three dots and choose <em>Keep</em>, then <em>Keep anyway</em>. In Chrome open the download's menu and choose <em>Keep</em>. The file is the same one GitHub built, so this is only the browser asking the same question as Windows.</p>
+        </Step>
+        <Step id="win-2" title="Open the installer and click More info">
+          <p>Double-click <code>TMPlayer-&lt;version&gt;-windows-x64.msi</code>. Windows shows a blue box that says <em>Windows protected your PC</em>. The words <em>More info</em> are a link under the paragraph, easy to miss. Click it.</p>
+          <Mock os="win" title="Windows protected your PC" caption="Drawing: the first box. The ring is the link to click.">
+            <h4>Windows protected your PC</h4>
+            <p>Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk.</p>
+            <span class="mock-link mock-target">More info</span>
+            <div class="mock-actions"><span class="mock-btn">Don't run</span></div>
+          </Mock>
+        </Step>
+        <Step id="win-3" title="Click Run anyway">
+          <p>The box now names the app and its publisher (<em>Unknown publisher</em>) and a <em>Run anyway</em> button appears. Click it, then click through the installer. It installs for your user only and never asks for an administrator password.</p>
+          <Mock os="win" title="Windows protected your PC" caption="Drawing: the same box after More info. The ring is the button to click.">
+            <h4>Windows protected your PC</h4>
+            <p>App: TMPlayer-&lt;version&gt;-windows-x64.msi<br />Publisher: Unknown publisher</p>
+            <div class="mock-actions"><span class="mock-btn mock-target">Run anyway</span><span class="mock-btn">Don't run</span></div>
+          </Mock>
+        </Step>
+        <Step id="win-4" title="Later versions" p>A newer installer you download by hand shows the box again, once. It installs over the old version in place, and your sign in, history and downloads are kept.</Step>
+      </Steps>
+      <div class="two-col">
+        <Panel title="Skip the box: the PowerShell line">
+          <p>Windows checks only files a browser downloaded. This line fetches the installer itself, checks its SHA-256 against the one tmplayer.org publishes and installs it for your user. The script is <a href="https://github.com/dracu-lah/TMPlayer/blob/main/site/public/install.ps1" rel="noopener">in the repository</a>: read it before you run it.</p>
+          <pre class="abi-cmd warn-cmd"><code>irm https://tmplayer.org/install.ps1 | iex</code></pre>
+        </Panel>
+        <Panel title="If sign in or a video is blocked">
+          <p>When TMPlayer says <em>Windows blocked TMPlayer's connection to Telegram</em> or <em>Windows blocked the video engine</em>, Smart App Control or an Application Control policy refused one of its unsigned libraries. Open <em>Windows Security</em>, <em>App and browser control</em>, <em>Smart App Control</em> and set it to <em>Off</em> (Windows lets it be turned back on only by reinstalling), or ask whoever manages the computer to allow TMPlayer's files. Then restart TMPlayer.</p>
+        </Panel>
+      </div>
+    </Band>
+
+    <Band wave tonal id="macos" title="Mac: Gatekeeper" sub="Apple Silicon Macs with macOS 26 Tahoe or newer.">
+      <Steps rail>
+        <Step id="mac-1" title="Drag TMPlayer into Applications" p>Open <code>TMPlayer-&lt;version&gt;-macos-arm64.dmg</code> and drag <em>TMPlayer</em> onto <em>Applications</em>.</Step>
+        <Step id="mac-2" title="Open it and click Done">
+          <p>Open TMPlayer from Applications. macOS says <em>"TMPlayer" Not Opened</em> because Apple has not checked this build. Click <em>Done</em>, not <em>Move to Trash</em>. Control-clicking the app and choosing Open no longer gets past this on current macOS, so do not spend time on it.</p>
+          <Mock os="mac" title="" caption="Drawing: the first box. The ring is the button to click.">
+            <h4>"TMPlayer" Not Opened</h4>
+            <p>Apple could not verify "TMPlayer" is free of malware that may harm your Mac or compromise your privacy.</p>
+            <div class="mock-actions"><span class="mock-btn mock-target">Done</span><span class="mock-btn">Move to Trash</span></div>
+          </Mock>
+        </Step>
+        <Step id="mac-3" title="Allow it in Privacy and Security">
+          <p>Open <em>System Settings</em>, then <em>Privacy and Security</em>, and scroll down to the <em>Security</em> part. It says <em>"TMPlayer" was blocked to protect your Mac</em>. Click <em>Open Anyway</em>. The button shows for a short while after the failed open, so if it is gone, open TMPlayer once more.</p>
+          <Mock os="mac" title="Privacy and Security" caption="Drawing: the Security part of the page. The ring is the button to click.">
+            <div class="mock-row">"TMPlayer" was blocked to protect your Mac.</div>
+            <div class="mock-actions"><span class="mock-btn mock-target">Open Anyway</span></div>
+          </Mock>
+        </Step>
+        <Step id="mac-4" title="Confirm once more" p>macOS asks for your password or Touch ID, then shows a last box: click <em>Open Anyway</em> again. macOS remembers the choice, so later launches open at once. A new DMG you download by hand asks again.</Step>
+      </Steps>
+      <Panel title="The same in Terminal" wide>
+        <p>If you would rather not click through Settings, this removes the mark macOS puts on downloaded files. Run it after step 1, then open the app.</p>
+        <pre class="abi-cmd warn-cmd"><code>xattr -dr com.apple.quarantine /Applications/TMPlayer.app</code></pre>
+      </Panel>
+    </Band>
+
+    <Band wave id="ladder" title="If it still will not open" sub="In this order.">
+      <div class="section-body prose-band" data-reveal>
+        <ul class="fact-list">
+          <li><strong>Check the file.</strong> A download that stopped halfway fails with an odd message. Compare its SHA-256 with the one on the <a href="/security/#verify">security page</a>, and download it again if it differs.</li>
+          <li><strong>On a work or school computer</strong> an administrator may block apps that are not signed. That choice is theirs, and no setting here changes it.</li>
+          <li><strong>Antivirus</strong> sometimes flags an app it has not seen often. <a href="/security/#warnings">The security page</a> explains how to get a second opinion.</li>
+          <li><strong>Prefer nothing to install?</strong> The web player at <a href="https://web.tmplayer.org/" rel="noopener">web.tmplayer.org</a> runs in the browser and shows none of these warnings.</li>
+          <li><strong>Still stuck?</strong> Tell us what the box says word for word, on <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">GitHub</a> or in <a href="https://t.me/tmplayer_chat" rel="noopener">the Telegram group</a>.</li>
+        </ul>
+        <p>Signing removes all of this. It costs money every year, so it will come when the project is funded: see <a href="/signing/">the signing policy</a>, and <a href="/support/">support</a> if you want to help.</p>
+      </div>
+    </Band>
+
+    <MoreHelp download={{ href: '/install/', label: text(ENGLISH, 'download.how_to_install_it') }} tonal>
+      More guides are on <a href="/troubleshooting/">the troubleshooting page</a>, and the <a href="/faq/">questions page</a> covers the rest.
+    </MoreHelp>
+  </main>
+
+  <ToTop />
+  <Footer />
+</Base>

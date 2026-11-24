@@ -146,8 +146,8 @@ installers for the system it runs on. For a tag `v<v>` the assets are:
 | Asset | Built on |
 | --- | --- |
 | `TMPlayer-<v>-universal.apk` | Linux, signed with the release key |
-| `TMPlayer-<v>-windows-x64.msi` | Windows, unsigned |
-| `TMPlayer-<v>-macos-arm64.dmg` | macOS 26 on Apple Silicon, signed ad hoc (not notarized), from 1.26.0 |
+| `TMPlayer-<v>-windows-x64.msi` | Windows, unsigned (SmartScreen help: tmplayer.org/install-warnings/) |
+| `TMPlayer-<v>-macos-arm64.dmg` | macOS 26 on Apple Silicon, signed ad hoc (not notarized), from 1.26.0 (Gatekeeper help: tmplayer.org/install-warnings/) |
 | `TMPlayer-<v>-x86_64.AppImage`, `TMPlayer-<v>-linux-x64.tar.xz` | Linux, wrapped from the app folder by `desktop/packaging/linux/package.sh`; the tarball is what the AUR PKGBUILD builds from |
 | `TMPlayer-<v>-x86_64.AppImage.zsync` | Linux, beside the AppImage: not a download, it lets an installed AppImage fetch only what changed |
 
@@ -206,8 +206,11 @@ API and finds each file by the end of its name (`universal.apk`, `windows-x64.ms
 links. Renaming an asset means updating the `KINDS` table in `site/src/scripts/app.js` in the same change, or
 the download page falls back to linking the release page for that row.
 
-The Windows files are not code signed, so SmartScreen warns on every machine; INSTALL.md and the
-site say how to get past it.
+The Windows files are not code signed, so SmartScreen warns on every machine, and the macOS DMG is
+signed ad hoc and not notarized, so Gatekeeper blocks the first open. INSTALL.md and the site's help page
+tmplayer.org/install-warnings/ (`site/src/pages/install-warnings/`, WP-53, decision D6: free help now, signing
+only when the user funds it) say how to get past both; keep its wording in step if a release changes how a
+file is signed or notarized, and link it from any release note that mentions a warning.
 
 The desktop jobs need the same Telegram credentials as the Android build, and they run in the
 `release` environment too, so each one waits for the same reviewer approval before it starts.

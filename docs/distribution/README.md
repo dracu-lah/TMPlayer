@@ -17,6 +17,15 @@ those steps use.
 | [crash-visibility.md](crash-visibility.md) | S3: Android vitals, Sentry and the log upload; the weekly stutter list; Sentry quota |
 | [libvlc-spike.md](libvlc-spike.md) | PR2 and PR7: libVLC's version, size, 16 KB, licence, F-Droid and Play answers |
 
+## Desktop install warnings
+
+The Windows MSI is unsigned and the macOS DMG is ad hoc signed and not notarized, so SmartScreen and
+Gatekeeper warn on the first open. The free help is the site page tmplayer.org/install-warnings/ (steps
+for both, drawn step windows, the PowerShell line and the `xattr` command); store and package-manager
+listings (winget, AlternativeTo, Uptodown) may link it where they mention a warning. Signing (Azure Trusted
+Signing or SignPath for Windows, an Apple Developer ID and notarization for the Mac) waits until the user
+funds it (decision D6); when it lands, update that page, `/signing/` and the notes in `INSTALL.md`.
+
 IzzyOnDroid was decided against (see PLAN); Obtainium installs straight from the GitHub releases.
 
 ## Already done in the repository

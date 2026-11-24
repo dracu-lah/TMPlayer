@@ -312,6 +312,12 @@
     "priority": "0.5"
   },
   {
+    "path": "/install-warnings/",
+    "lastmod": "2026-11-25",
+    "changefreq": "monthly",
+    "priority": "0.5"
+  },
+  {
     "path": "/signing/",
     "lastmod": "2026-10-29",
     "changefreq": "yearly",

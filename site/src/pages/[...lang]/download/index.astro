@@ -226,7 +226,7 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
               <li><T k="download.win_s2"><em slot="em1">{t('download.win_msi_note__em1')}</em><em slot="em2">{t('download.win_msi_note__em2')}</em></T></li>
               <li>{t('download.win_s3')}</li>
             </ol>
-            <Fragment slot="foot"><a href={l('/install/#windows')}>{t('download.full_steps')}</a><span class="sep" aria-hidden="true">&middot;</span><a href={l('/desktop/')}>{t('desktop.features_link__a1')}</a></Fragment>
+            <Fragment slot="foot"><a href={l('/install/#windows')}>{t('download.full_steps')}</a><span class="sep" aria-hidden="true">&middot;</span><a href="/install-warnings/#windows">{t('download.warning_help')}</a><span class="sep" aria-hidden="true">&middot;</span><a href={l('/desktop/')}>{t('desktop.features_link__a1')}</a></Fragment>
             <details slot="after" class="code-fold dl-more">
               <summary>{t('download.win_ps_h')}<Icon name="faq-chevron" /></summary>
               <div class="callout">
@@ -253,7 +253,7 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
               <li><T k="download.mac_s2"><em slot="em1">{t('install.mac_step2b__em4')}</em></T></li>
               <li>{t('download.sign_in_qr')}</li>
             </ol>
-            <Fragment slot="foot"><a href={l('/install/#macos')}>{t('download.full_steps')}</a></Fragment>
+            <Fragment slot="foot"><a href={l('/install/#macos')}>{t('download.full_steps')}</a><span class="sep" aria-hidden="true">&middot;</span><a href="/install-warnings/#macos">{t('download.warning_help')}</a></Fragment>
           </Platform>
 
           <Platform id="linux" icon="linux" tone="no" title="Linux" req={t('download.x86_64_with_glibc_2')} computer>

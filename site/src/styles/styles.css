@@ -5239,3 +5239,54 @@ html.dl-tabs-live[data-dl-tab] .platforms > .platform { animation: dl-tab-in 0.2
   .support-pop[open], .support-pop[open]::backdrop { animation: none; }
   .support-pop-actions .btn:active { transform: none; }
 }
+
+/* ---------- Install warnings: drawn stand-ins for a step's window (/install-warnings/) ---------- */
+.mock-fig { margin: 18px 0 0; max-width: 460px; }
+.mock-fig figcaption { margin-top: 8px; font-size: 0.86rem; color: var(--on-surface-variant); }
+.mock {
+  border: 1px solid var(--outline);
+  border-radius: var(--shape-m);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  overflow: hidden;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.mock-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--surface-container-high);
+  border-bottom: 1px solid var(--outline-variant);
+  font-size: 0.82rem;
+  color: var(--on-surface-variant);
+}
+.mock-dots { display: inline-flex; gap: 6px; }
+.mock-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--outline); opacity: 0.55; }
+.mock-close { margin-inline-start: auto; font-size: 1.1rem; line-height: 1; }
+.mock-body { padding: 16px 18px 18px; display: grid; gap: 10px; }
+.mock-body h4 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.mock-body p { margin: 0; color: var(--on-surface-variant); }
+.mock-win .mock-body { background: var(--primary-container); color: var(--on-primary-container); }
+.mock-win .mock-body h4, .mock-win .mock-body p { color: inherit; }
+.mock-link { color: inherit; text-decoration: underline; width: fit-content; }
+.mock-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+.mock-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--outline);
+  border-radius: var(--shape-xs);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  font-size: 0.88rem;
+}
+.mock-row {
+  padding: 8px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-s);
+  background: var(--surface-container-low);
+}
+.mock-target { outline: 3px solid var(--primary); outline-offset: 2px; font-weight: 600; }
+.mock-btn.mock-target { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.warn-cmd { overflow-x: auto; }
+.steps-rail + .two-col, .steps-rail + .panel { margin-top: 32px; }

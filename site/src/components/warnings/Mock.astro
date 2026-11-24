@@ -1,0 +1,19 @@
+---
+// A drawn stand-in for one step's window, in the site's own style: not a screenshot of Windows or
+// macOS, so it never claims to be one. It is decoration for sighted readers (the step's own text
+// says everything it shows), so it is hidden from assistive technology. `os` picks the title bar
+// (three dots for a Mac, a close box for Windows); the ring on `.mock-target` marks what to press.
+interface Props { os: 'win' | 'mac'; title: string; caption: string }
+const { os, title, caption } = Astro.props;
+---
+<figure class="mock-fig">
+  <div class:list={['mock', `mock-${os}`]} aria-hidden="true">
+    <div class="mock-bar">
+      {os === 'mac' && <span class="mock-dots"><i></i><i></i><i></i></span>}
+      <span class="mock-title">{title}</span>
+      {os === 'win' && <span class="mock-close">&times;</span>}
+    </div>
+    <div class="mock-body"><slot /></div>
+  </div>
+  <figcaption>{caption}</figcaption>
+</figure>
