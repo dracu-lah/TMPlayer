@@ -313,3 +313,20 @@ test('two dialogs open at once, the lower one closing first: Back from the top s
     assert.equal(b.index(), 0)
     assert.equal(mh.open, 0)
 })
+
+test('a dialog closing while the page is leaving takes no step back over that navigation', async () => {
+    const { b, mh } = setup()
+    const d = dialog()
+    mh.opened(d, null)
+    mh.setLeaving(true)
+    d.shut()
+    await tick()
+    assert.equal(b.pending(), 0)
+    // The unload did not come: the next close steps back as before.
+    mh.setLeaving(false)
+    const e = dialog()
+    mh.opened(e, null)
+    e.shut()
+    await tick()
+    assert.equal(b.pending(), 1)
+})

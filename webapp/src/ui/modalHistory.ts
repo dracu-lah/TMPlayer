@@ -64,6 +64,8 @@ export class ModalHistory {
     /** Backs this class asked for itself: their popstate is not the person's. */
     private ownBacks = 0
     private last: unknown
+    /** A navigation away from the page has started (`beforeunload`): a closing dialog must not step history back over it. */
+    private leaving = false
 
     private real: Pick<HistoryLike, 'pushState' | 'replaceState' | 'back' | 'forward'>
     private now: () => { state: unknown; path: string }
@@ -117,7 +119,7 @@ export class ModalHistory {
         const i = this.entries.indexOf(entry)
         if (i < 0) return
         this.entries.splice(i, 1)
-        if (entry.id !== null && this.currentId() === entry.id) {
+        if (entry.id !== null && this.currentId() === entry.id && !this.leaving) {
             entry.id = null
             this.ownBacks++
             this.real.back()
@@ -212,6 +214,15 @@ export class ModalHistory {
         }
     }
 
+    /**
+     * A page change has started (a reload or `location.replace` right after a button closed a question, as
+     * Remove all and Sign out do): the dialog's `close` event comes after it, and a history step then would
+     * cancel that navigation. Set again to false once the unload was cancelled or has not come.
+     */
+    setLeaving(on: boolean) {
+        this.leaving = on
+    }
+
     /** Test and debug view. */
     get open() {
         return this.entries.length
@@ -266,6 +277,11 @@ export function installModalHistory() {
             mh.sync()
             if (after !== before) queueMicrotask(() => mh.routeChanged())
         }
+    // A navigation started in the same turn a dialog was closed in must not meet this class's own history step.
+    window.addEventListener('beforeunload', () => {
+        mh.setLeaving(true)
+        setTimeout(() => mh.setLeaving(false), 3000)
+    })
     h.pushState = guarded('push')
     h.replaceState = guarded('replace')
 
