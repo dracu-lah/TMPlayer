@@ -255,6 +255,24 @@ export function writeBoost(level: number) {
     else remove(BOOST_KEY, true)
 }
 
+/** Night mode and Even out volume on the web, kept for every video until turned off (the apps' night_mode and even_volume). Off unless asked: routing every video through Web Audio is a cost a viewer chooses. */
+const NIGHT_KEY = 'player:night'
+const EVEN_KEY = 'player:even'
+export async function readNight(): Promise<boolean> {
+    return (await read<unknown>(NIGHT_KEY)) === true
+}
+export function writeNight(on: boolean) {
+    if (on) write(NIGHT_KEY, true)
+    else remove(NIGHT_KEY, true)
+}
+export async function readEven(): Promise<boolean> {
+    return (await read<unknown>(EVEN_KEY)) === true
+}
+export function writeEven(on: boolean) {
+    if (on) write(EVEN_KEY, true)
+    else remove(EVEN_KEY, true)
+}
+
 async function all<T>(prefix: string): Promise<T[]> {
     return [...(await allEntries<T>(prefix)).values()]
 }

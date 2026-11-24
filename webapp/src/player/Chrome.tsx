@@ -989,6 +989,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Show when={boost.ok || boost.ios}>
                             <Entry text={t('player.volume_boost')} trailing={boost.level() > 1 ? t('player.volume_boost_level', { percent: Math.round(boost.level() * 100) }) : undefined} onClick={() => setSheet('boost')} />
                         </Show>
+                        {/* The apps' Night mode and Even out volume, in the same Web Audio graph as the boost (boost.ts). */}
+                        <Show when={boost.extras()}>
+                            <Entry text={t('player.night_mode')} trailing={boost.night() ? t('common.on') : t('common.off')} onClick={boost.toggleNight} />
+                            <Entry text={t('player.even_volume')} trailing={boost.even() ? t('common.on') : t('common.off')} onClick={boost.toggleEven} />
+                        </Show>
                         {/* PhoneMenuEntry.ResetZoom: the pinch's undo without a gesture, so a screen reader reaches it too. */}
                         <Show when={zoomed(zoom())}>
                             <Entry text={t('player.reset_zoom')} trailing={`${percent(zoom())}%`} onClick={() => (setSheet(null), resetZoom())} />

@@ -7,6 +7,11 @@
 //  - the canvas engines (movi.ts, libavcanvas.ts), whose sound is their own Web Audio: they define
 //    `tmBoost` on the element and apply the level on their own gain (the level is kept here, so an
 //    engine that starts later opens at it).
+// Night mode and Even out volume (WP-33, the apps' two switches) ride in the same graph: the element's
+// sound goes through a lift and a compressor for Night mode, then a slow gain that follows the track's
+// own average level for Even out volume, then the boost and its limiter. Only the element's own path
+// has them: a canvas engine's sound is its own Web Audio and has the boost only. Audio delay stays out
+// of the page (the browser's <video> cannot move its sound; see playerKeys.ts, web.audio_delay_unavailable).
 // iPhone and iPad are left out: Safari's `<video>` volume is read only there, and a media element
 // source can break AirPlay and background audio, so the entry is hidden (boostSupported).
 
@@ -15,6 +20,69 @@
  * lands near it, then a hard clip at full scale for what its 3 ms attack lets through.
  */
 const LIMITER = { threshold: -3, knee: 0, ratio: 20, attack: 0.003, release: 0.12 }
+
+/** A compressor's settings (dB, ratio, seconds). */
+export interface Squeeze {
+    threshold: number
+    knee: number
+    ratio: number
+    attack: number
+    release: number
+}
+
+/**
+ * Night mode, as the apps have it (VolumeBoostProcessor): a lift of about 6 dB, then a compressor
+ * that starts far lower (about -15 dBFS) at 6 to 1, so a full scale peak lands near -11 dBFS while
+ * dialogue comes up: the loud scenes end quieter than they were.
+ */
+export const NIGHT: Squeeze = { threshold: -15, knee: 0, ratio: 6, attack: 0.005, release: 0.25 }
+export const NIGHT_LIFT = 2
+
+/** Even out volume's aim: about -18 dBFS of average level (an amplitude of 0.126), as the apps have it. */
+const LEVEL_TARGET = 0.126
+/** Its largest lift, about +12 dB. */
+export const LEVEL_MAX = 4
+/** About -60 dBFS: a block quieter than this is silence and is not measured, so a pause does not count as quiet. */
+const LEVEL_GATE_SQUARE = 1e-6
+/** How long the average level is taken over, and how fast the lift rises and falls (seconds): slow up, quick down, so it never pumps. */
+export const LEVEL_SECONDS = 2
+export const LEVEL_RISE_SECONDS = 1.5
+export const LEVEL_FALL_SECONDS = 0.3
+/** How often the level is looked at (ms): a few times a second is enough for a 2 s average and costs a TV stick next to nothing. */
+export const LEVEL_POLL_MS = 250
+
+/**
+ * The lift Even out volume wants for a track whose average level is `meanSquare`: towards the target,
+ * never below 1 (a loud track is left as it is) and never above 4.
+ */
+export function levelFor(meanSquare: number): number {
+    if (!Number.isFinite(meanSquare) || meanSquare <= 0) return LEVEL_MAX
+    return Math.min(LEVEL_MAX, Math.max(1, Math.sqrt((LEVEL_TARGET * LEVEL_TARGET) / meanSquare)))
+}
+
+/**
+ * The running average (a mean square) after one more look: a one pole follower over about two
+ * seconds, with a silent block left out (the average stays as it was). `dt` is the seconds since
+ * the last look; garbage in (NaN, negative) leaves the average alone.
+ */
+export function followLoudness(prev: number, meanSquare: number, dt: number): number {
+    if (!Number.isFinite(meanSquare) || !(meanSquare > LEVEL_GATE_SQUARE) || !Number.isFinite(dt) || !(dt > 0)) return prev
+    const a = 1 - Math.exp(-dt / LEVEL_SECONDS)
+    return prev + (meanSquare - prev) * a
+}
+
+/** The mean square of one block of samples. */
+export function meanSquareOf(samples: ArrayLike<number>): number {
+    let sum = 0
+    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i]
+    return samples.length ? sum / samples.length : 0
+}
+
+/** The time constant (seconds) the lift walks to its target with: slow when rising, quick when falling. */
+export const levelConstant = (from: number, to: number) => (to > from ? LEVEL_RISE_SECONDS : LEVEL_FALL_SECONDS)
+
+/** The starting average of a track: the target itself, so the lift begins at 1 and walks from what is heard. */
+export const LEVEL_START = LEVEL_TARGET * LEVEL_TARGET
 
 /**
  * The makeup gain a DynamicsCompressorNode adds by itself (Web Audio's spec: the full range gain,
@@ -43,6 +111,9 @@ export const boostIsIos = () => IOS
 /** The level in force (1 is off), kept for engines that start after it was set. */
 let level = 1
 export const boostLevel = () => level
+/** Night mode and Even out volume as asked (off until a viewer turns them on; the page keeps them). */
+let night = false
+let even = false
 
 /** What a canvas engine defines on the element to take the level on its own gain. */
 export interface BoostHook {
@@ -74,8 +145,18 @@ const RESUME_WAIT_MS = 300
 interface Graph {
     ctx: AudioContext
     source: MediaElementAudioSourceNode
+    /** Night mode's lift, in front of its compressor. */
+    lift: GainNode
+    squeeze: ReturnType<typeof squeezeBetween>
+    /** Even out volume's lift, walked by the poll. */
+    leveller: GainNode
+    analyser: AnalyserNode
     gain: GainNode
     limiter: ReturnType<typeof limiterBetween>
+    /** The poll of the track's level, running only while Even out volume is on and the video plays. */
+    poll: ReturnType<typeof setInterval> | null
+    loudness: number
+    polledAt: number
 }
 // One graph per element for its whole life: an element can be routed once only (a second
 // createMediaElementSource on it throws, whatever context asks), so a remount reuses it.
@@ -84,26 +165,30 @@ const graphs = new WeakMap<HTMLMediaElement, Graph>()
 const starting = new WeakMap<HTMLMediaElement, Promise<Graph | null>>()
 
 /**
- * The limiter in front of `to`: on above 100%, bypassed at 100% so an unboosted sound passes as the
- * file has it. `from` is wired to whichever it points at. The chain is the compressor, the makeup it
- * adds taken back out, and a hard clip at full scale (a WaveShaper whose two point curve is the
- * identity inside +-1 and flat outside it), so no sample leaves above 1.0.
+ * A compressor in front of `to`, on or bypassed: `from` is wired to whichever it points at. The
+ * chain is the compressor, the makeup it adds by itself taken back out, and (with `clip`) a hard
+ * clip at full scale, a WaveShaper whose two point curve is the identity inside +-1 and flat
+ * outside it, so no sample leaves above 1.0.
  */
-export function limiterBetween(ctx: BaseAudioContext, from: AudioNode, to: AudioNode): { set: (on: boolean) => void; node: DynamicsCompressorNode } {
+export function squeezeBetween(ctx: BaseAudioContext, from: AudioNode, to: AudioNode, spec: Squeeze, clip: boolean): { set: (on: boolean) => void; node: DynamicsCompressorNode } {
     const node = ctx.createDynamicsCompressor()
-    node.threshold.value = LIMITER.threshold
-    node.knee.value = LIMITER.knee
-    node.ratio.value = LIMITER.ratio
-    node.attack.value = LIMITER.attack
-    node.release.value = LIMITER.release
+    node.threshold.value = spec.threshold
+    node.knee.value = spec.knee
+    node.ratio.value = spec.ratio
+    node.attack.value = spec.attack
+    node.release.value = spec.release
     const trim = ctx.createGain()
-    trim.gain.value = 1 / limiterMakeup()
-    const clip = ctx.createWaveShaper()
-    clip.curve = new Float32Array([-1, 1])
-    clip.oversample = 'none'
+    trim.gain.value = 1 / limiterMakeup(spec.threshold, spec.ratio)
     node.connect(trim)
-    trim.connect(clip)
-    clip.connect(to)
+    if (clip) {
+        const shaper = ctx.createWaveShaper()
+        shaper.curve = new Float32Array([-1, 1])
+        shaper.oversample = 'none'
+        trim.connect(shaper)
+        shaper.connect(to)
+    } else {
+        trim.connect(to)
+    }
     let on: boolean | null = null
     return {
         node,
@@ -116,6 +201,14 @@ export function limiterBetween(ctx: BaseAudioContext, from: AudioNode, to: Audio
             from.connect(next ? node : to)
         },
     }
+}
+
+/**
+ * The limiter in front of `to`: on above 100%, bypassed at 100% so an unboosted sound passes as the
+ * file has it (see [squeezeBetween]).
+ */
+export function limiterBetween(ctx: BaseAudioContext, from: AudioNode, to: AudioNode) {
+    return squeezeBetween(ctx, from, to, LIMITER, true)
 }
 
 async function graphFor(video: HTMLMediaElement): Promise<Graph | null> {
@@ -144,11 +237,24 @@ async function graphFor(video: HTMLMediaElement): Promise<Graph | null> {
         if (ctx.state !== 'running') return give()
         try {
             const source = ctx.createMediaElementSource(video)
+            // source, Night mode (its lift, then its compressor, or straight past it), Even out volume's
+            // gain, the boost's gain, the limiter (or straight past it), the speakers. The analyser only
+            // listens to the source, for the level Even out volume follows.
+            const lift = ctx.createGain()
+            const afterNight = ctx.createGain()
+            const leveller = ctx.createGain()
             const gain = ctx.createGain()
-            source.connect(gain)
+            const analyser = ctx.createAnalyser()
+            analyser.fftSize = 2048
+            source.connect(lift)
+            source.connect(analyser)
+            const squeeze = squeezeBetween(ctx, lift, afterNight, NIGHT, false)
+            squeeze.set(false)
+            afterNight.connect(leveller)
+            leveller.connect(gain)
             const limiter = limiterBetween(ctx, gain, ctx.destination)
             limiter.set(false)
-            const graph: Graph = { ctx, source, gain, limiter }
+            const graph: Graph = { ctx, source, lift, squeeze, leveller, analyser, gain, limiter, poll: null, loudness: LEVEL_START, polledAt: 0 }
             graphs.set(video, graph)
             // The system may suspend the context (a phone call, a tab in the background): a routed element is silent until it runs again.
             const wake = () => void ctx.resume().catch(() => {})
@@ -168,32 +274,102 @@ async function graphFor(video: HTMLMediaElement): Promise<Graph | null> {
     }
 }
 
+/** What a page asks of the sound of one element; a missing field keeps what it was. */
+export interface AudioAsk {
+    level?: number
+    night?: boolean
+    even?: boolean
+}
+
+/** Whether this element's sound is the page's own (not a canvas engine's): only there Night mode and Even out volume reach it. */
+export const extrasHere = (video: HTMLMediaElement) => typeof (video as HTMLMediaElement & BoostHook).tmBoost !== 'function'
+
+/** Stops the poll of the track's level. */
+function stopPoll(graph: Graph) {
+    if (graph.poll !== null) clearInterval(graph.poll)
+    graph.poll = null
+}
+
+/** Starts or stops the poll that walks Even out volume's lift, as the switch and the video's playing say. */
+function pollLevel(video: HTMLMediaElement, graph: Graph) {
+    if (!(even && !video.paused && !video.ended)) return stopPoll(graph)
+    if (graph.poll !== null) return
+    const block = new Float32Array(graph.analyser.fftSize)
+    graph.polledAt = graph.ctx.currentTime
+    graph.poll = setInterval(() => {
+        // Nothing runs for a stopped video or a suspended context: the poll stops itself and the next `play` starts it again.
+        if (!even || video.paused || video.ended || graph.ctx.state !== 'running') return stopPoll(graph)
+        const now = graph.ctx.currentTime
+        graph.analyser.getFloatTimeDomainData(block)
+        graph.loudness = followLoudness(graph.loudness, meanSquareOf(block), now - graph.polledAt)
+        graph.polledAt = now
+        const target = levelFor(graph.loudness)
+        graph.leveller.gain.setTargetAtTime(target, now, levelConstant(graph.leveller.gain.value, target))
+    }, LEVEL_POLL_MS)
+}
+
+/** Sets the whole chain from what was asked (level, night, even), on the element's own path. */
+function settle(video: HTMLMediaElement, graph: Graph) {
+    const now = graph.ctx.currentTime
+    graph.squeeze.set(night)
+    graph.lift.gain.setTargetAtTime(night ? NIGHT_LIFT : 1, now, 0.02)
+    if (!even) graph.leveller.gain.setTargetAtTime(1, now, 0.08)
+    // A lift and a squeeze can push a peak over full scale: the limiter is in whenever anything lifts.
+    graph.limiter.set(level > 1 || night || even)
+    graph.gain.gain.setTargetAtTime(level, now, 0.02)
+    pollLevel(video, graph)
+    video.dataset.night = String(night)
+    video.dataset.even = String(even)
+}
+
+/** A canvas engine took the sound over: whatever this page's graph did to it is put to unity. */
+function neutral(graph: Graph) {
+    stopPoll(graph)
+    graph.squeeze.set(false)
+    graph.lift.gain.value = 1
+    graph.leveller.gain.value = 1
+    graph.limiter.set(false)
+    graph.gain.gain.value = 1
+}
+
 /**
- * Sets the boost on `video` (1 to 2). Resolves true when it took effect: false where nothing could
- * carry it (no Web Audio, a context no gesture has allowed yet, a cross origin source), so the
- * caller can ask again after the next tap.
+ * Sets the sound of `video`: the boost (1 to 2), Night mode and Even out volume. Resolves true when it
+ * took effect: false where nothing could carry it (no Web Audio, a context no gesture has allowed
+ * yet, a cross origin source), so the caller can ask again after the next tap. A canvas engine takes
+ * the boost only (Night mode and Even out volume stay off there, see [extrasHere]).
  */
-export async function applyBoost(video: HTMLVideoElement, next: number): Promise<boolean> {
-    level = next
-    video.dataset.boost = String(next)
+export async function applyAudio(video: HTMLVideoElement, ask: AudioAsk): Promise<boolean> {
+    if (ask.level !== undefined) level = ask.level
+    if (ask.night !== undefined) night = ask.night
+    if (ask.even !== undefined) even = ask.even
+    video.dataset.boost = String(level)
     const hook = (video as HTMLVideoElement & BoostHook).tmBoost
     if (typeof hook === 'function') {
-        hook(next)
+        hook(level)
         const graph = graphs.get(video)
-        if (graph) graph.gain.gain.value = 1
+        if (graph) neutral(graph)
         return true
     }
-    if (next <= 1 && !graphs.has(video)) return true
+    const wanted = level > 1 || night || even
+    if (!wanted && !graphs.has(video)) return true
     const graph = await graphFor(video)
-    if (!graph) return next <= 1
+    if (!graph) return !wanted
     // The engine may have changed while the context was waking.
     const now = (video as HTMLVideoElement & BoostHook).tmBoost
-    if (typeof now === 'function') return applyBoost(video, level)
+    if (typeof now === 'function') return applyAudio(video, {})
     // Which path carries it, for the end to end tests and the playback details.
     video.dataset.boostPath = 'element'
-    graph.limiter.set(level > 1)
-    graph.gain.gain.setTargetAtTime(level, graph.ctx.currentTime, 0.02)
+    settle(video, graph)
     return true
+}
+
+/** Sets the boost on `video` (1 to 2); see [applyAudio]. */
+export const applyBoost = (video: HTMLVideoElement, next: number) => applyAudio(video, { level: next })
+
+/** The video started or stopped: Even out volume's poll follows (the poll stops itself when paused, so a play starts it). */
+export function audioPlaying(video: HTMLMediaElement) {
+    const graph = graphs.get(video)
+    if (graph && extrasHere(video)) pollLevel(video, graph)
 }
 
 /**
@@ -205,8 +381,7 @@ export async function applyBoost(video: HTMLVideoElement, next: number): Promise
 export function releaseBoost(video: HTMLMediaElement) {
     const graph = graphs.get(video)
     if (!graph) return
-    graph.limiter.set(false)
-    graph.gain.gain.value = 1
+    neutral(graph)
     setTimeout(() => {
         if (video.isConnected || graphs.get(video) !== graph) return
         graphs.delete(video)
