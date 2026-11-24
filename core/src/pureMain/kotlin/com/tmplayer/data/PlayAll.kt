@@ -47,6 +47,13 @@ object PlayAll {
         }
     }
 
+    /**
+     * Whether the end of a video goes on to the next one: always in a Play all or Shuffle run, whose
+     * press is the request to play on (PB2-07), else as the Autoplay next setting says. "Still
+     * watching?" and the sleep timer still stop a run as they stop autoplay.
+     */
+    fun playsOn(mode: Mode, autoplaySetting: Boolean): Boolean = mode != Mode.Off || autoplaySetting
+
     /** One press of Play all or Shuffle: the video to start with, and how the rest follows. */
     class Request(
         val chatId: Long,
@@ -132,13 +139,14 @@ object PlayAll {
      * seed, as far as the chat's pages are the same. Handed from one video's player to the next
      * ([Request.pool]) it also knows exactly what was played.
      *
-     * [fetch] reads a page of the chat around an anchor (0 is the newest), null when it could not be
-     * asked (offline, a failed search): the pool keeps what it had and nothing further is invented.
+     * The pool holds data only (PB2-06): the page reader is handed to each [steps] call by the player
+     * asking, so a pool handed on through a whole run never keeps the first player (its views, its
+     * client) alive, and a player after a profile switch reads with its own client. [fits] must
+     * capture values only, never a screen.
      */
     class ShufflePool(
         private val seed: Long,
         private val fits: (MediaItem) -> Boolean = { true },
-        private val fetch: suspend (anchor: Long, newer: Boolean) -> ChatOrder.Window?,
     ) {
         private val pool = HashMap<Long, MediaItem>()
         private val played = HashSet<Long>()
@@ -152,7 +160,12 @@ object PlayAll {
 
         val size: Int get() = pool.size
 
-        suspend fun steps(current: MediaItem): EpisodeSteps {
+        /**
+         * The steps around [current]. [fetch] reads a page of the chat around an anchor (0 is the
+         * newest), null when it could not be asked (offline, a failed search): the pool keeps what
+         * it had and nothing further is invented. It is used during this call only, never kept.
+         */
+        suspend fun steps(current: MediaItem, fetch: suspend (anchor: Long, newer: Boolean) -> ChatOrder.Window?): EpisodeSteps {
             // A pool that has read nothing yet (a Shuffle just pressed, or a player rebuilt after its process died) may
             // read further to find where this video stands in the order; after that a step costs a page or two.
             val allowed = if (pagesRead == 0) FRESH_PAGES else PAGES_PER_ADVANCE
@@ -171,7 +184,7 @@ object PlayAll {
                 if (next != null || exhausted || read >= allowed || pool.size >= MAX_POOL) {
                     return EpisodeSteps(previous = previous, next = next)
                 }
-                if (!readPage(current)) return EpisodeSteps(previous = previous, next = null)
+                if (!readPage(current, fetch)) return EpisodeSteps(previous = previous, next = null)
                 read++
             }
         }
@@ -179,7 +192,7 @@ object PlayAll {
         private fun usable(item: MediaItem, current: MediaItem): Boolean =
             item.messageId != current.messageId && !sameFile(item, current)
 
-        private suspend fun readPage(current: MediaItem): Boolean {
+        private suspend fun readPage(current: MediaItem, fetch: suspend (anchor: Long, newer: Boolean) -> ChatOrder.Window?): Boolean {
             val page = fetch(cursor, false) ?: return false
             val first = pagesRead == 0
             pagesRead++

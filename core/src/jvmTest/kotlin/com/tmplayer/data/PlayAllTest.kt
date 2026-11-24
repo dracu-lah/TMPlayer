@@ -128,7 +128,8 @@ class PlayAllTest {
     // ---- a chat of 20,000 --------------------------------------------------------------------
 
     private fun walkChat(chat: Chat, seed: Long, start: MediaItem?, steps: Int): List<Long> = runBlocking {
-        val pool = PlayAll.ShufflePool(seed) { anchor, newer -> chat.window(anchor, newer) }
+        val pool = PlayAll.ShufflePool(seed)
+        val fetch: suspend (Long, Boolean) -> ChatOrder.Window? = { anchor, newer -> chat.window(anchor, newer) }
         val seen = mutableListOf<Long>()
         // As the grid does: the first of the loaded page in the shuffled order starts it.
         var at = start ?: PlayAll.shuffleFirst(seed, chat.window(0, false)!!.items)
@@ -136,7 +137,7 @@ class PlayAllTest {
             val here = at ?: return@runBlocking seen
             seen += here.messageId
             val before = chat.asked
-            at = pool.steps(here).next
+            at = pool.steps(here, fetch).next
             // Calls per advance are bounded, whatever the size of the chat.
             assertTrue(chat.asked - before <= PlayAll.PAGES_PER_ADVANCE, "asked ${chat.asked - before} pages for one step")
         }
@@ -162,7 +163,7 @@ class PlayAllTest {
     @Test
     fun `a chat that cannot be asked ends the shuffle where it is and invents nothing`() {
         val steps = runBlocking {
-            PlayAll.ShufflePool(1) { _, _ -> null }.steps(video(5))
+            PlayAll.ShufflePool(1).steps(video(5)) { _, _ -> null }
         }
         assertNull(steps.next)
         assertNull(steps.previous)
@@ -176,12 +177,28 @@ class PlayAllTest {
         assertEquals(5, seen.toSet().size)
     }
 
+    /** PB2-06: the pool goes from player to player through a whole run, so it must not keep the reader (and the screen behind it). */
+    @Test
+    fun `a pool keeps no reference to the reader it was asked with`() {
+        class Screen(val chat: Chat)
+        val screen = Screen(Chat(200))
+        val pool = PlayAll.ShufflePool(5)
+        runBlocking { pool.steps(video(1)) { anchor, newer -> screen.chat.window(anchor, newer) } }
+        assertTrue(pool.size > 0, "the pages were read")
+        val held = PlayAll.ShufflePool::class.java.declaredFields.onEach { it.isAccessible = true }.map { it.get(pool) }
+        assertTrue(held.none { it === screen }, "the screen itself is not held")
+        assertTrue(
+            held.none { it is Function<*> && it.javaClass.declaredFields.any { f -> f.isAccessible = true; f.get(it) === screen } },
+            "no kept function closes over the screen",
+        )
+    }
+
     @Test
     fun `another copy of the playing file, and a piece of a split video, are not played next`() {
         val twin = video(2, name = "same.mp4").copy(sizeBytes = 500)
         val here = video(1, name = "same.mp4").copy(sizeBytes = 500)
         val next = runBlocking {
-            PlayAll.ShufflePool(1) { _, _ -> ChatOrder.Window(listOf(twin), 0) }.steps(here).next
+            PlayAll.ShufflePool(1).steps(here) { _, _ -> ChatOrder.Window(listOf(twin), 0) }.next
         }
         assertNull(next)
     }

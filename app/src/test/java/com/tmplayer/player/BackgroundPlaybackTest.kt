@@ -54,6 +54,22 @@ class BackgroundPlaybackTest {
         unseen: Boolean = false,
     ) = BackgroundPlayback.atTheEnd(hasNext, autoplay, dismissed, sleep, ask, cardShown, unseen)
 
+    /** PB2-07: a Play all or Shuffle run plays on with Autoplay next off; a plain video still stops there. */
+    @Test
+    fun `play all goes on to the next video with autoplay off, a plain video does not`() {
+        val off = false
+        for (mode in com.tmplayer.data.PlayAll.Mode.entries.filter { it != com.tmplayer.data.PlayAll.Mode.Off }) {
+            assertEquals("$mode", AtTheEnd.Next(countdown = true), end(autoplay = com.tmplayer.data.PlayAll.playsOn(mode, off)))
+        }
+        assertEquals(AtTheEnd.Finished, end(autoplay = com.tmplayer.data.PlayAll.playsOn(com.tmplayer.data.PlayAll.Mode.Off, off)))
+        // "Still watching?" still stops a run.
+        assertEquals(AtTheEnd.AskFirst, end(autoplay = com.tmplayer.data.PlayAll.playsOn(com.tmplayer.data.PlayAll.Mode.Chat, off), ask = true))
+        // The activity decides the end, the foreground and the end watch through it.
+        val here = java.io.File("src/main/java/com/tmplayer/player/PlayerActivity.kt")
+        val source = (if (here.exists()) here else java.io.File("app/${here.path}")).readText()
+        assertEquals(3, Regex("""PlayAll\.playsOn\(playAllMode, """).findAll(source).count())
+    }
+
     @Test
     fun `out of sight the next episode starts at once, in sight after the countdown`() {
         assertEquals(AtTheEnd.Next(countdown = false), end(unseen = true))

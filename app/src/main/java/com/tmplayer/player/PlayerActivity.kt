@@ -6295,13 +6295,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val topic = here.topicId.takeIf { it != 0 }
                 ?: com.tmplayer.data.runCatchingCancellable { repository.topicOf(chatId, messageId) }.getOrDefault(0)
             val fits = { item: MediaItem -> com.tmplayer.data.SizeFilter.matches(item.sizeBytes, min, max) }
+            // Locals only in the reader: the activity's chatId field would tie this screen to it.
+            val chat = chatId
             val fetch: suspend (Long, Boolean) -> com.tmplayer.data.ChatOrder.Window? = { anchor, newer ->
-                com.tmplayer.data.runCatchingCancellable { repository.videoWindow(chatId, anchor, newer, topic) }.getOrNull()
+                com.tmplayer.data.runCatchingCancellable { repository.videoWindow(chat, anchor, newer, topic) }.getOrNull()
             }
             val steps = if (playAllMode == com.tmplayer.data.PlayAll.Mode.ChatShuffle) {
                 // One pool for the whole run: the pages read for one video are still there for the next.
-                val pool = shufflePool ?: com.tmplayer.data.PlayAll.ShufflePool(playAllSeed, fits, fetch).also { shufflePool = it }
-                pool.steps(here)
+                // It holds data only, the reader is this player's for this call (PB2-06).
+                val pool = shufflePool ?: com.tmplayer.data.PlayAll.ShufflePool(playAllSeed, fits).also { shufflePool = it }
+                pool.steps(here, fetch)
             } else {
                 com.tmplayer.data.ChatOrder.steps(current = here, sort = sort, fits = fits, fetch = fetch)
             }
@@ -6902,7 +6905,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch {
             settings.clearResumePosition(chatId, messageId, currentItem())
             val next = _episodes.value.next
-            val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+            // Play all and Shuffle play on whatever the Autoplay next setting says (PB2-07).
+            val autoplay = com.tmplayer.data.PlayAll.playsOn(playAllMode, runCatching { settings.autoplayNextNow() }.getOrDefault(true))
             hideNextUp()
             val unseen = inBackgroundAudio
             val end = BackgroundPlayback.atTheEnd(
@@ -6962,7 +6966,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun endLeadsOn(): Boolean = BackgroundPlayback.atTheEnd(
         hasNext = _episodes.value.next != null,
-        autoplay = autoplayNext,
+        autoplay = com.tmplayer.data.PlayAll.playsOn(playAllMode, autoplayNext),
         nextUpDismissed = nextUpDismissed,
         sleepAtTheEnd = sleepAtTheEnd,
         askBeforeAutoplay = StillWatching.askBeforeAutoplay(autoplayedInARow),
@@ -9809,7 +9813,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     // reading it alone left a video on VLC with no Skip button and no next-up card.
                     val exo = playing ?: continue
                     // The live copy each tick: the Episodes panel's switch changes it mid-video.
-                    val autoplay = autoplayNext
+                    val autoplay = com.tmplayer.data.PlayAll.playsOn(playAllMode, autoplayNext)
                     updateSkipPill(exo, autoplay)
                     if (!autoplay) {
                         // Switched off while the card was up: it must not promise a next episode.
