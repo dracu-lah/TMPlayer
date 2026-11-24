@@ -35,6 +35,10 @@ object MprisMapping {
 
     fun trackPath(trackNumber: Long): DBusPath = DBusPath("/com/tmplayer/track/$trackNumber")
 
+    /** `Rate`: the playback speed, 1 with nothing playing or a speed that is not a usable number. */
+    fun rate(now: NowPlaying?): Double =
+        (now?.rate?.toDouble() ?: 1.0).takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+
     fun playbackStatus(now: NowPlaying?): String = when {
         now == null -> "Stopped"
         now.playing -> "Playing"
@@ -68,9 +72,9 @@ object MprisMapping {
      */
     fun playerProperties(now: NowPlaying?): Map<String, Any> = mapOf(
         "PlaybackStatus" to playbackStatus(now),
-        "Rate" to 1.0,
-        "MinimumRate" to 1.0,
-        "MaximumRate" to 1.0,
+        "Rate" to rate(now),
+        "MinimumRate" to minOf(MIN_RATE, rate(now)),
+        "MaximumRate" to maxOf(MAX_RATE, rate(now)),
         "Metadata" to metadata(now),
         "CanGoNext" to (now?.canGoNext ?: false),
         "CanGoPrevious" to (now?.canGoPrevious ?: false),
@@ -79,6 +83,10 @@ object MprisMapping {
         "CanSeek" to (now != null && now.durationMs > 0),
         "CanControl" to true,
     )
+
+    /** The range `Rate` allows: the player's speeds, widened to hold the one playing. */
+    const val MIN_RATE = 0.25
+    const val MAX_RATE = 4.0
 
     /** `Position` in microseconds at [nowNanos]. */
     fun positionUs(now: NowPlaying?, nowNanos: Long): Long = (now?.positionAt(nowNanos) ?: 0L) * 1_000L
@@ -181,6 +189,7 @@ internal class MprisMediaSession private constructor(
         artUrl: String?,
         canGoNext: Boolean,
         canGoPrevious: Boolean,
+        rate: Float,
     ) {
         if (released) return
         val at = clock()
@@ -197,9 +206,12 @@ internal class MprisMediaSession private constructor(
                 canGoNext = canGoNext,
                 canGoPrevious = canGoPrevious,
                 atNanos = at,
+                rate = rate,
             )
             now = after
-            MprisMapping.changed(before, after) to (before != null && before.seekedTo(after))
+            // A new speed is announced with the position, as clients carry the old one forward by the old rate.
+            val rateChanged = before != null && before.trackNumber == track && MprisMapping.rate(before) != MprisMapping.rate(after)
+            MprisMapping.changed(before, after) to (before != null && (before.seekedTo(after) || rateChanged))
         }
         emit(changed)
         if (seeked) send { MprisPlayer.Seeked(MprisMapping.OBJECT_PATH, positionMs * 1_000L) }

@@ -160,7 +160,7 @@ fun PlayerHost(
         // title comes back the moment it shows again.
         kotlinx.coroutines.flow.combine(e.stateUpdates(), com.tmplayer.data.ProfileUnlock.hidden()) { s, hidden -> s to hidden }.collect { (s, hidden) ->
             if (s.playing && s.opened && !s.ended) keepAwake.acquire() else keepAwake.release()
-            session.update(com.tmplayer.desktop.os.ProfileOutside.mediaTitle(title, hidden, owner = openedFor), s.durationMs, s.positionMs, s.playing && !s.ended)
+            session.update(com.tmplayer.desktop.os.ProfileOutside.mediaTitle(title, hidden, owner = openedFor), s.durationMs, s.positionMs, s.playing && !s.ended, rate = s.speed)
         }
     }
 }

@@ -54,6 +54,17 @@ object SmtcMapping {
      */
     const val BUTTON_HANDLER_IID = "0557e996-7b23-5bae-aa81-ea0d671143a4"
 
+    /** `Windows.Media.ISystemMediaTransportControls2`: the playback rate, the timeline and the seek request. */
+    const val SMTC2_IID = "ea98d2f6-7f3c-4af2-a586-72889808efb1"
+
+    /** `Windows.Media.ISystemMediaTransportControlsTimelineProperties`, the default interface of [TIMELINE_CLASS]. */
+    const val TIMELINE_IID = "5125316a-c3a2-475b-8507-93534dc88f15"
+
+    const val TIMELINE_CLASS = "Windows.Media.SystemMediaTransportControlsTimelineProperties"
+
+    /** `Windows.Media.IPlaybackPositionChangeRequestedEventArgs`. */
+    const val POSITION_ARGS_IID = "b4493f88-eb28-4961-9c14-335e44f3e125"
+
     /** `IUnknown`. */
     const val IUNKNOWN_IID = "00000000-0000-0000-c000-000000000046"
 
@@ -67,6 +78,15 @@ object SmtcMapping {
         "pinterface({$TYPED_EVENT_HANDLER_PIID};" +
             "rc($RUNTIME_CLASS;{$SMTC_IID});" +
             "rc(Windows.Media.SystemMediaTransportControlsButtonPressedEventArgs;{$BUTTON_ARGS_IID}))"
+
+    /** `TypedEventHandler<SystemMediaTransportControls, PlaybackPositionChangeRequestedEventArgs>`'s signature. */
+    val POSITION_HANDLER_SIGNATURE: String =
+        "pinterface({$TYPED_EVENT_HANDLER_PIID};" +
+            "rc($RUNTIME_CLASS;{$SMTC_IID});" +
+            "rc(Windows.Media.PlaybackPositionChangeRequestedEventArgs;{$POSITION_ARGS_IID}))"
+
+    /** The IID of that handler, derived like [BUTTON_HANDLER_IID] and held to the derivation by a test. */
+    const val POSITION_HANDLER_IID = "44e34f15-bdc0-50a7-ace4-39e91fb753f1"
 
     /** WinRT's namespace for parameterized interface IIDs. */
     private const val PINTERFACE_NAMESPACE = "11f47ad5-7b73-42c0-abae-878b1e16adee"
@@ -130,6 +150,26 @@ object SmtcMapping {
         return "${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}"
     }
 
+    /** A `TimeSpan` is a count of 100 nanosecond ticks. */
+    fun ticks(ms: Long): Long = ms.coerceAtLeast(0) * 10_000L
+
+    /** The inverse of [ticks], in whole milliseconds. */
+    fun millis(ticks: Long): Long = ticks / 10_000L
+
+    /**
+     * What the flyout's timeline is told for [now], or null when it needs nothing new: SMTC moves
+     * the position on by itself at the playback rate while playing, so only a new video, play or
+     * pause, a new rate and a seek are sent ([before] is the snapshot the last send was made for).
+     * A video of no known length has no timeline.
+     */
+    fun timeline(before: NowPlaying?, now: NowPlaying): SmtcTimeline? {
+        if (now.durationMs <= 0) return null
+        val same = before != null && before.trackNumber == now.trackNumber &&
+            before.durationMs == now.durationMs && before.playing == now.playing && before.rate == now.rate
+        if (same && !before!!.seekedTo(now)) return null
+        return SmtcTimeline(now.durationMs, now.positionMs.coerceIn(0, now.durationMs), now.rate.toDouble().takeIf { it.isFinite() && it > 0.0 } ?: 1.0)
+    }
+
     /** `MediaPlaybackStatus` for a snapshot; nothing playing is Closed, which hides the panel's controls. */
     fun playbackStatus(now: SmtcState?): Int = when {
         now == null -> STATUS_CLOSED
@@ -154,6 +194,9 @@ object SmtcMapping {
         return true
     }
 }
+
+/** What the flyout's timeline shows: a scrubber from 0 to [durationMs], at [positionMs], moving at [rate] while playing. */
+data class SmtcTimeline(val durationMs: Long, val positionMs: Long, val rate: Double)
 
 /** What SMTC is showing, so a repeated update with the same values sends nothing. */
 data class SmtcState(
@@ -182,6 +225,17 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
     private lateinit var updater: Pointer
     private var token = 0L
 
+    /** `ISystemMediaTransportControls2` and the timeline object, null where Windows has not got them (before 1703). */
+    private var controls2: Pointer? = null
+    private var timeline: Pointer? = null
+
+    /** Cleared by the first failed timeline call: the flyout then goes without a scrubber, the buttons stay. */
+    private var timelineWorks = true
+
+    /** The length of the video on the timeline, so a seek request outside it is dropped. */
+    @Volatile
+    private var timelineDurationMs = 0L
+
     /** Who the buttons go to now; null between players. */
     @Volatile
     var listener: MediaSessionCallbacks? = null
@@ -194,7 +248,20 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
 
     // The handler object and everything it points at stays reachable for the life of the process:
     // SMTC may hold a reference past any session, and a collected callback would crash the app.
-    private val handler = ButtonHandler()
+    private val handler = ButtonHandler(SmtcMapping.BUTTON_HANDLER_IID) { target, args ->
+        val button = IntByReference()
+        if (args.com(ARGS_GET_BUTTON, button) >= 0) SmtcMapping.dispatch(button.value, target)
+    }
+
+    /** The flyout's scrubber moved: the requested position goes to the player as a seek. */
+    private val positionHandler = ButtonHandler(SmtcMapping.POSITION_HANDLER_IID) { target, args ->
+        val ticks = LongByReference()
+        if (args.com(ARGS_GET_REQUESTED_POSITION, ticks) >= 0) {
+            val ms = SmtcMapping.millis(ticks.value)
+            val length = timelineDurationMs
+            if (ms >= 0 && length > 0 && ms <= length) target.onSeekTo(ms)
+        }
+    }
 
     /**
      * Runs [block] on the COM thread. A failure logs once and turns the binding off for good,
@@ -247,6 +314,59 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
         if (before == null || before.title != state.title) setTitle(state.title)
     }
 
+    /**
+     * Puts the timeline on the flyout: the scrubber from 0 to the length, the position, and the
+     * rate it moves at. COM thread only. A failure turns the timeline off, not the session.
+     */
+    fun renderTimeline(t: SmtcTimeline?) {
+        val c2 = controls2 ?: return
+        val line = timeline ?: return
+        if (!timelineWorks || t == null) return
+        try {
+            val end = SmtcMapping.ticks(t.durationMs)
+            check(line.com(TIMELINE_PUT_START, 0L), "put_StartTime")
+            check(line.com(TIMELINE_PUT_END, end), "put_EndTime")
+            check(line.com(TIMELINE_PUT_MIN_SEEK, 0L), "put_MinSeekTime")
+            check(line.com(TIMELINE_PUT_MAX_SEEK, end), "put_MaxSeekTime")
+            check(line.com(TIMELINE_PUT_POSITION, SmtcMapping.ticks(t.positionMs)), "put_Position")
+            check(c2.com(PUT_PLAYBACK_RATE, t.rate), "put_PlaybackRate")
+            check(c2.com(UPDATE_TIMELINE, line), "UpdateTimelineProperties")
+            timelineDurationMs = t.durationMs
+        } catch (e: Throwable) {
+            timelineWorks = false
+            Logger.w(TAG, "SMTC timeline off: ${e.message}")
+        }
+    }
+
+    /**
+     * The timeline half of [init], optional: a Windows without `ISystemMediaTransportControls2`
+     * keeps its buttons and shows no scrubber. Seeking from the flyout reaches the listener.
+     */
+    private fun initTimeline() {
+        try {
+            val two = PointerByReference()
+            check(controls.com(QUERY_INTERFACE, guid(SmtcMapping.SMTC2_IID), two), "QueryInterface(ISystemMediaTransportControls2)")
+            val c2 = two.value ?: throw IllegalStateException("no ISystemMediaTransportControls2")
+            val made = PointerByReference()
+            withHString(SmtcMapping.TIMELINE_CLASS) {
+                check(Combase.INSTANCE.RoActivateInstance(it, made), "RoActivateInstance(timeline)")
+            }
+            val inspectable = made.value ?: throw IllegalStateException("no timeline object")
+            val line = PointerByReference()
+            try {
+                check(inspectable.com(QUERY_INTERFACE, guid(SmtcMapping.TIMELINE_IID), line), "QueryInterface(timeline)")
+            } finally {
+                inspectable.release()
+            }
+            val tok = LongByReference()
+            check(c2.com(ADD_POSITION_CHANGE_REQUESTED, positionHandler.self, tok), "add_PlaybackPositionChangeRequested")
+            controls2 = c2
+            timeline = line.value ?: throw IllegalStateException("no timeline interface")
+        } catch (t: Throwable) {
+            Logger.w(TAG, "SMTC has no timeline: ${t.message}")
+        }
+    }
+
     private fun setTitle(title: String) {
         check(updater.com(UPDATER_PUT_TYPE, SmtcMapping.TYPE_VIDEO), "put_Type")
         val out = PointerByReference()
@@ -282,6 +402,7 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
         val tok = LongByReference()
         check(controls.com(ADD_BUTTON_PRESSED, handler.self, tok), "add_ButtonPressed")
         token = tok.value
+        initTimeline()
         // Off until a video plays, so the panel never shows TMPlayer with nothing in it.
         check(controls.com(PUT_IS_ENABLED, FALSE), "put_IsEnabled")
     }
@@ -291,9 +412,9 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
      * by hand: QueryInterface, AddRef, Release, Invoke. Never freed (see [handler]), so the
      * reference count is kept only because COM expects the calls to answer.
      */
-    private inner class ButtonHandler {
+    private inner class ButtonHandler(iid: String, private val act: (MediaSessionCallbacks, Pointer) -> Unit) {
         private val refs = AtomicInteger(1)
-        private val handlerIid = guidBytes(SmtcMapping.BUTTON_HANDLER_IID)
+        private val handlerIid = guidBytes(iid)
         private val unknownIid = guidBytes(SmtcMapping.IUNKNOWN_IID)
         private val agileIid = guidBytes(SmtcMapping.IAGILE_OBJECT_IID)
 
@@ -320,9 +441,8 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
             override fun invoke(self: Pointer?, sender: Pointer?, args: Pointer?): Int {
                 try {
                     val target = listener ?: return S_OK
-                    val button = IntByReference()
-                    if (args == null || args.com(ARGS_GET_BUTTON, button) < 0) return S_OK
-                    SmtcMapping.dispatch(button.value, target)
+                    if (args == null) return S_OK
+                    act(target, args)
                 } catch (t: Throwable) {
                     // Nothing may escape into Windows' thread.
                     Logger.w(TAG, "button handler: ${t.message}")
@@ -357,6 +477,7 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
     interface Combase : StdCallLibrary {
         fun RoInitialize(initType: Int): Int
         fun RoGetActivationFactory(activatableClassId: Pointer, iid: Pointer, factory: PointerByReference): Int
+        fun RoActivateInstance(activatableClassId: Pointer, instance: PointerByReference): Int
         fun WindowsCreateString(source: WString, length: Int, string: PointerByReference): Int
         fun WindowsDeleteString(string: Pointer?): Int
 
@@ -375,6 +496,8 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
         private const val RO_INIT_MULTITHREADED = 1
         private const val TRUE: Byte = 1
         private const val FALSE: Byte = 0
+
+        private const val QUERY_INTERFACE = 0
 
         // Vtable slots. IUnknown is 0 to 2 (QueryInterface, AddRef, Release); IInspectable adds
         // 3 to 5 (GetIids, GetRuntimeClassName, GetTrustLevel); each interface's own methods
@@ -401,6 +524,23 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
 
         /** IVideoDisplayProperties::put_Title. */
         private const val VIDEO_PUT_TITLE = 7
+
+        // ISystemMediaTransportControls2 (windows.media.h order: AutoRepeatMode 6 and 7, ShuffleEnabled
+        // 8 and 9, PlaybackRate 10 and 11, UpdateTimelineProperties 12, then the events)
+        private const val PUT_PLAYBACK_RATE = 11
+        private const val UPDATE_TIMELINE = 12
+        private const val ADD_POSITION_CHANGE_REQUESTED = 13
+
+        // ISystemMediaTransportControlsTimelineProperties: StartTime 6 and 7, EndTime 8 and 9,
+        // MinSeekTime 10 and 11, MaxSeekTime 12 and 13, Position 14 and 15 (getter, then setter)
+        private const val TIMELINE_PUT_START = 7
+        private const val TIMELINE_PUT_END = 9
+        private const val TIMELINE_PUT_MIN_SEEK = 11
+        private const val TIMELINE_PUT_MAX_SEEK = 13
+        private const val TIMELINE_PUT_POSITION = 15
+
+        /** IPlaybackPositionChangeRequestedEventArgs::get_RequestedPlaybackPosition. */
+        private const val ARGS_GET_REQUESTED_POSITION = 6
 
         /** ISystemMediaTransportControlsButtonPressedEventArgs::get_Button. */
         private const val ARGS_GET_BUTTON = 6
@@ -484,8 +624,9 @@ internal class SmtcBinding private constructor(private val worker: ExecutorServi
 
 /**
  * The Windows now playing entry: the media flyout by the volume control, the lock screen, and
- * the keyboard's media keys, through SMTC. Only play, pause, stop, next and previous; SMTC's
- * timeline (seeking from the flyout) is not wired.
+ * the keyboard's media keys, through SMTC. Play, pause, stop, next and previous, and the timeline
+ * (length, position, playback rate, and a seek from the flyout) where Windows has
+ * `ISystemMediaTransportControls2`.
  */
 internal class SmtcMediaSession(
     private val binding: SmtcBinding,
@@ -495,6 +636,10 @@ internal class SmtcMediaSession(
     /** The last state this session asked for, so a timer tick with nothing new sends nothing. */
     @Volatile
     private var asked: SmtcState? = null
+
+    /** The snapshot the flyout's timeline was last sent for, and the number of the video it was. */
+    private var sentTimeline: NowPlaying? = null
+    private var track = 0L
 
     @Volatile
     private var released = false
@@ -510,21 +655,34 @@ internal class SmtcMediaSession(
         artUrl: String?,
         canGoNext: Boolean,
         canGoPrevious: Boolean,
+        rate: Float,
     ) {
         if (released) return
         val next = SmtcState(title, playing, canGoNext, canGoPrevious)
-        if (next == asked) return
+        // The timeline: a new video, play or pause, a new rate or a seek (SmtcMapping.timeline).
+        val timeline = synchronized(this) {
+            val before = sentTimeline
+            if (before == null || before.title != title) track++
+            val now = NowPlaying(
+                track, title, durationMs.coerceAtLeast(0), positionMs.coerceAtLeast(0), playing, artUrl,
+                canGoNext, canGoPrevious, System.nanoTime(), rate,
+            )
+            SmtcMapping.timeline(before, now)?.also { sentTimeline = now }
+        }
+        if (next == asked && timeline == null) return
         asked = next
         binding.post {
             // The newest player takes the panel; one closing a moment later cannot clear it.
             listener = callbacks
             render(next)
+            renderTimeline(timeline)
         }
     }
 
     override fun clear() {
         if (released) return
         asked = null
+        synchronized(this) { sentTimeline = null }
         binding.post { if (listener === callbacks) render(null) }
     }
 

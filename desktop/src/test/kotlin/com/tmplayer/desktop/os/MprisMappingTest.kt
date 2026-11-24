@@ -16,7 +16,28 @@ class MprisMappingTest {
         playing: Boolean = true,
         art: String? = null,
         at: Long = 0,
-    ) = NowPlaying(track, title, durationMs, positionMs, playing, art, canGoNext = true, canGoPrevious = false, atNanos = at)
+        rate: Float = 1f,
+    ) = NowPlaying(track, title, durationMs, positionMs, playing, art, canGoNext = true, canGoPrevious = false, atNanos = at, rate = rate)
+
+    @Test
+    fun `Rate is the playback speed, with a range that always holds it`() {
+        assertEquals(1.0, MprisMapping.rate(null), 0.0)
+        assertEquals(1.5, MprisMapping.rate(np(rate = 1.5f)), 0.0)
+        assertEquals(1.0, MprisMapping.rate(np(rate = Float.NaN)), 0.0)
+        assertEquals(1.0, MprisMapping.rate(np(rate = 0f)), 0.0)
+        val fast = MprisMapping.playerProperties(np(rate = 8f))
+        assertEquals(8.0, fast["Rate"])
+        assertEquals(8.0, fast["MaximumRate"])
+        assertEquals(0.25, MprisMapping.playerProperties(np())["MinimumRate"])
+    }
+
+    @Test
+    fun `a new speed is a changed property and the position carries on at the new pace`() {
+        assertEquals(setOf("Rate"), MprisMapping.changed(np(), np(rate = 2f)).keys)
+        // Two seconds of the clock at 2x is four seconds of the video.
+        assertEquals(64_000L, np(rate = 2f, at = 0).positionAt(2_000_000_000L))
+        assertFalse(np(rate = 2f).seekedTo(np(rate = 2f, positionMs = 64_000, at = 2_000_000_000L)))
+    }
 
     @Test
     fun `metadata carries track id, title and length in microseconds`() {

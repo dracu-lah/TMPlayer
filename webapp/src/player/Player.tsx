@@ -696,7 +696,7 @@ export function Player(props: {
     onMount(() => setReady(true))
 
     // The lock screen and media keys: its name, the jumps, previous and next.
-    useMediaSession(() => video, item, () => props.info, play)
+    useMediaSession(() => video, item, () => props.info, play, () => close())
 
     // Near the end: the next episode starts arriving (its card is the controls').
     let nextWarmed = false

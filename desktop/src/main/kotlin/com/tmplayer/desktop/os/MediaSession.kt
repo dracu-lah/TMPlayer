@@ -37,7 +37,8 @@ interface MediaSessionCallbacks {
  * position that steady playback cannot explain is reported as a seek. [clear] says nothing is
  * playing (the player closed but the app stays open), [release] removes the entry for good.
  *
- * Linux has MPRIS 2 ([MprisMediaSession]), Windows has SMTC ([SmtcMediaSession]). macOS (Now
+ * Linux has MPRIS 2 ([MprisMediaSession]), Windows has SMTC ([SmtcMediaSession]). [rate] is the
+ * playback speed, which the position's extrapolation and the OS's timeline follow. macOS (Now
  * Playing) is not built, and [create] returns [NoMediaSession] there.
  */
 interface MediaSession {
@@ -50,6 +51,7 @@ interface MediaSession {
         artUrl: String? = null,
         canGoNext: Boolean = false,
         canGoPrevious: Boolean = false,
+        rate: Float = 1f,
     )
 
     fun clear()
@@ -84,6 +86,7 @@ object NoMediaSession : MediaSession {
         artUrl: String?,
         canGoNext: Boolean,
         canGoPrevious: Boolean,
+        rate: Float,
     ) = Unit
 
     override fun clear() = Unit
@@ -105,11 +108,13 @@ data class NowPlaying(
     val canGoNext: Boolean,
     val canGoPrevious: Boolean,
     val atNanos: Long,
+    /** The playback speed (1 is normal); the position moves this much faster than the clock while playing. */
+    val rate: Float = 1f,
 ) {
-    /** Where playback is at [nowNanos], assuming normal speed while playing. */
+    /** Where playback is at [nowNanos], at [rate] times the clock's pace while playing. */
     fun positionAt(nowNanos: Long): Long {
         if (!playing) return positionMs
-        val moved = positionMs + (nowNanos - atNanos) / 1_000_000
+        val moved = positionMs + ((nowNanos - atNanos) / 1_000_000 * rate.toDouble()).toLong()
         return if (durationMs > 0) moved.coerceAtMost(durationMs) else moved
     }
 
