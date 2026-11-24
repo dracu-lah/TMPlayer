@@ -358,6 +358,38 @@ data class SubtitleStyle(
         /** [argb] as the unsigned value the store keeps. */
         fun storedColour(argb: Int): Long = argb.toLong() and 0xFFFFFFFFL
 
+        /** The longest stored per-video look read back (WP-29): a longer value is garbage. */
+        const val ENCODED_MAX = 300
+
+        /**
+         * One video's own look as one short line ("This video only", WP-29), kept beside its offsets.
+         * Names and numbers only; [decode] reads it back through the same checks as the stored look.
+         */
+        fun encode(style: SubtitleStyle): String = listOf(
+            "size=${style.size.name}", "box=${style.boxLevel.name}", "pos=${style.position.name}",
+            "col=${style.colour.name}", "edge=${style.edge.name}", "face=${style.face.name}",
+            "bold=${if (style.bold) 1 else 0}", "sp=${style.sizePercent}", "pp=${style.positionPercent}",
+            "cc=${storedColour(style.customColour)}",
+        ).joinToString(";")
+
+        /** Null for nothing stored, or anything cut short, wrong typed, too long or not a look at all. */
+        fun decode(text: String?): SubtitleStyle? {
+            if (text.isNullOrBlank() || text.length > ENCODED_MAX) return null
+            val parts = HashMap<String, String>()
+            for (piece in text.split(';')) {
+                val at = piece.indexOf('=')
+                if (at <= 0) continue
+                parts[piece.substring(0, at)] = piece.substring(at + 1)
+            }
+            if (parts.isEmpty()) return null
+            return from(
+                size = parts["size"], box = null, boxLevel = parts["box"], position = parts["pos"],
+                colour = parts["col"], edge = parts["edge"], face = parts["face"], bold = parts["bold"] == "1",
+                sizePercent = parts["sp"]?.toLongOrNull(), positionPercent = parts["pp"]?.toLongOrNull(),
+                customColour = parts["cc"]?.toLongOrNull(),
+            )
+        }
+
         private fun <T> List<T>.cycle(current: T): T = this[(indexOf(current) + 1) % size]
     }
 }

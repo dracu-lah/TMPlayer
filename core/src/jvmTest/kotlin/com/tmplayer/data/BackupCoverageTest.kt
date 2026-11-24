@@ -26,6 +26,8 @@ class BackupCoverageTest {
         "downloads_migrated", "download_queue", "download_queue_db", "developer_options",
         // The brightness the player was left at: this device's screen (WP-27); the switch travels.
         "player_brightness",
+        // One video's own subtitle look ("This video only", WP-29): per video, this device.
+        "substyle_",
         // Keep my place on all my devices: the Home question was shown, and when this device last synced.
         "keep_place_card_seen", "keep_place_wrote_at",
         // Locks: a PIN's hash has no place in a mailed file, and a restore never undoes a lock. The fingerprint

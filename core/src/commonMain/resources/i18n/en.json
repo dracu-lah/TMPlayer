@@ -3958,6 +3958,8 @@
     "weight": "Weight",
     "weight_bold": "Bold",
     "weight_regular": "Regular"
+    "this_video_only": "This video only",
+    "this_video_only_detail": "Other videos keep the look you chose for all of them",
   },
   "support": {
     "any_amount": "Any amount counts, and the smallest one is not a small thing. Support it if it is useful to you.",

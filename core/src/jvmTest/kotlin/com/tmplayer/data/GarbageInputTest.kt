@@ -355,6 +355,11 @@ class GarbageInputTest {
                 style.mpvScale
                 com.tmplayer.player.SyncDelays.decode(text)
             }
+            // One video's own look (WP-29 "This video only"): any text reads as a look or as nothing.
+            survive("SubtitleStyle.decode", text) {
+                com.tmplayer.player.SubtitleStyle.decode(text)?.summary()
+                com.tmplayer.player.SubtitleStyle.decode("size=$text;pp=$text;sp=$text;cc=$text;bold=$text")?.mpvProperties(text)
+            }
             survive("SinkCaps.parse", text) { SinkCaps.parse(text) }
             survive("SinkCaps.plan", text) {
                 val probe = MediaProbe(Container.Avi, 60_000, VideoTrack(1, Codecs.H264, 1920, 1080), listOf(AudioTrack(2, Codecs.AAC, channels = 2)))

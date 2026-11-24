@@ -404,7 +404,14 @@ class TrackPickerFragment : Fragment() {
         }
         // Each line steps through its choices with one press, the way a remote drives them; the
         // subtitles behind the dimmed list are the preview.
-        return listOf(
+        return listOfNotNull(
+            // "This video only" (WP-29): only where the video has somewhere to keep a look of its own.
+            host.subtitleThisVideo?.let { own ->
+                Line("this_video", L.subtitlesThisVideoOnly, if (own) L.commonOn else L.commonOff, icon = icon, group = Group.Look) {
+                    host.setSubtitleThisVideo(!own)
+                    onInPlace()
+                }
+            },
             Line("size", L.tracksSubtitleSize, style.size.label, icon = icon, group = Group.Look) { change(host.subtitleStyleNow().nextSize()) },
             Line("colour", L.subtitlesColour, style.colour.label, icon = icon, group = Group.Look) { change(host.subtitleStyleNow().nextColour()) },
             Line("edge", L.subtitlesEdge, style.edge.label, icon = icon, enabled = !style.box, group = Group.Look) { change(host.subtitleStyleNow().nextEdge()) },
@@ -807,6 +814,23 @@ class TrackPickerFragment : Fragment() {
                 onInPlace()
             }
             ChoiceSection(L.tracksSectionLook)
+            host.subtitleThisVideo?.let { own ->
+                val scopeTick = com.tmplayer.ui.components.rememberToggleTick()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .toggleable(value = own, role = Role.Switch) { on -> scopeTick(on); host.setSubtitleThisVideo(on); onInPlace() }
+                        .padding(horizontal = ADJUST_PAD),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        M3Text(L.subtitlesThisVideoOnly, style = M3Theme.typography.bodyLarge, color = Tone.text)
+                        M3Text(L.subtitlesThisVideoOnlyDetail, style = M3Theme.typography.bodySmall, color = Tone.muted)
+                    }
+                    Switch(checked = own, onCheckedChange = null)
+                }
+            }
             SegmentsLabel(L.tracksSubtitleSize)
             Segments(SubtitleSize.entries.map { it.label }, SubtitleSize.entries.indexOf(style.size)) {
                 change(host.subtitleStyleNow().copy(size = SubtitleSize.entries[it], sizePercent = 0))

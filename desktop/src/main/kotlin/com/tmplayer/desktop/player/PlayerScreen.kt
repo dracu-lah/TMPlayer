@@ -488,6 +488,8 @@ fun PlayerScreen(
     var navByKeyboard by remember { mutableStateOf(false) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val item = current.item
+    // "This video only" for the subtitle look (WP-29): this video keeps a look of its own.
+    var styleThisVideo by remember(item.chatId, item.messageId) { mutableStateOf(false) }
     DisposableEffect(item.fileId) {
         onDispose {
             translatingVideo?.let { video -> OnlineSubtitles.current?.let { it.translations.cancelVideo(it.translationPrefix(video)) } }
@@ -764,6 +766,8 @@ fun PlayerScreen(
             runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences()),
             Translator.messages.tag,
         )
+        val ownLook = if (hasMessage(item)) runCatching { settings.videoSubtitleStyle(item.chatId, item.messageId) }.getOrNull() else null
+        styleThisVideo = ownLook != null
         val prefs = OpenPrefs(
             audioLanguage = trackPlan.audioLanguage,
             audioMore = trackPlan.audioMore,
@@ -781,7 +785,7 @@ fun PlayerScreen(
             volumeBoost = runCatching { settings.volumeBoostNow() }.getOrDefault(false),
             nightMode = runCatching { settings.nightModeNow() }.getOrDefault(false),
             hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
-            subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
+            subtitleStyle = ownLook ?: runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
             delays = delays,
             resume = resumed,
         )
@@ -1298,7 +1302,8 @@ fun PlayerScreen(
     // menu, which writes the same setting) reaches the video playing now.
     LaunchedEffect(engine, settings) {
         settings.subtitleStyle.collect { style ->
-            if (style != engine.state.value.subtitleStyle) engine.setSubtitleStyle(style)
+            // A video with a look of its own (WP-29 "This video only") does not follow the shared one.
+            if (!styleThisVideo && style != engine.state.value.subtitleStyle) engine.setSubtitleStyle(style)
         }
     }
 
@@ -1449,6 +1454,36 @@ fun PlayerScreen(
         }
     }
 
+    /**
+     * From the subtitle menu: shown on the picture at once, and kept as the setting for every video,
+     * or for this video alone while "This video only" is on (WP-29).
+     */
+    fun setSubtitleStyle(style: SubtitleStyle) {
+        engine.setSubtitleStyle(style)
+        val own = styleThisVideo && hasMessage(item)
+        val (chat, message) = item.chatId to item.messageId
+        playerScope.launch {
+            runCatching { if (own) settings.setVideoSubtitleStyle(chat, message, style) else settings.setSubtitleStyle(style) }
+        }
+    }
+
+    /** "This video only" on: the look in force becomes this video's; off: it is forgotten and the shared look returns. */
+    fun setSubtitleThisVideo(on: Boolean) {
+        if (!hasMessage(item) || on == styleThisVideo) return
+        styleThisVideo = on
+        val (chat, message) = item.chatId to item.messageId
+        val own = engine.state.value.subtitleStyle
+        playerScope.launch {
+            if (on) {
+                runCatching { settings.setVideoSubtitleStyle(chat, message, own) }
+            } else {
+                runCatching { settings.setVideoSubtitleStyle(chat, message, null) }
+                val shared = runCatching { settings.subtitleStyleNow() }.getOrNull() ?: return@launch
+                if (!styleThisVideo) engine.setSubtitleStyle(shared)
+            }
+        }
+    }
+
     /** One step later ([direction] 1) or earlier (-1); 0 puts the subtitles back in step. */
     /**
      * Subtitles a size bigger or smaller from the keyboard: the one subtitle look every video
@@ -1461,8 +1496,7 @@ fun PlayerScreen(
         showFlash(Flash.Kind.Text, L.commonWithDetail(L.settingsSubtitleSize, next.label))
         if (next == now.size) return
         val style = now.copy(size = next, sizePercent = 0)
-        engine.setSubtitleStyle(style)
-        scope.launch { runCatching { settings.setSubtitleStyle(style) } }
+        setSubtitleStyle(style)
     }
 
     fun stepSubtitleDelay(direction: Int) {
@@ -1477,12 +1511,6 @@ fun PlayerScreen(
         engine.setAudioDelay(ms)
         showFlash(Flash.Kind.Text, L.playerAudioDelay(SyncDelays.label(ms)))
         saveDelays()
-    }
-
-    /** From the subtitle menu: shown on the picture at once, and kept as the setting for every video. */
-    fun setSubtitleStyle(style: SubtitleStyle) {
-        engine.setSubtitleStyle(style)
-        playerScope.launch { runCatching { settings.setSubtitleStyle(style) } }
     }
 
     fun seekFlash(delta: Long) {
@@ -2094,6 +2122,7 @@ fun PlayerScreen(
                 fromTelegram = current.fromTelegram,
                 savable = savable,
                 addToList = watched != null && current.fromTelegram && hasMessage(item),
+                subtitleThisVideo = if (hasMessage(item)) styleThisVideo else null,
                 watchedLabel = if (watched != null && current.fromTelegram && hasMessage(item)) {
                     WatchedWords.markLabel(SettingsStore.progressKey(item.chatId, item.messageId) in watchedKeys)
                 } else {
@@ -2177,6 +2206,7 @@ fun PlayerScreen(
                         is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
                         is MenuAction.AudioDelay -> stepAudioDelay(action.direction)
                         is MenuAction.SubtitleLook -> setSubtitleStyle(action.style)
+                        is MenuAction.SubtitleThisVideo -> setSubtitleThisVideo(action.on)
                         MenuAction.StartOver -> startOver()
                         MenuAction.LockScreen -> lockScreen()
                         MenuAction.ToggleIgnoreClicks -> {

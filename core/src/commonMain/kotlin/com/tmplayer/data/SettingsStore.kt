@@ -426,6 +426,10 @@ private fun delayKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("delay_${chatId}_$messageId")
 
 /**
+/** One video's own subtitle look ("This video only", WP-29): this device, per video, never in a backup. */
+private fun videoSubtitleKey(chatId: Long, messageId: Long) =
+    stringPreferencesKey("substyle_${chatId}_$messageId")
+
  * The same line again, for the Downloads screen.
  *
  * It cannot read the resume history instead: a video is written there only once three minutes of it
@@ -2462,6 +2466,22 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     suspend fun trackChoice(series: String): TrackChoice {
         val prefs = prefs.data.first()
         val key = seriesKey(series)
+    /**
+     * The subtitle look this one video has of its own (WP-29 "This video only"), or null when it follows
+     * the look of every video. This device only: a look chosen for one video on one screen is not worth
+     * a sync line or a backup.
+     */
+    suspend fun videoSubtitleStyle(chatId: Long, messageId: Long): SubtitleStyle? =
+        SubtitleStyle.decode(prefs.data.first()[videoSubtitleKey(chatId, messageId)])
+
+    /** Keeps [style] for this video alone, or forgets it when [style] is null (back to the look of every video). */
+    suspend fun setVideoSubtitleStyle(chatId: Long, messageId: Long, style: SubtitleStyle?) {
+        prefs.edit {
+            if (style == null) it.remove(videoSubtitleKey(chatId, messageId))
+            else it[videoSubtitleKey(chatId, messageId)] = SubtitleStyle.encode(style)
+        }
+    }
+
         return TrackChoice(
             audioLanguage = prefs[audioKey(key)]?.takeIf { it.isNotBlank() },
             textLanguage = prefs[textKey(key)]?.takeIf { it.isNotBlank() },

@@ -455,6 +455,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** How subtitles are drawn. Shared with Settings and the desktop. */
     private var subtitleStyle = SubtitleStyle()
 
+    /** True while [subtitleStyle] is this video's own look (WP-29 "This video only"), not the one of every video. */
+    private var styleThisVideo = false
+
     /** Volume boost as the viewer left it, read before the player is built. */
     private var volumeBoostOn = false
 
@@ -2795,6 +2798,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             audioPassthrough = AudioPolicy.passthroughAllowed(passthroughRead.await(), FormFactor.isTv(this@PlayerActivity))
             statsOn = statsRead.await()
             subtitleStyle = styleRead.await()
+            // A look this video has of its own (WP-29) takes the place of the shared one.
+            if (hasMessage()) {
+                runCatching { settings.videoSubtitleStyle(chatId, messageId) }.getOrNull()?.let {
+                    subtitleStyle = it
+                    styleThisVideo = true
+                }
+            }
             applySubtitleStyle()
             delaysRead.await()?.let { syncDelays = it }
             applySubtitleDelay()
@@ -7110,7 +7120,39 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         applySubtitleStyle()
         // A line on screen from a track with its own size is fitted again, so the change shows now.
         showCues(scaledForPicture(trackCues))
-        lifecycleScope.launch { runCatching { settings.setSubtitleStyle(style) } }
+        if (styleThisVideo && hasMessage()) {
+            // "This video only" (WP-29): the shared look stays as it was.
+            val (chat, message) = chatId to messageId
+            lifecycleScope.launch { runCatching { settings.setVideoSubtitleStyle(chat, message, style) } }
+        } else {
+            lifecycleScope.launch { runCatching { settings.setSubtitleStyle(style) } }
+        }
+    }
+
+    override val subtitleThisVideo: Boolean? get() = if (hasMessage()) styleThisVideo else null
+
+    /**
+     * "This video only" (WP-29). On: the look in force now becomes this video's own and the shared look
+     * is left alone from here. Off: this video's look is forgotten and it follows the shared one again.
+     */
+    override fun setSubtitleThisVideo(on: Boolean) {
+        if (!hasMessage() || on == styleThisVideo) return
+        styleThisVideo = on
+        val (chat, message) = chatId to messageId
+        if (on) {
+            val own = subtitleStyle
+            lifecycleScope.launch { runCatching { settings.setVideoSubtitleStyle(chat, message, own) } }
+        } else {
+            lifecycleScope.launch {
+                runCatching { settings.setVideoSubtitleStyle(chat, message, null) }
+                val shared = runCatching { settings.subtitleStyleNow() }.getOrNull() ?: return@launch
+                // The viewer may have turned it on again while the shared look was read.
+                if (styleThisVideo) return@launch
+                subtitleStyle = shared
+                applySubtitleStyle()
+                showCues(scaledForPicture(trackCues))
+            }
+        }
     }
 
     /**

@@ -105,6 +105,31 @@ class SubtitleFineStyleTest {
     }
 
     @Test
+    fun `a video's own look (This video only) is kept for that video alone and reads back the same`() = runBlocking {
+        val shared = SubtitleStyle(size = SubtitleSize.Large)
+        val own = SubtitleStyle(sizePercent = 170, positionPercent = 12, colour = SubtitleColour.Yellow, bold = true)
+        settings.setSubtitleStyle(shared)
+        settings.setVideoSubtitleStyle(5L, 7L, own)
+        assertEquals(own, settings.videoSubtitleStyle(5L, 7L))
+        assertEquals("another video keeps following the shared look", null, settings.videoSubtitleStyle(5L, 8L))
+        assertEquals("the shared look is untouched", shared, settings.subtitleStyleNow())
+        settings.setVideoSubtitleStyle(5L, 7L, null)
+        assertEquals(null, settings.videoSubtitleStyle(5L, 7L))
+        assertEquals(shared, settings.subtitleStyleNow())
+    }
+
+    @Test
+    fun `a stored per video look that is cut short, wrong typed or huge reads as the default or as nothing`() {
+        assertEquals(null, SubtitleStyle.decode(null))
+        assertEquals(null, SubtitleStyle.decode(""))
+        assertEquals(null, SubtitleStyle.decode("garbage"))
+        assertEquals(null, SubtitleStyle.decode("size=Large;".repeat(100)))
+        val odd = SubtitleStyle.decode("size=Nope;sp=999999;pp=-5;cc=12;bold=maybe")
+        assertEquals(SubtitleStyle(), odd)
+        assertEquals(SubtitleStyle(size = SubtitleSize.Small), SubtitleStyle.decode("size=Small"))
+    }
+
+    @Test
     fun `the subtitle delay reaches a minute and a long press steps a second, the sound stays at ten seconds`() {
         assertEquals(60_000L, SyncDelays.MAX_MS)
         assertEquals(1_000L, SyncDelays.stepLong(0, 1))

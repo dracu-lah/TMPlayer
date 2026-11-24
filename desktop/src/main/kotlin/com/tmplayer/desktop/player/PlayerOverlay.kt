@@ -216,6 +216,9 @@ internal sealed interface MenuAction {
 
     /** A new subtitle look, previewed on the picture while the menu stays open. */
     data class SubtitleLook(val style: SubtitleStyle) : MenuAction
+
+    /** "This video only" (WP-29): the look in force becomes this video's own, or this video follows every video again. */
+    data class SubtitleThisVideo(val on: Boolean) : MenuAction
     data object StartOver : MenuAction
 
     /** Locks the player against the mouse, the touchpad, the touch screen and the keyboard. */
@@ -468,6 +471,8 @@ internal fun BoxScope.PlayerOverlay(
     watchedLabel: String? = null,
     /** Whether the menu offers "Add to a list": a video from a message, with the lists' store at hand. */
     addToList: Boolean = false,
+    /** "This video only" for the subtitle look (WP-29): null where the video has nowhere to keep one, else whether it is on. */
+    subtitleThisVideo: Boolean? = null,
     /** A running sleep timer as the menu reads it ("25 minutes left"), or null for none. */
     sleepTimer: String? = null,
     /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
@@ -596,14 +601,14 @@ internal fun BoxScope.PlayerOverlay(
                             Box {
                                 OverlayButton(TmIcons.Subtitles, s.playerSubtitlesHint, onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                                 if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList)
+                                    PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList, subtitleThisVideo = subtitleThisVideo)
                                 }
                             }
                         }
                         Box {
                             OverlayButton(TmIcons.Audio, s.playerAudioHint, onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                             if (menu?.anchor == MenuAt.Anchor.Audio) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList, subtitleThisVideo = subtitleThisVideo)
                             }
                         }
                         Box {
@@ -622,7 +627,7 @@ internal fun BoxScope.PlayerOverlay(
                                 ) { Text(speedLabel, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                             }
                             if (menu?.anchor == MenuAt.Anchor.Speed) {
-                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList)
+                                PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList, subtitleThisVideo = subtitleThisVideo)
                             }
                         }
                         // A click steps the shape through all eight, as W does; the panel has its page of them.
@@ -652,7 +657,7 @@ internal fun BoxScope.PlayerOverlay(
         PlayerMenu(
             open, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable,
             watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction,
-            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList,
+            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus, repeatVideo = repeatVideo, markIntro = markIntro, addToList = addToList, subtitleThisVideo = subtitleThisVideo,
         )
     }
 }
@@ -1109,6 +1114,8 @@ internal fun PlayerMenu(
     markIntro: String? = null,
     /** Whether "Add to a list" is offered (a video from a message). */
     addToList: Boolean = false,
+    /** "This video only" for the subtitle look (WP-29): null where the video has nowhere to keep one, else whether it is on. */
+    subtitleThisVideo: Boolean? = null,
 ) {
     val s = LocalStrings.current
     val copies = LocalPlayerCopies.current
@@ -1304,6 +1311,9 @@ internal fun PlayerMenu(
                 val sizes = SubtitleSize.entries
                 val places = SubtitlePosition.entries
                 fun look(to: SubtitleStyle) = onAction(MenuAction.SubtitleLook(to))
+                subtitleThisVideo?.let { own ->
+                    Entry(s.subtitlesThisVideoOnly, detail = s.subtitlesThisVideoOnlyDetail, checked = own) { onAction(MenuAction.SubtitleThisVideo(!own)) }
+                }
                 Nudge(s.subtitlesSize, style.size.label, s.subtitlesSmaller, s.subtitlesLarger,
                     sizes.getOrNull(style.size.ordinal - 1)?.let { size -> { look(style.copy(size = size, sizePercent = 0)) } },
                     sizes.getOrNull(style.size.ordinal + 1)?.let { size -> { look(style.copy(size = size, sizePercent = 0)) } })

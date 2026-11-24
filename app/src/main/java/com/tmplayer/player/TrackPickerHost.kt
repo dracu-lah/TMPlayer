@@ -23,6 +23,15 @@ interface TrackPickerHost {
 
     fun changeSubtitleStyle(style: SubtitleStyle)
 
+    /**
+     * Whether the look is this video's own (WP-29 "This video only"): null where the video has nowhere to
+     * keep one (a file opened from elsewhere, the fixture), and the switch is then not drawn.
+     */
+    val subtitleThisVideo: Boolean? get() = null
+
+    /** Turns "This video only" on (the look in force becomes this video's) or off (it follows every video again). */
+    fun setSubtitleThisVideo(on: Boolean) = Unit
+
     /** The video as an online search wants it, its hash included when both ends are on the disk. */
     suspend fun onlineTarget(): SubtitleTarget?
 

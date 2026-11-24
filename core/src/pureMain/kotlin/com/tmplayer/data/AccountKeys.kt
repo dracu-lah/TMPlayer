@@ -70,6 +70,8 @@ object AccountKeys {
         "tunneled_playback", "audio_passthrough", "playback_stats", "play_chat_order", "keep_repeat",
         "preferred_audio_language", "preferred_subtitle_language", "subtitle_mode", "developer_options",
         "audio_", "text_", "subs_", "series_name_",
+        // One video's own subtitle look (WP-29, "This video only"): per video, this device.
+        "substyle_",
     )
 
     /** Whether the setting [name] is the account's. */
