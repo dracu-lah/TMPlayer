@@ -28,7 +28,7 @@ the same change.
 | Info | nothing | item options (today) | nothing | nothing | details on a short Info, report stutter on a held one (today; the first short Info says so once through the hint registry, WP-21) | same | nothing | long OK; More, Help (WP-89) |
 | Long OK | picture: account menu (today, plain OK does the same) | item options (today) | nothing | nothing | the "open with" chooser after 1.5 s, only when the press began over the bare picture (WP-19, today) | plain OK (WP-19, today) | nothing | More, Open in another app |
 | Back | leaves to Home or exits (today) | to the bar, or to the top first in the chat list and the video grid once more than 2 screens down (today, WP-12) | top first, then leave (today, WP-12) | pane to rail (a sub-page closes first), rail out (today, WP-07, `SettingsPaneTvFocusTest`) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
-| Search | TV search (today, WP-22 everywhere) | TV search (WP-22) | TV search (WP-22) | nothing | nothing | nothing | nothing | the bar's Search tab |
+| Search | TV search (today) | TV search (today: the browse shell answers it, a chat's videos and Downloads go to it from `MainActivity`, WP-22) | TV search (today, WP-22) | nothing | nothing | nothing | nothing | the bar's Search tab |
 | CC, Audio | nothing | nothing | nothing | nothing | CC toggles subtitles (last used track, or off), a second press within 3 s or a held CC opens the picker (WP-19, today); Audio opens its picker (today) | same | nothing | the row's subtitle and audio buttons |
 | Page, Channel | nothing | screenful (today, WP-12; Fast forward and Rewind too) | screenful (today, WP-12) | section jump: first row of the next section, Up: this section then the one before (today, WP-75, `SettingsPaneTvFocusTest`) | Page: chapter, or 60 s without chapters, once per press (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (WP-89) |
 | Play/Pause, Stop | nothing | nothing | nothing | nothing | toggle (today); Stop leaves (today) | same | Play/Pause, Play, Pause and Stop still work under the panel and the pickers (WP-19, today) | OK on the play button |
@@ -102,6 +102,6 @@ the key fails the test: add it here with its context first.
 | --- | --- |
 | Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt`, `TvTopBar.kt`, `TvMenu.kt` |
 | Info | `Holdable.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (short Info), `PlaybackMarks.kt` (held) |
-| Search | `BrowseScreen.kt`, `SearchKeyGuard.kt` (swallows it on a phone) |
+| Search | `BrowseScreen.kt`, `MainActivity.kt` (a chat's videos and Downloads, WP-22), `SearchKeyGuard.kt` (swallows it on a phone) |
 | Page, Channel | `PageKeys.kt` (every long list: the key names live there only), `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel steps the video, Page a chapter or a minute) |
 | Stop | `PlayerActivity.kt`, `PlayerRemoteKeys.kt` |

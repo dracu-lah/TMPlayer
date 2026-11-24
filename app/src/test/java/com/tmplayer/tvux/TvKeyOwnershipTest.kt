@@ -368,8 +368,19 @@ class TvKeyOwnershipTest {
         val browse = text("src/main/java/com/tmplayer/ui/browse/BrowseScreen.kt")
         val branch = browse.substringAfter("event.key == Key.Search) {").substringBefore("} else")
         assertTrue("tvSearchOpen = true" in branch)
-        // On a phone the activity swallows the key (SearchKeyGuardTest); the TV shell is its only taker.
-        assertEquals(listOf("BrowseScreen.kt"), claimants("""(?<![A-Za-z])Key\.Search\b"""))
+        // On a phone the activity swallows the key (SearchKeyGuardTest); on a TV the shell takes it, and
+        // the activity for the browser's screens that have no search of their own (WP-22).
+        assertEquals(listOf("BrowseScreen.kt", "MainActivity.kt"), claimants("""(?<![A-Za-z])Key\.Search\b"""))
+    }
+
+    @Test
+    fun `Search from a chat's videos or from Downloads opens the TV search, and nowhere else (WP-22)`() {
+        val main = text("src/main/java/com/tmplayer/MainActivity.kt")
+        val branch = main.substringAfter("event.key == Key.Search && FormFactor.isTv(context) &&").substringBefore("} else")
+        assertTrue("only a chat's videos and Downloads: ${branch.take(200)}", "screen is Screen.Media || screen is Screen.Downloads" in branch)
+        assertTrue("the TV search is asked for with an empty query", "TvBarSignals.searchAsked.value = true" in branch)
+        assertTrue("on the browser's own screen", "screen = Screen.Chats" in branch)
+        assertFalse("Settings, About and Add chats do nothing with it", "Screen.Settings" in branch || "Screen.About" in branch)
     }
 
     // ---- Who binds each key at all ----
@@ -385,7 +396,7 @@ class TvKeyOwnershipTest {
             claimants("""(?<![A-Za-z])Key\.Info\b|KEYCODE_INFO\b"""),
         )
         assertEquals(
-            listOf("BrowseScreen.kt", "SearchKeyGuard.kt"),
+            listOf("BrowseScreen.kt", "MainActivity.kt", "SearchKeyGuard.kt"),
             claimants("""(?<![A-Za-z])Key\.Search\b|KEYCODE_SEARCH\b"""),
         )
         assertEquals(

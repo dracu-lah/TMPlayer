@@ -1709,9 +1709,21 @@ private fun Root() {
         Modifier
             .fillMaxSize()
             .background(Tone.background)
-            .onPreviewKeyEvent {
+            .onPreviewKeyEvent { event ->
                 remoteKeys.fire()
-                false
+                // The remote's Search key on the browser's other screens (WP-22): a chat's videos and
+                // Downloads have no search of the whole library, so the key takes the viewer to the TV
+                // search with an empty query, as the bar's Search tab does from Downloads. The browse
+                // shell (Home, the chat list) answers it itself (BrowseScreen), Settings does nothing.
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Search && FormFactor.isTv(context) &&
+                    (screen is Screen.Media || screen is Screen.Downloads)
+                ) {
+                    com.tmplayer.ui.browse.TvBarSignals.searchAsked.value = true
+                    screen = Screen.Chats
+                    true
+                } else {
+                    false
+                }
             }
             .onKeyEvent { pressed ->
                 if (pressed.type != KeyEventType.KeyDown || FormFactor.isTv(context)) return@onKeyEvent false
