@@ -337,6 +337,7 @@ fun main(args: Array<String>) {
                 hidden = profileHidden,
                 page = shell.destination.label,
                 video = shell.nowPlaying?.item?.title,
+                videoOwner = shell.nowPlaying?.owner,
             )
             // Focus drawn for the keyboard only: a click hides it, Tab and the arrows show it.
             com.tmplayer.desktop.ui.FocusVisible.install()

@@ -13,6 +13,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.DragData
 import androidx.compose.ui.draganddrop.dragData
 import com.tmplayer.data.TelegramLinks
+import com.tmplayer.data.TgLink
 import java.net.URI
 import java.util.Locale
 
@@ -30,9 +31,18 @@ internal sealed interface WindowDropKind {
 
 internal object WindowDrop {
 
-    /** Text first (a link dragged from a browser), then files; the first file that is a backup. */
+    /** As much dropped text as is read, as Android caps a shared text (SEC2-09): a log's worth would stall the window. */
+    const val MAX_TEXT = 8_000
+
+    /**
+     * Text first (a link dragged from a browser), then files; the first file that is a backup. Of the
+     * text only the link goes on, never the rest of it, and no more than [MAX_TEXT] of it is read.
+     */
     fun classify(text: String?, files: List<String>): WindowDropKind {
-        val link = text?.trim()?.takeIf { it.isNotEmpty() && TelegramLinks.opensSomething(it) }
+        val link = text?.take(MAX_TEXT)?.trim()?.takeIf { it.isNotEmpty() }?.let { t ->
+            if (TelegramLinks.opensSomething(t)) t
+            else TelegramLinks.find(t)?.takeIf { it is TgLink.Post || it is TgLink.Invite }?.url
+        }
         if (link != null) return WindowDropKind.Link(link)
         val backup = files.firstOrNull { path -> path.substringAfterLast('.', "").lowercase(Locale.ROOT) == "json" }
         if (backup != null) return WindowDropKind.Backup(toPath(backup))

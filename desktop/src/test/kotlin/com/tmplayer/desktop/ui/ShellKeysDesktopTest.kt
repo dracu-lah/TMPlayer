@@ -123,6 +123,11 @@ class ShellKeysDesktopTest {
         assertEquals("Home - TMPlayer", WindowTitle.of(hidden = false, page = "Home", video = null))
         assertEquals("Night Train - TMPlayer", WindowTitle.of(hidden = false, page = "Home", video = "Night Train"))
         assertEquals("TMPlayer", WindowTitle.of(hidden = true, page = "Home", video = "Night Train"))
+        // A video of a profile no longer open (SEC2-08): not named.
+        val a = com.tmplayer.data.AccountStamp(1L, null)
+        val b = com.tmplayer.data.AccountStamp(2L, "pb")
+        assertEquals("Night Train - TMPlayer", WindowTitle.of(false, "Home", "Night Train", videoOwner = a, current = a))
+        assertEquals("TMPlayer", WindowTitle.of(false, "Home", "Night Train", videoOwner = a, current = b))
         assertEquals("TMPlayer", WindowTitle.of(hidden = false, page = null, video = " "))
     }
 

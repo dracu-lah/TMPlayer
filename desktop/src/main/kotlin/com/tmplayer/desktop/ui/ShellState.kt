@@ -90,6 +90,8 @@ data class PlayRequest(
     val item: MediaItem,
     val startFromBeginning: Boolean,
     val chatTitle: String,
+    /** The profile open when it was asked for: the window's title names the video only for it (SEC2-08). */
+    val owner: com.tmplayer.data.AccountStamp = com.tmplayer.data.Accounts.stamp,
 )
 
 /**

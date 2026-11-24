@@ -9,8 +9,20 @@ internal object WindowTitle {
     const val APP = "TMPlayer"
     private const val SEPARATOR = " - "
 
-    fun of(hidden: Boolean, page: String?, video: String?): String = when {
+    /**
+     * [videoOwner] is the profile the video was opened under: a video of a profile no longer open
+     * (a switch with the player up) is not named, as [com.tmplayer.desktop.os.ProfileOutside.mediaTitle]
+     * has it for the media controls (SEC2-08).
+     */
+    fun of(
+        hidden: Boolean,
+        page: String?,
+        video: String?,
+        videoOwner: com.tmplayer.data.AccountStamp? = null,
+        current: com.tmplayer.data.AccountStamp = com.tmplayer.data.Accounts.stamp,
+    ): String = when {
         hidden -> APP
+        videoOwner != null && videoOwner != current -> APP
         !video.isNullOrBlank() -> video.trim() + SEPARATOR + APP
         !page.isNullOrBlank() -> page.trim() + SEPARATOR + APP
         else -> APP

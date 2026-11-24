@@ -52,4 +52,16 @@ class DesktopIntegrationTest {
         assertEquals(WindowDropKind.Unsupported, WindowDrop.classify("", emptyList()))
         assertEquals(WindowDropKind.Unsupported, WindowDrop.classify("hello there", emptyList()))
     }
+
+    @Test
+    fun `a huge dropped text is read only so far and only its link goes on (SEC2-09)`() {
+        val words = "a log line with nothing in it\n".repeat(40_000)
+        assertTrue(words.length > 1_000_000)
+        assertEquals(WindowDropKind.Unsupported, WindowDrop.classify(words, emptyList()))
+        // A link inside the first part of a long text: the link alone, not the text around it.
+        val withLink = "see https://t.me/c/123/45 here\n" + words
+        assertEquals(WindowDropKind.Link("https://t.me/c/123/45"), WindowDrop.classify(withLink, emptyList()))
+        // A link past what is read is not looked for.
+        assertEquals(WindowDropKind.Unsupported, WindowDrop.classify(words + "https://t.me/c/123/45", emptyList()))
+    }
 }
