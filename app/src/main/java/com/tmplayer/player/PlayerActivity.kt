@@ -6851,10 +6851,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * (-1), or back to none ([direction] 0), and keeps the result for this file.
      */
     override fun stepDelay(trackType: Int, direction: Int) {
+        // A long press (WP-29) steps a whole second: its direction is ten steps.
+        val long = kotlin.math.abs(direction) >= LONG_DELAY_STEPS
+        val way = if (direction < 0) -1 else if (direction > 0) 1 else 0
         syncDelays = if (trackType == C.TRACK_TYPE_TEXT) {
-            syncDelays.copy(subtitleMs = if (direction == 0) 0 else SyncDelays.step(syncDelays.subtitleMs, direction))
+            syncDelays.copy(
+                subtitleMs = when {
+                    way == 0 -> 0
+                    long -> SyncDelays.stepLong(syncDelays.subtitleMs, way)
+                    else -> SyncDelays.step(syncDelays.subtitleMs, way)
+                },
+            )
         } else {
-            syncDelays.copy(audioMs = if (direction == 0) 0 else SyncDelays.step(syncDelays.audioMs, direction))
+            syncDelays.copy(audioMs = if (way == 0) 0 else SyncDelays.stepAudio(syncDelays.audioMs, way, long))
         }
         subtitleDelayUs = syncDelays.subtitleMs * 1000
         audioOffset?.offsetUs = syncDelays.audioMs * 1000
@@ -6893,7 +6902,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         return maxOf(1f, minOf(root.width, root.height) * UPRIGHT_TEXT_SHARE / height)
     }
 
-    private fun subtitleTextFraction(): Float = subtitleStyle.size.fraction * subtitleTextScale()
+    private fun subtitleTextFraction(): Float = subtitleStyle.fraction * subtitleTextScale()
 
     /**
      * The bottom padding, as a share of the view's height: the position setting's share, or
@@ -6902,7 +6911,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * on every picture shape and every video (user, 2026-10-18).
      */
     private fun subtitleBottomFraction(): Float {
-        val share = subtitleStyle.position.bottomFraction
+        val share = subtitleStyle.bottomFraction
         val height = subtitleView.layoutParams?.height ?: 0
         if (height <= 0) return share
         val clearance = resources.getDimensionPixelSize(R.dimen.player_subtitle_bottom)
@@ -11517,6 +11526,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the unlock pill stays up after a tap on the locked screen. */
         private const val UNLOCK_PILL_MS = 2_500L
+
+        /** [stepDelay]'s direction for a long press: ten of the 100 ms steps, a second. */
+        const val LONG_DELAY_STEPS = 10
 
         /** The pseudo key code of a finger held on the unlock pill (a real key is positive, none is 0). */
         private const val TOUCH_UNLOCK_HOLD = -1

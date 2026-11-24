@@ -145,7 +145,62 @@ data class SubtitleStyle(
     val edge: SubtitleEdge = SubtitleEdge.Outline,
     val face: SubtitleFace = SubtitleFace.Default,
     val bold: Boolean = false,
+    /**
+     * The size as a fine step, 50 to 250 per cent of Medium in tens (WP-29), or 0 to use the preset
+     * [size]. A style stored before the fine steps has 0 here, so nothing changes size on the upgrade;
+     * [fineSizePercent] is the nearest step a preset stands for.
+     */
+    val sizePercent: Int = 0,
+    /** How far up the picture the bottom line sits, 0 to 30 per cent of its height, or -1 for the preset [position]. */
+    val positionPercent: Int = -1,
+    /** A colour of [CUSTOM_COLOURS] for the letters, or 0 for the preset [colour]. */
+    val customColour: Int = 0,
 ) {
+    /** The size against Medium: 1 at Medium, from the fine step when there is one. */
+    val sizeScale: Float get() = if (sizePercent > 0) sizePercent / 100f else size.cueScale
+
+    /** The share of the picture's height a line is given (Media3's `SubtitleView` text size). */
+    val fraction: Float get() = SubtitleSize.Medium.fraction * sizeScale
+
+    /** [SubtitleSize.cueScale] for the fine size too: what a styled track's own sizes are multiplied by. */
+    val cueScale: Float get() = sizeScale
+
+    /** mpv's `sub-scale`, to three places. */
+    val mpvScale: String
+        get() {
+            if (sizePercent <= 0) return size.mpvScale
+            val thousandths = sizePercent * 10
+            return "${thousandths / 1000}.${(thousandths % 1000).toString().padStart(3, '0')}"
+        }
+
+    /** The nearest fine step of the size now, so the stepper starts from what is on screen. */
+    val fineSizePercent: Int
+        get() = if (sizePercent > 0) sizePercent else (kotlin.math.round(size.cueScale * 10f).toInt() * 10).coerceIn(SIZE_MIN, SIZE_MAX)
+
+    /** `SubtitleView`'s bottom padding as a share of its height. */
+    val bottomFraction: Float get() = if (positionPercent >= 0) positionPercent / 100f else position.bottomFraction
+
+    /** mpv's `sub-pos`: 100 is the bottom. */
+    val mpvSubPos: Int get() = if (positionPercent >= 0) 100 - positionPercent else position.mpvSubPos
+
+    /** The height now as a whole per cent from the bottom, for the stepper. */
+    val positionNowPercent: Int
+        get() = if (positionPercent >= 0) positionPercent else kotlin.math.round(position.bottomFraction * 100f).toInt().coerceIn(0, POSITION_MAX)
+
+    /** The letters' colour as an opaque ARGB. */
+    val colourArgb: Int get() = if (customColour != 0) customColour else colour.argb
+
+    /** "#FFE14D" for [colourArgb]. */
+    val colourHex: String get() = "#" + (colourArgb and 0xFFFFFF).toString(16).uppercase().padStart(6, '0')
+
+    /** One fine step larger or smaller ([direction] 1 or -1), held between 50 and 250 per cent. */
+    fun stepSize(direction: Int): SubtitleStyle =
+        copy(sizePercent = (fineSizePercent + direction * SIZE_STEP).coerceIn(SIZE_MIN, SIZE_MAX))
+
+    /** The bottom line higher ([direction] 1) or lower (-1) by two per cent of the height, held between 0 and 30. */
+    fun stepPosition(direction: Int): SubtitleStyle =
+        copy(positionPercent = (positionNowPercent + direction * POSITION_STEP).coerceIn(0, POSITION_MAX))
+
     /** Whether there is a box at all. */
     val box: Boolean get() = boxLevel != SubtitleBox.Off
 
@@ -153,11 +208,11 @@ data class SubtitleStyle(
     val isDefault: Boolean get() = this == SubtitleStyle()
 
     /** The next size up, wrapping back to the smallest: what a single remote button can drive. */
-    fun nextSize(): SubtitleStyle = copy(size = SubtitleSize.entries.cycle(size))
+    fun nextSize(): SubtitleStyle = copy(size = SubtitleSize.entries.cycle(size), sizePercent = 0)
 
-    fun nextPosition(): SubtitleStyle = copy(position = SubtitlePosition.entries.cycle(position))
+    fun nextPosition(): SubtitleStyle = copy(position = SubtitlePosition.entries.cycle(position), positionPercent = -1)
 
-    fun nextColour(): SubtitleStyle = copy(colour = SubtitleColour.entries.cycle(colour))
+    fun nextColour(): SubtitleStyle = copy(colour = SubtitleColour.entries.cycle(colour), customColour = 0)
 
     fun nextEdge(): SubtitleStyle = copy(edge = SubtitleEdge.entries.cycle(edge))
 
@@ -173,12 +228,12 @@ data class SubtitleStyle(
      * with the box, the face and the weight named only when they are not the default.
      */
     fun summary(): String = listOfNotNull(
-        size.label,
-        colour.label,
+        if (sizePercent > 0) L.messages.formatter.scalePercent(sizePercent) else size.label,
+        if (customColour != 0) colourHex else colour.label,
         if (box) L.subtitlesBoxSummary(boxLevel.percent) else edge.label,
         face.label.takeIf { face != SubtitleFace.Default },
         weightLabel.takeIf { bold },
-        position.label,
+        if (positionPercent >= 0) L.messages.formatter.scalePercent(positionPercent) else position.label,
     ).joinToString("  ·  ")
 
     /**
@@ -195,9 +250,9 @@ data class SubtitleStyle(
         // The size is the scale, not the font size: `sub-font-size` never reaches an ASS track
         // (mpv's `sub-ass-override` stays at `scale`), `sub-scale` reaches both.
         add("sub-font-size" to SubtitleSize.Medium.mpvFontSize.toString())
-        add("sub-scale" to this@SubtitleStyle.size.mpvScale)
-        add("sub-pos" to position.mpvSubPos.toString())
-        add("sub-color" to colour.hex)
+        add("sub-scale" to mpvScale)
+        add("sub-pos" to mpvSubPos.toString())
+        add("sub-color" to colourHex)
         add("sub-font" to font)
         add("sub-bold" to if (bold) "yes" else "no")
         if (box) {
@@ -251,6 +306,9 @@ data class SubtitleStyle(
             edge: String?,
             face: String?,
             bold: Boolean?,
+            sizePercent: Long? = null,
+            positionPercent: Long? = null,
+            customColour: Long? = null,
         ) = SubtitleStyle(
             size = SubtitleSize.entries.firstOrNull { it.name == size } ?: SubtitleSize.Medium,
             boxLevel = SubtitleBox.entries.firstOrNull { it.name == boxLevel }
@@ -260,7 +318,45 @@ data class SubtitleStyle(
             edge = SubtitleEdge.entries.firstOrNull { it.name == edge } ?: SubtitleEdge.Outline,
             face = SubtitleFace.entries.firstOrNull { it.name == face } ?: SubtitleFace.Default,
             bold = bold ?: false,
+            sizePercent = sanitiseSizePercent(sizePercent),
+            positionPercent = sanitisePositionPercent(positionPercent),
+            customColour = sanitiseCustomColour(customColour),
         )
+
+        /** The fine size steps: 50 to 250 per cent of Medium in tens. */
+        const val SIZE_MIN = 50
+        const val SIZE_MAX = 250
+        const val SIZE_STEP = 10
+
+        /** The bottom line's height, 0 to 30 per cent, by two. */
+        const val POSITION_MAX = 30
+        const val POSITION_STEP = 2
+
+        /**
+         * The colours the fine pickers offer (the same 16 hues the television's sub-page draws), each
+         * opaque. Index 0 is white, the default.
+         */
+        val CUSTOM_COLOURS: List<Int> = listOf(
+            0xFFFFFFFFL, 0xFFFFE14DL, 0xFFFFB347L, 0xFFFF6B6BL, 0xFFFF9AE0L, 0xFFD08CFFL, 0xFF8C9EFFL, 0xFF5CB8FFL,
+            0xFF5CE6FFL, 0xFF5CF0C8L, 0xFF7CF08AL, 0xFFB8F05CL, 0xFFE6E6E6L, 0xFFBFBFBFL, 0xFFA3C2A0L, 0xFFE8D2A6L,
+        ).map { it.toInt() }
+
+        /** A stored size off the steps (or garbage) is no fine size: the preset stays. */
+        fun sanitiseSizePercent(value: Long?): Int =
+            value?.takeIf { it in SIZE_MIN..SIZE_MAX && it % SIZE_STEP == 0L }?.toInt() ?: 0
+
+        fun sanitisePositionPercent(value: Long?): Int =
+            value?.takeIf { it in 0..POSITION_MAX }?.toInt() ?: -1
+
+        /** Only a colour of [CUSTOM_COLOURS], stored as its unsigned value, counts; anything else is the preset. */
+        fun sanitiseCustomColour(value: Long?): Int {
+            if (value == null || value < 0L || value > 0xFFFFFFFFL) return 0
+            val argb = value.toInt()
+            return if (argb in CUSTOM_COLOURS) argb else 0
+        }
+
+        /** [argb] as the unsigned value the store keeps. */
+        fun storedColour(argb: Int): Long = argb.toLong() and 0xFFFFFFFFL
 
         private fun <T> List<T>.cycle(current: T): T = this[(indexOf(current) + 1) % size]
     }
@@ -287,19 +383,32 @@ data class SyncDelays(val subtitleMs: Long = 0, val audioMs: Long = 0) {
          * As far as either can go. A subtitle file for another cut of the film can be minutes out,
          * but that is a different file, not something to fix a tenth of a second at a time.
          */
-        const val MAX_MS = 10_000L
+        const val MAX_MS = 60_000L
+
+        /** The sound stays at ten seconds: its delay is a buffer of audio held in memory, which a minute would make large. */
+        const val AUDIO_MAX_MS = 10_000L
+
+        /** A long press on Earlier or Later (WP-29): a whole second at a time, so a minute is not six hundred presses. */
+        const val LONG_STEP_MS = 1_000L
 
         fun decode(encoded: String?): SyncDelays {
             val parts = encoded?.split(',') ?: return SyncDelays()
             if (parts.size != 2) return SyncDelays()
             return SyncDelays(
                 subtitleMs = clamp(parts[0].toLongOrNull() ?: 0L),
-                audioMs = clamp(parts[1].toLongOrNull() ?: 0L),
+                audioMs = clamp(parts[1].toLongOrNull() ?: 0L).coerceIn(-AUDIO_MAX_MS, AUDIO_MAX_MS),
             )
         }
 
         /** [current] moved one step later ([direction] 1) or earlier (-1), within [MAX_MS]. */
         fun step(current: Long, direction: Int): Long = clamp(current + direction * STEP_MS)
+
+        /** The sound's own step: as [step], held to [AUDIO_MAX_MS]. [long] is a second, for the long press. */
+        fun stepAudio(current: Long, direction: Int, long: Boolean = false): Long =
+            (if (long) stepLong(current, direction) else step(current, direction)).coerceIn(-AUDIO_MAX_MS, AUDIO_MAX_MS)
+
+        /** [current] moved a second later ([direction] 1) or earlier (-1), within [MAX_MS]. */
+        fun stepLong(current: Long, direction: Int): Long = clamp(current + direction * LONG_STEP_MS)
 
         fun clamp(ms: Long): Long {
             // Snapped onto the step, so a stored figure never shows as "+0.25 s".

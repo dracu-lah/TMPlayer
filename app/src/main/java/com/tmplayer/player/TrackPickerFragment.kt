@@ -776,7 +776,8 @@ class TrackPickerFragment : Fragment() {
             ) {
                 // At least 48 dp rather than exactly, and the word a step smaller when it has to be:
                 // at a large font it was cut in half (R8).
-                OutlinedButton(onClick = { nudge(-1) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = STEP_PADDING) {
+                val earlier = rememberHoldSource { nudge(-PlayerActivity.LONG_DELAY_STEPS) }
+                OutlinedButton(onClick = { if (!earlier.consumeHold()) nudge(-1) }, interactionSource = earlier.source, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = STEP_PADDING) {
                     M3Icon(TmIcons.ChevronLeft, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
                     FitText(L.tracksEarlier, M3Theme.typography.labelLarge)
@@ -791,7 +792,8 @@ class TrackPickerFragment : Fragment() {
                         FitText(L.tracksDelayNone, M3Theme.typography.bodySmall, lines = 2, color = Tone.muted)
                     }
                 }
-                OutlinedButton(onClick = { nudge(1) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = STEP_PADDING) {
+                val later = rememberHoldSource { nudge(PlayerActivity.LONG_DELAY_STEPS) }
+                OutlinedButton(onClick = { if (!later.consumeHold()) nudge(1) }, interactionSource = later.source, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = STEP_PADDING) {
                     FitText(L.tracksLater, M3Theme.typography.labelLarge)
                     Spacer(Modifier.width(4.dp))
                     M3Icon(TmIcons.ChevronRight, contentDescription = null)
@@ -807,15 +809,15 @@ class TrackPickerFragment : Fragment() {
             ChoiceSection(L.tracksSectionLook)
             SegmentsLabel(L.tracksSubtitleSize)
             Segments(SubtitleSize.entries.map { it.label }, SubtitleSize.entries.indexOf(style.size)) {
-                change(host.subtitleStyleNow().copy(size = SubtitleSize.entries[it]))
+                change(host.subtitleStyleNow().copy(size = SubtitleSize.entries[it], sizePercent = 0))
             }
             SegmentsLabel(L.tracksSubtitlePosition)
             Segments(SubtitlePosition.entries.map { it.label }, SubtitlePosition.entries.indexOf(style.position)) {
-                change(host.subtitleStyleNow().copy(position = SubtitlePosition.entries[it]))
+                change(host.subtitleStyleNow().copy(position = SubtitlePosition.entries[it], positionPercent = -1))
             }
             val boldTick = com.tmplayer.ui.components.rememberToggleTick()
             SegmentsLabel(L.subtitlesColour)
-            ColourSwatches(style.colour) { change(host.subtitleStyleNow().copy(colour = it)) }
+            ColourSwatches(style.colour) { change(host.subtitleStyleNow().copy(colour = it, customColour = 0)) }
             SegmentsLabel(L.tracksBackgroundBox)
             Segments(SubtitleBox.entries.map { it.label }, SubtitleBox.entries.indexOf(style.boxLevel)) {
                 change(host.subtitleStyleNow().copy(boxLevel = SubtitleBox.entries[it]))
@@ -1122,3 +1124,47 @@ class TrackPickerFragment : Fragment() {
         }
     }
 }
+
+
+/**
+ * A press that, held past the long press time, repeats [onHold] a few times a second until it lets go
+ * (WP-29: Earlier and Later step a second on a long press), and whose release then is not a click.
+ */
+internal class HoldSource(val source: androidx.compose.foundation.interaction.MutableInteractionSource) {
+    var held = false
+
+    /** True once for the click that ends a hold, which the hold already answered. */
+    fun consumeHold(): Boolean = held.also { held = false }
+}
+
+@Composable
+internal fun rememberHoldSource(onHold: () -> Unit): HoldSource {
+    val holder = remember { HoldSource(androidx.compose.foundation.interaction.MutableInteractionSource()) }
+    val latest = androidx.compose.runtime.rememberUpdatedState(onHold)
+    LaunchedEffect(holder) {
+        var job: kotlinx.coroutines.Job? = null
+        holder.source.interactions.collect { interaction ->
+            when (interaction) {
+                is androidx.compose.foundation.interaction.PressInteraction.Press -> {
+                    holder.held = false
+                    job = launch {
+                        kotlinx.coroutines.delay(HOLD_START_MS)
+                        while (true) {
+                            holder.held = true
+                            latest.value()
+                            kotlinx.coroutines.delay(HOLD_REPEAT_MS)
+                        }
+                    }
+                }
+                is androidx.compose.foundation.interaction.PressInteraction.Release,
+                is androidx.compose.foundation.interaction.PressInteraction.Cancel,
+                -> job?.cancel()
+                else -> Unit
+            }
+        }
+    }
+    return holder
+}
+
+private const val HOLD_START_MS = 500L
+private const val HOLD_REPEAT_MS = 250L

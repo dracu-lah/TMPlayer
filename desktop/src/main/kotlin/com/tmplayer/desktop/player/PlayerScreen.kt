@@ -1459,7 +1459,7 @@ fun PlayerScreen(
         val next = sizes[(now.size.ordinal + direction).coerceIn(0, sizes.size - 1)]
         showFlash(Flash.Kind.Text, L.commonWithDetail(L.settingsSubtitleSize, next.label))
         if (next == now.size) return
-        val style = now.copy(size = next)
+        val style = now.copy(size = next, sizePercent = 0)
         engine.setSubtitleStyle(style)
         scope.launch { runCatching { settings.setSubtitleStyle(style) } }
     }

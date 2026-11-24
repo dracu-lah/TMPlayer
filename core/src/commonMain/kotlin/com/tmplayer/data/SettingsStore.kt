@@ -316,6 +316,9 @@ private val SHOW_REMAINING = booleanPreferencesKey("show_remaining_time")
 
 // How subtitles look, on every platform. See [SubtitleStyle].
 private val SUBTITLE_SIZE = stringPreferencesKey("subtitle_size")
+private val SUBTITLE_SIZE_PERCENT = longPreferencesKey("subtitle_size_percent")
+private val SUBTITLE_POSITION_PERCENT = longPreferencesKey("subtitle_position_percent")
+private val SUBTITLE_COLOUR_RGB = longPreferencesKey("subtitle_colour_rgb")
 private val SUBTITLE_BOX = booleanPreferencesKey("subtitle_box")
 private val SUBTITLE_POSITION = stringPreferencesKey("subtitle_position")
 private val SUBTITLE_BOX_LEVEL = stringPreferencesKey("subtitle_box_level")
@@ -2215,6 +2218,10 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             it[SUBTITLE_EDGE] = style.edge.name
             it[SUBTITLE_FACE] = style.face.name
             it[SUBTITLE_BOLD] = style.bold
+            // The fine values (WP-29): stored only while they are set, so the preset names above stay the whole story otherwise.
+            if (style.sizePercent > 0) it[SUBTITLE_SIZE_PERCENT] = style.sizePercent.toLong() else it.remove(SUBTITLE_SIZE_PERCENT)
+            if (style.positionPercent >= 0) it[SUBTITLE_POSITION_PERCENT] = style.positionPercent.toLong() else it.remove(SUBTITLE_POSITION_PERCENT)
+            if (style.customColour != 0) it[SUBTITLE_COLOUR_RGB] = SubtitleStyle.storedColour(style.customColour) else it.remove(SUBTITLE_COLOUR_RGB)
         }
     }
 
@@ -2227,6 +2234,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         edge = prefs[SUBTITLE_EDGE],
         face = prefs[SUBTITLE_FACE],
         bold = prefs[SUBTITLE_BOLD],
+        sizePercent = prefs[SUBTITLE_SIZE_PERCENT],
+        positionPercent = prefs[SUBTITLE_POSITION_PERCENT],
+        customColour = prefs[SUBTITLE_COLOUR_RGB],
     )
 
     // ---- video decoder (Android) --------------------------------------------------------------

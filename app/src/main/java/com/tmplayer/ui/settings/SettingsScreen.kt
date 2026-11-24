@@ -118,6 +118,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -3436,10 +3437,10 @@ private fun SubtitlePreview(style: SubtitleStyle, modifier: Modifier = Modifier)
         contentAlignment = Alignment.BottomCenter,
     ) {
         val density = LocalDensity.current
-        val fontSize = with(density) { (maxHeight * style.size.fraction).toSp() }
+        val fontSize = with(density) { (maxHeight * style.fraction).toSp() }
         M3Text(
             s.settingsSubtitlePreview,
-            color = Color(style.colour.argb),
+            color = Color(style.colourArgb),
             fontSize = fontSize,
             textAlign = TextAlign.Center,
             fontFamily = when (style.face) {
@@ -3450,7 +3451,7 @@ private fun SubtitlePreview(style: SubtitleStyle, modifier: Modifier = Modifier)
             fontWeight = if (style.bold) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
             style = TextStyle(shadow = previewShadow(style)),
             modifier = Modifier
-                .padding(bottom = maxHeight * style.position.bottomFraction, start = 12.dp, end = 12.dp)
+                .padding(bottom = maxHeight * style.bottomFraction, start = 12.dp, end = 12.dp)
                 .then(if (style.box) Modifier.background(Color(style.boxLevel.argb)) else Modifier)
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         )
@@ -3847,17 +3848,48 @@ private fun SubtitleStyleDialog(style: SubtitleStyle, onChange: (SubtitleStyle) 
         ChoiceList {
             ChoiceSection(s.settingsSubtitleSize)
             SubtitleSize.entries.forEach { size ->
-                val selected = size == style.size
+                val selected = size == style.size && style.sizePercent == 0
                 ChoiceLine(
                     title = size.label,
                     selected = selected,
                     modifier = if (selected) Modifier.focusRequester(first) else Modifier,
-                ) { onChange(style.copy(size = size)) }
+                ) { onChange(style.copy(size = size, sizePercent = 0)) }
             }
+            // The fine size beside the four presets (WP-29): 50 to 250 per cent in tens, from where the size is now.
+            val fine = com.tmplayer.i18n.Translator.messages.formatter.scalePercent(style.fineSizePercent)
+            ChoiceLine(
+                title = s.subtitlesSmaller, detail = fine, icon = TmIcons.Remove,
+                enabled = style.fineSizePercent > SubtitleStyle.SIZE_MIN,
+            ) { onChange(style.stepSize(-1)) }
+            ChoiceLine(
+                title = s.subtitlesLarger, detail = fine, icon = TmIcons.Add,
+                enabled = style.fineSizePercent < SubtitleStyle.SIZE_MAX,
+            ) { onChange(style.stepSize(1)) }
             ChoiceSection(s.subtitlesColour)
             com.tmplayer.player.SubtitleColour.entries.forEach { colour ->
-                ChoiceLine(title = colour.label, selected = colour == style.colour) {
-                    onChange(style.copy(colour = colour))
+                ChoiceLine(title = colour.label, selected = colour == style.colour && style.customColour == 0) {
+                    onChange(style.copy(colour = colour, customColour = 0))
+                }
+            }
+            // The sixteen hues (WP-29), one line each as swatches wrap: a tap picks, the ticked one is ringed.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SubtitleStyle.CUSTOM_COLOURS.forEach { argb ->
+                    val chosen = style.customColour == argb
+                    val hex = "#" + (argb and 0xFFFFFF).toString(16).uppercase().padStart(6, '0')
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(argb))
+                            .border(if (chosen) 3.dp else 1.dp, if (chosen) Tone.accent else Tone.outline, CircleShape)
+                            .clickable(role = Role.RadioButton, onClickLabel = hex) { onChange(style.copy(customColour = argb)) }
+                            .semantics { contentDescription = hex; selected = chosen },
+                    )
                 }
             }
             ChoiceSection(s.settingsSubtitleBox)
@@ -3892,10 +3924,20 @@ private fun SubtitleStyleDialog(style: SubtitleStyle, onChange: (SubtitleStyle) 
             ChoiceLine(title = s.subtitlesWeightBold, selected = style.bold) { onChange(style.copy(bold = true)) }
             ChoiceSection(s.settingsSubtitlePosition)
             SubtitlePosition.entries.forEach { position ->
-                ChoiceLine(title = position.label, selected = position == style.position) {
-                    onChange(style.copy(position = position))
+                ChoiceLine(title = position.label, selected = position == style.position && style.positionPercent < 0) {
+                    onChange(style.copy(position = position, positionPercent = -1))
                 }
             }
+            // The fine height (WP-29): 0 to 30 per cent up from the bottom, by two.
+            val height = com.tmplayer.i18n.Translator.messages.formatter.scalePercent(style.positionNowPercent)
+            ChoiceLine(
+                title = s.subtitlesLower, detail = height, icon = TmIcons.Remove,
+                enabled = style.positionNowPercent > 0,
+            ) { onChange(style.stepPosition(-1)) }
+            ChoiceLine(
+                title = s.subtitlesHigher, detail = height, icon = TmIcons.Add,
+                enabled = style.positionNowPercent < SubtitleStyle.POSITION_MAX,
+            ) { onChange(style.stepPosition(1)) }
             // Last, and greyed out (still focusable) while the look is the default one.
             ChoiceLine(
                 title = s.subtitlesDefaultLook,

@@ -37,7 +37,7 @@ object SubtitleLook {
      */
     @OptIn(UnstableApi::class)
     fun captionStyle(style: SubtitleStyle, script: Typeface? = null): CaptionStyleCompat = CaptionStyleCompat(
-        style.colour.argb,
+        style.colourArgb,
         if (style.box) style.boxLevel.argb else Color.TRANSPARENT,
         Color.TRANSPARENT,
         if (style.box) CaptionStyleCompat.EDGE_TYPE_NONE else edgeType(style.edge),

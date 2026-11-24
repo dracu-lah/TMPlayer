@@ -790,10 +790,10 @@ private fun SubtitlePreview(style: SubtitleStyle, modifier: Modifier = Modifier)
             .background(Brush.verticalGradient(listOf(Color(0xFF3A4A5C), Color(0xFF1A1F26)))),
     ) {
         val frame = maxHeight
-        val fontSize = with(LocalDensity.current) { (frame * (style.size.mpvFontSize / 720f)).toSp() }
-        val foot = frame * (1f - style.position.mpvSubPos / 100f) + frame * (22f / 720f)
+        val fontSize = with(LocalDensity.current) { (frame * (SubtitleSize.Medium.mpvFontSize * style.sizeScale / 720f)).toSp() }
+        val foot = frame * (1f - style.mpvSubPos / 100f) + frame * (22f / 720f)
         val text = TextStyle(
-            color = Color(style.colour.argb),
+            color = Color(style.colourArgb),
             fontSize = fontSize,
             textAlign = TextAlign.Center,
             fontFamily = when (style.face) {
@@ -1000,7 +1000,7 @@ private fun SubtitleLookChoices(settings: SettingsStore, subtitleStyle: Subtitle
             val sizes = SubtitleSize.entries
             fun size(by: Int) {
                 val next = sizes[(subtitleStyle.size.ordinal + by).coerceIn(0, sizes.lastIndex)]
-                scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(size = next)) }
+                scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(size = next, sizePercent = 0)) }
             }
             Stepper(
                 onLess = { size(-1) },
@@ -1010,7 +1010,7 @@ private fun SubtitleLookChoices(settings: SettingsStore, subtitleStyle: Subtitle
             )
         }
         Setting(s.subtitlesColour, subtitleStyle.colour.label) {
-            Segments(com.tmplayer.player.SubtitleColour.entries, subtitleStyle.colour, { it.label }) { look(subtitleStyle.copy(colour = it)) }
+            Segments(com.tmplayer.player.SubtitleColour.entries, subtitleStyle.colour, { it.label }) { look(subtitleStyle.copy(colour = it, customColour = 0)) }
         }
         Setting(s.subtitlesBoxDarkness, s.subtitlesBoxDarknessHint) {
             Segments(com.tmplayer.player.SubtitleBox.entries, subtitleStyle.boxLevel, { it.label }) { look(subtitleStyle.copy(boxLevel = it)) }
@@ -1025,7 +1025,7 @@ private fun SubtitleLookChoices(settings: SettingsStore, subtitleStyle: Subtitle
         }
         Toggle(s.subtitlesWeightBold, subtitleStyle.weightLabel, subtitleStyle.bold) { on -> look(subtitleStyle.copy(bold = on)) }
         Setting(s.subtitlesPosition, s.settingsSubtitlePositionHint) {
-            Segments(SubtitlePosition.entries, subtitleStyle.position, { it.label }) { place -> look(subtitleStyle.copy(position = place)) }
+            Segments(SubtitlePosition.entries, subtitleStyle.position, { it.label }) { place -> look(subtitleStyle.copy(position = place, positionPercent = -1)) }
         }
     }
 }

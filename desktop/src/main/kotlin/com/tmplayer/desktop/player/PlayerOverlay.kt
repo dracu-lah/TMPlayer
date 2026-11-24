@@ -1294,11 +1294,11 @@ internal fun PlayerMenu(
                 val places = SubtitlePosition.entries
                 fun look(to: SubtitleStyle) = onAction(MenuAction.SubtitleLook(to))
                 Nudge(s.subtitlesSize, style.size.label, s.subtitlesSmaller, s.subtitlesLarger,
-                    sizes.getOrNull(style.size.ordinal - 1)?.let { size -> { look(style.copy(size = size)) } },
-                    sizes.getOrNull(style.size.ordinal + 1)?.let { size -> { look(style.copy(size = size)) } })
+                    sizes.getOrNull(style.size.ordinal - 1)?.let { size -> { look(style.copy(size = size, sizePercent = 0)) } },
+                    sizes.getOrNull(style.size.ordinal + 1)?.let { size -> { look(style.copy(size = size, sizePercent = 0)) } })
                 Nudge(s.subtitlesPosition, style.position.label, s.subtitlesLower, s.subtitlesHigher,
-                    places.getOrNull(style.position.ordinal - 1)?.let { p -> { look(style.copy(position = p)) } },
-                    places.getOrNull(style.position.ordinal + 1)?.let { p -> { look(style.copy(position = p)) } })
+                    places.getOrNull(style.position.ordinal - 1)?.let { p -> { look(style.copy(position = p, positionPercent = -1)) } },
+                    places.getOrNull(style.position.ordinal + 1)?.let { p -> { look(style.copy(position = p, positionPercent = -1)) } })
                 // The rest step through their choices a click at a time, the menu staying open on
                 // the picture so each click shows on the subtitles behind it.
                 Entry(s.subtitlesColour, trailing = style.colour.label) { look(style.nextColour()) }

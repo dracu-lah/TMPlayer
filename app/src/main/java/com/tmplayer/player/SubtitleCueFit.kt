@@ -26,7 +26,7 @@ object SubtitleCueFit {
      * upright picture gets, see PlayerActivity.subtitleTextScale). The same list when nothing changes.
      */
     fun fit(cues: List<Cue>, style: SubtitleStyle, pictureScale: Float): List<Cue> {
-        val scale = pictureScale * style.size.cueScale
+        val scale = pictureScale * style.cueScale
         if (cues.none { needsFit(it, scale) }) return cues
         return cues.map { cue ->
             if (!needsFit(cue, scale)) return@map cue

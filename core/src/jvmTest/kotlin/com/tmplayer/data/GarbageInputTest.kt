@@ -327,6 +327,18 @@ class GarbageInputTest {
             survive("Didl.fallbacks", text) { Didl.fallbacks(text); Didl.fallbacks(Didl.item(text, text, text, DlnaFeatures())) }
             survive("Xml.decode", text) { com.tmplayer.cast.dlna.Xml.decode(text.toByteArray(), text); com.tmplayer.cast.dlna.Xml.decode(text.toByteArray(Charsets.UTF_16LE), null) }
             survive("Didl.item", text) { Didl.parse(Didl.item(text, text, text, DlnaFeatures(profile = text), subtitleUrl = text, durationMs = text.length.toLong())) }
+            // The stored subtitle look with its fine values (WP-29): names, wrong-typed or huge numbers, any text.
+            survive("SubtitleStyle.from", text) {
+                val n = text.toLongOrNull()
+                val style = com.tmplayer.player.SubtitleStyle.from(text, text.isEmpty(), text, text, text, text, text, text.length > 3, n, n, n)
+                style.summary()
+                style.mpvProperties(text)
+                style.stepSize(1)
+                style.stepPosition(-1)
+                style.fraction
+                style.mpvScale
+                com.tmplayer.player.SyncDelays.decode(text)
+            }
             survive("SinkCaps.parse", text) { SinkCaps.parse(text) }
             survive("SinkCaps.plan", text) {
                 val probe = MediaProbe(Container.Avi, 60_000, VideoTrack(1, Codecs.H264, 1920, 1080), listOf(AudioTrack(2, Codecs.AAC, channels = 2)))
