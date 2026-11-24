@@ -387,7 +387,7 @@ internal fun SettingsHeader(
     }
 }
 
-/** The header's Find a setting (WP-09): a 40 dp TV button, never a rail item. OK opens the panel. */
+/** The header's Find a setting (WP-09): a 48 dp TV button (the header line's height), never a rail item. OK opens the panel. */
 @Composable
 private fun FindButton(
     onClick: () -> Unit,
@@ -399,7 +399,7 @@ private fun FindButton(
     com.tmplayer.ui.components.TmButton(
         onClick = onClick,
         modifier = Modifier
-            .height(40.dp)
+            .height(HEADER_HEIGHT)
             .focusRequester(requester)
             .testTag(FIND_BUTTON_TAG)
             .onPreviewKeyEvent { event ->
