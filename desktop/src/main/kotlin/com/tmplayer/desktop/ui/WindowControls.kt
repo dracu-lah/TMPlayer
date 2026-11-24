@@ -32,6 +32,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,6 +53,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tmplayer.desktop.os.Bounds
+import com.tmplayer.desktop.os.PixelRect
 import com.tmplayer.desktop.os.ResizeEdge
 import com.tmplayer.desktop.os.WindowChromeMode
 import com.tmplayer.desktop.os.WindowResize
@@ -90,6 +94,17 @@ class WindowChrome(
     /** How many full window covers (the loader, the setup, the proxy page) hide those headers now. */
     var covers by mutableIntStateOf(0)
         internal set
+
+    /**
+     * Where the maximize button is drawn, in the window's pixels, for Windows 11's Snap Layouts hit
+     * test (`SnapLayouts`); null while none is on screen.
+     */
+    @Volatile
+    var maximizeBounds: PixelRect? = null
+        internal set
+
+    /** The pointer is on the maximize button as Windows sees it, which Compose gets no hover for. */
+    var snapHover by mutableStateOf(false)
 
     /** The last floating bounds, for a maximized window dragged back to its size. */
     @Volatile
@@ -141,6 +156,7 @@ fun WindowControls(modifier: Modifier = Modifier, onArt: Boolean = false) {
             onArt,
             danger = false,
             onClick = chrome.onToggleMaximize,
+            snapOf = chrome,
         )
         // Red under the pointer as Windows has it; a tiling window manager has no such habit.
         WindowButton(WindowGlyphs.Close, s.windowClose, onArt, danger = chrome.mode == WindowChromeMode.Custom, onClick = chrome.onClose)
@@ -188,9 +204,24 @@ fun WindowControlsFallback(modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun WindowButton(icon: ImageVector, label: String, onArt: Boolean, danger: Boolean, onClick: () -> Unit) {
+private fun WindowButton(
+    icon: ImageVector,
+    label: String,
+    onArt: Boolean,
+    danger: Boolean,
+    onClick: () -> Unit,
+    /** The maximize button: tells the chrome where it is and takes the hover Windows sees (Snap Layouts). */
+    snapOf: WindowChrome? = null,
+) {
     val hover = remember { MutableInteractionSource() }
-    val hovered by hover.collectIsHoveredAsState()
+    val hovered = hover.collectIsHoveredAsState().value || (snapOf?.snapHover == true)
+    var bounds by remember { mutableStateOf<PixelRect?>(null) }
+    if (snapOf != null) {
+        DisposableEffect(snapOf, bounds) {
+            snapOf.maximizeBounds = bounds
+            onDispose { if (snapOf.maximizeBounds == bounds) snapOf.maximizeBounds = null }
+        }
+    }
     val focused by hover.collectIsFocusVisibleAsState()
     val ink = if (onArt) Color.White else LocalContentColor.current
     val fill = when {
@@ -210,6 +241,12 @@ private fun WindowButton(icon: ImageVector, label: String, onArt: Boolean, dange
     ) {
         Box(
             Modifier.size(40.dp).clip(CircleShape)
+                .onGloballyPositioned { c ->
+                    if (snapOf != null) {
+                        val r = c.boundsInWindow()
+                        bounds = PixelRect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
+                    }
+                }
                 .background(fill)
                 .hoverable(hover)
                 // The keyboard's Tab lands here too: the shared ring, as on every other button.

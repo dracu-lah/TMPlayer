@@ -16,6 +16,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -138,6 +141,32 @@ class ListsPageTest {
         assertEquals(5_000, list.records.size)
         assertTrue(cards.isNotEmpty())
         assertTrue("opened in $ms ms", ms < 1_000)
+    }
+
+    @Test
+    fun `F2 opens the rename and Delete the question for the list shown, nothing with no list`() = runComposeUiTest {
+        val list = runBlocking { store.create("Weekend")!! }
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Surface(Modifier.fillMaxSize()) {
+                    ListPageScaffold(
+                        lists = store.visible.collectAsStateValue(),
+                        selectedId = list.id,
+                        onSelect = {},
+                        store = store,
+                        onMessage = {},
+                    ) { _, _, _ -> }
+                }
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Delete list").fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Weekend").requestFocus()
+        onNodeWithText("Weekend").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.F2) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag(LIST_NAME_TAG).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Cancel").performClick()
+        waitForIdle()
+        onNodeWithText("Weekend").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Delete) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Delete Weekend?").fetchSemanticsNodes().isNotEmpty() }
     }
 }
 

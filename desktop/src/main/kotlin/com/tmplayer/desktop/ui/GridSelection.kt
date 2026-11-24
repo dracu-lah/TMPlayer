@@ -125,6 +125,11 @@ internal fun isSelectAllChord(event: KeyEvent): Boolean =
     event.type == KeyEventType.KeyDown && event.key == Key.A && !event.isAltPressed && !event.isShiftPressed &&
         (event.isCtrlPressed || event.isMetaPressed)
 
+/** Delete, or Cmd+Backspace on a Mac (where the key marked Delete is Backspace): remove what is picked. */
+internal fun isDeleteKey(event: KeyEvent): Boolean =
+    event.type == KeyEventType.KeyDown && !event.isAltPressed && !event.isShiftPressed && !event.isCtrlPressed &&
+        (event.key == Key.Delete && !event.isMetaPressed || event.key == Key.Backspace && event.isMetaPressed)
+
 /**
  * Ctrl+Space (Cmd+Space is the system's, so Ctrl there too): one row in or out, the keyboard's way
  * of the Ctrl+click, as a list box does it (WAI-ARIA).

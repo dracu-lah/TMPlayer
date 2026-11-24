@@ -155,6 +155,22 @@ class DownloadsSelectionKeysTest {
     }
 
     @Test
+    fun `Delete asks about the ticked rows and does nothing with none ticked (WP-51)`() = runComposeUiTest {
+        page(folderWithFive())
+        row(names[2]).requestFocus()
+        // Nothing ticked: the key is not taken and no question comes.
+        onNode(isFocused()).performKeyInput { pressKey(Key.Delete) }
+        waitForIdle()
+        onNodeWithText("Delete this download?", substring = true).assertDoesNotExist()
+        clickWith(toggleKey, names[0])
+        clickWith(toggleKey, names[1])
+        picked(2)
+        row(names[1]).requestFocus()
+        onNode(isFocused()).performKeyInput { pressKey(Key.Delete) }
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("Delete 2 downloads?", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
     fun `a deleted row hands the keyboard to the row after it, then the one before`() = runComposeUiTest {
         page(folderWithFive())
         // The page lists newest first: Echo, Delta, Charlie, Bravo, Alpha.

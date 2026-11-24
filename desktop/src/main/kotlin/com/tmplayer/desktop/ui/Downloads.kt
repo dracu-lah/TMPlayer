@@ -253,7 +253,11 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.profileDo
     val list = rememberLazyListState()
 
     Column(
-        Modifier.fillMaxSize().selectAllChord(enabled = history.isNotEmpty(), onSelectAll = selectAll),
+        Modifier.fillMaxSize()
+            .selectAllChord(enabled = history.isNotEmpty(), onSelectAll = selectAll)
+            // Delete takes the ticked rows through the same question as the button (WP-51); with
+            // nothing ticked, or the question already up, the key is left alone.
+            .deleteKey(enabled = picked.isNotEmpty() && confirm == null) { confirm = history.filter { it.key in picked } },
     ) {
         PageHeader(
             s.navDownloads,
@@ -1341,6 +1345,16 @@ private val LIST_MAX = 920.dp
 private val OVERVIEW_MAX = 560.dp
 
 private val ON_MAC = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+
+/** Delete (Cmd+Backspace on a Mac) over the page asks to remove what is ticked; [enabled] false leaves the key alone. */
+internal fun Modifier.deleteKey(enabled: Boolean, onDelete: () -> Unit): Modifier = onPreviewKeyEvent { event ->
+    if (enabled && isDeleteKey(event)) {
+        onDelete()
+        true
+    } else {
+        false
+    }
+}
 
 /**
  * Ctrl+A (Cmd+A on a Mac) picks everything on the page, with or without a selection already on:

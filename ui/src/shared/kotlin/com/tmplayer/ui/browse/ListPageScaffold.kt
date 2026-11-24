@@ -25,6 +25,16 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,7 +109,18 @@ fun ListPageScaffold(
         if (tv) runCatching { deleteFocus.requestFocus() }
     }
 
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
+    // F2 renames and Delete deletes the list shown, each through its own dialog (WP-51). Nothing
+    // happens while a dialog is up or with no list shown, and the key is then left alone.
+    val listKeys = Modifier.onPreviewKeyEvent { event ->
+        val list = shown
+        if (list == null || naming || renaming != null || deleting != null) return@onPreviewKeyEvent false
+        when (listKeyFor(event)) {
+            ListKey.Rename -> { renaming = list; true }
+            ListKey.Delete -> { deleting = list; true }
+            null -> false
+        }
+    }
+    Column(modifier.then(listKeys), verticalArrangement = Arrangement.spacedBy(gap)) {
         top?.invoke()
         Text(
             s.listsHeading,
@@ -192,3 +213,22 @@ private fun Message(text: String, sides: PaddingValues) {
 }
 
 const val LIST_CHIPS_TAG = "list-chips"
+
+/** What a key does on a list's page. */
+enum class ListKey { Rename, Delete }
+
+/**
+ * The key a list's page answers: F2 renames, Delete deletes (Cmd+Backspace on a Mac, where the
+ * key marked Delete is Backspace). Any other modifier leaves the key to whoever else wants it.
+ */
+fun listKeyFor(event: KeyEvent): ListKey? {
+    if (event.type != KeyEventType.KeyDown) return null
+    if (event.isAltPressed || event.isCtrlPressed || event.isShiftPressed) return null
+    val plain = !event.isMetaPressed
+    return when {
+        event.key == Key.F2 && plain -> ListKey.Rename
+        event.key == Key.Delete && plain -> ListKey.Delete
+        event.key == Key.Backspace && event.isMetaPressed -> ListKey.Delete
+        else -> null
+    }
+}

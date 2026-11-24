@@ -423,6 +423,29 @@ fun main(args: Array<String>) {
                         )
                     }
                 }
+                // Windows 11 shows its Snap Layouts flyout over a maximize button it recognises: the hit
+                // test answers for the app's own button (WP-51). Where it cannot be put in, the window
+                // is as it was, and the system title bar stays a setting away.
+                if (undecorated && chrome != null) {
+                    LaunchedEffect(window, chrome) {
+                        if (!com.tmplayer.desktop.os.SnapLayouts.supported()) return@LaunchedEffect
+                        repeat(100) { if (!window.isDisplayable) delay(50) }
+                        val win32 = com.tmplayer.desktop.os.SnapLayoutsWindows(window)
+                        val logic = com.tmplayer.desktop.os.SnapLayouts(
+                            host = win32.host,
+                            maximizeButton = { chrome.maximizeBounds },
+                            onToggleMaximize = { javax.swing.SwingUtilities.invokeLater { chrome.onToggleMaximize() } },
+                            onHover = { chrome.snapHover = it },
+                        )
+                        val installed = com.tmplayer.desktop.os.SnapLayouts.install(logic, win32)
+                        com.tmplayer.platform.Logger.i("Main", "Snap Layouts hit test: ${installed.outcome}")
+                        try {
+                            kotlinx.coroutines.awaitCancellation()
+                        } finally {
+                            installed.close()
+                        }
+                    }
+                }
                 // Restart now asks before its helper starts; the quit itself is then not asked twice.
                 DesktopServices.selfUpdate.quit = quitNow
                 DesktopServices.selfUpdate.beforeQuit = quitGuard::request

@@ -43,6 +43,10 @@ internal object ShellKeys {
                 L.keysShellRowSearchPage to "$cmd+F, /",
                 L.keysShellRowSearchChats to "$cmd+K",
             ),
+            L.keysShellGroupLists to listOf(
+                L.keysShellRowDelete to if (mac) "Delete, $cmd+Backspace" else "Delete",
+                L.keysShellRowRename to "F2",
+            ),
             L.keysGroupWindow to listOf(
                 L.keysRowFullscreen to "F11",
                 L.keysShellRowRefresh to "F5, $cmd+R",
