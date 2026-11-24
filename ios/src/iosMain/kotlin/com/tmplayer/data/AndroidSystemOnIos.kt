@@ -133,6 +133,11 @@ object AppLocales {
  */
 class AndroidTransferNotifier(@Suppress("UNUSED_PARAMETER") context: Context) : com.tmplayer.platform.TransferNotifier {
     override fun begin(id: Long, kind: com.tmplayer.platform.TransferNotifier.Kind, title: String) = Unit
+/** Android 12's per-app night mode for the chosen theme (WP-44). iOS draws the theme itself, so nothing here. */
+object AppNightMode {
+    fun apply(context: Context, choice: ThemeChoice) = Unit
+}
+
     override fun progress(id: Long, done: Long, total: Long?, bytesPerSecond: Long?) = Unit
     override fun complete(id: Long, title: String, body: String, open: com.tmplayer.platform.TransferNotifier.OpenTarget?) {
         announce(title)

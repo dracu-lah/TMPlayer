@@ -198,7 +198,7 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
             "AndroidTransferNotifier", "AndroidUpdates", "AppNotices", "AutoUpdater", "BackgroundChecks",
             "CrashExits", "CrashReports", "DownloadRelocationService", "DownloadService", "FolderExport",
             "NoticeActions", "SelfInstaller", "TvArt", "TvArtProvider", "TvChannelsPublisher", "UpdatedReceiver",
-            "WatchNextPublisher", "AppLocales", "LegacyApiCompat", "LauncherShortcuts", "NetworkMonitor", "ProfileNotifications",
+            "WatchNextPublisher", "AppLocales", "AppNightMode", "LegacyApiCompat", "LauncherShortcuts", "NetworkMonitor", "ProfileNotifications",
             // The update's baseline profile (java.util.zip), read only by SelfInstaller.
             "UpdateDexMetadata",
             // The version line's facts (Build.*), with an iOS twin in AndroidSystemOnIos.kt (WP-104).

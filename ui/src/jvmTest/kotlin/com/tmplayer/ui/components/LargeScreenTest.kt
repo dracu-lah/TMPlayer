@@ -51,4 +51,18 @@ class LargeScreenTest {
         assertEquals(0.dp, LargeScreen.extraGutter(673.dp, 841.dp, 16.dp))
         assertEquals(0.dp, LargeScreen.extraGutter(752.dp, 900.dp, 16.dp))
     }
+
+    @Test
+    fun `a poster grid and its heading share one edge inside the grid maximum on a tablet (WP-44)`() {
+        // Phones: nothing added, either way up.
+        assertEquals(0.dp, LargeScreen.gridGutter(411.dp, 891.dp, 16.dp))
+        assertEquals(0.dp, LargeScreen.gridGutter(891.dp, 411.dp, 16.dp))
+        // A 1280 dp window: the grid fills GridMax, centred.
+        val extra = LargeScreen.gridGutter(1280.dp, 800.dp, 16.dp)
+        assertEquals(1280.dp, extra * 2 + 16.dp * 2 + LargeScreen.GridMax)
+        // A large window narrower than the maximum keeps its margin.
+        assertEquals(0.dp, LargeScreen.gridGutter(900.dp, 700.dp, 16.dp))
+        // The grid is wider than a column of rows, never narrower.
+        assertTrue(LargeScreen.GridMax > LargeScreen.ColumnMax)
+    }
 }

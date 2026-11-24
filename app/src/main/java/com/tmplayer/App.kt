@@ -8,6 +8,7 @@ import com.tmplayer.data.AndroidStorage
 import com.tmplayer.data.AppLockSession
 import com.tmplayer.data.ChatGate
 import com.tmplayer.data.AppLocales
+import com.tmplayer.data.AppNightMode
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.DownloadRelocation
 import com.tmplayer.data.LocalDownloads
@@ -96,6 +97,11 @@ class App : Application() {
                 // The chosen language's locale data, loaded here rather than in a frame.
                 runCatching { Translator.messages.formatter.warmUp() }
             }
+        }
+        // The chosen theme as Android's night mode for this app (Android 12 and later, WP-44): the resources
+        // Android picks before Compose runs follow the choice, not only the system's setting.
+        backgroundScope.launch {
+            SettingsStore(this@App).themeChoice.collect { AppNightMode.apply(this@App, it) }
         }
         // The system's first load of a locale's data (numbers, dates) is heavy, and on a 1 GB
         // television a frame that did it on the main thread was caught waiting on a garbage

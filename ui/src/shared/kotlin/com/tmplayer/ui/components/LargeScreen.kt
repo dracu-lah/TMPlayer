@@ -18,6 +18,20 @@ object LargeScreen {
     /** The widest a column of settings rows or reading text grows on a large screen. */
     val ColumnMax: Dp = 720.dp
 
+    /**
+     * The widest a poster grid and the header over it grow on a large screen (WP-44, PT-19): wider than a
+     * column of rows, since tiles want the room, but one edge for the heading, the topic tabs, the selection
+     * bar and the tiles, so a 1280 dp window does not show a heading at one margin and tiles at another.
+     */
+    val GridMax: Dp = 1100.dp
+
+    /** What a grid in a window [width] by [height] adds to each side beyond its margin [side]: zero on a phone. */
+    fun gridGutter(width: Dp, height: Dp, side: Dp): Dp {
+        if (!isLarge(width, height)) return 0.dp
+        val extra = (width - side * 2 - GridMax) / 2
+        return if (extra > 0.dp) extra else 0.dp
+    }
+
     /** True for a window [width] by [height] that is a tablet's or an unfolded foldable's. */
     fun isLarge(width: Dp, height: Dp): Boolean = minOf(width, height) >= Shortest
 

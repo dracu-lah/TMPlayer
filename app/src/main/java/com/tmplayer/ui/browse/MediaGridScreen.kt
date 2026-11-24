@@ -325,7 +325,15 @@ fun MediaGridScreen(
     // those figures are asked for again below rather than assumed.
     val touch = !FormFactor.isTv(context)
     val lessMotion = rememberReducedMotion() || Motion.reduced
-    val edge = if (touch) TOUCH_EDGE else Tv.SafeH
+    // On a tablet the heading, the topic tabs, the selection bar and the tiles share one edge, inside
+    // [com.tmplayer.ui.components.LargeScreen.GridMax] (WP-44): the chat list and Downloads stand in a column,
+    // and a grid that ran to 16 dp on a 1280 dp window looked like another app beside them.
+    val window = androidx.compose.ui.platform.LocalConfiguration.current
+    val edge = if (touch) {
+        TOUCH_EDGE + com.tmplayer.ui.components.LargeScreen.gridGutter(window.screenWidthDp.dp, window.screenHeightDp.dp, TOUCH_EDGE)
+    } else {
+        Tv.SafeH
+    }
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
     // not leave a stale one filtered by the old bounds. Scoped to this screen rather than to the
     // activity, so a session's chats do not each leave behind an item list full of minithumbnail
