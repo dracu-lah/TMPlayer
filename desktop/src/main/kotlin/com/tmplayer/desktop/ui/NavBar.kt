@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -67,6 +68,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -365,12 +367,13 @@ internal const val NAV_BADGE_TAG = "nav-badge"
 
 @Composable
 private fun NavCell(
-    label: String,
+    /** The caption under the glyph; null draws none (the account: a long name has no place on the bar). */
+    label: String?,
     chosen: Boolean,
     onClick: () -> Unit,
     role: Role,
     modifier: Modifier = Modifier,
-    description: String = label,
+    description: String = label.orEmpty(),
     glyph: @Composable (Color) -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -397,7 +400,7 @@ private fun NavCell(
     ) {
         // One height for every glyph, the ringed picture included, so the names sit on one line.
         Box(Modifier.size(GLYPH_SLOT), contentAlignment = Alignment.Center) { glyph(tint) }
-        if (cell.compact) return@Column
+        if (cell.compact || label == null) return@Column
         Spacer(Modifier.height(2.dp))
         Text(
             label,
@@ -413,7 +416,8 @@ private fun NavCell(
 }
 
 /**
- * The account's picture and first name (WP-103), ringed while one of its lists is open, with a dot
+ * The account's picture (WP-103), with no caption (a long name has no place on the bar: the name is its
+ * screen reader label and its hover tip), ringed while one of its lists is open, with a dot
  * for news behind it. The phone's chain: Telegram's picture once it is there, else the profile's
  * saved photo, else the letter on the profile's colour, and the person glyph only when no name is
  * known. A screen reader hears "Account, Asha" (with ", an update is ready" while one waits).
@@ -432,11 +436,9 @@ private fun ProfileButton(
     val s = LocalStrings.current
     val name = desktopAccountName(account, profile)
     val named = name?.let { s.navAccountNamed(it) } ?: s.navAccount
-    // The first name, short like the other places' names, and "Account" while none is known.
-    val caption = name?.let(::firstName) ?: s.navAccount
     BarTooltip(named, null) {
         NavCell(
-            label = caption,
+            label = null,
             chosen = ringed || open,
             onClick = onClick,
             role = Role.Button,
@@ -477,6 +479,9 @@ internal const val NAV_PICTURE_TAG = "nav-account-picture"
 
 /** The tag of the account menu's head (picture, name, @username). */
 internal const val NAV_MENU_HEAD_TAG = "nav-account-head"
+
+/** The tag of the account menu's card. */
+internal const val NAV_MENU_TAG = "nav-account-menu"
 
 /**
  * The account's round picture at [size]: Telegram's (its letter while it loads), else the profile's
@@ -579,14 +584,20 @@ private fun BoxScope.ProfilePopover(
     if (signOutAsked) SignOutDialog(state, onDismiss = { signOutAsked = false }, name = name)
     val window = below == null
     val shownName = desktopAccountName(account, profileList?.active)
-    val half = POPOVER_WIDTH / 2
     // Over the floating bar at the foot, or hanging under the TV's bar at the top (plan 8.7).
     val origin = TransformOrigin(0.5f, if (below != null) 0f else 1f)
     Box(
         Modifier
             .align(if (below != null) Alignment.TopStart else Alignment.BottomStart)
             .padding(top = below?.plus(4.dp) ?: 0.dp, bottom = if (below != null) 0.dp else NAV_MARGIN + NAV_HEIGHT + 8.dp)
-            .offset(x = if (anchorX.value.isNaN()) 0.dp else (anchorX - half).coerceAtLeast(8.dp)),
+            // Centred on the picture it opened from, clamped inside the window so neither edge cuts it off.
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+                val edge = 8.dp.roundToPx()
+                val want = if (anchorX.value.isNaN()) edge else anchorX.roundToPx() - placeable.width / 2
+                val x = want.coerceIn(edge, (constraints.maxWidth - placeable.width - edge).coerceAtLeast(edge))
+                layout(x + placeable.width, placeable.height) { placeable.place(x, 0) }
+            },
     ) {
         AnimatedVisibility(
             visible = open,
@@ -620,81 +631,48 @@ private fun BoxScope.ProfilePopover(
                         }
                     }
                     .semantics { paneTitle = shownName?.let { s.navAccountNamed(it) } ?: s.navAccount }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 8.dp)
+                    .testTag(NAV_MENU_TAG),
             ) {
-                if (window) {
-                    AccountMenuHead(account, profileList?.active, shownName ?: s.navAccount)
-                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
-                    if (profileFlow != null) {
-                        PopoverRow(
-                            TmIcons.Person,
-                            if (severalProfiles) s.profilesSwitchProfile else s.profilesAdd,
-                            null,
-                            Modifier.focusRequester(first),
-                            // Two or more: the picker; one: Add account, as Settings' own rows (SettingsPages).
-                            onClick = close { if (severalProfiles) profileFlow.ask() else profileFlow.add() },
-                        )
-                    }
-                    PopoverRow(
-                        TmIcons.Settings,
-                        s.navSettings,
-                        null,
-                        if (profileFlow == null) Modifier.focusRequester(first) else Modifier,
-                        shortcut = "$COMMAND,",
-                        onClick = close { state.go(Destination.Settings) },
-                    )
-                    // The page's own refresh (F5), where it has one.
-                    state.refreshAction?.let { refresh -> PopoverRow(TmIcons.Refresh, s.commonRefresh, null, shortcut = "F5", onClick = close(refresh)) }
-                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
-                    com.tmplayer.ui.components.ViewingSummary(
-                        watching = watching.size,
-                        watched = watchedVideos.size,
-                        starred = favourites.size,
-                        onWatching = close { state.showHistory(HistoryTab.Continue) },
-                        onWatched = close { state.showHistory(HistoryTab.Watched) },
-                        onStarred = close { state.go(Destination.Favourites) },
-                    )
-                    PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favourites.size.takeIf { it > 0 }?.toString(), onClick = close { state.go(Destination.Favourites) })
-                    PopoverRow(TmIcons.History, s.browseTabHistory, null, onClick = close { state.showHistory(HistoryTab.Continue) })
-                    PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, onClick = close { state.showHistory(HistoryTab.WatchLater) })
-                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
-                    if (update != null) {
-                        PopoverRow(TmIcons.Refresh, update.label, update.version, ink = Tone.caution, onClick = close { state.updatePopup = true })
-                    }
-                    PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = close { signOutAsked = true })
-                    VersionFooterRow(close { state.updatePopup = true })
-                    return@Column
-                }
-                com.tmplayer.ui.components.ViewingSummary(
+                // One grouping for the window and the big screen alike (user, 2026-11-25), as the
+                // phone's sheet has it, left to right on one 16 dp edge and divided only between
+                // groups: header | library tiles | rows | version. Refresh and the switcher are the
+                // header's two small buttons; the old "Your viewing" block is gone, its numbers on the
+                // tiles they belong to. Sign out is in Settings, Account; the big screen, which the
+                // remote reaches Settings on slowly, keeps it as the last row (WP-02).
+                AccountMenuHead(
+                    account,
+                    profileList?.active,
+                    shownName ?: s.navAccount,
+                    onRefresh = state.refreshAction?.let { refresh -> close(refresh) },
+                    onSwitch = if (profileFlow != null && severalProfiles) close { profileFlow.ask() } else null,
+                )
+                MenuDivider()
+                com.tmplayer.ui.components.LibraryTiles(
+                    starred = favourites.size,
                     watching = watching.size,
                     watched = watchedVideos.size,
-                    starred = favourites.size,
-                    onWatching = close { state.showHistory(HistoryTab.Continue) },
-                    onWatched = close { state.showHistory(HistoryTab.Watched) },
-                    onStarred = close { state.go(Destination.Favourites) },
+                    onFavourites = close { state.go(Destination.Favourites) },
+                    onHistory = close { state.showHistory(HistoryTab.Continue) },
+                    onWatchLater = close { state.showHistory(HistoryTab.WatchLater) },
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    firstFocus = first,
                 )
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
-                PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favourites.size.takeIf { it > 0 }?.toString(), Modifier.focusRequester(first), onClick = close { state.go(Destination.Favourites) })
-                PopoverRow(TmIcons.History, s.browseTabHistory, null, onClick = close { state.showHistory(HistoryTab.Continue) })
-                PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, onClick = close { state.showHistory(HistoryTab.WatchLater) })
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+                MenuDivider()
                 PopoverRow(TmIcons.Settings, s.navSettings, null, shortcut = "$COMMAND,", onClick = close { state.go(Destination.Settings) })
-                if (update != null) {
-                    // Amber, as on the television's rail and the phone's popover: the one row that is news.
-                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
-                    PopoverRow(TmIcons.Refresh, update.label, update.version, ink = Tone.caution, onClick = close { state.updatePopup = true })
-                }
-                if (below != null && profileFlow != null) {
-                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+                if (profileFlow != null) {
                     PopoverRow(
                         TmIcons.Person,
-                        if (severalProfiles) s.profilesSwitchProfile else s.profilesAdd,
+                        if (severalProfiles) s.profilesSwitchOrAdd else s.profilesAdd,
                         null,
-                        // The picker for both: with one profile it shows the one tile and Add account, as on Android.
-                        onClick = close { profileFlow.ask() },
+                        // The picker for both (it has the Add tile); with one profile in the window, Add account itself.
+                        onClick = close { if (severalProfiles || below != null) profileFlow.ask() else profileFlow.add() },
                     )
+                }
+                if (below != null && profileFlow != null) {
                     PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = close { signOutAsked = true })
                 }
+                MenuDivider()
                 VersionFooterRow(close { state.updatePopup = true })
             }
             LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
@@ -702,44 +680,108 @@ private fun BoxScope.ProfilePopover(
     }
 }
 
-/** The popover's last line: the version, the build and the update state; a click copies them (WP-104). */
+/**
+ * The popover's last line: the app's tile and "v1.28.7" with the update state beside it (user,
+ * 2026-11-25); a click copies the full line for support (WP-104) and says so. On the menu's one left
+ * edge, 16 dp in.
+ */
 @Composable
 private fun VersionFooterRow(onUpdate: () -> Unit) {
-    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
-    com.tmplayer.ui.components.VersionFooter(
-        info = rememberDesktopVersion(),
-        modifier = Modifier.padding(horizontal = 6.dp),
+    val s = LocalStrings.current
+    val info = rememberDesktopVersion()
+    val copier = com.tmplayer.ui.components.rememberVersionCopier(info)
+    com.tmplayer.ui.components.VersionMark(
+        info = info,
+        modifier = Modifier.padding(horizontal = 4.dp),
+        onClick = copier::copy,
+        onClickLabel = s.aboutVersionCopy,
         onUpdate = onUpdate,
+        message = if (copier.copied) s.aboutVersionCopied else null,
     )
 }
 
+/** A thin line between two groups of the menu, on the same 16 dp edge as its content; never between rows of one group. */
+@Composable
+private fun MenuDivider() {
+    HorizontalDivider(Modifier.padding(horizontal = POPOVER_EDGE, vertical = 8.dp), color = Tone.outline)
+}
+
 /**
- * The window's account menu head (WP-103): the picture at 48 dp, the name in two lines at most and
- * the @username under it when Telegram has one, so two profiles of the same name read apart. One
- * node for a screen reader.
+ * The window's account menu header (WP-103): the picture at 48 dp, the name in two lines at most and
+ * the @username under it when Telegram has one, so two profiles of the same name read apart (one node
+ * for a screen reader), and at the end two small icon buttons, each with a tip: Refresh (F5) where
+ * the page has one and the switcher with two profiles or more.
  */
 @Composable
-private fun AccountMenuHead(account: Account?, profile: com.tmplayer.data.Profile?, name: String) {
+private fun AccountMenuHead(
+    account: Account?,
+    profile: com.tmplayer.data.Profile?,
+    name: String,
+    onRefresh: (() -> Unit)? = null,
+    onSwitch: (() -> Unit)? = null,
+) {
+    val s = LocalStrings.current
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-            .semantics(mergeDescendants = true) {}
-            .testTag(NAV_MENU_HEAD_TAG),
+            .padding(start = POPOVER_EDGE, end = 8.dp, top = 4.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        androidx.compose.runtime.key(profile?.id) { AccountPictureDesktop(account, profile, desktopAccountName(account, profile), 48.dp) }
-        Column(Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val username = account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() }
-            if (username != null) {
-                Text("@$username", style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) {}
+                .testTag(NAV_MENU_HEAD_TAG),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.runtime.key(profile?.id) { AccountPictureDesktop(account, profile, desktopAccountName(account, profile), 48.dp) }
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.titleMedium, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val username = account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() }
+                if (username != null) {
+                    Text("@$username", style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
+        }
+        if (onRefresh != null) HeadIconButton(TmIcons.Refresh, s.commonRefresh, "F5", NAV_MENU_REFRESH_TAG, onRefresh)
+        if (onSwitch != null) HeadIconButton(TmIcons.ChevronDown, s.profilesSwitchProfile, null, NAV_MENU_SWITCH_TAG, onSwitch)
+    }
+}
+
+/** A 40 dp icon button of the menu's header: a hover fill, the keyboard's ring, a tip and a name for a screen reader. */
+@Composable
+private fun HeadIconButton(icon: ImageVector, label: String, shortcut: String?, tag: String, onClick: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    val hovered by interactions.collectIsHoveredAsState()
+    BarTooltip(label, shortcut) {
+        Box(
+            Modifier
+                .size(POPOVER_ROW)
+                .clip(CircleShape)
+                .background(if (hovered || focused) Tone.surfaceHigh else Color.Transparent)
+                .then(if (focused) Modifier.border(2.dp, Tone.accent, CircleShape) else Modifier)
+                .clickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = label }
+                .testTag(tag),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(20.dp))
         }
     }
 }
 
+/** The tags of the header's Refresh and switcher buttons. */
+internal const val NAV_MENU_REFRESH_TAG = "nav-account-refresh"
+internal const val NAV_MENU_SWITCH_TAG = "nav-account-switch"
+
+/**
+ * One row of the menu: a fixed 20 dp icon column, then the label on the same left edge in every row
+ * (16 dp in), the key that does the same said quietly at the end, 40 dp high, filled under the
+ * pointer and under the keyboard's focus.
+ */
 @Composable
 private fun PopoverRow(
     icon: ImageVector,
@@ -753,16 +795,17 @@ private fun PopoverRow(
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
+    val hovered by interactions.collectIsHoveredAsState()
     Row(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 6.dp)
+            .padding(horizontal = 8.dp)
             .height(POPOVER_ROW)
-            // The card's 20 dp corner less the 6 dp inset, so a lit row runs parallel to it.
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (focused) Tone.surfaceHigh else Color.Transparent)
+            // The card's 20 dp corner less the 8 dp inset, so a lit row runs parallel to it.
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (focused || hovered) Tone.surfaceHigh else Color.Transparent)
             .clickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -782,6 +825,9 @@ private fun PopoverRow(
         }
     }
 }
+
+/** The menu's one left edge: header, tiles, rows and version all start this far in. */
+private val POPOVER_EDGE = 16.dp
 
 /**
  * Makes [action] the window's refresh (F5, Ctrl+R) while the calling page is on screen, the
@@ -840,6 +886,6 @@ private val NAV_MARGIN = 16.dp
 private val NAV_SHADOW = 10.dp
 private val PICTURE = 22.dp
 private val GLYPH_SLOT = 28.dp
-private val POPOVER_WIDTH = 232.dp
+private val POPOVER_WIDTH = 320.dp
 private val POPOVER_ROW = 40.dp
 private val POPOVER_SHAPE = RoundedCornerShape(20.dp)

@@ -418,7 +418,7 @@ fun SettingsPage(
             if (wide) {
                 val shown = open ?: settingsCategories.first()
                 Column(Modifier.fillMaxSize()) {
-                    PageHeader(s().settingsTitle, s().settingsSavesAsYouGo)
+                    PageHeader(s().settingsTitle, s().settingsSavesAsYouGo, leading = { com.tmplayer.ui.components.AppTile(36.dp) })
                     Row(
                         Modifier.fillMaxSize().padding(start = pageMargin()),
                         horizontalArrangement = Arrangement.spacedBy(PANE_GAP),
@@ -468,7 +468,7 @@ fun SettingsPage(
                             )
                             Column(Modifier.widthIn(max = PAGE_MAX).padding(horizontal = pageMargin())) { aboutPage(about) }
                         } else if (open == null) {
-                            PageHeader(s().settingsTitle, s().settingsSavesAsYouGo)
+                            PageHeader(s().settingsTitle, s().settingsSavesAsYouGo, leading = { com.tmplayer.ui.components.AppTile(36.dp) })
                             Column(Modifier.widthIn(max = PAGE_MAX).padding(horizontal = pageMargin())) { list() }
                         } else {
                             PageHeader(
@@ -579,13 +579,6 @@ private fun CategoryList(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
         )
     }
-    // The version, the build and the update state, quietly; a click copies them (WP-104).
-    if (!searching) {
-        com.tmplayer.ui.components.VersionNote(
-            info = rememberDesktopVersion(),
-            onUpdate = { state.updatePopup = true },
-        )
-    }
     if (searching) {
         val hits = SettingsSearch.match(query, searchRows, DeviceForm.Desktop) { key ->
             s.messages.format(key, mapOf("device" to "desktop", "form" to "desktop"))
@@ -654,6 +647,15 @@ private fun CategoryList(
             ) { if (selected == null) RowTail(null, RowEnd.Chevron) }
         }
     }
+    // The last thing of the list (user, 2026-11-25): the app's tile and "v1.28.7" with the update
+    // state beside it; a click opens About, which has the build, the source and the copy for support.
+    com.tmplayer.ui.components.VersionMark(
+        info = rememberDesktopVersion(),
+        modifier = Modifier.padding(top = 8.dp),
+        onClick = { onOpen(SettingsCategory.About) },
+        onClickLabel = s.settingsAbout,
+        onUpdate = { state.updatePopup = true },
+    )
 }
 
 /**

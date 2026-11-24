@@ -18,6 +18,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
@@ -139,12 +142,27 @@ class NavBarAccountTest {
     }
 
     @Test
-    fun `the cell says whose account it is and shows the first name, not You`() = runComposeUiTest {
+    fun `the cell says whose account it is, and draws no name on the bar`() = runComposeUiTest {
         window()
         cell(L.navAccountNamed("Asha Rao")).assertExists()
-        assertTrue("the first name under the picture", exists("Asha"))
+        // A long name has no place on the bar (user, 2026-11-25): the picture alone, the name as its label.
+        assertFalse("no first name under the picture", exists("Asha"))
+        assertFalse("no whole name either", exists("Asha Rao"))
         assertFalse(exists(L.navYou))
         assertTrue(onAllNodes(hasContentDescription(L.navProfile)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `a 60 character name keeps the bar's slots as wide as each other and draws no text for it`() = runComposeUiTest {
+        val long = "Asha " + "Ramanathan".repeat(6).take(55)
+        window(account = asha.copy(name = long))
+        cell(L.navAccountNamed(long)).assertExists()
+        assertFalse(exists(long))
+        val places = listOf(L.browseTabHome, L.navChats, L.commonSearch, L.navDownloads, L.navAccountNamed(long))
+        val widths = places.map { cell(it).fetchSemanticsNode().boundsInRoot.width }
+        val heights = places.map { cell(it).fetchSemanticsNode().boundsInRoot.height }
+        assertTrue("every slot is as wide as the others: $widths", widths.all { kotlin.math.abs(it - widths.first()) < 1f })
+        assertTrue("and as high: $heights", heights.all { kotlin.math.abs(it - heights.first()) < 1f })
     }
 
     @Test
@@ -152,7 +170,7 @@ class NavBarAccountTest {
         profiles("Maya Lee")
         window(account = null)
         cell(L.navAccountNamed("Maya Lee")).assertExists()
-        assertTrue(exists("Maya"))
+        assertFalse(exists("Maya"))
     }
 
     @Test
@@ -169,7 +187,7 @@ class NavBarAccountTest {
     }
 
     @Test
-    fun `the menu's head names the account, one profile reads Add account, and the rows are there`() = runComposeUiTest {
+    fun `the menu is a header, three tiles, two rows and the version, with no Your viewing block and no Sign out`() = runComposeUiTest {
         profiles("Asha Rao")
         window()
         cell(L.navAccountNamed("Asha Rao")).performSemanticsAction(SemanticsActions.OnClick)
@@ -177,10 +195,18 @@ class NavBarAccountTest {
         assertTrue(shell.profileOpen)
         onNode(androidx.compose.ui.test.hasTestTag(NAV_MENU_HEAD_TAG), useUnmergedTree = true).assertExists()
         assertTrue(exists("@asha"))
-        for (label in listOf(L.profilesAdd, L.navSettings, L.browseTabFavourites, L.browseTabHistory, L.browseTabWatchLater, L.settingsSignOutConfirm)) {
+        for (label in listOf(L.profilesAdd, L.navSettings, L.browseTabFavourites, L.browseTabHistory, L.browseTabWatchLater)) {
             row(label).assertExists()
         }
-        assertFalse(exists(L.profilesSwitchProfile))
+        onNode(androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.components.LIBRARY_TILES_TAG), useUnmergedTree = true).assertExists()
+        onNode(androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.components.VERSION_MARK_TAG), useUnmergedTree = true).assertExists()
+        // The stray block of three bare numbers is gone, and so is Sign out (Settings, Account has it).
+        assertFalse(exists(L.profileHeading))
+        assertFalse(exists(L.profileStarred))
+        assertFalse(exists(L.settingsSignOutConfirm))
+        assertFalse(exists(L.profilesSwitchOrAdd))
+        // Only a one profile device: no switcher button.
+        assertTrue(onAllNodes(androidx.compose.ui.test.hasTestTag(NAV_MENU_SWITCH_TAG)).fetchSemanticsNodes().isEmpty())
         row(L.navSettings).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
         assertEquals(Destination.Settings, shell.destination)
@@ -188,55 +214,71 @@ class NavBarAccountTest {
     }
 
     @Test
-    fun `two profiles read Switch profile`() = runComposeUiTest {
+    fun `two profiles read Switch or add account, and the header has the switcher`() = runComposeUiTest {
         profiles("Asha Rao", "Ben Ode")
         window()
         cell(L.navAccountNamed("Asha Rao")).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
-        row(L.profilesSwitchProfile).assertExists()
+        row(L.profilesSwitchOrAdd).assertExists()
         assertFalse(exists(L.profilesAdd))
+        onNode(androidx.compose.ui.test.hasTestTag(NAV_MENU_SWITCH_TAG)).assertExists()
     }
 
     @Test
-    fun `Enter opens the menu on its first row, Down walks it, Esc closes it onto the picture`() = runComposeUiTest {
+    fun `Enter opens the menu on its first tile, Down walks it, Esc closes it onto the picture`() = runComposeUiTest {
         profiles("Asha Rao")
         window()
         cell(L.navAccountNamed("Asha Rao")).requestFocus()
         press(Key.Enter)
         assertTrue(shell.profileOpen)
         waitForIdle()
-        row(L.profilesAdd).assertIsFocused()
+        val favourites = androidx.compose.ui.test.hasTestTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-favourites")
+        onNode(favourites, useUnmergedTree = true).assertIsFocused()
         press(Key.DirectionDown)
-        row(L.navSettings).assertIsFocused()
+        onNode(androidx.compose.ui.test.hasTestTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-history"), useUnmergedTree = true).assertIsFocused()
         press(Key.Escape)
         assertFalse(shell.profileOpen)
         cell(L.navAccountNamed("Asha Rao")).assertIsFocused()
     }
 
-    @Test
-    fun `Sign out from the menu asks the question naming the account`() = runComposeUiTest {
-        profiles("Asha Rao")
-        window()
-        cell(L.navAccountNamed("Asha Rao")).performSemanticsAction(SemanticsActions.OnClick)
-        waitForIdle()
-        row(L.settingsSignOutConfirm).performSemanticsAction(SemanticsActions.OnClick)
-        waitUntil(timeoutMillis = 5_000) { exists(L.settingsSignOutTitleNamed("Asha Rao")) }
+    private fun ComposeUiTest.shot(name: String) {
+        val image = onRoot().captureToImage().toAwtImage()
+        val file = java.io.File("../build/device-test/review/$name").absoluteFile
+        file.parentFile?.mkdirs()
+        javax.imageio.ImageIO.write(image, "png", file)
+        assertTrue(file.length() > 0)
     }
 
     @Test
-    fun `while a sign out runs, Sign out from the menu asks nothing again (SEC-08)`() = runComposeUiTest {
+    fun `the popover and the bar with a 60 character name, as drawn`() = runComposeUiTest {
+        profiles("Asha Rao", "Ben Ode")
+        shell.refreshAction = {}
+        val long = "Asha " + "Ramanathan".repeat(6).take(55)
+        window(account = asha.copy(name = long), update = NavUpdate("Update", "1.30.0"))
+        shot("desktop-bar-long-name.png")
+        cell("${L.navAccountNamed(long)}, ${L.navUpdateWaiting}").performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        // Inside the window on both sides, and clear of the picture it opened from.
+        val menu = onNode(androidx.compose.ui.test.hasTestTag(NAV_MENU_TAG), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val picture = cell("${L.navAccountNamed(long)}, ${L.navUpdateWaiting}").fetchSemanticsNode().boundsInRoot
+        assertTrue("inside the window: $menu", menu.left >= 0f && menu.right <= 1280f * 1f + 1f && menu.top >= 0f)
+        assertTrue("clear of the picture", menu.bottom <= picture.top + 1f || menu.top >= picture.bottom - 1f)
+        shot("desktop-account-popover.png")
+    }
+
+    @Test
+    fun `Refresh is the header's own small button where the page has one, with no row for it`() = runComposeUiTest {
         profiles("Asha Rao")
-        shell.signingOut = true
-        try {
-            window()
-            cell(L.navAccountNamed("Asha Rao")).performSemanticsAction(SemanticsActions.OnClick)
-            waitForIdle()
-            row(L.settingsSignOutConfirm).performSemanticsAction(SemanticsActions.OnClick)
-            waitForIdle()
-            assertEquals(false, exists(L.settingsSignOutTitleNamed("Asha Rao")))
-        } finally {
-            shell.signingOut = false
-        }
+        var refreshed = 0
+        shell.refreshAction = { refreshed++ }
+        window()
+        cell(L.navAccountNamed("Asha Rao")).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        assertTrue(onAllNodes(hasText(L.commonRefresh) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        onNode(androidx.compose.ui.test.hasTestTag(NAV_MENU_REFRESH_TAG)).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        assertEquals(1, refreshed)
+        assertFalse(shell.profileOpen)
     }
 
     /** How many PIN pads are up: each draws its title once. */
