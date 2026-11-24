@@ -116,8 +116,22 @@ internal fun AppearanceRows(state: ShellState) {
     Setting(s.settingsTypeface, s.settingsTypefaceDetail, icon = TmIcons.TextSize) {
         Segments(com.tmplayer.data.AppTypeface.entries, typeface, { it.label }) { scope.launch { settings.setTypeface(it) } }
     }
-    Toggle(s.settingsHighContrast, s.settingsHighContrastDetail, highContrast, icon = TmIcons.Visibility) { on ->
-        scope.launch { settings.setHighContrast(on) }
+    // Follow the system, On or Off (WP-50): the choice wins; a stored on counts as On. Choosing On or
+    // Off also writes the shared flag, so a backup and the phone's row say the same; Follow leaves it.
+    val reduceMotion by settings.reduceMotion.collectAsState(initial = false)
+    val systemChoices = listOf<Boolean?>(null, true, false)
+    val systemLabel: @Composable (Boolean?) -> String = { if (it == null) s.settingsFollowSystemContrast else if (it) s.commonOn else s.commonOff }
+    Setting(s.settingsHighContrast, s.settingsHighContrastDetail, icon = TmIcons.Visibility) {
+        Segments(systemChoices, SystemDefaults.shown(desktop.highContrast, highContrast), systemLabel) { picked ->
+            state.extras.prefs.update { it.copy(highContrast = picked) }
+            if (picked != null) scope.launch { settings.setHighContrast(picked) }
+        }
+    }
+    Setting(s.settingsReduceMotion, if (SystemDefaults.effective(desktop.reduceMotion, reduceMotion, null)) s.settingsReduceMotionOn else s.settingsReduceMotionOff, icon = TmIcons.Visibility) {
+        Segments(systemChoices, SystemDefaults.shown(desktop.reduceMotion, reduceMotion), systemLabel) { picked ->
+            state.extras.prefs.update { it.copy(reduceMotion = picked) }
+            if (picked != null) scope.launch { settings.setReduceMotion(picked) }
+        }
     }
     Action(s.settingsLanguage, s.languageRowDetail(language), TmIcons.Language) { pickingLanguage = true }
     // The big-screen mode for a computer on a television (plan 8.7). Desktop or TV, no Auto: a
@@ -126,7 +140,11 @@ internal fun AppearanceRows(state: ShellState) {
         Segments(DesktopLayout.entries, BigScreen.override ?: desktop.layout, { it.label }) { picked -> pickLayout(state, picked) }
     }
     Setting(s.interfaceSize, s.interfaceSizeDetail, icon = TmIcons.TextSize) {
-        Segments(UiScale.entries, uiScale, { it.label }) { scope.launch { settings.setUiScale(it) } }
+        // The shared sizes and the desktop's own Huge (WP-50); Ctrl+= and Ctrl+- step them, Ctrl+0 resets.
+        Segments(DesktopSize.entries, DesktopSize.of(uiScale, desktop.hugeSize), { it.label }) { picked ->
+            state.extras.prefs.update { it.copy(hugeSize = picked == DesktopSize.Huge) }
+            if (picked != DesktopSize.Huge) scope.launch { settings.setUiScale(picked.scale) }
+        }
     }
     Toggle(
         s.settingsStartFullscreen,

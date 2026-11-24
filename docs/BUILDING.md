@@ -119,6 +119,35 @@ Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or t
 blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
 path, and software decoding takes over.
 
+### Screen readers and the OS accessibility settings (WP-50)
+
+What the app does by itself: pages, Home rows and Downloads sections are headings; a video card
+carries its state (percent watched, downloading, kept, watched, selected) after its title; the
+player's time bar is a slider (range, "1:02 of 1:30:00", Left and Right step 5 s) and its volume
+slider is always in the tree. High contrast, Reduce motion and the OS text size follow the system
+until the viewer chooses (Settings, Appearance; the choice is per computer in `desktop.properties`),
+polled every 2 s on Windows (registry, `SystemParametersInfo`) and every 15 s on Linux
+(`gsettings`) and macOS (`defaults`). Ctrl+= and Ctrl+- step the interface size, Ctrl+0 resets, and
+Huge (1.5) is a desktop-only step.
+
+What is not known, and is the manual pass to run on a real machine before anything is promised on
+the site: how much of the Compose tree each reader sees.
+
+- **Windows, NVDA and Narrator:** Compose Desktop exposes its semantics through the Java Access
+  Bridge. The bridge is off by default: run `jabswitch -enable` from a JDK of the same major version
+  (it writes `%USERPROFILE%\.accessibility.properties`), restart the screen reader and the app.
+  The jpackage runtime does not ship `jabswitch`, so for now it is a step for the person running
+  the pass; if NVDA reads the window, the installer can write that file.
+- **Linux, Orca:** needs `java-atk-wrapper` (Fedora `java-atk-wrapper`, Debian
+  `libatk-wrapper-java-jni`) on the runtime's class path and `assistive_technologies` set in
+  `~/.accessibility.properties` or `$JAVA_HOME/conf/accessibility.properties`; the jpackage runtime
+  has neither. Expect Orca to see only the window until that is shown to work.
+- **macOS, VoiceOver:** Compose Desktop maps its semantics to NSAccessibility; no setup. Check Home,
+  a grid, Settings and Downloads, and that the player's bar reads as a slider.
+
+Record the result of each pass here, with the date and the app version, and the site's
+accessibility line follows it (the user approves that copy).
+
 ### In-app trailers (the Chromium download)
 
 Trailers play inside the desktop app through JCEF, the Java Chromium Embedded Framework, by way of

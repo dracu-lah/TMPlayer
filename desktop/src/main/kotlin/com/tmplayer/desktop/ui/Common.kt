@@ -34,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -391,8 +393,10 @@ fun PageHeader(
         ) {
             val heading: @Composable (Modifier) -> Unit = { headingModifier ->
                 Column(headingModifier) {
+                    // The page's name is a heading to a screen reader, which jumps by headings (WP-50).
                     Text(
                         title,
+                        modifier = Modifier.semantics { heading() },
                         style = MaterialTheme.typography.displaySmall.trackedFor(title),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

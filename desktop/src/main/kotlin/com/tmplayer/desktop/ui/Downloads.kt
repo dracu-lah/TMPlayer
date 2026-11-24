@@ -32,6 +32,7 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.unit.Dp
@@ -877,7 +878,7 @@ private fun Section(title: String, first: Boolean = false, actions: @Composable 
             color = Tone.muted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
         actions()
     }
@@ -887,7 +888,7 @@ private fun Section(title: String, first: Boolean = false, actions: @Composable 
 @Composable
 private fun ShowHeading(title: String, detail: String) {
     Column(Modifier.fillMaxWidth().padding(start = ROW_INSET, end = ROW_INSET, top = 16.dp, bottom = 4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
         Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
     }
 }

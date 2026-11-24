@@ -1165,6 +1165,7 @@
     "open_with": "Open with",
     "part_number": "Part {number}",
     "parts_count": "{count, plural, one {# part} other {# parts}}",
+    "percent_watched": "{percent} percent watched",
     "piece_first_missing": "Part 1 of {total} is not in this chat, so this video cannot start",
     "piece_missing": "Part {number} of {total} is not in this chat",
     "pinned_label": "Pinned",
@@ -1359,6 +1360,7 @@
     "size": "Interface size",
     "size_default": "Default",
     "size_detail": "How large text, buttons and panels are drawn. The video always fills the screen.",
+    "size_huge": "Huge",
     "size_larger": "Larger",
     "size_largest": "Largest",
     "size_smaller": "Smaller"
@@ -3087,6 +3089,7 @@
     "favourites_cleared": "{count, plural, =1 {Favourite cleared} one {# favourites cleared} other {# favourites cleared}}",
     "favourites_detail": "Take the star off every chat",
     "favourites_empty": "No chats are starred",
+    "follow_system_contrast": "Follow the system",
     "forget": "Forget",
     "forget_last": "Forget the last chat",
     "forget_last_chat": "Forget it",

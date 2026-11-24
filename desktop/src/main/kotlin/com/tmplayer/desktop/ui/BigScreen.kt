@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
@@ -105,17 +106,68 @@ object TvScale {
  * in place rather than throwing the tree's state away.
  */
 @Composable
-fun ProvideInterfaceScale(scale: UiScale, bigScreen: Boolean, content: @Composable () -> Unit) {
+fun ProvideInterfaceScale(
+    scale: UiScale,
+    bigScreen: Boolean,
+    /** Desktop only: the Huge step, 1.5, which the shared [UiScale] does not have (WP-50). */
+    huge: Boolean = false,
+    /** The OS text size (SystemAccessibility), on top of the interface size as Android's font scale is. */
+    textScale: Float = 1f,
+    content: @Composable () -> Unit,
+) {
     val base = LocalDensity.current
     val factor = if (bigScreen) {
         // Read only in the big-screen mode: a desktop window being resized recomposes nothing here.
         val window = LocalWindowInfo.current.containerSize
         TvScale.factor(window.width / base.density, window.height / base.density, scale)
     } else {
-        scale.factor
+        DesktopSize.of(scale, huge).factor
     }
-    val scaled = remember(base.density, base.fontScale, factor) { Density(base.density * factor, base.fontScale) }
+    val font = base.fontScale * textScale
+    val scaled = remember(base.density, font, factor) { Density(base.density * factor, font) }
     CompositionLocalProvider(LocalDensity provides scaled, content = content)
+}
+
+/**
+ * The interface sizes the desktop offers (WP-50): the shared [UiScale]'s four and [Huge], 1.5,
+ * which only a computer needs (a television has its own scale and a phone its font setting), so it
+ * lives here and core's [UiScale] is unchanged. [Huge] is a desktop choice (`huge_size` in
+ * desktop.properties) on top of the stored [UiScale], which it leaves alone.
+ */
+enum class DesktopSize(val scale: UiScale, val factor: Float) {
+    Smaller(UiScale.Smaller, UiScale.Smaller.factor),
+    Default(UiScale.Default, UiScale.Default.factor),
+    Larger(UiScale.Larger, UiScale.Larger.factor),
+    Largest(UiScale.Largest, UiScale.Largest.factor),
+    Huge(UiScale.Largest, 1.5f),
+    ;
+
+    /** The word on the segment, in the UI language. */
+    val label: String get() = if (this == Huge) com.tmplayer.i18n.L.interfaceSizeHuge else scale.label
+
+    /** The size [direction] steps away, or this one at either end. */
+    fun step(direction: Int): DesktopSize = entries.getOrNull(ordinal + direction) ?: this
+
+    companion object {
+        /** The size for the stored [scale] and the Huge choice. */
+        fun of(scale: UiScale, huge: Boolean): DesktopSize = if (huge) Huge else entries.first { it != Huge && it.scale == scale }
+    }
+}
+
+/** Ctrl+= and Ctrl+- (Cmd on a Mac) step the interface size, Ctrl+0 puts it back to Default (WP-50). */
+internal object InterfaceSize {
+
+    /** [direction] 1 larger, -1 smaller, 0 back to Default. A step at either end changes nothing. */
+    suspend fun step(settings: com.tmplayer.data.SettingsStore, prefs: com.tmplayer.desktop.DesktopPrefs, direction: Int) {
+        val now = DesktopSize.of(settings.uiScale.first(), prefs.now.hugeSize)
+        apply(settings, prefs, if (direction == 0) DesktopSize.Default else now.step(direction))
+    }
+
+    suspend fun apply(settings: com.tmplayer.data.SettingsStore, prefs: com.tmplayer.desktop.DesktopPrefs, size: DesktopSize) {
+        prefs.update { it.copy(hugeSize = size == DesktopSize.Huge) }
+        // Huge leaves the shared size as it was, so a step back down from it lands on Largest.
+        if (size != DesktopSize.Huge) settings.setUiScale(size.scale)
+    }
 }
 
 /**

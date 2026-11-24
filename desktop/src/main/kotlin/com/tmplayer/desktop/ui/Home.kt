@@ -60,6 +60,8 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -667,7 +669,7 @@ private fun RowHeading(title: String, count: String?, side: Dp, onSeeAll: (() ->
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
         // The words alone, no count (user, 2026-10-22: "just a see all button").
         if (onSeeAll != null) SeeAllLink(s.homeSeeAll, onSeeAll)

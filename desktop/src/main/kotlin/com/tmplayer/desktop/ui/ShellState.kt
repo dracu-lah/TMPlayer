@@ -660,6 +660,12 @@ class ShellState(
                 minimize?.invoke()
                 true
             }
+            // The interface size, as a browser's zoom keys have it (WP-50): Ctrl+= and Ctrl+- step, Ctrl+0 resets.
+            command && sizeStep(event.key, event.isShiftPressed) != null -> {
+                val direction = sizeStep(event.key, event.isShiftPressed) ?: 0
+                Background.scope.launch { runCatching { InterfaceSize.step(settings, extras.prefs, direction) } }
+                true
+            }
             command && event.key == Key.K -> {
                 paletteOpen = !paletteOpen
                 true
@@ -703,6 +709,14 @@ class ShellState(
             }
             else -> false
         }
+    }
+
+    /** 1 for Ctrl+= (and Ctrl++, the same key with Shift), -1 for Ctrl+-, 0 for Ctrl+0, else null. */
+    private fun sizeStep(key: Key, shift: Boolean): Int? = when (key) {
+        Key.Equals, Key.Plus, Key.NumPadAdd -> 1
+        Key.Minus, Key.NumPadSubtract -> if (shift) null else -1
+        Key.Zero, Key.NumPad0 -> if (shift) null else 0
+        else -> null
     }
 
     /** The window's own keys, the only ones heard while the shell is hidden behind the gate. */

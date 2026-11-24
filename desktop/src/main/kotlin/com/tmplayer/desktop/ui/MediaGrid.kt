@@ -71,6 +71,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -1170,6 +1173,32 @@ internal fun Poster(
         }
     }
 
+    // What a screen reader adds to the card (WP-50): the title and its line are the merged text of
+    // the card, and this is the state after them: how far it was watched and what is true of it
+    // (selected, downloading, kept, watched). The name stays as text, so the card is found by it.
+    val spokenTitle = remember(item, poster, titleText) { titleText ?: if (poster) SeriesShelf.posterTitle(item) else SeriesShelf.tileTitle(item) }
+    val spokenStage = when {
+        selected -> s.browseBadgeSelected
+        record != null -> s.downloadsDownloaded
+        download != null -> when (download.stage) {
+            OfflineDownloads.Stage.Running -> download.fraction?.let { s.formatter.percent(it.toDouble()) } ?: s.gridStageDownloading
+            OfflineDownloads.Stage.Queued -> s.gridStageQueued
+            OfflineDownloads.Stage.Paused -> s.gridStagePausedLong
+            OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.Yielding -> s.gridStageWaiting
+            OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
+            OfflineDownloads.Stage.Moving -> s.gridStageMoving
+            OfflineDownloads.Stage.Failed -> s.gridStageFailed
+        }
+        item.onDevice -> s.browseBadgeCached
+        finished -> s.commonWatched
+        else -> null
+    }
+    val spokenState = tileSpokenState(watchedPercentOf(progress)?.let { s.gridPercentWatched(percent = it) }, spokenStage)
+    val speech: Modifier = Modifier.semantics {
+        if (spokenState.isNotEmpty()) stateDescription = spokenState
+        if (selection?.active == true) this.selected = selected
+    }
+
     val behaviour = Modifier
             .hoverable(interaction)
             .onPointerEvent(PointerEventType.Press) { event ->
@@ -1234,6 +1263,7 @@ internal fun Poster(
                     Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = play)
                 },
             )
+            .then(speech)
     Column(
         behaviour,
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1326,7 +1356,7 @@ internal fun Poster(
         // The name cleaned of its release tags, a film of several copies by the film's own name
         // (see SeriesShelf.tileTitle); the detail pane keeps the whole file name.
         if (titleBelow) {
-            val title = remember(item, poster, titleText) { titleText ?: if (poster) SeriesShelf.posterTitle(item) else SeriesShelf.tileTitle(item) }
+            val title = spokenTitle
             if (poster) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
             } else {

@@ -53,6 +53,16 @@ data class DesktopSettings(
      * the player; off, it does nothing there. Per device.
      */
     val escLeavesVideo: Boolean = true,
+    /**
+     * High contrast as the viewer chose it on this computer: null follows the system's setting
+     * (SystemAccessibility), true and false stay as chosen (WP-50). A shared store value already on,
+     * from an earlier choice or a backup, counts as chosen on.
+     */
+    val highContrast: Boolean? = null,
+    /** Reduce motion as [highContrast] is: null follows the system's Animation effects (WP-50). */
+    val reduceMotion: Boolean? = null,
+    /** The desktop-only Huge interface size, 1.5 (WP-50); the shared UiScale stays as stored. */
+    val hugeSize: Boolean = false,
 ) {
     companion object {
         /**
@@ -154,6 +164,9 @@ class DesktopPrefs(private val file: File) {
             setProperty("start_fullscreen", s.startFullscreen.toString())
             setProperty("quit_without_asking", s.quitWithoutAsking.toString())
             setProperty("esc_leaves_video", s.escLeavesVideo.toString())
+            s.highContrast?.let { setProperty("high_contrast", it.toString()) }
+            s.reduceMotion?.let { setProperty("reduce_motion", it.toString()) }
+            setProperty("huge_size", s.hugeSize.toString())
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -196,6 +209,9 @@ class DesktopPrefs(private val file: File) {
                 startFullscreen = bool("start_fullscreen", d.startFullscreen),
                 quitWithoutAsking = bool("quit_without_asking", d.quitWithoutAsking),
                 escLeavesVideo = bool("esc_leaves_video", d.escLeavesVideo),
+                highContrast = p.getProperty("high_contrast")?.toBooleanStrictOrNull(),
+                reduceMotion = p.getProperty("reduce_motion")?.toBooleanStrictOrNull(),
+                hugeSize = bool("huge_size", d.hugeSize),
             )
         }
     }

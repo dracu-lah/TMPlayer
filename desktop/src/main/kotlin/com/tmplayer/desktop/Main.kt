@@ -210,7 +210,10 @@ fun main(args: Array<String>) {
                 com.tmplayer.player.StreamWarmup.allowed = { true }
             }
         }
-        Background.scope.launch { settings.reduceMotion.collect { com.tmplayer.ui.theme.Motion.reduced = it } }
+        // The viewer's choice, else the shared flag, else the OS's Animation effects (WP-50).
+        Background.scope.launch {
+            com.tmplayer.desktop.ui.SystemDefaults.reduceMotion(settings, DesktopServices.prefs).collect { com.tmplayer.ui.theme.Motion.reduced = it }
+        }
         // `-Dtmplayer.lowend=true`: the low-end verdict, short of storage, for checking the card and the step.
         if (System.getProperty("tmplayer.lowend") == "true") {
             com.tmplayer.data.DeviceFitOverride.forced = com.tmplayer.data.DeviceFit(shortOfMemory = false, shortOfStorage = true)
@@ -333,9 +336,11 @@ fun main(args: Array<String>) {
                 // The layouts are made for 960 by 600 at the Default size, so the least the window
                 // can be grows with the interface size, as far as the screen allows.
                 val uiScale by rememberUiScale(settings)
+                val hugeSize by remember { DesktopServices.prefs.state.map { it.hugeSize }.distinctUntilChanged() }.collectAsState(initial = DesktopServices.prefs.now.hugeSize)
                 // The big-screen mode scales to the window it is given, so it asks for no more room.
                 val bigScreen = com.tmplayer.desktop.ui.BigScreen.on
-                LaunchedEffect(uiScale, bigScreen) { window.minimumSize = minimumWindow(window, if (bigScreen) 1f else uiScale.factor) }
+                val sizeFactor = com.tmplayer.desktop.ui.DesktopSize.of(uiScale, hugeSize).factor
+                LaunchedEffect(sizeFactor, bigScreen) { window.minimumSize = minimumWindow(window, if (bigScreen) 1f else sizeFactor) }
                 // Before the window is first shown, so one that opens maximized stops at the taskbar.
                 if (undecorated) UndecoratedFrame.holdToWorkArea(window)
                 DisposableEffect(window) {
@@ -602,11 +607,14 @@ fun DesktopTheme(settings: SettingsStore, content: @Composable () -> Unit) {
     val scale by rememberUiScale(settings)
     val accent by settings.accent.collectAsState(initial = com.tmplayer.data.Accent.Default)
     val customAccent by settings.customAccent.collectAsState(initial = null)
-    val highContrast by settings.highContrast.collectAsState(initial = false)
+    val highContrast by remember(settings) { com.tmplayer.desktop.ui.SystemDefaults.highContrast(settings, DesktopServices.prefs) }
+        .collectAsState(initial = false)
+    val desktopPrefs by DesktopServices.prefs.state.collectAsState()
+    val textScale by com.tmplayer.desktop.os.SystemAccessibility.reading.collectAsState()
     val typeface by settings.typeface.collectAsState(initial = com.tmplayer.data.AppTypeface.Default)
     TmMaterialTheme(dark = dark, black = black, accent = accent, customAccent = customAccent, highContrast = highContrast, typeface = typeface) {
         // The big-screen mode (plan 8.7) sizes the whole window for a sofa's distance (TvScale).
-        ProvideFocusVisibility { com.tmplayer.desktop.ui.ProvideInterfaceScale(scale, com.tmplayer.desktop.ui.BigScreen.on, content) }
+        ProvideFocusVisibility { com.tmplayer.desktop.ui.ProvideInterfaceScale(scale, com.tmplayer.desktop.ui.BigScreen.on, desktopPrefs.hugeSize, textScale.textScale, content) }
     }
 }
 
