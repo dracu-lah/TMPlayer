@@ -168,6 +168,10 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.role
+import androidx.compose.runtime.MutableState
+import com.tmplayer.data.AddedChat
+import androidx.compose.foundation.lazy.LazyListState
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * "Add chats" (HX27): every chat of the account with a tick box and the number chosen at the foot. A full screen on the phone, the television and the desktop alike, so
@@ -230,21 +234,205 @@ fun AddChatsScreen(
     onContinue: (() -> Unit)? = null,
     onAdded: (Int) -> Unit = {},
 ) {
+    // Split in three so that no method grows past what the release build's ProGuard can write stack
+    // map frames for (HX1, as SeriesPanel was): PickUi is what the screen remembers, PickList the
+    // rows it derives, PickScreen what it draws and how its keys behave.
     val s = LocalStrings.current
     val form = deviceForm()
     val tv = form == DeviceForm.Tv
-    val state by model.state.collectAsState()
+    val stateHolder = model.state.collectAsState()
+    val state by stateHolder
     val choice by AddedChats.choice.collectAsState()
     // "All chats" (HX86): every chat counts, the ticks are disabled (and kept), the folders and the
     // Recommended band are greyed.
     val allOn = state.allChats
     // The television's held Down jumps a screen at a time: the rows it lands on are composed ahead (HX76).
     val listState = rememberJumpAheadListState(enabled = tv)
-    val searchFocus = remember { FocusRequester() }
-    var asking by remember { mutableStateOf<Ask?>(null) }
+    val ui = remember { PickUi() }
     // Typed here and handed on, since a text field fed back through a flow a frame late loses keys.
-    var typed by rememberSaveable { mutableStateOf(state.query) }
-    val onType: (String) -> Unit = { typed = it; model.type(it) }
+    val typedState = rememberSaveable { mutableStateOf(state.query) }
+    val searchingState = rememberSaveable { mutableStateOf(state.query.isNotBlank()) }
+    val lst = rememberPickList(chats, starred, listComplete, folders, folderStatus, stateHolder, choice.chats, tv, allOn, ui)
+
+    // The remote's way round a long list (HX76): the first row takes the focus, not the search
+    // box; Right (the end side) goes to Done from any row; Left (the start side) goes back to the
+    // start of the row's band, then the band before, then the filters; Back goes up to the
+    // filters before it leaves; Page and Channel Up or Down, and Down or Up held, move a screenful.
+    val scope = rememberCoroutineScope()
+    val nowShownState = rememberUpdatedState(lst.shown)
+    val nowPlaceState = rememberUpdatedState(lst.placeOf)
+    val nowFolderReadState = rememberUpdatedState(lst.folderRead)
+    val nowPlace by nowPlaceState
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val doneReady = !(required && state.ticked.isEmpty() && !allOn)
+    // The way out of a required choice with nothing to choose (ON-4): the head start has finished
+    // with no recommendation and the whole list is in.
+    val showHint = required && listComplete && !state.recommending && !allOn &&
+        state.recommended.isEmpty() && state.ticked.isEmpty()
+    val showEscape = showHint && onContinue != null
+    val pick = PickScreen(
+        s = s, form = form, state = state, allOn = allOn, chats = chats, listComplete = listComplete, partial = partial,
+        model = model, onClose = onClose, onLeave = onLeave, confirmLeave = confirmLeave, required = required,
+        onContinue = onContinue, onRetry = onRetry, onRetryFolders = onRetryFolders, sendLogs = sendLogs,
+        searchField = searchField, folderStatus = folderStatus, listState = listState, ui = ui, lst = lst,
+        scope = scope, nowShownState = nowShownState, nowPlaceState = nowPlaceState,
+        nowFolderReadState = nowFolderReadState, rtl = rtl, doneReady = doneReady, showHint = showHint,
+        showEscape = showEscape, tick = rememberToggleTick(), typedState = typedState, searchingState = searchingState,
+    )
+
+    LaunchedEffect(Unit) { if (typedState.value != state.query) model.type(typedState.value) }
+    LaunchedEffect(chats.isNotEmpty()) { if (chats.isNotEmpty()) model.start(chats) }
+    // Saved Messages may arrive after the rest of the list: a fresh start ticks it when it does (HX86).
+    val savedId = remember(chats) { ChatPicking.savedId(chats) }
+    LaunchedEffect(savedId) { model.knowSaved(savedId) }
+    // Nothing is counted once the screen is gone, and a count already running is cancelled.
+    DisposableEffect(model) { onDispose { model.stop() } }
+    LaunchedEffect(state.saved) {
+        if (state.saved) {
+            if (state.justAdded > 0) onAdded(state.justAdded)
+            onClose()
+        }
+    }
+    // The remote starts on the first row, where OK ticks, not in the search box (HX76). Until a row
+    // is there it stands on the filters, and moves down to the first row when one lands, unless a
+    // key has been pressed since.
+    // It starts on Done instead when something is already ticked and recommended (a picker
+    // reopened over a choice already made: nothing is ticked for a first run); a band that lands
+    // late (up to 3 s) never moves a remote that has already moved. No chats at all: it starts
+    // on the rail.
+    val firstId = lst.shown.firstOrNull()?.id
+    // Only over a choice already made (HX86): a fresh install starts with Saved Messages ticked, and
+    // its remote still starts on the first row.
+    val startOnDone = tv && !state.recommending && state.recommended.isNotEmpty() && state.ticked.isNotEmpty() && doneReady &&
+        state.added.isNotEmpty() && !allOn
+    LaunchedEffect(firstId, startOnDone, allOn) {
+        if (!tv || ui.keyed) return@LaunchedEffect
+        // The list lays its first items out a frame after this runs, and a request before that
+        // finds nothing to focus.
+        withFrameNanos { }
+        withFrameNanos { }
+        if (ui.keyed) return@LaunchedEffect
+        // Every row is disabled while all chats count, so the switch is where the remote starts.
+        if (allOn && runCatching { ui.switchFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        if (startOnDone && runCatching { ui.doneFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        val first = firstId?.let { ui.rowFocus[it] }
+        if (first == null || runCatching { first.requestFocus() }.isFailure) {
+            runCatching { pick.railNow().requestFocus() }
+        }
+    }
+    // Pressing a fold opens it, and the remote stands on its first chat.
+    LaunchedEffect(ui.foldFocus) {
+        val id = ui.foldFocus ?: return@LaunchedEffect
+        withFrameNanos { }
+        withFrameNanos { }
+        nowPlace[id]?.let { pick.focusRow(it) }
+        ui.foldFocus = null
+    }
+    // The background count waits while the remote jumps, so the list is not rebuilt mid jump.
+    // LaunchedEffect(Unit), not LaunchedEffect(racing): keying on racing read it in the body, so
+    // the whole screen recomposed on every settle flip (HX76); snapshotFlow reads it off-composition.
+    LaunchedEffect(Unit) { snapshotFlow { ui.racing }.collect { model.hold(it) } }
+    // The whole account is counted behind the first band on every platform, so the Recommended band
+    // finds a video channel however far down the list it sits (T5); the television asks one at a time.
+    LaunchedEffect(chats.isNotEmpty(), listComplete) {
+        if (!listComplete || chats.isEmpty()) return@LaunchedEffect
+        if (tv) model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV, AddChatsViewModel.BATCH_ON_TV_MS) else model.countRest(chats)
+    }
+    // The list's own end triggers the chat list's next chats, one request at a time.
+    LoadMoreAhead(listState, enabled = !listComplete && !partial && !loadingMore, onLoadMore = onLoadMore)
+    // Back from a question puts the remote on the button that asked it.
+    var wasAsking by remember { mutableStateOf(false) }
+    LaunchedEffect(ui.asking) {
+        if (ui.asking == null && wasAsking && tv) pick.toFoot()
+        wasAsking = ui.asking != null
+    }
+    BackHandler(onBack = pick.leave)
+    pick.Body(modifier)
+}
+
+/**
+ * What the screen remembers across recompositions: the remote's stops, the flags its key handlers
+ * read, and the maps from a row to its focus and its place. One object, made once, so the screen's
+ * own method holds none of them as locals. The states are read where they are used, never when
+ * the screen is composed, so a focus move recomposes nothing.
+ */
+@Stable
+private class PickUi {
+    val searchFocus = FocusRequester()
+    val doneFocus = FocusRequester()
+    val chipFocus = FocusRequester()
+    // The television's rail (HX76): one stop per scope, and the Search entry.
+    val railFocus = ChatPicking.Scope.entries.associateWith { FocusRequester() }
+    // And one stop per folder under them (HX29), made as folders come.
+    val folderFocus = HashMap<Int, FocusRequester>()
+    // A folder that could not be read has no rows, so the remote lands on its Try again instead.
+    val retryFocus = FocusRequester()
+    val railSearchFocus = FocusRequester()
+    // The television's own keyboard in the right-hand panel while the words are being typed: the
+    // system keyboard covered the list it was typing for. The remote is on one of its keys.
+    val keyFocus = FocusRequester()
+    // The remote is on the "All chats" switch, the first stop on the television (HX86).
+    val switchFocus = FocusRequester()
+    val escapeFocus = FocusRequester()
+    // The row the remote last stood on, per scope or folder, for Right from the rail.
+    val lastIn = HashMap<Any, Long>()
+    // The rows on screen and where each sits in the lazy list, written as the list is laid out.
+    val rowFocus = HashMap<Long, FocusRequester>()
+    val lazyIndex = HashMap<Long, Int>()
+    val held = IntArray(1)
+    val jump = arrayOfNulls<Job>(1)
+    val settle = arrayOfNulls<Job>(1)
+    var asking by mutableStateOf<Ask?>(null)
+    // The row the remote stands on, kept here because the short list reads it (a focused row never folds away).
+    var onRow by mutableStateOf<Long?>(null)
+    var inSearch by mutableStateOf(false)
+    var inKeys by mutableStateOf(false)
+    // The row the remote last stood on, for Left from the panel.
+    var lastRow by mutableStateOf<Long?>(null)
+    var foldFocus by mutableStateOf<Long?>(null)
+    var inFoot by mutableStateOf(false)
+    var onSwitch by mutableStateOf(false)
+    // The remote is on the Recommended band's button, which is not a row: Back from it climbs too.
+    var onBandButton by mutableStateOf(false)
+    // Once a key is pressed the remote is the viewer's, and the first focus stops following the list.
+    var keyed by mutableStateOf(false)
+    // True while the remote is jumping and for a moment after the last jump. The rows a held Down
+    // runs past are not counted, so each jump does not also start a count in Telegram whose
+    // answer rebuilds the whole list while the next jump is being drawn (52% janky frames on the
+    // Mi TV, HX76). Cleared by time, not by the key's release, which can land on another control.
+    var racing by mutableStateOf(false)
+}
+
+/** The rows the screen derives from the chats, the folders and the viewer's choices, and how they sit in bands. */
+private class PickList(
+    val pickable: List<ChatFolderSummary>,
+    val folderId: Int?,
+    val folderRead: FolderRead,
+    val rows: List<ChatPicking.Row>,
+    val foldOpen: MutableState<Set<ChatPicking.Band>>,
+    val visible: Set<Long>,
+    val holding: Boolean,
+    val bands: Map<ChatPicking.Band, List<ChatPicking.Item>>,
+    val shown: List<ChatPicking.Row>,
+    val placeOf: HashMap<Long, Int>,
+)
+
+@Composable
+private fun rememberPickList(
+    chats: List<ChatSummary>,
+    starred: Set<Long>,
+    listComplete: Boolean,
+    folders: List<ChatFolderSummary>,
+    folderStatus: FolderStatus,
+    stateHolder: State<AddChatsViewModel.State>,
+    addedNames: List<AddedChat>,
+    tv: Boolean,
+    allOn: Boolean,
+    ui: PickUi,
+): PickList {
+    // Read through the holder inside the derived values below, as the screen's own state was, so
+    // they follow it without being rebuilt.
+    val state by stateHolder
 
     // A chat ticked that the list does not hold: the Gone rows' candidates. Derived, so a tick on a
     // chat that is there does not rebuild the rows.
@@ -256,12 +444,12 @@ fun AddChatsScreen(
     val pickable = remember(folders) { ChatPicking.pickable(folders) }
     val folderId = state.folder?.takeIf { id -> !allOn && pickable.any { it.id == id } }
     val folderRead = folderId?.let { folderStatus.read(it) } ?: FolderRead.Loaded
-    val rows = remember(chats, state.query, state.scope, folderId, state.recommended, state.added, starred, listComplete, strays, choice.chats, allOn) {
+    val rows = remember(chats, state.query, state.scope, folderId, state.recommended, state.added, starred, listComplete, strays, addedNames, allOn) {
         ChatPicking.rows(
             chats = chats,
             // A chat left since it was ticked has nothing to remove while every chat counts.
             added = if (allOn) emptySet() else strays,
-            addedNames = choice.chats,
+            addedNames = addedNames,
             starred = starred,
             recommended = state.recommended,
             query = state.query,
@@ -271,31 +459,28 @@ fun AddChatsScreen(
             alreadyAdded = state.added,
         )
     }
-    // The row the remote stands on, kept here because the short list reads it (a focused row never folds away).
-    var onRow by remember { mutableStateOf<Long?>(null) }
     // The television folds the chats counted at no videos into one row per band (HX76), unless a
     // search asks a question about every chat. A derived list, so a count that changes nothing
     // visible does not rebuild the rows.
-    var foldOpen by remember(state.scope, folderId) { mutableStateOf<Set<ChatPicking.Band>>(emptySet()) }
+    val foldOpen = remember(state.scope, folderId) { mutableStateOf<Set<ChatPicking.Band>>(emptySet()) }
     val folding = tv && state.query.isBlank()
     // onRow is read untracked (HX76): a focus move alone never re-runs fold over every row (it ran
     // once per held-Down jump, 11 ms each plus a GC spike, even through a narrower derived value,
     // since a derived state tracks what its inner derived states read). The row the remote stands
     // on only matters when a count or a tick refolds, and those are tracked. A row kept for the
     // focus stays unfolded after the remote leaves it, until the next refold.
-    val items by remember(rows, folding, foldOpen) {
+    val items by remember(rows, folding, foldOpen.value) {
         derivedStateOf {
             if (folding) {
-                val focusedRow = Snapshot.withoutReadObservation { onRow }
+                val focusedRow = Snapshot.withoutReadObservation { ui.onRow }
                 val keep = focusedRow?.let { state.ticked + it } ?: state.ticked
-                ChatPicking.fold(rows, state.counted, keep, foldOpen)
+                ChatPicking.fold(rows, state.counted, keep, foldOpen.value)
             } else {
                 rows.map { ChatPicking.Item.Chat(it) }
             }
         }
     }
     val visible = remember(items) { ChatPicking.visible(items.mapNotNull { (it as? ChatPicking.Item.Chat)?.row }) }
-    val chosen = state.ticked.size
 
     // The Recommended band is worked out in the first seconds and lands above every other band,
     // which moved the row under a click or a finger down a whole band. Until it is taken its place
@@ -310,88 +495,96 @@ fun AddChatsScreen(
         }
     }
     val placeOf = remember(shown) { HashMap<Long, Int>(shown.size * 2).apply { shown.forEachIndexed { i, row -> put(row.id, i) } } }
+    return PickList(pickable, folderId, folderRead, rows, foldOpen, visible, holding, bands, shown, placeOf)
+}
 
-    // The remote's way round a long list (HX76): the first row takes the focus, not the search
-    // box; Right (the end side) goes to Done from any row; Left (the start side) goes back to the
-    // start of the row's band, then the band before, then the filters; Back goes up to the
-    // filters before it leaves; Page and Channel Up or Down, and Down or Up held, move a screenful.
-    val scope = rememberCoroutineScope()
-    val doneFocus = remember { FocusRequester() }
-    val chipFocus = remember { FocusRequester() }
-    // The television's rail (HX76): one stop per scope, and the Search entry.
-    val railFocus = remember { ChatPicking.Scope.entries.associateWith { FocusRequester() } }
-    // And one stop per folder under them (HX29), made as folders come.
-    val folderFocus = remember { HashMap<Int, FocusRequester>() }
-    // A folder that could not be read has no rows, so the remote lands on its Try again instead.
-    val retryFocus = remember { FocusRequester() }
-    val nowFolderRead by rememberUpdatedState(folderRead)
-    val railNow = { folderId?.let { folderFocus.getOrPut(it) { FocusRequester() } } ?: railFocus.getValue(state.scope) }
-    val railSearchFocus = remember { FocusRequester() }
-    var inSearch by remember { mutableStateOf(false) }
-    // The television's own keyboard in the right-hand panel while the words are being typed: the
-    // system keyboard covered the list it was typing for. The remote is on one of its keys.
-    var inKeys by remember { mutableStateOf(false) }
-    val keyFocus = remember { FocusRequester() }
-    var searching by rememberSaveable { mutableStateOf(state.query.isNotBlank()) }
-    // The row the remote last stood on, overall and per scope, for Left from the panel and Right from the rail.
-    var lastRow by remember { mutableStateOf<Long?>(null) }
-    val lastIn = remember { HashMap<Any, Long>() }
-    var foldFocus by remember { mutableStateOf<Long?>(null) }
-    // The rows on screen and where each sits in the lazy list, written as the list is laid out.
-    val rowFocus = remember { HashMap<Long, FocusRequester>() }
-    val lazyIndex = remember { HashMap<Long, Int>() }
-    var inFoot by remember { mutableStateOf(false) }
-    // The remote is on the "All chats" switch, the first stop on the television (HX86).
-    val switchFocus = remember { FocusRequester() }
-    var onSwitch by remember { mutableStateOf(false) }
-    // The remote is on the Recommended band's button, which is not a row: Back from it climbs too.
-    var onBandButton by remember { mutableStateOf(false) }
-    // Once a key is pressed the remote is the viewer's, and the first focus stops following the list.
-    var keyed by remember { mutableStateOf(false) }
-    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val held = remember { IntArray(1) }
-    val jump = remember { arrayOfNulls<Job>(1) }
-    // True while the remote is jumping and for a moment after the last jump. The rows a held Down
-    // runs past are not counted, so each jump does not also start a count in Telegram whose
-    // answer rebuilds the whole list while the next jump is being drawn (52% janky frames on the
-    // Mi TV, HX76). Cleared by time, not by the key's release, which can land on another control.
-    var racing by remember { mutableStateOf(false) }
-    val settle = remember { arrayOfNulls<Job>(1) }
-    val nowShown by rememberUpdatedState(shown)
-    val nowPlace by rememberUpdatedState(placeOf)
-    val doneReady = !(required && state.ticked.isEmpty() && !allOn)
-    // The way out of a required choice with nothing to choose (ON-4): the head start has finished
-    // with no recommendation and the whole list is in.
-    val escapeFocus = remember { FocusRequester() }
-    val showHint = required && listComplete && !state.recommending && !allOn &&
-        state.recommended.isEmpty() && state.ticked.isEmpty()
-    val showEscape = showHint && onContinue != null
+/**
+ * What the screen draws and how its keys behave. Made again on each composition, so what its
+ * functions hold is what that composition saw, as the closures they replace held it; the states
+ * it works on are [PickUi]'s and are read when they are used.
+ */
+private class PickScreen(
+    val s: Messages,
+    val form: DeviceForm,
+    val state: AddChatsViewModel.State,
+    val allOn: Boolean,
+    val chats: List<ChatSummary>,
+    val listComplete: Boolean,
+    val partial: Boolean,
+    val model: AddChatsViewModel,
+    val onClose: () -> Unit,
+    val onLeave: () -> Unit,
+    val confirmLeave: Boolean,
+    val required: Boolean,
+    val onContinue: (() -> Unit)?,
+    val onRetry: () -> Unit,
+    val onRetryFolders: () -> Unit,
+    val sendLogs: (@Composable () -> Unit)?,
+    val searchField: (@Composable (value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSubmit: () -> Unit) -> Unit)?,
+    val folderStatus: FolderStatus,
+    val listState: LazyListState,
+    val ui: PickUi,
+    val lst: PickList,
+    val scope: CoroutineScope,
+    val nowShownState: State<List<ChatPicking.Row>>,
+    val nowPlaceState: State<HashMap<Long, Int>>,
+    val nowFolderReadState: State<FolderRead>,
+    val rtl: Boolean,
+    val doneReady: Boolean,
+    val showHint: Boolean,
+    val showEscape: Boolean,
+    val tick: (Boolean) -> Unit,
+    val typedState: MutableState<String>,
+    val searchingState: MutableState<Boolean>,
+) {
+    val tv = form == DeviceForm.Tv
+    val compact = form != DeviceForm.Phone
+    val chosen = state.ticked.size
+    var typed by typedState
+    var searching by searchingState
+    val nowShown by nowShownState
+    val nowPlace by nowPlaceState
+    val nowFolderRead by nowFolderReadState
+    val pickable = lst.pickable
+    val folderId = lst.folderId
+    val folderRead = lst.folderRead
+    val rows = lst.rows
+    val visible = lst.visible
+    val holding = lst.holding
+    val bands = lst.bands
+    val shown = lst.shown
+    val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
+    val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
+    val onType: (String) -> Unit = { typed = it; model.type(it) }
+    val railNow = { folderId?.let { ui.folderFocus.getOrPut(it) { FocusRequester() } } ?: ui.railFocus.getValue(state.scope) }
+    val flipAll = { tick(!allOn); model.setAllChats(!allOn, chats, listComplete) }
+
 
     fun focusRow(at: Int) {
         val list = nowShown
-        if (list.isEmpty() || jump[0]?.isActive == true) return
+        if (list.isEmpty() || ui.jump[0]?.isActive == true) return
         val row = list[at.coerceIn(0, list.lastIndex)]
-        racing = true
-        settle[0]?.cancel()
-        settle[0] = scope.launch {
+        ui.racing = true
+        ui.settle[0]?.cancel()
+        ui.settle[0] = scope.launch {
             delay(RACE_SETTLE_MS)
-            racing = false
+            ui.racing = false
         }
-        jump[0] = scope.launch {
-            val index = lazyIndex[row.id]
+        ui.jump[0] = scope.launch {
+            val index = ui.lazyIndex[row.id]
             if (index != null && listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }) {
                 // One item above it stays in sight, so the jump reads as a move and not a new page.
                 listState.scrollToItem((index - 1).coerceAtLeast(0))
             }
             withFrameNanos { }
-            rowFocus[row.id]?.let { runCatching { it.requestFocus() } }
+            ui.rowFocus[row.id]?.let { runCatching { it.requestFocus() } }
         }
     }
     fun toTop() {
         scope.launch {
             listState.scrollToItem(0)
             withFrameNanos { }
-            runCatching { (if (tv) railNow() else chipFocus).requestFocus() }
+            runCatching { (if (tv) railNow() else ui.chipFocus).requestFocus() }
         }
     }
     // Right or Select on a rail entry: the scope (or folder) is chosen, and the remote goes to its
@@ -405,12 +598,12 @@ fun AddChatsScreen(
             if (list.isEmpty()) {
                 // The button is composed with the list's next frame; ask until it is there.
                 if (nowFolderRead == FolderRead.NotLoaded) repeat(5) {
-                    if (runCatching { retryFocus.requestFocus() }.getOrDefault(false)) return@launch
+                    if (runCatching { ui.retryFocus.requestFocus() }.getOrDefault(false)) return@launch
                     withFrameNanos { }
                 }
                 return@launch
             }
-            val back = lastIn[key]?.let { nowPlace[it] }
+            val back = ui.lastIn[key]?.let { nowPlace[it] }
             focusRow(back ?: 0)
         }
     }
@@ -428,23 +621,23 @@ fun AddChatsScreen(
             withFrameNanos { }
             withFrameNanos { }
             // The television types on its own keys; the field stays for the system keyboard (OK on it).
-            runCatching { if (tv) keyFocus.requestFocus() else searchFocus.requestFocus() }
+            runCatching { if (tv) ui.keyFocus.requestFocus() else ui.searchFocus.requestFocus() }
         }
     }
     fun backToRow() {
-        val at = lastRow?.let { nowPlace[it] } ?: 0
+        val at = ui.lastRow?.let { nowPlace[it] } ?: 0
         focusRow(at)
     }
     // Done; with nothing ticked in the mandatory choice it is off and the remote stays put. No picker has a Select all for now (user, 2026-11-03).
     fun toFoot(): Boolean = when {
-        doneReady -> runCatching { doneFocus.requestFocus() }.isSuccess
-        showEscape -> runCatching { escapeFocus.requestFocus() }.isSuccess
+        doneReady -> runCatching { ui.doneFocus.requestFocus() }.isSuccess
+        showEscape -> runCatching { ui.escapeFocus.requestFocus() }.isSuccess
         else -> false
     }
     fun rowKey(event: KeyEvent, id: Long): Boolean {
         val vertical = event.key == Key.DirectionDown || event.key == Key.DirectionUp
         if (event.type == KeyEventType.KeyUp) {
-            if (vertical) held[0] = 0
+            if (vertical) ui.held[0] = 0
             return false
         }
         if (event.type != KeyEventType.KeyDown) return false
@@ -476,8 +669,8 @@ fun AddChatsScreen(
                 // still running swallows the repeats, so a slow television is not queued up. Half,
                 // not a full page: each jump composes about 4 new rows rather than 7, which is
                 // what a held Down cost on the Mi TV (HX76). Page and Channel keys keep a screenful.
-                held[0]++
-                if (held[0] <= HOLD_REPEATS) return false
+                ui.held[0]++
+                if (ui.held[0] <= HOLD_REPEATS) return false
                 val step = (page / 2).coerceAtLeast(2)
                 focusRow(if (event.key == Key.DirectionDown) at + step else at - step)
                 true
@@ -497,135 +690,71 @@ fun AddChatsScreen(
         .focusRequester(requester)
         .onFocusChanged {
             if (it.hasFocus) {
-                onRow = id
-                lastRow = id
-                lastIn[folderId ?: state.scope] = id
-            } else if (onRow == id) {
-                onRow = null
+                ui.onRow = id
+                ui.lastRow = id
+                ui.lastIn[folderId ?: state.scope] = id
+            } else if (ui.onRow == id) {
+                ui.onRow = null
             }
         }
         .onPreviewKeyEvent { rowKey(it, id) }
     // Enter in the search box (the television keyboard's Search) puts the remote on the first answer.
     val toFirstRow = { if (nowShown.isNotEmpty()) focusRow(0) }
 
-    LaunchedEffect(Unit) { if (typed != state.query) model.type(typed) }
-    LaunchedEffect(chats.isNotEmpty()) { if (chats.isNotEmpty()) model.start(chats) }
-    // Saved Messages may arrive after the rest of the list: a fresh start ticks it when it does (HX86).
-    val savedId = remember(chats) { ChatPicking.savedId(chats) }
-    LaunchedEffect(savedId) { model.knowSaved(savedId) }
-    // Nothing is counted once the screen is gone, and a count already running is cancelled.
-    DisposableEffect(model) { onDispose { model.stop() } }
-    LaunchedEffect(state.saved) {
-        if (state.saved) {
-            if (state.justAdded > 0) onAdded(state.justAdded)
-            onClose()
-        }
-    }
-    // The remote starts on the first row, where OK ticks, not in the search box (HX76). Until a row
-    // is there it stands on the filters, and moves down to the first row when one lands, unless a
-    // key has been pressed since.
-    // It starts on Done instead when something is already ticked and recommended (a picker
-    // reopened over a choice already made: nothing is ticked for a first run); a band that lands
-    // late (up to 3 s) never moves a remote that has already moved. No chats at all: it starts
-    // on the rail.
-    val firstId = shown.firstOrNull()?.id
-    // Only over a choice already made (HX86): a fresh install starts with Saved Messages ticked, and
-    // its remote still starts on the first row.
-    val startOnDone = tv && !state.recommending && state.recommended.isNotEmpty() && state.ticked.isNotEmpty() && doneReady &&
-        state.added.isNotEmpty() && !allOn
-    LaunchedEffect(firstId, startOnDone, allOn) {
-        if (!tv || keyed) return@LaunchedEffect
-        // The list lays its first items out a frame after this runs, and a request before that
-        // finds nothing to focus.
-        withFrameNanos { }
-        withFrameNanos { }
-        if (keyed) return@LaunchedEffect
-        // Every row is disabled while all chats count, so the switch is where the remote starts.
-        if (allOn && runCatching { switchFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-        if (startOnDone && runCatching { doneFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-        val first = firstId?.let { rowFocus[it] }
-        if (first == null || runCatching { first.requestFocus() }.isFailure) {
-            runCatching { railNow().requestFocus() }
-        }
-    }
-    // Pressing a fold opens it, and the remote stands on its first chat.
-    LaunchedEffect(foldFocus) {
-        val id = foldFocus ?: return@LaunchedEffect
-        withFrameNanos { }
-        withFrameNanos { }
-        nowPlace[id]?.let { focusRow(it) }
-        foldFocus = null
-    }
-    // The background count waits while the remote jumps, so the list is not rebuilt mid jump.
-    // LaunchedEffect(Unit), not LaunchedEffect(racing): keying on racing read it in the body, so
-    // the whole screen recomposed on every settle flip (HX76); snapshotFlow reads it off-composition.
-    LaunchedEffect(Unit) { snapshotFlow { racing }.collect { model.hold(it) } }
-    // The whole account is counted behind the first band on every platform, so the Recommended band
-    // finds a video channel however far down the list it sits (T5); the television asks one at a time.
-    LaunchedEffect(chats.isNotEmpty(), listComplete) {
-        if (!listComplete || chats.isEmpty()) return@LaunchedEffect
-        if (tv) model.countRest(chats, AddChatsViewModel.BACKGROUND_ON_TV, AddChatsViewModel.BATCH_ON_TV_MS) else model.countRest(chats)
-    }
-    // The list's own end triggers the chat list's next chats, one request at a time.
-    LoadMoreAhead(listState, enabled = !listComplete && !partial && !loadingMore, onLoadMore = onLoadMore)
-    // Back from a question puts the remote on the button that asked it.
-    var wasAsking by remember { mutableStateOf(false) }
-    LaunchedEffect(asking) {
-        if (asking == null && wasAsking && tv) toFoot()
-        wasAsking = asking != null
-    }
-
     val leave = {
         when {
-            asking != null -> asking = null
+            ui.asking != null -> ui.asking = null
             // Back empties the search words first (rule 2: clear, then close), and a remote only
             // from the field: from a row it climbs to the top, as below.
-            typed.isNotEmpty() && (!tv || inSearch || inKeys) -> onType("")
+            typed.isNotEmpty() && (!tv || ui.inSearch || ui.inKeys) -> onType("")
             // On the television Back from the list or the foot goes up to the filters first, so
             // the top of a long list is one press away; Back there leaves.
-            tv && (onRow != null || inFoot || inSearch || onBandButton || onSwitch) -> toTop()
+            tv && (ui.onRow != null || ui.inFoot || ui.inSearch || ui.onBandButton || ui.onSwitch) -> toTop()
             // Nothing behind the mandatory choice to go back to: Back leaves the app (or, on the
             // desktop, does nothing). It always asks "Leave without choosing?" first.
-            required && confirmLeave && !state.saving -> asking = Ask.Leave
+            required && confirmLeave && !state.saving -> ui.asking = Ask.Leave
             required -> onLeave()
-            model.changed -> asking = Ask.Discard
+            model.changed -> ui.asking = Ask.Discard
             else -> onClose()
         }
     }
-    BackHandler(onBack = leave)
 
-
-    val tick = rememberToggleTick()
-    val flipAll = { tick(!allOn); model.setAllChats(!allOn, chats, listComplete) }
-    val compact = form != DeviceForm.Phone
-    // A phone on its side is about 400 dp high: the header, the foot and one row filled it, so Back
-    // sits beside the title and the words under it give way (HX56); the search stays.
-    val windowHeight = LocalWindowInfo.current.containerSize.height
-    val shortWindow = windowHeight in 1 until with(LocalDensity.current) { 480.dp.roundToPx() }
-    val bigFont = LocalDensity.current.fontScale >= 1.5f
-
-    val outer = when (form) {
-        DeviceForm.Tv -> Modifier.padding(horizontal = Tv.SafeH, vertical = Tv.SafeV)
-        DeviceForm.Desktop -> Modifier.padding(horizontal = 40.dp, vertical = 28.dp)
-        DeviceForm.Phone -> Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp)
-    }
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(Tone.background)
-            // Over another screen on the desktop: it takes the pointer, and the arrows never leave it.
-            .pointerInput(Unit) {}
-            .focusProperties { onExit = { if (requestedFocusDirection in ARROWS) cancelFocusChange() } }
-            .focusGroup()
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown) keyed = true
-                false
+    @Composable
+    fun Body(modifier: Modifier) {
+        val outer = when (form) {
+            DeviceForm.Tv -> Modifier.padding(horizontal = Tv.SafeH, vertical = Tv.SafeV)
+            DeviceForm.Desktop -> Modifier.padding(horizontal = 40.dp, vertical = 28.dp)
+            DeviceForm.Phone -> Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp)
+        }
+        Box(
+            modifier
+                .fillMaxSize()
+                .background(Tone.background)
+                // Over another screen on the desktop: it takes the pointer, and the arrows never leave it.
+                .pointerInput(Unit) {}
+                .focusProperties { onExit = { if (requestedFocusDirection in ARROWS) cancelFocusChange() } }
+                .focusGroup()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) ui.keyed = true
+                    false
+                }
+                .then(outer),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            if (tv) {
+                TvLayout()
+            } else {
+                Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()) {
+                    ListPane()
+                    FootPane()
+                }
             }
-            .then(outer),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        val searchBox: @Composable () -> Unit = {
-        val field = Modifier.fillMaxWidth().focusRequester(searchFocus).onFocusChanged { inSearch = it.hasFocus }
+        }
+    }
+
+    @Composable
+    fun SearchBox() {
+        val field = Modifier.fillMaxWidth().focusRequester(ui.searchFocus).onFocusChanged { ui.inSearch = it.hasFocus }
         Box(Modifier.padding(top = 12.dp)) {
             if (searchField != null) {
                 searchField(typed, onType, s.commonSearch, field, toFirstRow)
@@ -662,651 +791,689 @@ fun AddChatsScreen(
                 )
             }
         }
-        }
-        val listPane: @Composable ColumnScope.() -> Unit = {
-            // The count of chats read so far, above the list and not in it: a list scrolled down
-            // would hide it, and on a big account that is where the viewer is (WP-95). Nothing
-            // while the list is whole, and no space taken then.
-            if (!listComplete && !partial) {
-                val sofar = rememberThrottledCount(chats.size)
-                val wait = s.pickerLoading
-                Column(Modifier.fillMaxWidth()) {
-                    WorkStatusLine(
-                        WorkStatus.Syncing(what = if (sofar > 0) s.pickerLoadingCount(sofar) else wait),
-                        asked = true,
-                    )
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = wait },
-                        color = Tone.accent,
-                        trackColor = Tone.track,
-                    )
-                }
-            }
-            // On the television the list steps instead of sliding each focused row a third of the way
-            // down: the slide was a fresh layout of the list on every frame of every press (HX76).
-            EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) {
-                LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth(),
-                    state = listState,
-                    contentPadding = PaddingValues(top = if (form == DeviceForm.Phone) 16.dp else 0.dp, bottom = 8.dp),
-                ) { CountingScope(this).run {
-                    if (!tv) {
-                    // A phone stacks Back, the title and the words; a wide screen has the room to put Back
-                    // beside the title, which leaves more of it for the rows.
-                    val headingText = if (required) s.setupWhichTitle else s.pickerChooseChats
-                    val blurbText = if (required) s.setupWhichBody else s.pickerBlurbOnly
-                    if (compact || shortWindow) {
-                        item(key = "title") {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    if (!required) QuietButton(s.commonBack, icon = true, onClick = leave)
-                                    Text(
-                                        headingText,
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        color = Tone.text,
-                                        modifier = Modifier.semantics { heading() },
-                                    )
-                                }
-                                if (!shortWindow) Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                            }
-                        }
-                    } else {
-                        if (!required) {
-                            item(key = "back") {
-                                QuietButton(s.commonBack, icon = true, onClick = leave)
-                            }
-                        }
-                        item(key = "title") {
-                            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    headingText,
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = Tone.text,
-                                    modifier = Modifier.semantics { heading() },
-                                )
-                                // At a large font the words give way to the switch (HX86): the filters and a whole row stay in sight.
-                                if (!bigFont) Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                            }
-                        }
-                    }
-                    item(key = "all-chats") {
-                        Box(Modifier.padding(top = 12.dp)) { AllChatsSwitch(allOn, tv = false, onToggle = flipAll) }
-                    }
-                    item(key = "search") { searchBox() }
-                    item(key = "scopes") {
-                        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Row(
-                                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                for (scope in ChatPicking.Scope.entries) {
-                                    val here = folderId == null && state.scope == scope
-                                    CopyChip(
-                                        label = scopeLabel(scope, s),
-                                        chosen = here,
-                                        onClick = { model.scope(scope) },
-                                        modifier = if (here) Modifier.focusRequester(chipFocus) else Modifier,
-                                    )
-                                    // Telegram's folders come right after All, as they do in its own tab bar (HX29).
-                                    if (scope == ChatPicking.Scope.All) for (folder in pickable) {
-                                        CopyChip(
-                                            label = folderLabel(folder, s),
-                                            chosen = folderId == folder.id,
-                                            onClick = { model.folder(folder.id) },
-                                            modifier = if (folderId == folder.id) Modifier.focusRequester(chipFocus) else Modifier,
-                                            enabled = !allOn,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    }
-                    if (partial) {
-                        item(key = "partial") {
-                            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(s.chatsSomeNotLoaded, style = MaterialTheme.typography.bodyMedium, color = Tone.danger, modifier = Modifier.liveMessage())
-                                // Wraps: the two buttons side by side ran off a narrow phone at a large font.
-                                @OptIn(ExperimentalLayoutApi::class)
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    itemVerticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    SetupButton(s.commonTryAgain, primary = true, onClick = onRetry)
-                                    sendLogs?.invoke()
-                                }
-                            }
-                        }
-                    }
-                    if (rows.isEmpty()) {
-                        item(key = "empty") {
-                            val words = when {
-                                state.query.isNotBlank() -> s.chatsNoMatch(state.query.trim())
-                                // A folder whose members are not read yet is not empty, and one that
-                                // could not be read is not empty either (HX32): it says so.
-                                folderId != null && folderRead == FolderRead.Loading -> s.browseFolderLoading
-                                folderId != null && folderRead == FolderRead.NotLoaded -> s.browseFolderNotLoaded
-                                folderId != null -> s.pickerFolderEmpty
-                                else -> s.pickerEmpty
-                            }
-                            // While the list is still arriving an empty screen is not an answer yet.
-                            if (listComplete || partial || folderId != null) {
-                                Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(words, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                                    if (folderRead == FolderRead.NotLoaded) {
-                                        SetupButton(
-                                            s.commonTryAgain,
-                                            primary = true,
-                                            modifier = Modifier
-                                                .focusRequester(retryFocus)
-                                                .onFocusChanged { onBandButton = it.hasFocus },
-                                            onClick = onRetryFolders,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // A folder still being read shows its rows from the last snapshot with a line over them.
-                    if (rows.isNotEmpty() && folderId != null && folderRead != FolderRead.Loaded) {
-                        item(key = "folder-reading") {
-                            Text(
-                                if (folderRead == FolderRead.Loading) s.browseFolderLoading else s.browseFolderNotLoaded,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Tone.muted,
-                                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 8.dp),
-                            )
-                        }
-                    }
-                    // A folder is a set the viewer made in Telegram, so it can be taken whole with one press (HX29):
-                    // the chats listed here and no others, a large folder after a question. Not Select all over the account.
-                    if (folderId != null && folderRead == FolderRead.Loaded && visible.size >= 2) {
-                        item(key = "folder-all") {
-                            val every = visible.all { it in state.ticked }
-                            val words = if (every) s.pickerRemoveThese(visible.size) else s.pickerAddThese(visible.size)
-                            SetupButton(
-                                words,
-                                modifier = Modifier
-                                    .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
-                                    .onFocusChanged { onBandButton = it.hasFocus }
-                                    .onPreviewKeyEvent { event ->
-                                        val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
-                                        val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
-                                        when {
-                                            event.type != KeyEventType.KeyDown -> false
-                                            event.key == end -> toFoot()
-                                            event.key == start && tv -> { toTop(); true }
-                                            else -> false
-                                        }
-                                    },
-                                onClick = {
-                                    when {
-                                        every -> { tick(false); model.clear(visible) }
-                                        ChatPicking.needsConfirm(model.adding(visible)) -> asking = Ask.AddMany(visible)
-                                        else -> { tick(true); model.selectAll(visible) }
-                                    }
-                                },
-                            )
-                        }
-                    }
-                    val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
-                    for ((band, inBand) in bands) {
-                        if (holding && band != ChatPicking.Band.Saved) continue
-                        val label = if (bands.size > 1 || holding) bandLabel(band, inBand.size, s) else null
-                        if (label != null) {
-                            item(key = "band-$band") { BandLabel(label) }
-                        }
-                        if (band == ChatPicking.Band.Recommended && state.belowBar) {
-                            item(key = "below-bar") {
-                                Text(
-                                    s.pickerBelowBarMany,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Tone.muted,
-                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                                )
-                            }
-                        }
-                        // One explicit press takes the whole band (the pickers tick nothing for the
-                        // viewer): 20 chats are one press, not 20 ticks or 40 presses of a remote.
-                        // Not for the fallback band, which says nothing reached the bar.
-                        if (band == ChatPicking.Band.Recommended && !state.belowBar && inBand.size >= 2) {
-                            item(key = "band-recommended-all") {
-                                val ids = inBand.mapNotNullTo(LinkedHashSet()) { (it as? ChatPicking.Item.Chat)?.row?.id }
-                                val every = ids.all { it in state.ticked }
-                                val words = if (every) s.pickerRemoveThese(ids.size) else s.pickerAddThese(ids.size)
-                                SetupButton(
-                                    words,
-                                    enabled = !allOn,
-                                    modifier = Modifier
-                                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
-                                        .onFocusChanged { onBandButton = it.hasFocus }
-                                        // The remote's Right goes to Done and Left to the filters, as from a row.
-                                        .onPreviewKeyEvent { event ->
-                                            val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
-                                            val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
-                                            when {
-                                                event.type != KeyEventType.KeyDown -> false
-                                                event.key == end -> toFoot()
-                                                event.key == start && tv -> { toTop(); true }
-                                                else -> false
-                                            }
-                                        },
-                                    onClick = {
-                                        tick(!every)
-                                        if (every) model.clear(ids) else model.selectAll(ids)
-                                    },
-                                )
-                            }
-                        }
-                        val base = count
-                        inBand.forEachIndexed { i, entry -> lazyIndex[itemRow(entry).id] = base + i }
-                        // One content type, so a jump of the remote reuses the rows it scrolls away
-                        // rather than building a screenful from nothing in one frame.
-                        itemsIndexed(inBand, key = { _, entry -> itemRow(entry).id }, contentType = { _, _ -> ROW_TYPE }) { index, item ->
-                            val row = itemRow(item)
-                            // Only a row on screen is counted: this effect leaves with the row. It
-                            // waits for the list to stop (a fling, a held Down), so the rows run past
-                            // on the way are never counted at all, and for the row to be in sight,
-                            // since the rows composed ahead of a jump run it too.
-                            if (tv && item is ChatPicking.Item.Chat && row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) {
-                                snapshotFlow {
-                                    racing || listState.isScrollInProgress ||
-                                        listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }
-                                }.first { !it }
-                                model.count(row.id)
-                            }
-                            val ticked = allOn || row.id in state.ticked
-                            val requester = remember(row.id) { FocusRequester() }
-                            DisposableEffect(row.id) {
-                                rowFocus[row.id] = requester
-                                onDispose { if (rowFocus[row.id] === requester) rowFocus.remove(row.id) }
-                            }
-                            val card = rowModifier(row.id, requester)
-                                .groupedCard(GroupPlace(first = index == 0, last = index == inBand.lastIndex), divider)
-                            if (item is ChatPicking.Item.Folded) {
-                                FoldRow(
-                                    label = s.pickerFold(item.count),
-                                    modifier = card,
-                                    onOpen = {
-                                        foldFocus = ChatPicking.foldedIn(rows, state.counted, state.ticked, item.band).firstOrNull()?.id
-                                        foldOpen = foldOpen + item.band
-                                    },
-                                )
-                            } else if (row.band == ChatPicking.Band.Gone) {
-                                GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
-                            } else {
-                                PickRow(
-                                    row = row,
-                                    ticked = ticked,
-                                    reason = if (row.band == ChatPicking.Band.Recommended) {
-                                        if (state.belowBar) s.pickerReasonSome else s.pickerReasonMany
-                                    } else {
-                                        null
-                                    },
-                                    tv = tv,
-                                    enabled = !allOn,
-                                    modifier = card,
-                                    onToggle = { tick(!ticked); model.toggle(row.id) },
-                                    onToggleStar = { model.toggleStar(row.id) },
-                                )
-                            }
-                        }
-                    }
-                    if (holding) {
-                        item(key = "band-recommended-held") {
-                            Column {
-                                BandLabel(s.pickerBandRecommended)
-                                PickSkeleton(rows = HELD_ROWS, tv = tv, divider = divider)
-                            }
-                        }
-                    }
-                } }
-            }
-        }
+    }
 
-        val questionUi: (@Composable () -> Unit)? = asking?.let { question ->
-            {
-                when (question) {
-                    Ask.Discard -> Confirm(
-                        title = s.pickerDiscardTitle,
-                        body = s.pickerDiscardBody,
-                        action = s.pickerDiscardYes,
-                        onYes = {
-                            asking = null
-                            onClose()
-                        },
-                        onNo = { asking = null },
-                    )
-                    is Ask.AddMany -> Confirm(
-                        title = s.pickerConfirmTitle(model.adding(question.ids)),
-                        body = s.pickerConfirmBody,
-                        action = s.pickerConfirmYes,
-                        onYes = {
-                            asking = null
-                            model.selectAll(question.ids)
-                        },
-                        onNo = { asking = null },
-                    )
-                    Ask.Leave -> Confirm(
-                        title = s.pickerLeaveChoosingTitle,
-                        body = s.pickerLeaveChoosingBody,
-                        action = s.pickerLeaveYes,
-                        onYes = {
-                            asking = null
-                            onLeave()
-                        },
-                        onNo = { asking = null },
-                    )
+    @Composable
+    fun ColumnScope.ListPane() {
+        val windowHeight = LocalWindowInfo.current.containerSize.height
+        val shortWindow = windowHeight in 1 until with(LocalDensity.current) { 480.dp.roundToPx() }
+        val bigFont = LocalDensity.current.fontScale >= 1.5f
+        // The count of chats read so far, above the list and not in it: a list scrolled down
+        // would hide it, and on a big account that is where the viewer is (WP-95). Nothing
+        // while the list is whole, and no space taken then.
+        if (!listComplete && !partial) {
+            val sofar = rememberThrottledCount(chats.size)
+            val wait = s.pickerLoading
+            Column(Modifier.fillMaxWidth()) {
+                WorkStatusLine(
+                    WorkStatus.Syncing(what = if (sofar > 0) s.pickerLoadingCount(sofar) else wait),
+                    asked = true,
+                )
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = wait },
+                    color = Tone.accent,
+                    trackColor = Tone.track,
+                )
+            }
+        }
+        // On the television the list steps instead of sliding each focused row a third of the way
+        // down: the slide was a fresh layout of the list on every frame of every press (HX76).
+        EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) {
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
+                contentPadding = PaddingValues(top = if (form == DeviceForm.Phone) 16.dp else 0.dp, bottom = 8.dp),
+            ) {
+                CountingScope(this).run {
+                    val divider = 16.dp + (if (tv) 52.dp else 44.dp) + 12.dp
+                    topItems(shortWindow, bigFont)
+                    partialItem()
+                    emptyItem()
+                    folderItems()
+                    bandItems(divider)
+                    heldItem(divider)
                 }
             }
         }
-        // A save that failed says so, with Try again and Send logs; nothing tries again on its own.
-        val failure: @Composable () -> Unit = {
-            val failed = state.error
-            if (failed != null) {
-                Column(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(failed, style = MaterialTheme.typography.bodyMedium, color = Tone.danger)
+    }
+
+    private fun CountingScope.topItems(shortWindow: Boolean, bigFont: Boolean) {
+        if (!tv) {
+            // A phone stacks Back, the title and the words; a wide screen has the room to put Back
+            // beside the title, which leaves more of it for the rows.
+            val headingText = if (required) s.setupWhichTitle else s.pickerChooseChats
+            val blurbText = if (required) s.setupWhichBody else s.pickerBlurbOnly
+            if (compact || shortWindow) {
+                item(key = "title") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (!required) QuietButton(s.commonBack, icon = true, onClick = leave)
+                            Text(
+                                headingText,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Tone.text,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                        }
+                        if (!shortWindow) Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                    }
+                }
+            } else {
+                if (!required) {
+                    item(key = "back") {
+                        QuietButton(s.commonBack, icon = true, onClick = leave)
+                    }
+                }
+                item(key = "title") {
+                    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            headingText,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Tone.text,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        // At a large font the words give way to the switch (HX86): the filters and a whole row stay in sight.
+                        if (!bigFont) Text(blurbText, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                    }
+                }
+            }
+            item(key = "all-chats") {
+                Box(Modifier.padding(top = 12.dp)) { AllChatsSwitch(allOn, tv = false, onToggle = flipAll) }
+            }
+            item(key = "search") { SearchBox() }
+            item(key = "scopes") {
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        for (scope in ChatPicking.Scope.entries) {
+                            val here = folderId == null && state.scope == scope
+                            CopyChip(
+                                label = scopeLabel(scope, s),
+                                chosen = here,
+                                onClick = { model.scope(scope) },
+                                modifier = if (here) Modifier.focusRequester(ui.chipFocus) else Modifier,
+                            )
+                            // Telegram's folders come right after All, as they do in its own tab bar (HX29).
+                            if (scope == ChatPicking.Scope.All) for (folder in pickable) {
+                                CopyChip(
+                                    label = folderLabel(folder, s),
+                                    chosen = folderId == folder.id,
+                                    onClick = { model.folder(folder.id) },
+                                    modifier = if (folderId == folder.id) Modifier.focusRequester(ui.chipFocus) else Modifier,
+                                    enabled = !allOn,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun CountingScope.partialItem() {
+        if (partial) {
+            item(key = "partial") {
+                Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(s.chatsSomeNotLoaded, style = MaterialTheme.typography.bodyMedium, color = Tone.danger, modifier = Modifier.liveMessage())
+                    // Wraps: the two buttons side by side ran off a narrow phone at a large font.
                     @OptIn(ExperimentalLayoutApi::class)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         itemVerticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SetupButton(s.commonTryAgain, primary = true, onClick = { model.done(chats) })
+                        SetupButton(s.commonTryAgain, primary = true, onClick = onRetry)
                         sendLogs?.invoke()
                     }
                 }
             }
         }
-        // Nothing ticked is an answer in Settings, and Done reads as what it will do; the
-        // mandatory choice needs at least one chat, and says so instead.
-        val doneButton: @Composable () -> Unit = {
-            val none = state.ticked.isEmpty() && !allOn
-            if (required && none) {
-                DisabledDone(s.pickerGateDoneNone)
-            } else {
-                // While the choice is written the button says so and keeps the focus (the model
-                // ignores a second press); the screen closes when it is done.
-                SetupButton(
-                    when {
-                        state.saving -> s.pickerSaving
-                        none -> s.pickerDoneNone
-                        else -> s.commonDone
-                    },
-                    primary = true,
-                    busy = state.saving,
-                    modifier = Modifier.focusRequester(doneFocus),
-                    onClick = { model.done(chats) },
-                )
-            }
-        }
-        val escape: @Composable () -> Unit = {
-            val go = onContinue
-            // No chat holds videos yet (Saved Messages may be the only row): say what to do, and
-            // leave the way on for this visit.
-            if (showHint) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        s.pickerForwardHint,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Tone.muted,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
-                    if (go != null) {
-                        QuietButton(s.pickerContinueWithout, modifier = Modifier.focusRequester(escapeFocus), onClick = go)
-                    }
-                }
-            }
-        }
-        // The running total and Done on a card of their own, so the foot reads as the bar it is
-        // rather than words left under the list.
-        val footPane: @Composable ColumnScope.() -> Unit = {
-            val question = questionUi
-            if (question != null) {
-                question()
-            } else {
-                Column(Modifier.fillMaxWidth()) {
-                    failure()
-                    val totalWords: @Composable (Modifier) -> Unit = { m ->
-                        Text(
-                            if (allOn) s.pickerAllChatsOn else totalLine(chosen, s),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Tone.text,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = m,
-                        )
-                    }
-                    val card = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
-                        .groupedCard(GroupPlace.Alone)
-                        .onFocusChanged { inFoot = it.hasFocus }
-                        .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp)
-                    // At a large system font the button takes the whole card and left the count no
-                    // width at all (HX56): the count goes over the button then.
-                    if (LocalDensity.current.fontScale >= LARGE_FONT) {
-                        Column(card, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
-                            totalWords(Modifier.fillMaxWidth())
-                            doneButton()
-                        }
-                    } else {
-                        Row(card, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            totalWords(Modifier.weight(1f))
-                            doneButton()
-                        }
-                    }
-                    if (showHint) {
-                        Box(Modifier.fillMaxWidth().padding(bottom = if (form == DeviceForm.Phone) 8.dp else 0.dp), contentAlignment = Alignment.Center) { escape() }
-                    }
-                }
-            }
-        }
+    }
 
-        if (tv) {
-            // Three panes (HX76): the scopes, the list, and what is chosen with Done. Every key
-            // lands on something that is on screen, so nothing is a shortcut to be found.
-            val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
-            val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
-            val scopeCounts = remember(chats) {
-                ChatPicking.Scope.entries.associateWith { sc -> chats.count { ChatPicking.inScope(it, sc) } }
-            }
-            // Each folder's chats, counted once for the rail; a folder not read yet shows no number.
-            val folderCounts = remember(chats, pickable) {
-                val wanted = pickable.mapTo(HashSet()) { it.id }
-                HashMap<Int, Int>().also { counts ->
-                    for (chat in chats) for (id in chat.folderIds) if (id in wanted) counts[id] = (counts[id] ?: 0) + 1
+    private fun CountingScope.emptyItem() {
+        if (rows.isEmpty()) {
+            item(key = "empty") {
+                val words = when {
+                    state.query.isNotBlank() -> s.chatsNoMatch(state.query.trim())
+                    // A folder whose members are not read yet is not empty, and one that
+                    // could not be read is not empty either (HX32): it says so.
+                    folderId != null && folderRead == FolderRead.Loading -> s.browseFolderLoading
+                    folderId != null && folderRead == FolderRead.NotLoaded -> s.browseFolderNotLoaded
+                    folderId != null -> s.pickerFolderEmpty
+                    else -> s.pickerEmpty
+                }
+                // While the list is still arriving an empty screen is not an answer yet.
+                if (listComplete || partial || folderId != null) {
+                    Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(words, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                        if (folderRead == FolderRead.NotLoaded) {
+                            SetupButton(
+                                s.commonTryAgain,
+                                primary = true,
+                                modifier = Modifier
+                                    .focusRequester(ui.retryFocus)
+                                    .onFocusChanged { ui.onBandButton = it.hasFocus },
+                                onClick = onRetryFolders,
+                            )
+                        }
+                    }
                 }
             }
-            val title = if (required) s.setupWhichTitle else s.pickerChooseChats
-            Column(Modifier.fillMaxSize()) {
+        }
+    }
+
+    private fun CountingScope.folderItems() {
+        // A folder still being read shows its rows from the last snapshot with a line over them.
+        if (rows.isNotEmpty() && folderId != null && folderRead != FolderRead.Loaded) {
+            item(key = "folder-reading") {
                 Text(
-                    title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Tone.text,
-                    modifier = Modifier.semantics { heading() },
+                    if (folderRead == FolderRead.Loading) s.browseFolderLoading else s.browseFolderNotLoaded,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Tone.muted,
+                    modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 8.dp),
                 )
-                Row(
-                    Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    // Scrolls, since the folders stack under the scopes and an account may have a dozen.
-                    Column(
-                        Modifier.width(RAIL_WIDTH).fillMaxHeight().verticalScroll(rememberScrollState()).focusGroup(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        for (sc in TV_RAIL) {
-                            val n = scopeCounts.getValue(sc)
-                            RailEntry(
-                                label = scopeLabel(sc, s),
-                                icon = railIcon(sc),
-                                detail = if (n > 0) s.formatter.number(n) else null,
-                                chosen = folderId == null && state.scope == sc,
-                                dim = n == 0,
-                                onClick = { intoList(sc) },
-                                modifier = Modifier
-                                    .focusRequester(railFocus.getValue(sc))
-                                    .onPreviewKeyEvent { event ->
-                                        if (event.type == KeyEventType.KeyDown && event.key == end) {
-                                            intoList(sc)
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    },
-                            )
+            }
+        }
+        // A folder is a set the viewer made in Telegram, so it can be taken whole with one press (HX29):
+        // the chats listed here and no others, a large folder after a question. Not Select all over the account.
+        if (folderId != null && folderRead == FolderRead.Loaded && visible.size >= 2) {
+            item(key = "folder-all") {
+                val every = visible.all { it in state.ticked }
+                val words = if (every) s.pickerRemoveThese(visible.size) else s.pickerAddThese(visible.size)
+                SetupButton(
+                    words,
+                    modifier = Modifier
+                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
+                        .onFocusChanged { ui.onBandButton = it.hasFocus }
+                        .onPreviewKeyEvent { event ->
+                            val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
+                            val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
+                            when {
+                                event.type != KeyEventType.KeyDown -> false
+                                event.key == end -> toFoot()
+                                event.key == start && tv -> { toTop(); true }
+                                else -> false
+                            }
+                        },
+                    onClick = {
+                        when {
+                            every -> { tick(false); model.clear(visible) }
+                            ChatPicking.needsConfirm(model.adding(visible)) -> ui.asking = Ask.AddMany(visible)
+                            else -> { tick(true); model.selectAll(visible) }
                         }
-                        if (pickable.isNotEmpty()) {
-                            Text(
-                                s.pickerFolders,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Tone.muted,
-                                modifier = Modifier.padding(start = 14.dp, top = 10.dp, bottom = 2.dp).semantics { heading() },
-                            )
-                        }
-                        for (folder in pickable) {
-                            val read = folderStatus.read(folder.id)
-                            val n = folderCounts[folder.id] ?: 0
-                            RailEntry(
-                                label = folderLabel(folder, s),
-                                icon = folderIcon(folder.icon),
-                                detail = if (read == FolderRead.Loaded && n > 0) s.formatter.number(n) else null,
-                                chosen = folderId == folder.id,
-                                dim = allOn || (read == FolderRead.Loaded && n == 0),
-                                onClick = { if (!allOn) intoFolder(folder.id) },
-                                modifier = Modifier
-                                    .focusRequester(folderFocus.getOrPut(folder.id) { FocusRequester() })
-                                    .onPreviewKeyEvent { event ->
-                                        if (event.type == KeyEventType.KeyDown && event.key == end) {
-                                            // Greyed while every chat counts: Right goes nowhere.
-                                            if (!allOn) intoFolder(folder.id)
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    },
-                            )
-                        }
-                        RailEntry(
-                            label = s.commonSearch,
-                            icon = TmIcons.Search,
-                            detail = state.query.trim().ifBlank { null },
-                            chosen = searching || state.query.isNotBlank(),
-                            dim = false,
-                            onClick = { intoSearch() },
-                            modifier = Modifier
-                                .focusRequester(railSearchFocus)
-                                .onPreviewKeyEvent { event ->
-                                    if (event.type == KeyEventType.KeyDown && event.key == end) {
-                                        intoSearch()
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                },
-                        )
-                    }
-                    Column(Modifier.weight(1f).fillMaxHeight()) {
-                        // The first stop (HX86): OK flips it, Right goes to Done, and Down goes to Done
-                        // too while every chat counts, since the rows under it are disabled.
-                        AllChatsSwitch(
-                            allOn,
-                            tv = true,
-                            onToggle = flipAll,
-                            modifier = Modifier
-                                .focusRequester(switchFocus)
-                                .onFocusChanged { onSwitch = it.hasFocus }
-                                .onPreviewKeyEvent { event ->
-                                    when {
-                                        event.type != KeyEventType.KeyDown -> false
-                                        event.key == end -> toFoot()
-                                        event.key == Key.DirectionDown && allOn -> toFoot()
-                                        else -> false
-                                    }
-                                },
-                        )
-                        if (searching || state.query.isNotBlank()) searchBox()
-                        listPane()
-                    }
-                    Column(
-                        Modifier
-                            .width(PANEL_WIDTH)
-                            .fillMaxHeight()
-                            .onFocusChanged { inFoot = it.hasFocus }
+                    },
+                )
+            }
+        }
+    }
+
+    private fun CountingScope.bandItems(divider: Dp) {
+        for ((band, inBand) in bands) {
+            if (holding && band != ChatPicking.Band.Saved) continue
+            val label = if (bands.size > 1 || holding) bandLabel(band, inBand.size, s) else null
+            if (label != null) {
+                item(key = "band-$band") { BandLabel(label) }
+            }
+            if (band == ChatPicking.Band.Recommended && state.belowBar) {
+                item(key = "below-bar") {
+                    Text(
+                        s.pickerBelowBarMany,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Tone.muted,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    )
+                }
+            }
+            // One explicit press takes the whole band (the pickers tick nothing for the
+            // viewer): 20 chats are one press, not 20 ticks or 40 presses of a remote.
+            // Not for the fallback band, which says nothing reached the bar.
+            if (band == ChatPicking.Band.Recommended && !state.belowBar && inBand.size >= 2) {
+                item(key = "band-recommended-all") {
+                    val ids = inBand.mapNotNullTo(LinkedHashSet()) { (it as? ChatPicking.Item.Chat)?.row?.id }
+                    val every = ids.all { it in state.ticked }
+                    val words = if (every) s.pickerRemoveThese(ids.size) else s.pickerAddThese(ids.size)
+                    SetupButton(
+                        words,
+                        enabled = !allOn,
+                        modifier = Modifier
+                            .padding(start = ROW_INSET, end = ROW_INSET, bottom = 10.dp)
+                            .onFocusChanged { ui.onBandButton = it.hasFocus }
+                            // The remote's Right goes to Done and Left to the filters, as from a row.
                             .onPreviewKeyEvent { event ->
+                                val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
+                                val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
                                 when {
                                     event.type != KeyEventType.KeyDown -> false
-                                    // On the keys, Left and Right walk the key grid and Left from its first
-                                    // column finds the list by position.
-                                    event.key == start && !inKeys -> {
-                                        backToRow()
-                                        true
-                                    }
-                                    // Done is the one control here: Up and Down stay on it, and never
-                                    // drop into whichever row a focus search finds beside it (HX86).
-                                    // The keys below it are walked by Up and Down like any grid.
-                                    event.key == Key.DirectionDown || event.key == Key.DirectionUp -> !inKeys
+                                    event.key == end -> toFoot()
+                                    event.key == start && tv -> { toTop(); true }
                                     else -> false
                                 }
                             },
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        val question = questionUi
-                        if (question != null) {
-                            question()
-                        } else {
-                            Text(
-                                s.pickerYourChoice,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Tone.muted,
-                                modifier = Modifier.semantics { heading() },
-                            )
-                            Text(
-                                if (allOn) s.pickerAllChatsOn else totalLine(chosen, s),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = Tone.text,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            failure()
-                            doneButton()
-                            escape()
-                            // The keys need the room the hint takes while the words are being typed.
-                            if (required && !(tv && (searching || state.query.isNotBlank()))) {
-                                Text(s.setupWhichBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                            }
-                            // The words are typed on the keys beside the list, which stays in view.
-                            val keysUp = tv && (searching || state.query.isNotBlank())
-                            if (keysUp) {
-                                com.tmplayer.ui.components.TvKeyboard(
-                                    text = typed,
-                                    onText = onType,
-                                    onSearch = toFirstRow,
-                                    modifier = Modifier.fillMaxWidth().onFocusChanged { inKeys = it.hasFocus },
-                                    firstKey = keyFocus,
-                                    // The panel is short: keys of 40 dp, and no typed line, since the
-                                    // search box over the list shows the words.
-                                    keyHeight = 40.dp,
-                                    showText = false,
-                                )
-                            }
-                            if (shown.isNotEmpty() && !keysUp) {
-                                Text(s.pickerTvKeys, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
+                        onClick = {
+                            tick(!every)
+                            if (every) model.clear(ids) else model.selectAll(ids)
+                        },
+                    )
                 }
             }
+            val base = count
+            inBand.forEachIndexed { i, entry -> ui.lazyIndex[itemRow(entry).id] = base + i }
+            // One content type, so a jump of the remote reuses the rows it scrolls away
+            // rather than building a screenful from nothing in one frame.
+            itemsIndexed(inBand, key = { _, entry -> itemRow(entry).id }, contentType = { _, _ -> ROW_TYPE }) { index, item ->
+                RowEntry(item, index, index == inBand.lastIndex, divider)
+            }
+        }
+    }
+
+    private fun CountingScope.heldItem(divider: Dp) {
+        if (holding) {
+            item(key = "band-recommended-held") {
+                Column {
+                    BandLabel(s.pickerBandRecommended)
+                    PickSkeleton(rows = HELD_ROWS, tv = tv, divider = divider)
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun RowEntry(item: ChatPicking.Item, index: Int, last: Boolean, divider: Dp) {
+        val row = itemRow(item)
+        // Only a row on screen is counted: this effect leaves with the row. It
+        // waits for the list to stop (a fling, a held Down), so the rows run past
+        // on the way are never counted at all, and for the row to be in sight,
+        // since the rows composed ahead of a jump run it too.
+        if (tv && item is ChatPicking.Item.Chat && row.band != ChatPicking.Band.Gone) LaunchedEffect(row.id) {
+            snapshotFlow {
+                ui.racing || listState.isScrollInProgress ||
+                    listState.layoutInfo.visibleItemsInfo.none { it.key == row.id }
+            }.first { !it }
+            model.count(row.id)
+        }
+        val ticked = allOn || row.id in state.ticked
+        val requester = remember(row.id) { FocusRequester() }
+        DisposableEffect(row.id) {
+            ui.rowFocus[row.id] = requester
+            onDispose { if (ui.rowFocus[row.id] === requester) ui.rowFocus.remove(row.id) }
+        }
+        val card = rowModifier(row.id, requester)
+            .groupedCard(GroupPlace(first = index == 0, last = last), divider)
+        if (item is ChatPicking.Item.Folded) {
+            FoldRow(
+                label = s.pickerFold(item.count),
+                modifier = card,
+                onOpen = {
+                    ui.foldFocus = ChatPicking.foldedIn(rows, state.counted, state.ticked, item.band).firstOrNull()?.id
+                    lst.foldOpen.value = lst.foldOpen.value + item.band
+                },
+            )
+        } else if (row.band == ChatPicking.Band.Gone) {
+            GoneRow(row, tv, card, onRemove = { model.toggle(row.id) })
         } else {
-            Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()) {
-                listPane()
-                footPane()
+            PickRow(
+                row = row,
+                ticked = ticked,
+                reason = if (row.band == ChatPicking.Band.Recommended) {
+                    if (state.belowBar) s.pickerReasonSome else s.pickerReasonMany
+                } else {
+                    null
+                },
+                tv = tv,
+                enabled = !allOn,
+                modifier = card,
+                onToggle = { tick(!ticked); model.toggle(row.id) },
+                onToggleStar = { model.toggleStar(row.id) },
+            )
+        }
+    }
+
+    @Composable
+    fun AskDialog(question: Ask) {
+        when (question) {
+            Ask.Discard -> Confirm(
+                title = s.pickerDiscardTitle,
+                body = s.pickerDiscardBody,
+                action = s.pickerDiscardYes,
+                onYes = {
+                    ui.asking = null
+                    onClose()
+                },
+                onNo = { ui.asking = null },
+            )
+            is Ask.AddMany -> Confirm(
+                title = s.pickerConfirmTitle(model.adding(question.ids)),
+                body = s.pickerConfirmBody,
+                action = s.pickerConfirmYes,
+                onYes = {
+                    ui.asking = null
+                    model.selectAll(question.ids)
+                },
+                onNo = { ui.asking = null },
+            )
+            Ask.Leave -> Confirm(
+                title = s.pickerLeaveChoosingTitle,
+                body = s.pickerLeaveChoosingBody,
+                action = s.pickerLeaveYes,
+                onYes = {
+                    ui.asking = null
+                    onLeave()
+                },
+                onNo = { ui.asking = null },
+            )
+        }
+    }
+
+    @Composable
+    fun Failure() {
+        val failed = state.error
+        if (failed != null) {
+            Column(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(failed, style = MaterialTheme.typography.bodyMedium, color = Tone.danger)
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SetupButton(s.commonTryAgain, primary = true, onClick = { model.done(chats) })
+                    sendLogs?.invoke()
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun DoneButton() {
+        val none = state.ticked.isEmpty() && !allOn
+        if (required && none) {
+            DisabledDone(s.pickerGateDoneNone)
+        } else {
+            // While the choice is written the button says so and keeps the focus (the model
+            // ignores a second press); the screen closes when it is done.
+            SetupButton(
+                when {
+                    state.saving -> s.pickerSaving
+                    none -> s.pickerDoneNone
+                    else -> s.commonDone
+                },
+                primary = true,
+                busy = state.saving,
+                modifier = Modifier.focusRequester(ui.doneFocus),
+                onClick = { model.done(chats) },
+            )
+        }
+    }
+
+    @Composable
+    fun Escape() {
+        val go = onContinue
+        // No chat holds videos yet (Saved Messages may be the only row): say what to do, and
+        // leave the way on for this visit.
+        if (showHint) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    s.pickerForwardHint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Tone.muted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+                if (go != null) {
+                    QuietButton(s.pickerContinueWithout, modifier = Modifier.focusRequester(ui.escapeFocus), onClick = go)
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun FootPane() {
+        val question = ui.asking
+        if (question != null) {
+            AskDialog(question)
+        } else {
+            Column(Modifier.fillMaxWidth()) {
+                Failure()
+                val totalWords: @Composable (Modifier) -> Unit = { m ->
+                    Text(
+                        if (allOn) s.pickerAllChatsOn else totalLine(chosen, s),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.text,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = m,
+                    )
+                }
+                val card = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = if (form == DeviceForm.Phone) 12.dp else 0.dp)
+                    .groupedCard(GroupPlace.Alone)
+                    .onFocusChanged { ui.inFoot = it.hasFocus }
+                    .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp)
+                // At a large system font the button takes the whole card and left the count no
+                // width at all (HX56): the count goes over the button then.
+                if (LocalDensity.current.fontScale >= LARGE_FONT) {
+                    Column(card, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+                        totalWords(Modifier.fillMaxWidth())
+                        DoneButton()
+                    }
+                } else {
+                    Row(card, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        totalWords(Modifier.weight(1f))
+                        DoneButton()
+                    }
+                }
+                if (showHint) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = if (form == DeviceForm.Phone) 8.dp else 0.dp), contentAlignment = Alignment.Center) { Escape() }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun TvLayout() {
+        val title = if (required) s.setupWhichTitle else s.pickerChooseChats
+        Column(Modifier.fillMaxSize()) {
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Tone.text,
+                modifier = Modifier.semantics { heading() },
+            )
+            Row(
+                Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                TvRail()
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    // The first stop (HX86): OK flips it, Right goes to Done, and Down goes to Done
+                    // too while every chat counts, since the rows under it are disabled.
+                    AllChatsSwitch(
+                        allOn,
+                        tv = true,
+                        onToggle = flipAll,
+                        modifier = Modifier
+                            .focusRequester(ui.switchFocus)
+                            .onFocusChanged { ui.onSwitch = it.hasFocus }
+                            .onPreviewKeyEvent { event ->
+                                when {
+                                    event.type != KeyEventType.KeyDown -> false
+                                    event.key == end -> toFoot()
+                                    event.key == Key.DirectionDown && allOn -> toFoot()
+                                    else -> false
+                                }
+                            },
+                    )
+                    if (searching || state.query.isNotBlank()) SearchBox()
+                    ListPane()
+                }
+                TvPanel()
+            }
+        }
+    }
+
+    @Composable
+    fun TvRail() {
+        val scopeCounts = remember(chats) {
+            ChatPicking.Scope.entries.associateWith { sc -> chats.count { ChatPicking.inScope(it, sc) } }
+        }
+        // Each folder's chats, counted once for the rail; a folder not read yet shows no number.
+        val folderCounts = remember(chats, pickable) {
+            val wanted = pickable.mapTo(HashSet()) { it.id }
+            HashMap<Int, Int>().also { counts ->
+                for (chat in chats) for (id in chat.folderIds) if (id in wanted) counts[id] = (counts[id] ?: 0) + 1
+            }
+        }
+        Column(
+            Modifier.width(RAIL_WIDTH).fillMaxHeight().verticalScroll(rememberScrollState()).focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            for (sc in TV_RAIL) {
+                val n = scopeCounts.getValue(sc)
+                RailEntry(
+                    label = scopeLabel(sc, s),
+                    icon = railIcon(sc),
+                    detail = if (n > 0) s.formatter.number(n) else null,
+                    chosen = folderId == null && state.scope == sc,
+                    dim = n == 0,
+                    onClick = { intoList(sc) },
+                    modifier = Modifier
+                        .focusRequester(ui.railFocus.getValue(sc))
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == end) {
+                                intoList(sc)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                )
+            }
+            if (pickable.isNotEmpty()) {
+                Text(
+                    s.pickerFolders,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Tone.muted,
+                    modifier = Modifier.padding(start = 14.dp, top = 10.dp, bottom = 2.dp).semantics { heading() },
+                )
+            }
+            for (folder in pickable) {
+                val read = folderStatus.read(folder.id)
+                val n = folderCounts[folder.id] ?: 0
+                RailEntry(
+                    label = folderLabel(folder, s),
+                    icon = folderIcon(folder.icon),
+                    detail = if (read == FolderRead.Loaded && n > 0) s.formatter.number(n) else null,
+                    chosen = folderId == folder.id,
+                    dim = allOn || (read == FolderRead.Loaded && n == 0),
+                    onClick = { if (!allOn) intoFolder(folder.id) },
+                    modifier = Modifier
+                        .focusRequester(ui.folderFocus.getOrPut(folder.id) { FocusRequester() })
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == end) {
+                                // Greyed while every chat counts: Right goes nowhere.
+                                if (!allOn) intoFolder(folder.id)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                )
+            }
+            RailEntry(
+                label = s.commonSearch,
+                icon = TmIcons.Search,
+                detail = state.query.trim().ifBlank { null },
+                chosen = searching || state.query.isNotBlank(),
+                dim = false,
+                onClick = { intoSearch() },
+                modifier = Modifier
+                    .focusRequester(ui.railSearchFocus)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == end) {
+                            intoSearch()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            )
+        }
+    }
+
+    @Composable
+    fun TvPanel() {
+        Column(
+            Modifier
+                .width(PANEL_WIDTH)
+                .fillMaxHeight()
+                .onFocusChanged { ui.inFoot = it.hasFocus }
+                .onPreviewKeyEvent { event ->
+                    when {
+                        event.type != KeyEventType.KeyDown -> false
+                        // On the keys, Left and Right walk the key grid and Left from its first
+                        // column finds the list by position.
+                        event.key == start && !ui.inKeys -> {
+                            backToRow()
+                            true
+                        }
+                        // Done is the one control here: Up and Down stay on it, and never
+                        // drop into whichever row a focus search finds beside it (HX86).
+                        // The keys below it are walked by Up and Down like any grid.
+                        event.key == Key.DirectionDown || event.key == Key.DirectionUp -> !ui.inKeys
+                        else -> false
+                    }
+                },
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val question = ui.asking
+            if (question != null) {
+                AskDialog(question)
+            } else {
+                Text(
+                    s.pickerYourChoice,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Tone.muted,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    if (allOn) s.pickerAllChatsOn else totalLine(chosen, s),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Tone.text,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Failure()
+                DoneButton()
+                Escape()
+                // The keys need the room the hint takes while the words are being typed.
+                if (required && !(tv && (searching || state.query.isNotBlank()))) {
+                    Text(s.setupWhichBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                }
+                // The words are typed on the keys beside the list, which stays in view.
+                val keysUp = tv && (searching || state.query.isNotBlank())
+                if (keysUp) {
+                    com.tmplayer.ui.components.TvKeyboard(
+                        text = typed,
+                        onText = onType,
+                        onSearch = toFirstRow,
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { ui.inKeys = it.hasFocus },
+                        firstKey = ui.keyFocus,
+                        // The panel is short: keys of 40 dp, and no typed line, since the
+                        // search box over the list shows the words.
+                        keyHeight = 40.dp,
+                        showText = false,
+                    )
+                }
+                if (shown.isNotEmpty() && !keysUp) {
+                    Text(s.pickerTvKeys, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
