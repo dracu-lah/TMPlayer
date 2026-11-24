@@ -2288,7 +2288,7 @@ private fun Pill(
     // touch, as a card does; nothing sinks, since nothing is under a finger.
     val lessMotion = com.tmplayer.ui.components.rememberLessMotion()
     val scale by animateFloatAsState(
-        if (focused && !lessMotion) PILL_FOCUS_SCALE else 1f,
+        if (focused && !lessMotion) focusScale else 1f,
         Motion.standard(Motion.Fast),
         label = "pillScale",
     )
@@ -2329,9 +2329,6 @@ private fun Pill(
         }
     }
 }
-
-/** How much a pill in a chat's header grows under the remote: less than a card, being small. */
-private const val PILL_FOCUS_SCALE = 1.06f
 
 /**
  * The whole name of whatever the remote is standing on, along the bottom corner.
