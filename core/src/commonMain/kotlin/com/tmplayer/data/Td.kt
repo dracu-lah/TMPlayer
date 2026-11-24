@@ -1505,10 +1505,19 @@ object Td {
     @Volatile
     private var floodWaitUntilMs = 0L
 
+    private val _floodWaitUntil = MutableStateFlow(0L)
+
+    /**
+     * The same stamp as a flow, for the status corner that counts down to it (WP-100): zero for
+     * none. It is not cleared when the wait ends; the reader subtracts the clock.
+     */
+    val floodWaitUntil: StateFlow<Long> = _floodWaitUntil.asStateFlow()
+
     /** Records a flood wait if [message] carries one. Returns the seconds Telegram named. */
     fun noteFailure(message: String?): Int? {
         val seconds = Failures.floodWaitSeconds(message) ?: return null
         floodWaitUntilMs = System.currentTimeMillis() + seconds * 1000L
+        _floodWaitUntil.value = floodWaitUntilMs
         return seconds
     }
 

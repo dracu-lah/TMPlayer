@@ -485,6 +485,18 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         browseScope.launch { runCatching { state.extras.updates?.checkIfDue() } }
     }
 
+    // The corner's line for catching up, a wait Telegram asked for and a sync that needs the viewer (WP-100): a
+    // connection state above wins, and a locked profile sees none.
+    val syncStatus by state.settings.resumeSyncStatus.collectAsState(initial = null)
+    val hintsSeen by state.settings.hintsSeen.collectAsState(initial = emptySet())
+    val statusDay = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(java.util.Date()) }
+    val syncHintId = syncStatus?.kind?.let { com.tmplayer.data.GlobalStatusRules.syncHintId(it, statusDay) }
+    val globalLine = com.tmplayer.ui.components.rememberGlobalLine(
+        active = connection == ConnectionNotice.Hidden && !com.tmplayer.data.ProfileUnlock.hiddenNow(),
+        syncKind = syncStatus?.kind,
+        syncDismissed = syncHintId != null && syncHintId in hintsSeen,
+    )
+
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
     // Back from any page lands on Home, the first destination, as on the phone and the TV; in the
     // big-screen mode by way of the page's place on the bar (ShellState.backFromPage).
@@ -645,6 +657,17 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
 
         ConnectionBanner(connection, Modifier.align(Alignment.TopCenter).padding(top = 12.dp), onOpenDownloads = { state.go(Destination.Downloads) })
+        com.tmplayer.ui.components.GlobalStatusPill(
+            line = globalLine,
+            syncStatus = syncStatus,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+            onRetry = { browseScope.launch { Td.retryConnecting() } },
+            onOpenSettings = {
+                syncHintId?.let { id -> browseScope.launch { runCatching { state.settings.markHintSeen(id) } } }
+                state.go(Destination.Settings)
+            },
+            onDismiss = { syncHintId?.let { id -> browseScope.launch { runCatching { state.settings.markHintSeen(id) } } } },
+        )
 
         // Over the page rather than instead of it, so the page keeps its scroll position and its
         // search, and closing the player is simply taking this away.

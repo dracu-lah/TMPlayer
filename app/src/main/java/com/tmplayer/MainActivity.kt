@@ -1211,6 +1211,18 @@ private fun Root() {
         }
     }
 
+    // The corner's line for catching up, a wait Telegram asked for and a sync that needs the viewer (WP-100). A
+    // connection state above wins; one effect, ticking only while a count down needs it; a locked profile sees none.
+    val syncStatus by settings.resumeSyncStatus.collectAsStateWithLifecycle(initialValue = null)
+    val hintsSeen by settings.hintsSeen.collectAsStateWithLifecycle(initialValue = emptySet())
+    val statusDay = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(java.util.Date()) }
+    val syncHintId = syncStatus?.kind?.let { com.tmplayer.data.GlobalStatusRules.syncHintId(it, statusDay) }
+    val globalLine = com.tmplayer.ui.components.rememberGlobalLine(
+        active = auth is AuthState.Ready && connectionNotice == ConnectionNotice.Hidden && !com.tmplayer.data.ProfileUnlock.hiddenNow(),
+        syncKind = syncStatus?.kind,
+        syncDismissed = syncHintId != null && syncHintId in hintsSeen,
+    )
+
     var screen by rememberSaveable(stateSaver = ScreenSaver) {
         mutableStateOf<Screen>(Screen.Chats)
     }
@@ -2577,7 +2589,8 @@ private fun Root() {
                     pageKey = TouchScreens.key(screen),
                     // The connection notice stands above the bar, never over it, and the pages make
                     // room for it (R4, 9.1): Offline is a card with Try again and Downloads.
-                    bannerShown = (connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready) || tipAboveBar,
+                    bannerShown = (connectionNotice != ConnectionNotice.Hidden && auth is AuthState.Ready) ||
+                        globalLine != com.tmplayer.data.GlobalLine.Idle || tipAboveBar,
                     banner = {
                         // The notice first; the card only while it is really due, so the banner's fade-out
                         // after a notice clears never draws the card (or hands the remote to it).
@@ -2589,6 +2602,18 @@ private fun Root() {
                             } else {
                                 ConnectionStatus(notice = connectionNotice)
                             }
+                        } else if (globalLine != com.tmplayer.data.GlobalLine.Idle) {
+                            com.tmplayer.ui.components.GlobalStatusPill(
+                                line = globalLine,
+                                syncStatus = syncStatus,
+                                onRetry = { scope.launch { Td.retryConnecting() } },
+                                onOpenSettings = {
+                                    syncHintId?.let { id -> scope.launch { runCatching { settings.markHintSeen(id) } } }
+                                    openSettings()
+                                    settingsPage = SettingsPage.Accounts
+                                },
+                                onDismiss = { syncHintId?.let { id -> scope.launch { runCatching { settings.markHintSeen(id) } } } },
+                            )
                         } else if (tipAboveBar) {
                             TipsCard(
                                 onShow = { scope.launch { runCatching { settings.openTour() } } },
@@ -2826,6 +2851,14 @@ private fun Root() {
         if (FormFactor.isTv(context)) {
             ConnectionStatus(
                 notice = connectionNotice,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .tvPillSlot(),
+            )
+            // The same corner for a catch up, a wait and a sync that needs the viewer: the words only, never focusable (WP-100).
+            com.tmplayer.ui.components.GlobalStatusPill(
+                line = globalLine,
+                syncStatus = syncStatus,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .tvPillSlot(),
