@@ -59,7 +59,7 @@ class TdSessionPolicyTest {
         "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopDownloads.kt" to (11 to "the desktop's download queue: each request carries its stamp and rows (DownloadStamps), its fetch takes Td.sessionFor, its cancels and byte reads are of rows a switch stops (stopForSwitch), and TDLib's copy is deleted only while its owner may act"),
         "desktop/src/main/kotlin/com/tmplayer/desktop/DesktopStorage.kt" to (1 to "the housekeeping trim after sign in, of the open profile's own cache; a switch builds the window that runs it again"),
         "desktop/src/main/kotlin/com/tmplayer/desktop/DownloadIndex.kt" to (3 to "a download's delete and its bytes, pressed on the Downloads page of the open profile, or Remove after watching for the profile the mark was made for"),
-        "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerMedia.kt" to (19 to "the desktop player's reads and its own downloads' cancels; it closes before a switch (BeforeSwitch, PlayerHost) and its writes carry its owner"),
+        "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerMedia.kt" to (20 to "the desktop player's reads (Play all and Shuffle read the chat's next videos, WP-32) and its own downloads' cancels; it closes before a switch (BeforeSwitch, PlayerHost) and its writes carry its owner"),
         "desktop/src/main/kotlin/com/tmplayer/desktop/player/PlayerScreen.kt" to (3 to "the desktop player's reads; it closes before a switch and its resume saves carry the owner it opened under"),
         "desktop/src/main/kotlin/com/tmplayer/desktop/ui/DetailPane.kt" to (1 to desktopScreen),
         "desktop/src/main/kotlin/com/tmplayer/desktop/ui/Downloads.kt" to (13 to "presses on the desktop's Downloads page of the open profile"),

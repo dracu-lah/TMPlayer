@@ -4487,7 +4487,7 @@
     "highlight_player": "Player: chapters, picture shape on the bar, finer speed steps and a way back after a long jump",
     "highlight_search": "Search across all your chats, with one result per video, filters and sort",
     "highlight_sort": "Sort each chat, rename a video or fix a wrong match",
-    "line_account": "Your picture is where the gear was and opens your account menu: switch or add an account, Settings, Refresh and sign out. The version is there too",
+    "line_account": "Your picture is where the gear was and opens your account menu: switch or add an account, open Settings or Refresh, or sign out. The version is there too",
     "line_account_tv": "Your picture and name are on the top bar. Press OK on it, or Menu while on the bar, to switch or add an account or to sign out",
     "line_chapters": "Chapters have their own page in More once a video has two or more",
     "line_decoder_desktop": "Options has Force software decoding and Report stutter",

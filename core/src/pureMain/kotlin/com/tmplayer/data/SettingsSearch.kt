@@ -177,6 +177,9 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
 
     /** The status corner's sync hints (unreadable file, newer file, other account): Open settings, Account (WP-100). */
     SyncHint("settings.resume_sync_unreadable", SettingsGroup.Accounts, "resume_sync", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+
+    /** The account menu's compact version row opens Settings, About (the build and the update source). */
+    AccountVersion("settings.about", SettingsGroup.About, "about", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
     ;
 
     /** Where Setup choices' "Also in" goes is in the ui module (SetupStep lives there). */
