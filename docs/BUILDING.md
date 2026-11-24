@@ -119,6 +119,16 @@ Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or t
 blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
 path, and software decoding takes over.
 
+Links and launcher: TMPlayer does not register `tg://` anywhere (no MSI entry, no `x-scheme-handler`
+line in the `.desktop` file): Telegram Desktop owns it, and a second handler would take the scheme
+from it. Links reach the app by being pasted into the search or dropped on the window. The Linux
+launcher's right click offers Continue watching, Downloads and Search (`tmplayer --go=resume`,
+`--go=downloads`, `--go=search`, which a second launch hands to the running window).
+`DesktopIntegrationTest` fails if a `tg://` line appears in the build file or the packaging folder.
+On GNOME Wayland the window is drawn by XWayland, which can look soft at 125, 150 and 200 percent:
+check it on a real session first, and if it does, `GDK_SCALE` (or a JBR with the `WLToolkit`
+option) is the lever; neither is set by the launcher yet.
+
 ### Screen readers and the OS accessibility settings (WP-50)
 
 What the app does by itself: pages, Home rows and Downloads sections are headings; a video card

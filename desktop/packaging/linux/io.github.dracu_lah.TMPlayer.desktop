@@ -55,3 +55,18 @@ Keywords=Telegram;Video;Player;Stream;Media;
 StartupWMClass=com-tmplayer-desktop-MainKt
 # AWT never completes a startup notification, so asking for one leaves a busy cursor spinning.
 StartupNotify=false
+# Right click in the launcher: each action opens its page in the running window, or starts TMPlayer
+# there (LaunchGo). There is no URL scheme handler line on purpose: Telegram Desktop owns tg links.
+Actions=Resume;Downloads;Search;
+
+[Desktop Action Resume]
+Name=Continue watching
+Exec=tmplayer --go=resume
+
+[Desktop Action Downloads]
+Name=Downloads
+Exec=tmplayer --go=downloads
+
+[Desktop Action Search]
+Name=Search
+Exec=tmplayer --go=search

@@ -57,7 +57,9 @@ import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.desktop.ui.ProvideFocusVisibility
 import com.tmplayer.desktop.ui.idleCursor
+import com.tmplayer.desktop.ui.WindowDropKind
 import com.tmplayer.desktop.ui.trackFocusVisibility
+import com.tmplayer.desktop.ui.windowDropTarget
 import com.tmplayer.ui.theme.rememberUiScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -95,6 +97,8 @@ fun main(args: Array<String>) {
             raise()
             // A media PC's autostart that finds TMPlayer already open: its layout, in this window.
             com.tmplayer.desktop.ui.LaunchOptions.parse(forwarded).layout?.let { com.tmplayer.desktop.ui.BigScreen.override = it }
+            // The launcher's actions (Continue watching, Downloads, Search) open their page in this window.
+            com.tmplayer.desktop.ui.LaunchOptions.parse(forwarded).go?.let { com.tmplayer.desktop.ui.LaunchGo.pending.value = it }
             com.tmplayer.desktop.os.ToastPresses.handle(forwarded)
         }
     }
@@ -247,6 +251,7 @@ fun main(args: Array<String>) {
         // layout drawn first, then followed as Settings changes it.
         com.tmplayer.desktop.ui.BigScreen.layout = DesktopServices.prefs.now.layout
         com.tmplayer.desktop.ui.BigScreen.override = launch.layout
+        launch.go?.let { com.tmplayer.desktop.ui.LaunchGo.pending.value = it }
         Background.scope.launch {
             DesktopServices.prefs.state.collect { com.tmplayer.desktop.ui.BigScreen.layout = it.layout }
         }
@@ -279,6 +284,14 @@ fun main(args: Array<String>) {
             }
             // For what outlives a switch (the trailers' notices, a notification's press): the shell now.
             val shellNow = androidx.compose.runtime.rememberUpdatedState(shell)
+            // A launcher action's place, taken once by whichever shell is up (WP-52).
+            LaunchedEffect(shell) {
+                com.tmplayer.desktop.ui.LaunchGo.pending.collect { place ->
+                    if (place == null) return@collect
+                    com.tmplayer.desktop.ui.LaunchGo.pending.value = null
+                    com.tmplayer.desktop.ui.LaunchGo.apply(place, shellNow.value)
+                }
+            }
             // In-app trailers (private/TRAILERS-PLAN.md, T4): nothing is looked at, downloaded or
             // started until a trailer is pressed; the fallback lines show as the window's notices.
             val trailerScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -502,7 +515,18 @@ fun main(args: Array<String>) {
                     // minimise, and the remote leaves full screen with Back.
                     CompositionLocalProvider(LocalWindowChrome provides if (bigScreen && shell.fullscreen) null else chrome) {
                         // The pointer hides while it rests in the big-screen mode (IdleCursor).
-                        Box(Modifier.fillMaxSize().trackFocusVisibility().idleCursor(bigScreen)) {
+                        Box(
+                            Modifier.fillMaxSize().trackFocusVisibility().idleCursor(bigScreen).windowDropTarget { kind ->
+                                when (kind) {
+                                    is WindowDropKind.Link -> shell.searchEverywhere(kind.text)
+                                    is WindowDropKind.Backup -> {
+                                        shell.go(com.tmplayer.desktop.ui.Destination.Settings)
+                                        shell.notices.tryEmit(com.tmplayer.i18n.L.windowDropBackup)
+                                    }
+                                    WindowDropKind.Unsupported -> shell.notices.tryEmit(com.tmplayer.i18n.L.windowDropNotSupported)
+                                }
+                            },
+                        ) {
                             com.tmplayer.desktop.ui.ShellOrFailure(
                                 recovery,
                                 onTryAgain = { shell.closePlayer() },

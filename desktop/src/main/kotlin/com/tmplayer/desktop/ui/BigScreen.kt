@@ -30,12 +30,16 @@ data class LaunchOptions(
     val layout: DesktopLayout? = null,
     /** Full screen at the start; null leaves it to Settings' "Start in full screen". */
     val fullscreen: Boolean? = null,
+    /** `--go=downloads`, `--go=search` or `--go=resume`: where the Linux launcher's actions open (WP-52); null for none. */
+    val go: LaunchGo.Place? = null,
 ) {
     companion object {
         fun parse(args: List<String>): LaunchOptions {
             var layout: DesktopLayout? = null
             var fullscreen: Boolean? = null
+            var go: LaunchGo.Place? = null
             for (raw in args) {
+                LaunchGo.Place.from(raw)?.let { go = it }
                 when (raw.trim().lowercase()) {
                     "--tv", "--big-screen", "--layout=tv" -> {
                         layout = DesktopLayout.Tv
@@ -47,7 +51,7 @@ data class LaunchOptions(
                     "--windowed" -> fullscreen = false
                 }
             }
-            return LaunchOptions(layout, fullscreen)
+            return LaunchOptions(layout, fullscreen, go)
         }
     }
 }

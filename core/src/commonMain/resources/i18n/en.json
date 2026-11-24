@@ -4371,6 +4371,8 @@
   },
   "window": {
     "close": "Close",
+    "drop_backup": "To restore a backup, open Settings and choose Restore, then pick this file",
+    "drop_not_supported": "TMPlayer plays videos from your Telegram chats",
     "maximize": "Maximize",
     "minimize": "Minimize",
     "restore": "Restore"
