@@ -313,6 +313,9 @@ object SettingsMap {
         val lock = SettingsGroup.Privacy
         row("pin", lock, "lock.set_pin", PTD, listOf("lock.set_pin_detail"), drawnAs = listOf("lock.change_pin"))
         row("lock_on_open", lock, "lock.on_open", PTD, listOf("lock.on_open_detail"), SettingsNeed.State)
+        // A fingerprint or face on the app lock's pad only (WP-41), a phone's: there with a PIN set and the
+        // lock asking when the app opens, and the sensor enrolled (else the row says what is missing).
+        row("biometric_unlock", lock, "settings.biometric_unlock", P, listOf("lock.biometric_row_detail", "lock.biometric_none"), SettingsNeed.State)
         row("kids_lock", lock, "lock.kids", PTD)
         row("allowed_chats", lock, "lock.allowed_chats", PTD)
         row("remove_pin", lock, "lock.remove_pin", PTD, listOf("lock.remove_pin_detail"), SettingsNeed.State)

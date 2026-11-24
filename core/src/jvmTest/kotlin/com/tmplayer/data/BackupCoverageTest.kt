@@ -26,8 +26,9 @@ class BackupCoverageTest {
         "downloads_migrated", "download_queue", "download_queue_db", "developer_options",
         // Keep my place on all my devices: the Home question was shown, and when this device last synced.
         "keep_place_card_seen", "keep_place_wrote_at",
-        // Locks: a PIN's hash has no place in a mailed file, and a restore never undoes a lock.
-        "app_lock_on_open", "app_pin", "app_pin_failures", "app_pin_wait_left_ms", "app_pin_wait_stamp",
+        // Locks: a PIN's hash has no place in a mailed file, and a restore never undoes a lock. The fingerprint
+        // switch is tied to this device's sensor (WP-41).
+        "app_lock_on_open", "app_lock_biometric", "app_pin", "app_pin_failures", "app_pin_wait_left_ms", "app_pin_wait_stamp",
         "kids_chats", "kids_lock",
         // Whether this device was signed in: a session belongs to the device, and a restore on
         // another one must not read as "Telegram signed you out" there (HX23).

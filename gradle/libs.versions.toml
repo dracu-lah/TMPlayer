@@ -30,6 +30,8 @@ nextlib = "1.11.1-0.16.0"
 libvlc = "3.7.7"
 leanback = "1.0.0"
 fragment = "1.9.1"
+# The fingerprint or face on the app lock (WP-41): 1.1.0 is the stable line that supports API 23 and Android 6.
+biometric = "1.1.0"
 datastore = "1.2.1"
 # Crash reporting, and only when the viewer switches it on. Core alone: the "sentry-android"
 # umbrella pulls in NDK, fragment, Compose and Room integrations, none of which this needs.
@@ -125,6 +127,7 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 androidx-media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }
 androidx-leanback = { group = "androidx.leanback", name = "leanback", version.ref = "leanback" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlib" }
 libvlc-all = { group = "org.videolan.android", name = "libvlc-all", version.ref = "libvlc" }
 # What nextlib-media3ext's POM depends on, for the AAR scripts/build-media3ext.sh builds from source.

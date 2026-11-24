@@ -51,7 +51,7 @@ object AccountKeys {
         "home_order", "crash_reports", "detailed_logs", "crash_ask_done", "min_size_bytes", "max_size_bytes",
         "chat_filter", "chat_sort", "hide_default_groups", "quality_habit", "decode_memory", "title_ledger",
         "feedback_draft", "heavy_ask_skip", "app_pin", "app_pin_failures", "app_pin_wait_left_ms",
-        "app_pin_wait_stamp", "app_lock_on_open", "kids_lock", "setup", "tour", "history_tab", "history_sort",
+        "app_pin_wait_stamp", "app_lock_on_open", "app_lock_biometric", "kids_lock", "setup", "tour", "history_tab", "history_sort",
         "downloads_sort", "theme_choice", "pure_black", "accent", "accent_custom", "app_typeface", "high_contrast",
         "language", "language_announced", "last_seen_version", "dynamic_colour", "ui_scale", "video_scale",
         "remember_searches", "update_notify", "update_last_check", "update_skipped_version", "update_snoozed_until",

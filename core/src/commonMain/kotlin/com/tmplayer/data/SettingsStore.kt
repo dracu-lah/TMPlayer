@@ -160,6 +160,7 @@ private val PIN_FAILURES = longPreferencesKey("app_pin_failures")
 private val PIN_WAIT_LEFT = longPreferencesKey("app_pin_wait_left_ms")
 private val PIN_WAIT_STAMP = longPreferencesKey("app_pin_wait_stamp")
 private val LOCK_ON_OPEN = booleanPreferencesKey("app_lock_on_open")
+private val LOCK_BIOMETRIC = booleanPreferencesKey("app_lock_biometric")
 private val KIDS_LOCK = booleanPreferencesKey("kids_lock")
 private val KIDS_CHATS = stringSetPreferencesKey("kids_chats")
 
@@ -2690,6 +2691,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     /**
+     * Whether a fingerprint or face may open the app lock's pad (WP-41), off until it is switched on.
+     * True only with a PIN set and the lock asking when the app opens: without either there is no
+     * pad for it to open. It never reaches Settings, signing out, a profile's PIN or the kids lock.
+     */
+    val appLockBiometric: Flow<Boolean> = read { prefs ->
+        prefs[APP_PIN] != null && prefs[LOCK_ON_OPEN] == true && prefs[LOCK_BIOMETRIC] == true
+    }
+
+    /** The biometric switch (this device's: the sensor is, and a backup never carries it). */
+    suspend fun setAppLockBiometric(on: Boolean) {
+        prefs.edit { it[LOCK_BIOMETRIC] = on }
+    }
+
+    /**
      * The chats the kids lock allows, or null while it is off: what [ChatGate] follows and every
      * list of chats is filtered by.
      */
@@ -2724,6 +2739,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             it.remove(PIN_WAIT_LEFT)
             it.remove(PIN_WAIT_STAMP)
             it.remove(LOCK_ON_OPEN)
+            it.remove(LOCK_BIOMETRIC)
             it.remove(KIDS_LOCK)
         }
     }
@@ -2761,7 +2777,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     /** "Ask when the app opens". Ignored without a PIN. */
     suspend fun setLockOnOpen(on: Boolean) {
-        prefs.edit { it[LOCK_ON_OPEN] = on }
+        prefs.edit {
+            it[LOCK_ON_OPEN] = on
+            // A fingerprint only opens the pad that asks when the app opens: with that off it goes too.
+            if (!on) it.remove(LOCK_BIOMETRIC)
+        }
     }
 
     /** The kids lock's switch. Ignored without a PIN ([KidsLock.inForce]). */
@@ -2786,6 +2806,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             it.remove(PIN_WAIT_LEFT)
             it.remove(PIN_WAIT_STAMP)
             it.remove(LOCK_ON_OPEN)
+            it.remove(LOCK_BIOMETRIC)
             it.remove(KIDS_LOCK)
             it.remove(KIDS_CHATS)
         }

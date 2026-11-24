@@ -130,6 +130,9 @@ service worker stream, and relaying bytes is ruled out by Telegram's terms).
   handing the stream over. A saved video (a file path) has no such limit. Check on an iPhone with
   an Apple TV, and picture in picture with the screen locked and from the Home screen.
 
+Fingerprint or face on the app lock (Android has it, WP-41) is not on iOS yet: `BiometricPrompter` there is a no-op
+(`ios/src/iosMain/.../ui/lock/BiometricPrompter.kt`), LocalAuthentication later.
+
 ## Identifiers
 
 Decision (2026-11-17): the iOS app is `org.tmplayer.ios`, set once and never changed after the

@@ -26,14 +26,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -111,9 +114,17 @@ fun PinPad(
     showForgot: Boolean = purpose == PinPurpose.Check,
     /** The app's mark and name over the lock: the pad that stands in for the whole app at its opening. */
     brand: Boolean = false,
+    /**
+     * A fingerprint or face for the app lock's own pad (WP-41), and what an unlock by it does. Only
+     * here: the checker overload below (profile PINs) has no way to take one, and nor has any other
+     * pad of the app lock's PIN (Settings, signing out, Remove the PIN, the kids lock), which leave it
+     * null. Null until the lock and the opt-in have been read, so nothing is offered before then.
+     */
+    biometric: BiometricUnlock? = null,
+    onBiometric: (() -> Unit)? = null,
 ) {
     val checker = remember(settings) { SettingsPinChecker(settings) }
-    PinPad(checker, purpose, title, onDone, onCancel, modifier, showForgot, brand)
+    PinPadBody(checker, purpose, title, onDone, onCancel, modifier, showForgot, brand, biometric, onBiometric)
 }
 
 /**
@@ -159,6 +170,21 @@ fun PinPad(
     modifier: Modifier = Modifier,
     showForgot: Boolean = purpose == PinPurpose.Check,
     brand: Boolean = false,
+) = PinPadBody(checker, purpose, title, onDone, onCancel, modifier, showForgot, brand, biometric = null, onBiometric = null)
+
+/** The pad itself; [biometric] is only ever given by the app lock's own overload above. */
+@Composable
+private fun PinPadBody(
+    checker: PinChecker?,
+    purpose: PinPurpose,
+    title: String,
+    onDone: (pin: String) -> Unit,
+    onCancel: (() -> Unit)?,
+    modifier: Modifier,
+    showForgot: Boolean,
+    brand: Boolean,
+    biometric: BiometricUnlock?,
+    onBiometric: (() -> Unit)?,
 ) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
@@ -170,14 +196,27 @@ fun PinPad(
     var waitUntil by remember { mutableLongStateOf(0L) }
     var now by remember { mutableLongStateOf(PinClock.now()) }
     val waiting = waitUntil > now
+    // The fingerprint (WP-41): only while checking the app lock's PIN, only when both the prompt and the
+    // way to act on its success were given.
+    val bio = if (purpose == PinPurpose.Check && biometric != null && onBiometric != null) biometric else null
+    var bioReady by remember(bio) { mutableStateOf(false) }
+    var bioBusy by remember(bio) { mutableStateOf(false) }
+    var bioAuto by remember(bio) { mutableStateOf(false) }
+    val onBio by rememberUpdatedState(onBiometric)
     // A keypad's taps, and the verdict felt before it is read (HAPTICS-PLAN rows 10 to 12).
     val haptic = com.tmplayer.ui.components.rememberHaptics()
 
-    // A wait earned before this pad opened is still a wait.
+    // A wait earned before this pad opened is still a wait. Until it has been read the pad does not know
+    // whether it is waiting, so nothing that skips the PIN (a fingerprint, WP-41) is offered before.
+    var waitRead by remember(purpose, checker) { mutableStateOf(false) }
     LaunchedEffect(purpose, checker) {
-        if (purpose != PinPurpose.Check || checker == null) return@LaunchedEffect
+        if (purpose != PinPurpose.Check || checker == null) {
+            waitRead = true
+            return@LaunchedEffect
+        }
         val until = runCatching { checker.waitUntil() }.getOrDefault(0L)
         if (until > PinClock.now()) waitUntil = until
+        waitRead = true
     }
     // The countdown, a second at a time, and the keys back once it runs out.
     LaunchedEffect(waitUntil) {
@@ -189,6 +228,36 @@ fun PinPad(
         if (waitUntil != 0L) message = null
         waitUntil = 0L
     }
+
+    // Whether a fingerprint can be tried now: never while the pad waits out wrong PINs, or while one is being checked.
+    fun askBiometric() {
+        val b = bio ?: return
+        // Read from the state as it is now, not as it was when the composition ran: a wait found in this
+        // very frame (the read of the stored wait) must already stop the prompt.
+        if (!bioReady || !waitRead || waitUntil > now || busy || bioBusy) return
+        bioBusy = true
+        b.prompt(
+            onSuccess = {
+                bioBusy = false
+                // A wait that began meanwhile still holds: the PIN's back-off is not for a sensor to skip.
+                if (waitUntil <= now) onBio?.invoke()
+            },
+            onEnd = { bioBusy = false },
+        )
+    }
+    // Read each time the pad opens: a sensor can be enrolled or removed between two openings. A read
+    // that fails is "not available", never "available".
+    LaunchedEffect(bio) { bioReady = bio != null && runCatching { bio.available() }.getOrDefault(false) }
+    // Once, when the pad first shows with a ready sensor and nothing typed or waiting; after a cancel the button is there.
+    LaunchedEffect(bioReady, waitRead, waiting) {
+        if (bioReady && waitRead && waitUntil <= now && !bioAuto) {
+            bioAuto = true
+            askBiometric()
+        }
+    }
+    // A wait takes the prompt down; the pad leaving takes it down too.
+    LaunchedEffect(waiting) { if (waiting) bio?.cancel() }
+    DisposableEffect(bio) { onDispose { bio?.cancel() } }
 
     fun submit(pin: String) {
         when (purpose) {
@@ -249,6 +318,8 @@ fun PinPad(
 
     fun press(digit: Char) {
         if (busy || waiting || entered.length >= PinHash.LENGTH) return
+        // A digit typed is the PIN's way chosen: the fingerprint prompt gets out of the way.
+        if (bioBusy) bio?.cancel()
         haptic(com.tmplayer.ui.components.Haptic.KeyTap)
         entered += digit
         if (entered.length == PinHash.LENGTH) submit(entered)
@@ -379,6 +450,13 @@ fun PinPad(
             }
           }
         }
+        val biometricButton: @Composable () -> Unit = {
+            if (bio != null && bioReady && waitRead && !waiting) {
+                TextButton(onClick = { askBiometric() }, enabled = enabled && !bioBusy) {
+                    Text(s.lockUseBiometric)
+                }
+            }
+        }
         val forgot: @Composable () -> Unit = {
             if (showForgot) {
                 Text(
@@ -407,6 +485,7 @@ fun PinPad(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         header()
+                        biometricButton()
                         forgot()
                     }
                     keys()
@@ -421,6 +500,7 @@ fun PinPad(
                 ) {
                     header()
                     keys()
+                    biometricButton()
                     forgot()
                 }
             }

@@ -1948,6 +1948,11 @@ fun SettingsScreen(
                             },
                         )
                     }
+                    // A fingerprint or face on the app lock's pad (WP-41): a phone's, and only while the lock asks
+                    // when the app opens. Never for Settings, signing out or a profile's PIN.
+                    if (form == DeviceForm.Phone && appLock.onOpen) {
+                        item(key = "biometric_unlock") { BiometricUnlockRow(settings) }
+                    }
                 }
                 item(key = "kids_lock") {
                     ToggleRow(

@@ -434,6 +434,8 @@ dependencies {
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.leanback)
     implementation(libs.androidx.fragment.ktx)
+    // The fingerprint or face on the app lock's pad only (WP-41); the prompt lives in ui/lock/BiometricPrompter.kt.
+    implementation(libs.androidx.biometric)
     if (media3extAar.isFile) {
         // The AAR's own dependencies, which a file dependency does not bring: the ones the Maven
         // Central POM lists, Media3 itself being above.

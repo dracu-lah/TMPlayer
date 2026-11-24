@@ -90,7 +90,7 @@ that carries libVLC links its corresponding source archive from its notes, as fo
 
 ### Android libraries
 
-- AndroidX Core, Activity, Compose, TV Material, Lifecycle, Media3 1.11.1, Leanback, Fragment and
+- AndroidX Core, Activity, Compose, TV Material, Lifecycle, Media3 1.11.1, Leanback, Fragment, Biometric and
   DataStore: Apache License 2.0: <https://github.com/androidx/androidx>
 - Sentry Android SDK 8.61.0 (crash reports, see the privacy page): MIT:
   <https://github.com/getsentry/sentry-java>

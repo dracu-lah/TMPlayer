@@ -5,7 +5,7 @@ import androidx.compose.ui.zIndex
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.focus.onFocusChanged
@@ -319,7 +319,7 @@ private data class RoomPrompt(
     val lowStorageOff: Boolean = false,
 )
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     // The TV resources follow the app's layout, not only the system's UI mode (HX78).
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -1880,6 +1880,11 @@ private fun Root() {
         // cannot walk out of it into the screen behind. Back leaves the app.
         if (appLock?.onOpen == true && !appUnlocked) {
             val activity = LocalActivity.current
+            // A fingerprint or face, for this pad only (WP-41): offered once the opt-in has been read as on
+            // (null before: nothing is shown, nothing can open the pad but the PIN). Its success unlocks the
+            // app and nothing else: Settings still asks for the PIN, as does signing out.
+            val biometricOn by settings.appLockBiometric.collectAsStateWithLifecycle(initialValue = null)
+            val prompter = remember(activity) { (activity as? FragmentActivity)?.let { com.tmplayer.ui.lock.BiometricPrompter(it) } }
             PinPad(
                 settings = settings,
                 purpose = PinPurpose.Check,
@@ -1891,6 +1896,8 @@ private fun Root() {
                     com.tmplayer.data.SettingsUnlock.unlock()
                 },
                 onCancel = { activity?.finish() },
+                biometric = if (biometricOn == true) prompter else null,
+                onBiometric = { AppLockSession.unlock() },
             )
             return@Box
         }
