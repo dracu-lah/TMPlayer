@@ -197,7 +197,7 @@ class ChooseChatsBarTest {
         val activity = chatsBar(fontScale = 1f)
         val node = button(activity)!!
         assertInside(activity, node.boundsInRoot)
-        assertTrue("at the start of a right to left bar", node.boundsInRoot.center.x < activity.window.decorView.width / 2f)
+        assertTrue("at the start of a right to left bar: ${node.boundsInRoot} of ${activity.window.decorView.width}", node.boundsInRoot.center.x < activity.window.decorView.width / 2f)
     }
 
     @Test

@@ -2421,8 +2421,6 @@ private fun PhoneDownloads(
             }
         }
 
-        // The account's picture and its menu (WP-103): the account, Settings and your lists; not while a selection is up.
-        if (!picking) com.tmplayer.ui.browse.AccountButton(Modifier.align(Alignment.TopEnd))
         FloatingBackButton(
             icon = if (picking) TmIcons.Close else TmIcons.ArrowBack,
             // While picking, the button leaves the selection rather than the screen: that is what

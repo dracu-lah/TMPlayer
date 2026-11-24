@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
@@ -515,12 +516,17 @@ internal fun PhonePageFrame(
                 // Choose chats at its end: add or remove chats in one tap from the list they fill.
                 TopAppBar(
                     title = { Text(s.browseTabChats, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    actions = { com.tmplayer.ui.components.ChooseChatsButton(labelled = true) },
+                    actions = {
+                        com.tmplayer.ui.components.ChooseChatsButton(labelled = true)
+                        // The account's picture is the shell's, over this corner: its room, so nothing sits under it.
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(ACCOUNT_ROOM))
+                    },
                 )
             } else {
                 TopAppBar(
                     scrollBehavior = scrollBehavior,
                     title = { Text(section.heading, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    actions = { androidx.compose.foundation.layout.Spacer(Modifier.width(ACCOUNT_ROOM)) },
                 )
             }
         },
@@ -622,3 +628,6 @@ private const val PULL_ACK_MS = 900L
 
 /** The longest the spinner waits on a refresh that says it is still fetching. */
 private const val PULL_HOLD_MS = 8_000L
+
+/** The room the shell's account picture takes at the top end of a page's title bar (its 48 dp target and the margin round it). */
+internal val ACCOUNT_ROOM = 60.dp

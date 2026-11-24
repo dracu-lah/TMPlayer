@@ -104,7 +104,6 @@ class DownloadsTabBarTest {
                             CompositionLocalProvider(LocalTouchPageKey provides "page") {
                                 TouchPage(TouchPageSpec(current = current))
                                 Box(Modifier.fillMaxSize()) {
-                                    if (gear) AccountButton(Modifier.align(Alignment.TopEnd))
                                 }
                             }
                         }

@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -108,6 +109,7 @@ class PhoneAccountButtonTest {
     private val asha = Account(name = "Asha Rao", username = "asha", miniThumbnail = null, photoFileId = 0)
 
     private var kit: com.tmplayer.ui.profiles.ProfileKit? = null
+    private val prompt = mutableStateOf(false)
 
     @After
     fun tearDown() {
@@ -142,6 +144,9 @@ class PhoneAccountButtonTest {
         /** The real profile flow, drawn by its gate as in the app; null records the press instead. */
         flow: com.tmplayer.ui.lock.ProfileFlow? = null,
         promptUp: Boolean = false,
+        /** Starred, watching and watched, the counts the tiles carry. */
+        counts: Triple<Int, Int, Int> = Triple(0, 0, 0),
+        prompt: MutableState<Boolean> = this.prompt,
     ): TouchChrome {
         FormFactor.override(false)
         Motion.reduced = true
@@ -152,16 +157,16 @@ class PhoneAccountButtonTest {
             signOut = rememberSignOutState()
             val state = signOut
             val nav = TouchNav(
-                account = account, favoriteCount = 0, downloadCount = 0, updateVersion = update,
+                account = account, favoriteCount = counts.first, watchingCount = counts.second, watchedCount = counts.third, downloadCount = 0, updateVersion = update,
                 onHome = {}, onChats = {}, onSearch = {}, onSettings = { calls += "settings" },
-                onFavourites = {}, onDownloads = {}, onHistory = {}, onUpdate = {},
+                onFavourites = { calls += "favourites" }, onDownloads = {}, onHistory = { calls += "history:$it" }, onUpdate = {},
                 onSwitchProfile = if (several) ({ calls += "switch" }) else null,
                 // As the shell wires it (MainActivity): Add account through the profile flow, which asks the PIN.
                 onSwitchOrAdd = if (flow != null) ({ switchOrAdd(flow, several) }) else ({ calls += "picker" }),
                 onSignOut = { calls += "signOut"; state.request() },
                 signOutPhase = state.phase,
                 profile = profile.value,
-                promptUp = promptUp,
+                promptUp = promptUp || prompt.value,
             )
             TMPlayerTheme {
                 surfaceHigh = Tone.surfaceHigh
@@ -171,11 +176,10 @@ class PhoneAccountButtonTest {
                   com.tmplayer.ui.lock.ProfilesGate(flow, signInStep = false) {
                     TouchNavHost(nav, chrome, "page") {
                         CompositionLocalProvider(LocalTouchPageKey provides "page") {
-                            TouchPage(TouchPageSpec(current = TouchDestination.Home, refresh = if (refresh) ({ calls += "refresh" }) else null))
+                            TouchPage(TouchPageSpec(current = if (shown.value) TouchDestination.Home else TouchDestination.Chats, refresh = if (refresh) ({ calls += "refresh" }) else null))
                             Box(Modifier.fillMaxSize()) {
                                 // Something before the picture for Tab to start from.
                                 Box(Modifier.size(10.dp).focusRequester(start).focusable().testTag("start"))
-                                if (shown.value) AccountButton(Modifier.align(Alignment.TopEnd), movedHint = hint)
                             }
                         }
                     }
@@ -288,39 +292,101 @@ class PhoneAccountButtonTest {
     // (c) The menu ---------------------------------------------------------------------------
 
     @Test
-    fun `the menu names the account, one profile reads Add account, Settings and Sign out work`() {
-        val chrome = show()
-        openMenu()
+    fun `the menu is a header, three tiles, two rows and the version, with no strip of numbers and no Sign out`() {
+        val chrome = show(update = "1.30.0")
+        openMenu(L.navAccountNamed("Asha Rao") + ", " + L.navUpdateWaiting)
         assertTrue(chrome.youOpen)
         assertTrue(exists("Asha Rao"))
         assertTrue(exists("@asha"))
         assertTrue(exists(L.profilesAdd))
-        assertFalse(exists(L.profilesSwitchProfile))
-        assertFalse("no Refresh where the page has none", exists(L.commonRefresh))
+        assertFalse(exists(L.profilesSwitchOrAdd))
+        for (tile in listOf("favourites", "history", "watch-later")) {
+            rule.onNodeWithTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-$tile", useUnmergedTree = true).assertExists()
+        }
+        // The old block of three bare numbers is gone, and so are the rows the tiles replaced.
+        assertFalse(exists(L.profileHeading))
+        assertFalse(exists(L.profileStarred))
+        assertFalse("no Sign out here, it lives in Settings, Account", exists(L.settingsSignOutConfirm))
+        assertFalse("no Refresh row where the page has none", exists(L.commonRefresh))
+        // The version, compact: the tile and "v..." (the amber update button is VersionMark's own, tested there).
+        rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_TAG, useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_ICON_TAG, useUnmergedTree = true).assertExists()
         row(L.navSettings).performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
         assertEquals(listOf("settings"), calls)
         assertFalse(chrome.youOpen)
-        openMenu()
-        row(L.settingsSignOutConfirm).performSemanticsAction(SemanticsActions.OnClick)
-        rule.waitForIdle()
-        assertEquals(listOf("settings", "signOut"), calls)
-        // The host's question, naming the account.
-        assertTrue(exists(L.settingsSignOutTitleNamed("Asha Rao")))
     }
 
     @Test
-    fun `two profiles read Switch profile, and Refresh shows where the page has one`() {
+    fun `the counts ride on the tiles they belong to, and a tile with none shows none`() {
+        show(counts = Triple(7, 3, 12))
+        openMenu()
+        assertTrue(exists(L.navTileStarred("7")))
+        assertTrue(exists(L.navTileWatching("3")))
+        assertTrue(exists(L.navTileWatched("12")))
+        rule.onNodeWithTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-watch-later", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun `the tiles open Favourites, History and Watch later`() {
+        show()
+        openMenu()
+        rule.onNodeWithTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-favourites", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+        openMenu()
+        rule.onNodeWithTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-history", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+        openMenu()
+        rule.onNodeWithTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-watch-later", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+        assertEquals(listOf("favourites", "history:Continue", "history:WatchLater"), calls)
+    }
+
+    @Test
+    fun `two profiles read Switch or add account, and Refresh is the header's small button where the page has one`() {
         show(several = true, refresh = true)
         openMenu()
-        assertTrue(exists(L.profilesSwitchProfile))
+        assertTrue(exists(L.profilesSwitchOrAdd))
         assertFalse(exists(L.profilesAdd))
-        row(L.commonRefresh).performSemanticsAction(SemanticsActions.OnClick)
+        assertFalse("no Refresh row, a header button", rule.onAllNodes(hasText(L.commonRefresh) and hasClickAction()).fetchSemanticsNodes().isNotEmpty())
+        rule.onNodeWithTag(REFRESH_BUTTON_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
         openMenu()
-        row(L.profilesSwitchProfile).performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag(SWITCH_BUTTON_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
-        assertEquals(listOf("refresh", "switch"), calls)
+        openMenu()
+        row(L.profilesSwitchOrAdd).performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+        // The switcher asks the picker; the row is the shell's switch or add.
+        assertEquals(listOf("refresh", "switch", "picker"), calls)
+    }
+
+    @Test
+    fun `with one profile the header has no switcher, and without a refresh no Refresh button`() {
+        show()
+        openMenu()
+        assertTrue(rule.onAllNodesWithTag(SWITCH_BUTTON_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithTag(REFRESH_BUTTON_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `Back closes the sheet before it leaves the page`() {
+        val chrome = show()
+        openMenu()
+        assertTrue(chrome.youOpen)
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        assertFalse(chrome.youOpen)
+    }
+
+    @Test
+    fun `an app lock or a PIN pad coming up closes the sheet`() {
+        val chrome = show()
+        openMenu()
+        assertTrue(chrome.youOpen)
+        rule.runOnUiThread { prompt.value = true }
+        rule.waitForIdle()
+        assertFalse("a sheet never stays over the lock", chrome.youOpen)
     }
 
     @Test
@@ -352,36 +418,24 @@ class PhoneAccountButtonTest {
     // (e) The keyboard -----------------------------------------------------------------------
 
     @Test
-    fun `Tab reaches the picture, Enter opens the menu on its first row, Down walks it, Escape gives the picture its focus back`() {
+    fun `the keyboard reaches the picture, Enter opens the menu, Back closes it and gives the picture its focus back`() {
         val chrome = show(keyboard = true)
-        rule.runOnIdle { start.requestFocus() }
-        rule.onNodeWithTag("start").performKeyInput { pressKey(Key.Tab) }
+        rule.runOnIdle { chrome.accountFocus.requestFocus() }
         rule.waitForIdle()
         button(L.navAccountNamed("Asha Rao")).assertIsFocused()
         button(L.navAccountNamed("Asha Rao")).performKeyInput { pressKey(Key.Enter) }
         rule.waitForIdle()
         assertTrue(chrome.youOpen)
-        row(L.profilesAdd).assertIsFocused()
-        row(L.profilesAdd).performKeyInput { pressKey(Key.DirectionDown) }
-        rule.waitForIdle()
-        row(L.navSettings).assertIsFocused()
-        row(L.navSettings).performKeyInput { pressKey(Key.Escape) }
+        // The sheet is a window of its own, whose focus a test window does not grant: the first tile
+        // taking the focus, and Escape in it, are the device's to check. Here the tiles are there, and Back closes it.
+        rule.onNodeWithTag("${com.tmplayer.ui.components.LIBRARY_TILE_TAG}-favourites", useUnmergedTree = true).assertExists()
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         assertFalse(chrome.youOpen)
         button(L.navAccountNamed("Asha Rao")).assertIsFocused()
     }
 
     // (f) The app PIN ------------------------------------------------------------------------
-
-    @Test
-    fun `with an app PIN set, Sign out asks the PIN first, saying it is for signing out`() {
-        runBlocking { settings.setPin(PIN) }
-        show(pinGate = true)
-        openMenu()
-        row(L.settingsSignOutConfirm).performSemanticsAction(SemanticsActions.OnClick)
-        rule.waitUntil(5_000) { exists(L.lockEnterForSignOut) }
-        assertFalse("no question before the PIN", exists(L.settingsSignOutTitleNamed("Asha Rao")))
-    }
 
     /** How many PIN pads are up: each draws its title once. */
     private fun pads(): Int = listOf(L.lockEnterPin, L.lockEnterForSignOut, L.lockEnterForSettings)

@@ -39,7 +39,7 @@ import com.tmplayer.data.VersionLine
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.DrainMainLooperRule
-import com.tmplayer.ui.components.VERSION_FOOTER_TAG
+import com.tmplayer.ui.components.VERSION_MARK_TAG
 import com.tmplayer.ui.settings.SignOutHost
 import com.tmplayer.ui.settings.rememberSignOutState
 import com.tmplayer.ui.theme.Motion
@@ -78,6 +78,7 @@ class VersionFooterPhoneMenuTest {
     val drain = DrainMainLooperRule()
 
     private val asha = Account(name = "Asha Rao", username = "asha", miniThumbnail = null, photoFileId = 0)
+    private var aboutOpened = 0
 
     @Before
     fun setUp() {
@@ -103,14 +104,14 @@ class VersionFooterPhoneMenuTest {
                 account = asha, favoriteCount = 0, downloadCount = 0, updateVersion = null,
                 onHome = {}, onChats = {}, onSearch = {}, onSettings = {},
                 onFavourites = {}, onDownloads = {}, onHistory = {}, onUpdate = {},
-                onSwitchOrAdd = {}, onSignOut = { signOut.request() },
+                onSwitchOrAdd = {}, onSignOut = { signOut.request() }, onAbout = { aboutOpened++ },
             )
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
                     TouchNavHost(nav, chrome, "page") {
                         CompositionLocalProvider(LocalTouchPageKey provides "page") {
                             TouchPage(TouchPageSpec(current = TouchDestination.Home))
-                            Box(Modifier.fillMaxSize()) { AccountButton(Modifier.align(Alignment.TopEnd)) }
+                            Box(Modifier.fillMaxSize())
                         }
                     }
                 }
@@ -131,44 +132,35 @@ class VersionFooterPhoneMenuTest {
     }
 
     @Test
-    fun `the menu ends with the version, the build and the state, and a tap copies the support line`() {
+    fun `the menu ends with the compact version, the app's tile and the number, and a tap goes to About`() {
         open()
-        val footer = rule.onNodeWithTag(VERSION_FOOTER_TAG)
-        footer.assertExists()
-        rule.onNodeWithTextExists(L.aboutVersionBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toString()) + ", " + L.updateStateUpToDate)
-        // It is the last thing in the card: below Sign out.
-        val signOut = rule.onNode(hasText(L.settingsSignOutConfirm) and hasClickAction()).fetchSemanticsNode().boundsInRoot
-        assertTrue(footer.fetchSemanticsNode().boundsInRoot.top >= signOut.bottom - 1f)
-        footer.performSemanticsAction(SemanticsActions.OnClick)
-        rule.waitForIdle()
-        val expected = VersionLine.copyText(
-            VersionFacts.info(RuntimeEnvironment.getApplication()).version,
-            VersionFacts.info(RuntimeEnvironment.getApplication()).build,
-            VersionFacts.line(RuntimeEnvironment.getApplication()),
+        val mark = rule.onNodeWithTag(VERSION_MARK_TAG)
+        mark.assertExists()
+        rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_ICON_TAG, useUnmergedTree = true).assertExists()
+        val compact = VersionLine.compact(BuildConfig.VERSION_NAME)
+        assertTrue("\"v1.28.7\"-style, no -test or build suffix: $compact", Regex("v\\d+\\.\\d+\\.\\d+").matches(compact))
+        rule.onNodeWithTextExists("$compact  ·  ${L.updateStateUpToDate}")
+        // The long sentence is gone from the menu: the build and the source are About's.
+        assertFalse(rule.onAllNodes(hasText(BuildConfig.VERSION_CODE.toString(), substring = true)).fetchSemanticsNodes().isNotEmpty())
+        // It is the last thing in the sheet: below Settings.
+        val settings = rule.onNode(hasText(L.navSettings) and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        assertTrue(mark.fetchSemanticsNode().boundsInRoot.top >= settings.bottom - 1f)
+        // A 48 dp target, and a screen reader hears the name, the number and the state.
+        assertTrue(mark.fetchSemanticsNode().boundsInRoot.height >= 48f * rule.activity.resources.displayMetrics.density - 1f)
+        assertEquals(
+            "TMPlayer $compact, ${L.updateStateUpToDate}",
+            mark.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull(),
         )
-        assertEquals(expected, clipboardText())
-        assertTrue(expected.startsWith("TMPlayer ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) Android "))
-        // No account data in the text.
-        assertFalse(expected.contains("Asha", ignoreCase = true))
-        assertFalse(expected.contains("asha"))
-        // The confirmation is said once, in a polite live region.
-        val copied = rule.onNodeWithTag(VERSION_FOOTER_TAG)
-        assertEquals(LiveRegionMode.Polite, copied.fetchSemanticsNode().config.getOrNull(SemanticsProperties.LiveRegion))
-        rule.onNodeWithTextExists(L.aboutVersionCopied)
-        // A second tap inside the two seconds copies again; the words stay the same.
-        copied.performSemanticsAction(SemanticsActions.OnClick)
+        mark.performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
-        rule.onNodeWithTextExists(L.aboutVersionCopied)
-        assertEquals(expected, clipboardText())
+        assertEquals(1, aboutOpened)
     }
 
     @Test
-    fun `a build with no update check says updates come from where it was installed`() {
+    fun `a build with no update check says so beside the number`() {
         Updates.enabled = false
         open()
-        rule.onNodeWithTextExists(
-            L.aboutVersionBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toString()) + ", " + L.updateStateOff,
-        )
+        rule.onNodeWithTextExists(VersionLine.compact(BuildConfig.VERSION_NAME) + "  ·  " + L.updateStateOff)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onNodeWithTextExists(text: String) {
@@ -277,7 +269,7 @@ class VersionFooterTvMenuTest {
     @Test
     fun `Down from the last row reaches the footer, OK copies it and says so, Up returns`() {
         open()
-        val footer = rule.onNodeWithTag(VERSION_FOOTER_TAG)
+        val footer = rule.onNodeWithTag(VERSION_MARK_TAG)
         footer.assertExists()
         // The remote starts on the header's button; Down walks the list to its last row.
         // Favourites, History, Watched, Watch later, Settings: five Downs from the header's button.
@@ -292,10 +284,10 @@ class VersionFooterTvMenuTest {
         // OK copies, and the same node now carries the confirmation in a polite live region.
         footer.performKeyInput { pressKey(Key.Enter) }
         rule.waitForIdle()
-        rule.onNodeWithTag(VERSION_FOOTER_TAG).assertIsFocused()
+        rule.onNodeWithTag(VERSION_MARK_TAG).assertIsFocused()
         assertEquals(
             LiveRegionMode.Polite,
-            rule.onNodeWithTag(VERSION_FOOTER_TAG).fetchSemanticsNode().config.getOrNull(SemanticsProperties.LiveRegion),
+            rule.onNodeWithTag(VERSION_MARK_TAG).fetchSemanticsNode().config.getOrNull(SemanticsProperties.LiveRegion),
         )
         assertTrue(rule.onAllNodes(hasText(L.aboutVersionCopied)).fetchSemanticsNodes().isNotEmpty())
         val clipboard = RuntimeEnvironment.getApplication().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -304,14 +296,14 @@ class VersionFooterTvMenuTest {
         assertTrue(text!!.startsWith("TMPlayer ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) Android "))
         assertFalse(text.contains("Asha"))
         // Up goes back to the last row.
-        rule.onNodeWithTag(VERSION_FOOTER_TAG).performKeyInput { pressKey(Key.DirectionUp) }
+        rule.onNodeWithTag(VERSION_MARK_TAG).performKeyInput { pressKey(Key.DirectionUp) }
         rule.waitForIdle()
         settingsRow().assertIsFocused()
         // Down twice: the footer, then on past it (to Close), never stuck.
         settingsRow().performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
-        rule.onNodeWithTag(VERSION_FOOTER_TAG).performKeyInput { pressKey(Key.DirectionDown) }
+        rule.onNodeWithTag(VERSION_MARK_TAG).performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
-        rule.onNodeWithTag(VERSION_FOOTER_TAG).assertIsNotFocused()
+        rule.onNodeWithTag(VERSION_MARK_TAG).assertIsNotFocused()
     }
 }

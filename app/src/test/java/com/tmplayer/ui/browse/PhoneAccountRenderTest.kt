@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -42,7 +43,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * The phone's and tablet's account picture and its menu as drawn (WP-103), with the numbers that
+ * The phone's and tablet's account picture and its menu as drawn (WP-103; the menu a bottom sheet on a phone, a card beside a rail), with the numbers that
  * must hold in each form: the 40 dp picture sits inside its 48 dp target at the top end (the top
  * start in Arabic), the menu's head sits inside the card, and no row of the card is cut at its
  * sides, at the phone's 360 x 800 dp upright and on its side, a tablet, twice the font and Arabic.
@@ -86,7 +87,7 @@ class PhoneAccountRenderTest {
                         TouchNavHost(nav, TouchChrome(), "page") {
                             CompositionLocalProvider(LocalTouchPageKey provides "page") {
                                 TouchPage(TouchPageSpec(current = TouchDestination.Home, refresh = {}))
-                                Box(Modifier.fillMaxSize()) { AccountButton(Modifier.align(Alignment.TopEnd)) }
+                                Box(Modifier.fillMaxSize())
                             }
                         }
                     }
@@ -104,7 +105,16 @@ class PhoneAccountRenderTest {
     private fun bounds(tag: String): Rect = rule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
 
     private fun frame(out: String): Bitmap {
-        val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+        val roots = rule.onAllNodes(isRoot())
+        val count = roots.fetchSemanticsNodes().size
+        val bitmap = roots[0].captureToImage().asAndroidBitmap()
+        // A bottom sheet is a window of its own: its frame goes beside the page's.
+        if (count > 1) {
+            val sheet = roots[count - 1].captureToImage().asAndroidBitmap()
+            val sheetFile = File("../build/device-test/review/${out.replace(".png", "-sheet.png")}").absoluteFile
+            sheetFile.parentFile?.mkdirs()
+            sheetFile.outputStream().use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
         val file = File("../build/device-test/review/$out").absoluteFile
         file.parentFile?.mkdirs()
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -133,11 +143,16 @@ class PhoneAccountRenderTest {
         account().performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
         val card = bounds(ACCOUNT_MENU_TAG)
-        val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
-        assertTrue("the card inside the window", inside(card, root))
+        val root = rule.onAllNodes(isRoot()).fetchSemanticsNodes().last().boundsInRoot
+        // A sheet scrolls where the window is short, so only its sides are held to the window.
+        assertTrue("the card inside the window", card.left >= root.left - 0.5f && card.right <= root.right + 0.5f)
+        // No stray block: the tiles are one row, the version is the last thing, Sign out is not here.
+        rule.onNodeWithTag(com.tmplayer.ui.components.LIBRARY_TILES_TAG, useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_TAG, useUnmergedTree = true).assertExists()
+        assertTrue(rule.onAllNodes(hasText(L.settingsSignOutConfirm)).fetchSemanticsNodes().isEmpty())
         val head = bounds(ACCOUNT_HEAD_TAG)
         assertTrue("the head inside the card", head.left >= card.left - 0.5f && head.right <= card.right + 0.5f && head.top >= card.top - 0.5f)
-        for (label in listOf(L.profilesAdd, L.navSettings, L.commonRefresh, L.browseTabFavourites, L.navUpdate, L.settingsSignOutConfirm)) {
+        for (label in listOf(L.profilesAdd, L.navSettings, L.browseTabFavourites, L.browseTabHistory, L.browseTabWatchLater)) {
             val nodes = rule.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes()
             assertTrue("'$label' is in the menu", nodes.isNotEmpty())
             // A short window or a large font scrolls the card: each row is brought in before it is measured.
@@ -190,7 +205,7 @@ class PhoneAccountRenderTest {
         checkButton(endIsRight = false)
         checkMenu("phone-account-menu-360-rtl.png")
         val card = bounds(ACCOUNT_MENU_TAG)
-        val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        val root = rule.onAllNodes(isRoot()).fetchSemanticsNodes().last().boundsInRoot
         assertTrue("the card hangs from the start side", card.left < root.center.x)
     }
 

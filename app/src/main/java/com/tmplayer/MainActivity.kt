@@ -2229,6 +2229,11 @@ private fun Root() {
                 browseTo(BrowseSection.of(BrowseTab.History))
             },
             onUpdate = { showUpdate = true },
+            // The compact version row of the account sheet: About, with the build and the update source.
+            onAbout = {
+                openSettings()
+                settingsPage = SettingsPage.About
+            },
             onSwitchProfile = profileFlow?.takeIf { severalProfiles }?.let { flow -> { flow.ask() } },
             // Add account with one profile, the picker with more (WP-02, WP-103). Add asks the app
             // lock's PIN itself (ProfileFlow.add, closed while the lock is unread): one PIN, once.

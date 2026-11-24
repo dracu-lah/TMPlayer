@@ -102,6 +102,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
+import com.tmplayer.ui.components.PhoneSheet
+import com.tmplayer.ui.components.keepScrollInSheet
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -185,6 +189,8 @@ internal class TouchNav(
     val onDownloads: () -> Unit,
     val onHistory: (HistoryTab) -> Unit,
     val onUpdate: () -> Unit,
+    /** About, from the compact version row of the account menu; null falls back to Settings. */
+    val onAbout: (() -> Unit)? = null,
     /** Switch profile (HX88): the picker, with two profiles or more on the device; null hides the row. */
     val onSwitchProfile: (() -> Unit)? = null,
     /**
@@ -340,6 +346,24 @@ internal fun TouchNavHost(
         chrome.youBadge = nav.updateVersion != null
     }
     val spec = chrome.specs[pageKey]
+
+    // Whether the account's picture is up: with every bar page, hidden with the page that hides the
+    // bar (a search open, a selection under way). A page change leaves the spec missing for a frame
+    // or two while the new page reports in; the picture rides that out rather than blinking.
+    val accountWanted = spec != null && !spec.hidden
+    var accountHeld by remember { mutableStateOf(accountWanted) }
+    LaunchedEffect(accountWanted, spec == null) {
+        if (accountWanted) {
+            accountHeld = true
+        } else if (spec != null) {
+            accountHeld = false
+        } else {
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            accountHeld = false
+        }
+    }
+    val showAccount = accountWanted || accountHeld
 
     // Back closes the card before it leaves the screen.
     BackHandler(enabled = chrome.youOpen) { chrome.youOpen = false }
@@ -511,8 +535,28 @@ internal fun TouchNavHost(
                     Box(Modifier.toastFloor().onSizeChanged { bannerHeight = with(bannerDensity) { it.height.toDp() } }) { banner() }
                 }
 
-                YouPopover(
+                // The account's picture: ONE instance, the shell's, over every page (user, 2026-11-25).
+                // It is not part of any page, so a swipe between Home and Chats, a tap on the bar and a
+                // page change never move, fade or drop it; it is out only where the bar's page says so
+                // (a search open, a selection under way) or where no bar page is up (a chat, Settings).
+                if (showAccount) {
+                    CompositionLocalProvider(LocalTouchChrome provides chrome, LocalTouchNav provides nav) {
+                        AccountButton(Modifier.align(Alignment.TopEnd), movedHint = spec?.current == TouchDestination.Home)
+                    }
+                }
+
+                // Something of the shell's own over the pages (the app lock, a PIN pad) or the app
+                // going to the background closes the menu: a sheet is a window of its own and
+                // must never stay over the lock.
+                LaunchedEffect(nav.promptUp) { if (nav.promptUp) chrome.youOpen = false }
+                DisposableEffect(lifecycleOwner) {
+                    val closer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) chrome.youOpen = false }
+                    lifecycleOwner.lifecycle.addObserver(closer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(closer) }
+                }
+                AccountMenu(
                     open = chrome.youOpen,
+                    rail = rail,
                     reduced = reduced,
                     account = nav.account,
                     profile = nav.profile,
@@ -521,17 +565,15 @@ internal fun TouchNavHost(
                     favoriteCount = nav.favoriteCount,
                     watchingCount = nav.watchingCount,
                     watchedCount = nav.watchedCount,
-                    updateVersion = nav.updateVersion,
                     onDismiss = { chrome.youOpen = false },
-                    onWatched = { chrome.youOpen = false; nav.onHistory(HistoryTab.Watched) },
                     onFavourites = { chrome.youOpen = false; nav.onFavourites() },
                     onHistory = { chrome.youOpen = false; nav.onHistory(HistoryTab.Continue) },
                     onWatchLater = { chrome.youOpen = false; nav.onHistory(HistoryTab.WatchLater) },
                     onSettings = { chrome.youOpen = false; nav.onSettings() },
                     onUpdate = { chrome.youOpen = false; nav.onUpdate() },
+                    onAbout = { chrome.youOpen = false; (nav.onAbout ?: nav.onSettings)() },
                     onSwitchProfile = nav.onSwitchProfile?.let { switch -> { chrome.youOpen = false; switch() } },
-                    onAddAccount = nav.onSwitchOrAdd?.takeIf { nav.onSwitchProfile == null }?.let { add -> { chrome.youOpen = false; add() } },
-                    onSignOut = nav.onSignOut?.let { out -> { chrome.youOpen = false; out() } },
+                    onSwitchOrAdd = (nav.onSwitchOrAdd ?: nav.onSwitchProfile)?.let { act -> { chrome.youOpen = false; act() } },
                 )
             }
         }
@@ -657,9 +699,6 @@ internal fun TouchBrowseShell(
         // Each page draws its own title ([PhonePageFrame]), so a title swiped in moves with its page.
         content()
 
-        // Home has no title bar to hold the picture: it floats over the carousel's top end, as the
-        // detail page's Cast does over its picture. Only Home says once where the gear went.
-        if (selected.isHome && !searchOpen) AccountButton(Modifier.align(Alignment.TopEnd), movedHint = true)
 
         val shared = LocalTouchShared.current
         AnimatedVisibility(
@@ -785,13 +824,17 @@ internal fun rememberTouchExploration(): Boolean {
 }
 
 /**
- * The floating bar: one rounded pill, clear of the screen's edge and the navigation bar, with a
- * soft shadow and the floating hairline. Each button is its icon with its name in small type under
- * it, as a tab bar has. The current page's button sits on a rounded pill in the accent, which
- * slides from button to button (and follows a swipe between Home and Chats as it goes). On a page
- * behind the picture (Favourites, History, Watch later) no button is lit. Search is the button the
- * search field grows out of ([searchShared]); Downloads wears the number running ([downloading]).
- * Every press and the highlight are pills, round like the bar they sit in.
+ * The floating bar: one rounded pill of four equal slots, clear of the screen's edge and the
+ * navigation bar, with a soft shadow and the floating hairline. Each button is its icon with its
+ * name in small type under it, as a tab bar has; every icon is the same size at the same gap from
+ * its caption, and every caption is the same size (user, 2026-11-25: "Downloads" was shrunk alone):
+ * [rememberBarCaptionSize] picks the one size all four fit at, stepping all of them down together
+ * and, when even the smallest does not fit, showing icons only. The slots are as wide as each other
+ * whatever the window, with room round the icons. The current page's button sits on a rounded pill
+ * in the accent, which slides from button to button (and follows a swipe between Home and Chats as
+ * it goes). On a page behind the picture (Favourites, History, Watch later) no button is lit.
+ * Search is the button the search field grows out of ([searchShared]); Downloads wears the number
+ * running ([downloading]). Every press and the highlight are pills, round like the bar they sit in.
  *
  * [vertical] stands the same bar up as a rail down the start edge, for a wide window: the same
  * buttons in the same order, top to bottom, with the highlight sliding down rather than across.
@@ -808,8 +851,6 @@ private fun FloatingBar(
     searchShared: Modifier,
     vertical: Boolean = false,
 ) {
-    val s = LocalStrings.current
-    val reduced = rememberReducedMotion() || Motion.reduced
     val outer = if (vertical) {
         Modifier
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical))
@@ -822,35 +863,70 @@ private fun FloatingBar(
     } else {
         Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = BAR_MARGIN)
     }
-    // Concentric: the highlight's corners (half its 52 dp height) sit the same distance inside the
-    // bar's as the padding around it, so the two curves run parallel. The bar is a pill of 64 dp
-    // with 6 dp around the highlight; the rail is as wide as the bar is tall plus its margins, so
-    // it takes the bar's 32 dp corners rather than a full semicircle, which no button could follow.
+    if (vertical) {
+        Box(outer, contentAlignment = Alignment.Center) {
+            BarPill(RAIL_WIDTH, BUTTON_WIDTH, current, position, downloading, onHome, onChats, onSearch, onDownloads, searchShared, vertical = true)
+        }
+    } else {
+        BoxWithConstraints(outer, contentAlignment = Alignment.Center) {
+            // As wide as its four slots like, up to its natural width; a narrow phone loses width
+            // evenly from every slot, never from one.
+            val width = minOf(maxWidth, PILL_MAX_WIDTH)
+            val slot = (width - PILL_PADDING * 2 - BAR_SPACING * (BAR_BUTTONS - 1)) / BAR_BUTTONS
+            BarPill(width, slot, current, position, downloading, onHome, onChats, onSearch, onDownloads, searchShared, vertical = false)
+        }
+    }
+}
+
+/** The pill itself: its four slots, the highlight under the chosen one and the caption size they share. */
+@Composable
+private fun BarPill(
+    width: Dp,
+    slot: Dp,
+    current: TouchDestination?,
+    position: (() -> Float)?,
+    downloading: Int,
+    onHome: () -> Unit,
+    onChats: () -> Unit,
+    onSearch: () -> Unit,
+    onDownloads: () -> Unit,
+    searchShared: Modifier,
+    vertical: Boolean,
+) {
+    val s = LocalStrings.current
+    val reduced = rememberReducedMotion() || Motion.reduced
+    // Concentric: the highlight's corners (half its height) sit the same distance inside the bar's
+    // as the padding around it, so the two curves run parallel. The rail is as wide as the bar is
+    // tall plus its margins, so it takes 32 dp corners rather than a full semicircle, which no
+    // button could follow.
     val barShape = if (vertical) RAIL_SHAPE else CircleShape
-    Box(outer, contentAlignment = Alignment.Center) {
-        Box(
-            Modifier
-                .then(if (vertical) Modifier.width(RAIL_WIDTH) else Modifier.height(BAR_HEIGHT))
-                .shadow(BAR_SHADOW, barShape)
-                .clip(barShape)
-                .background(FloatingTone.menu)
-                .border(floatingBorder(), barShape)
-                .padding(if (vertical) PaddingValues(vertical = RAIL_INSET) else PaddingValues(horizontal = 6.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-          Box(contentAlignment = if (vertical) Alignment.TopCenter else Alignment.CenterStart) {
+    // One caption size for the four, or none (icons only) when even the smallest does not fit.
+    val captionSize = rememberBarCaptionSize(listOf(s.browseTabHome, s.browseTabChats, s.commonSearch, s.navDownloads), slot)
+    Box(
+        Modifier
+            .width(width)
+            .then(if (vertical) Modifier else Modifier.height(BAR_HEIGHT))
+            .shadow(BAR_SHADOW, barShape)
+            .clip(barShape)
+            .background(FloatingTone.menu)
+            .border(floatingBorder(), barShape)
+            .padding(if (vertical) PaddingValues(vertical = RAIL_INSET) else PaddingValues(horizontal = PILL_PADDING))
+            .testTag(BAR_PILL_TAG),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(contentAlignment = if (vertical) Alignment.TopCenter else Alignment.CenterStart) {
             // One highlight under the chosen page, sliding to the next one rather than blinking
             // off under one button and on under another, so the bar shows where the page went.
             val index = barHighlightIndex(current)
-            val step = with(LocalDensity.current) { ((if (vertical) BUTTON_HEIGHT else BUTTON_WIDTH) + BAR_SPACING).toPx() }
+            val step = with(LocalDensity.current) { ((if (vertical) BUTTON_HEIGHT else slot) + BAR_SPACING).toPx() }
             // Where the highlight stands, in buttons from the start: sprung to the chosen one, or,
             // while Home and Chats are on screen, following the pager (sprung only the first time,
             // coming in from another page, then held to the finger).
-            val slot = remember { Animatable((index ?: 0).toFloat()) }
+            val place = remember { Animatable((index ?: 0).toFloat()) }
             val spring = androidx.compose.animation.core.spring<Float>(dampingRatio = 0.8f, stiffness = 500f)
             LaunchedEffect(index, position == null) {
                 if (position != null || index == null) return@LaunchedEffect
-                if (reduced) slot.snapTo(index.toFloat()) else slot.animateTo(index.toFloat(), spring)
+                if (reduced) place.snapTo(index.toFloat()) else place.animateTo(index.toFloat(), spring)
             }
             if (position != null) {
                 LaunchedEffect(position) {
@@ -858,7 +934,7 @@ private fun FloatingBar(
                     snapshotFlow { position() }.collectLatest { at ->
                         val glide = first && !reduced
                         first = false
-                        if (glide) slot.animateTo(at, spring) else slot.snapTo(at)
+                        if (glide) place.animateTo(at, spring) else place.snapTo(at)
                     }
                 }
             }
@@ -870,16 +946,16 @@ private fun FloatingBar(
             Box(
                 Modifier
                     .offset {
-                        val along = (slot.value * step).roundToInt()
+                        val along = (place.value * step).roundToInt()
                         if (vertical) IntOffset(0, along) else IntOffset(along, 0)
                     }
-                    .size(BUTTON_WIDTH, BUTTON_HEIGHT)
+                    .size(slot, BUTTON_HEIGHT)
                     .graphicsLayer {
                         alpha = shown
                         // Stretched a little along the way while it springs to another button and
                         // round again as it lands: it reads as moving, not as being redrawn.
                         if (!reduced) {
-                            val stretch = (kotlin.math.abs(slot.velocity) * STRETCH_PER_SPEED).coerceAtMost(STRETCH_MAX)
+                            val stretch = (kotlin.math.abs(place.velocity) * STRETCH_PER_SPEED).coerceAtMost(STRETCH_MAX)
                             if (vertical) {
                                 scaleY = 1f + stretch
                                 scaleX = 1f - stretch / 3f
@@ -893,14 +969,19 @@ private fun FloatingBar(
                     .background(Tone.accent.copy(alpha = 0.16f)),
             )
             val buttons: @Composable () -> Unit = {
-                BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome, index = 0, vertical = vertical)
-                BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats, index = 1, vertical = vertical)
-                BarButton(TmIcons.Search, s.commonSearch, false, onSearch, role = Role.Button, modifier = searchShared, index = 2, vertical = vertical)
+                BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome, slot = slot, captionSize = captionSize, index = 0, vertical = vertical)
+                BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats, slot = slot, captionSize = captionSize, index = 1, vertical = vertical)
+                BarButton(
+                    TmIcons.Search, s.commonSearch, false, onSearch,
+                    slot = slot, captionSize = captionSize, role = Role.Button, modifier = searchShared.testTag(BAR_SEARCH_TAG), index = 2, vertical = vertical,
+                )
                 BarButton(
                     TmIcons.Download,
                     s.navDownloads,
                     current == TouchDestination.Downloads,
                     onDownloads,
+                    slot = slot,
+                    captionSize = captionSize,
                     badge = downloading,
                     index = 3,
                     vertical = vertical,
@@ -917,7 +998,6 @@ private fun FloatingBar(
             } else {
                 Row(group, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
             }
-          }
         }
     }
 }
@@ -1099,33 +1179,28 @@ private class HintBelowEnd : androidx.compose.ui.window.PopupPositionProvider {
     }
 }
 
-/** A bar button's name under its icon, in the accent while its page is up. */
+/**
+ * A bar button's name under its icon, in the accent while its page is up, at [size], the one size
+ * every caption of the pill has. Never shrunk to fit on its own: [rememberBarCaptionSize] chose a
+ * size all of them fit at.
+ */
 @Composable
-private fun BarCaption(text: String, chosen: Boolean) {
+private fun BarCaption(text: String, chosen: Boolean, size: TextUnit) {
     val ink by androidx.compose.animation.animateColorAsState(if (chosen) Tone.accent else Tone.muted, label = "barCaption")
-    // A long word steps down to fit the 64 dp button ("Einstellungen" was cut to "Einstellung…").
-    // Clip, not Ellipsis, because an ellipsized line never reports an overflow and so never steps.
-    // The side padding keeps it clear of the pill's rounded ends, which the button clips to and
-    // which reach about 7 dp in at the caption's height.
-    // 12 sp, Material's own label size (WP-44), and the system's font size stops growing it at 1.3: the
-    // button is 64 dp wide whatever the font, so past that a word only gets cut. The long press on the
-    // button says the name in full size for whoever needs it larger.
-    val style = captionStyle().copy(fontSize = BAR_CAPTION_SP.sp, lineHeight = (BAR_CAPTION_SP + 2).sp)
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    androidx.compose.runtime.CompositionLocalProvider(
-        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
-            density.density,
-            density.fontScale.coerceAtMost(BAR_CAPTION_MAX_SCALE),
-        ),
-    ) {
+    // The system's font size stops growing the caption at 1.3 (WP-44): the slot is as wide whatever
+    // the font, so past that a word only gets cut. The long press on the button says the name in
+    // full size for whoever needs it larger.
+    val style = captionStyle().copy(fontSize = size, lineHeight = (size.value + 2f).sp)
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale.coerceAtMost(BAR_CAPTION_MAX_SCALE))) {
         Text(
             text,
             style = style,
             color = ink,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Clip,
-            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
-            modifier = Modifier.padding(top = 2.dp, start = 7.dp, end = 7.dp),
+            modifier = Modifier.padding(top = BAR_CAPTION_GAP, start = BAR_CAPTION_SIDE, end = BAR_CAPTION_SIDE),
         )
     }
 }
@@ -1134,12 +1209,59 @@ private fun BarCaption(text: String, chosen: Boolean) {
 internal const val BAR_CAPTION_SP = 12
 internal const val BAR_CAPTION_MAX_SCALE = 1.3f
 
+/** The sizes tried for the whole pill, largest first; below the last the pill shows icons only. */
+internal val BAR_CAPTION_STEPS_SP = intArrayOf(BAR_CAPTION_SP, 11, 10)
+
+/** The icon-to-caption gap, and the room kept either side of a caption inside its slot. */
+internal val BAR_CAPTION_GAP = 3.dp
+internal val BAR_CAPTION_SIDE = 2.dp
+
+/**
+ * The one caption size the pill's labels share: the largest of [BAR_CAPTION_STEPS_SP] at which every
+ * label fits [slot] on one line, or null (no captions, icons only) when not even the smallest does.
+ * Chosen for all of them together, so no label is ever smaller than its neighbour. Measured at the
+ * font size the captions are drawn at.
+ */
+@Composable
+internal fun rememberBarCaptionSize(labels: List<String>, slot: Dp): TextUnit? {
+    val density = LocalDensity.current
+    val capped = Density(density.density, density.fontScale.coerceAtMost(BAR_CAPTION_MAX_SCALE))
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val base = captionStyle()
+    return remember(labels, slot, capped, base) { pickBarCaptionSize(labels, slot - BAR_CAPTION_SIDE * 2, capped, measurer, base) }
+}
+
+/** [rememberBarCaptionSize]'s choice, without the composition. */
+internal fun pickBarCaptionSize(
+    labels: List<String>,
+    room: Dp,
+    density: Density,
+    measurer: androidx.compose.ui.text.TextMeasurer,
+    base: androidx.compose.ui.text.TextStyle,
+): TextUnit? {
+    val limit = with(density) { room.roundToPx() }
+    for (step in BAR_CAPTION_STEPS_SP) {
+        val style = base.copy(fontSize = step.sp, lineHeight = (step + 2).sp)
+        val fits = labels.all { label ->
+            measurer.measure(label, style, softWrap = false, maxLines = 1, density = density).size.width <= limit
+        }
+        if (fits) return step.sp
+    }
+    return null
+}
+
+/**
+ * One of the pill's four slots: [slot] wide and [BUTTON_HEIGHT] high, whatever it holds, with its
+ * icon at [BAR_ICON] over [captionSize] type, or alone when [captionSize] is null.
+ */
 @Composable
 private fun BarButton(
     icon: ImageVector,
     label: String,
     chosen: Boolean,
     onClick: () -> Unit,
+    slot: Dp,
+    captionSize: TextUnit?,
     role: Role = Role.Tab,
     modifier: Modifier = Modifier,
     /** A count over the icon's top end (Downloads running); 0 draws none. */
@@ -1153,7 +1275,7 @@ private fun BarButton(
     var showLarge by remember { mutableStateOf(false) }
     Column(
         modifier
-            .size(BUTTON_WIDTH, BUTTON_HEIGHT)
+            .size(slot, BUTTON_HEIGHT)
             .pressScale(press)
             .clip(HIGHLIGHT_SHAPE)
             .combinedClickable(
@@ -1175,11 +1297,11 @@ private fun BarButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        // The highlight behind is the bar's (see FloatingBar); the icon takes its colour as it lands
+        // The highlight behind is the bar's (see BarPill); the icon takes its colour as it lands
         // and fills in with a drop (SelectableIcon).
         val tint by androidx.compose.animation.animateColorAsState(if (chosen) Tone.accent else Tone.text, label = "barIcon")
-        Box(contentAlignment = Alignment.Center) {
-            com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = 24.dp)
+        Box(Modifier.size(BAR_ICON), contentAlignment = Alignment.Center) {
+            com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = BAR_ICON)
             if (badge > 0) {
                 Text(
                     if (badge > 99) "99+" else badge.toString(),
@@ -1197,7 +1319,7 @@ private fun BarButton(
                 )
             }
         }
-        BarCaption(label, chosen)
+        if (captionSize != null) BarCaption(label, chosen, captionSize)
         if (showLarge) LargeBarLabel(label) { showLarge = false }
     }
 }
@@ -1236,41 +1358,40 @@ private const val LARGE_LABEL_MS = 1_800L
 private const val LARGE_LABEL_LIFT_PX = 160
 
 /**
- * The account menu behind the picture (WP-103), the phone's and tablet's copy of the television's
- * (WP-02): a small card that grows out of the top end corner over a dimmed screen. First whose
- * account it is (the picture at 48 dp, the name, the @username), then Add account (one profile) or
- * Switch profile (two or more), Settings (one tap from the open menu, as it was from the gear's),
- * Refresh where the page has one, the viewing summary, Favourites, History and Watch later, Update
- * when there is one, and Sign out last in the danger colour, through the shell's host. A tap
- * outside, Back, Escape or picking a row closes it; with a keyboard the first row has the focus on
- * open and the picture has it again on close.
+ * The account menu behind the picture at the top end (WP-103, user 2026-11-25), the phone's and
+ * tablet's copy of the television's (WP-02). On a phone it is a bottom sheet ([PhoneSheet]: the
+ * drag handle, no border handed to the window, Back and a tap outside close it, it scrolls only
+ * where the screen is too short). Beside a rail (a tablet, a phone on its side) it is a card that
+ * grows out of the top end corner under the picture, over a dimmed screen. Both hold the same
+ * [AccountMenuContent]: a header, three tiles, two rows and the version. With a keyboard the first
+ * tile has the focus on open and the picture has it again on close.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun YouPopover(
+private fun AccountMenu(
     open: Boolean,
+    rail: Boolean,
     reduced: Boolean,
     account: Account?,
     profile: com.tmplayer.data.Profile?,
     /** The picture, which has the keyboard's focus again once the menu closes. */
     focusBack: androidx.compose.ui.focus.FocusRequester,
-    /** The page's refresh; null hides the row. */
+    /** The page's refresh; null hides the header's Refresh button. */
     onRefresh: (() -> Unit)?,
     favoriteCount: Int,
     watchingCount: Int,
     watchedCount: Int,
-    updateVersion: String?,
     onDismiss: () -> Unit,
-    onWatched: () -> Unit,
     onFavourites: () -> Unit,
     onHistory: () -> Unit,
     onWatchLater: () -> Unit,
     onSettings: () -> Unit,
     onUpdate: () -> Unit,
-    onSwitchProfile: (() -> Unit)? = null,
-    /** Add account, with one profile on the device (the picker shows the Add tile). */
-    onAddAccount: (() -> Unit)? = null,
-    /** Sign out, through the shell's host; the last row, in the danger colour. */
-    onSignOut: (() -> Unit)? = null,
+    onAbout: () -> Unit,
+    /** The picker, with two profiles or more: the header's switcher; null with one. */
+    onSwitchProfile: (() -> Unit)?,
+    /** Add account (one profile) or the picker with its Add tile (several); null hides the row. */
+    onSwitchOrAdd: (() -> Unit)?,
 ) {
     val s = LocalStrings.current
     val name = accountName(account, profile)
@@ -1285,6 +1406,50 @@ private fun YouPopover(
             runCatching { focusBack.requestFocus() }
         }
         wasOpen = open
+    }
+    val first = remember { androidx.compose.ui.focus.FocusRequester() }
+    val content: @Composable () -> Unit = {
+        AccountMenuContent(
+            account = account,
+            profile = profile,
+            name = name ?: s.navAccount,
+            first = first,
+            onRefresh = onRefresh,
+            favoriteCount = favoriteCount,
+            watchingCount = watchingCount,
+            watchedCount = watchedCount,
+            onFavourites = onFavourites,
+            onHistory = onHistory,
+            onWatchLater = onWatchLater,
+            onSettings = onSettings,
+            onUpdate = onUpdate,
+            onAbout = onAbout,
+            onSwitchProfile = onSwitchProfile,
+            onSwitchOrAdd = onSwitchOrAdd,
+        )
+    }
+    val escape: Modifier = Modifier.onPreviewKeyEvent { event ->
+        // Escape closes it, as Back does; the picture gets the keyboard's focus back.
+        if (event.key == androidx.compose.ui.input.key.Key.Escape) {
+            if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) onDismiss()
+            true
+        } else {
+            false
+        }
+    }
+    if (!rail) {
+        if (open) {
+            PhoneSheet(onDismissRequest = onDismiss) {
+                Box(escape.verticalScroll(rememberScrollState()).keepScrollInSheet()) { content() }
+                LaunchedEffect(Unit) {
+                    if (keyboard()) {
+                        androidx.compose.runtime.withFrameNanos { }
+                        runCatching { first.requestFocus() }
+                    }
+                }
+            }
+        }
+        return
     }
     AnimatedVisibility(
         visible = open,
@@ -1322,79 +1487,20 @@ private fun YouPopover(
                 fadeOut(Motion.standard(Motion.Fast)) + scaleOut(Motion.standard(Motion.Fast), targetScale = 0.9f, transformOrigin = origin)
             },
         ) {
-            val first = remember { androidx.compose.ui.focus.FocusRequester() }
-            // A larger font widens the card as far as the window lets it, so "Favourites" is not broken in two.
+            // A card as wide as three tiles need: the tiles' labels and counts do not break in two.
             val widest = POPOVER_WIDTH * LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
-            Column(
+            Box(
                 Modifier
                     .widthIn(max = widest)
                     .shadow(BAR_SHADOW, POPOVER_SHAPE)
                     .clip(POPOVER_SHAPE)
                     .background(FloatingTone.dialog)
                     .border(floatingBorder(), POPOVER_SHAPE)
-                    .semantics { paneTitle = name?.let { s.navAccountNamed(it) } ?: s.navAccount }
-                    .onPreviewKeyEvent { event ->
-                        if (event.key == androidx.compose.ui.input.key.Key.Escape) {
-                            if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) onDismiss()
-                            true
-                        } else {
-                            false
-                        }
-                    }
+                    .then(escape)
                     // Taps inside the card stay inside it rather than reaching the scrim.
                     .swallowClicks()
-                    .verticalScroll(rememberScrollState())
-                    // The rows' own 6 dp at the sides, so the last row's fill keeps it below too.
-                    .padding(vertical = 6.dp)
-                    .testTag(ACCOUNT_MENU_TAG),
-            ) {
-                AccountMenuHead(account, profile, name ?: s.navAccount)
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
-                val switchOrAdd = onSwitchProfile ?: onAddAccount
-                if (switchOrAdd != null) {
-                    PopoverRow(
-                        TmIcons.Person,
-                        if (onSwitchProfile != null) s.profilesSwitchProfile else s.profilesAdd,
-                        null,
-                        modifier = Modifier.focusRequester(first),
-                        onClick = switchOrAdd,
-                    )
-                }
-                PopoverRow(
-                    TmIcons.Settings,
-                    s.navSettings,
-                    null,
-                    modifier = if (switchOrAdd == null) Modifier.focusRequester(first) else Modifier,
-                    onClick = onSettings,
-                )
-                if (onRefresh != null) PopoverRow(TmIcons.Refresh, s.commonRefresh, null, onClick = onRefresh)
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
-                com.tmplayer.ui.components.ViewingSummary(
-                    watching = watchingCount,
-                    watched = watchedCount,
-                    starred = favoriteCount,
-                    onWatching = onHistory,
-                    onWatched = onWatched,
-                    onStarred = onFavourites,
-                )
-                PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favoriteCount.takeIf { it > 0 }?.toString(), onClick = onFavourites)
-                PopoverRow(TmIcons.History, s.browseTabHistory, null, onClick = onHistory)
-                PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, onClick = onWatchLater)
-                if (updateVersion != null || onSignOut != null) HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
-                if (updateVersion != null) {
-                    // Amber, as on the television's bar and the desktop's: the one row that is news.
-                    PopoverRow(TmIcons.Refresh, s.navUpdate, updateVersion, ink = Tone.caution, onClick = onUpdate)
-                }
-                // Last, in the danger colour: the press that ends the session, asked first.
-                if (onSignOut != null) PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = onSignOut)
-                // The version, the build and the update state; a press copies them for support (WP-104).
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
-                com.tmplayer.ui.components.VersionFooter(
-                    info = com.tmplayer.ui.components.rememberVersionInfo(),
-                    modifier = Modifier.padding(horizontal = 6.dp),
-                    onUpdate = onUpdate,
-                )
-            }
+                    .verticalScroll(rememberScrollState()),
+            ) { content() }
             LaunchedEffect(Unit) {
                 if (keyboard()) {
                     androidx.compose.runtime.withFrameNanos { }
@@ -1406,31 +1512,144 @@ private fun YouPopover(
 }
 
 /**
- * The account menu's head: the picture at 48 dp, the name in two lines at most, and the @username
- * under it when Telegram has one, so two profiles of the same name read apart. One node for a
- * screen reader.
+ * What the account menu holds (user, 2026-11-25: "too many options"), one order for the sheet and the
+ * card, five things and no more:
+ *
+ * 1. the header, not a row: the picture at 48 dp, the name, the @username, and at its end two small
+ *    48 dp buttons: Refresh (where the page has one) and the switcher (with two profiles or more);
+ * 2. your library as one row of three tiles: Favourites, History, Watch later, with the old "Your
+ *    viewing" counts on the tiles they belong to ([LibraryTiles]);
+ * 3. two plain rows: Settings, and Add account (Switch or add account with two profiles or more);
+ * 4. the version as the app's tile and "v1.28.7" ([VersionMark]), which goes to About; an update
+ *    waiting is the amber words beside it, a button to the update window.
+ *
+ * Sign out is not here: it lives in Settings, Account, behind the Settings PIN. [first] takes the
+ * keyboard's focus on open: the first tile.
  */
 @Composable
-private fun AccountMenuHead(account: Account?, profile: com.tmplayer.data.Profile?, name: String) {
+internal fun AccountMenuContent(
+    account: Account?,
+    profile: com.tmplayer.data.Profile?,
+    name: String,
+    first: androidx.compose.ui.focus.FocusRequester,
+    onRefresh: (() -> Unit)?,
+    favoriteCount: Int,
+    watchingCount: Int,
+    watchedCount: Int,
+    onFavourites: () -> Unit,
+    onHistory: () -> Unit,
+    onWatchLater: () -> Unit,
+    onSettings: () -> Unit,
+    onUpdate: () -> Unit,
+    onAbout: () -> Unit,
+    onSwitchProfile: (() -> Unit)?,
+    onSwitchOrAdd: (() -> Unit)?,
+) {
+    val s = LocalStrings.current
+    // The row's action: the picker with two profiles or more (it has the Add tile), Add account with one.
+    val rowAction = onSwitchOrAdd ?: onSwitchProfile
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .semantics { paneTitle = if (name == s.navAccount) s.navAccount else s.navAccountNamed(name) }
+            .padding(bottom = 6.dp)
+            .testTag(ACCOUNT_MENU_TAG),
+    ) {
+        AccountMenuHead(account, profile, name, onRefresh = onRefresh, onSwitch = onSwitchProfile)
+        com.tmplayer.ui.components.LibraryTiles(
+            starred = favoriteCount,
+            watching = watchingCount,
+            watched = watchedCount,
+            onFavourites = onFavourites,
+            onHistory = onHistory,
+            onWatchLater = onWatchLater,
+            firstFocus = first,
+        )
+        PopoverRow(TmIcons.Settings, s.navSettings, null, onClick = onSettings)
+        if (rowAction != null) {
+            PopoverRow(
+                TmIcons.Person,
+                if (onSwitchProfile != null) s.profilesSwitchOrAdd else s.profilesAdd,
+                null,
+                onClick = rowAction,
+            )
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
+        // The version, compact: the app's tile and "v1.28.7"; About has the build and the update source.
+        com.tmplayer.ui.components.VersionMark(
+            info = com.tmplayer.ui.components.rememberVersionInfo(),
+            modifier = Modifier.padding(horizontal = 2.dp),
+            onClick = onAbout,
+            onClickLabel = s.settingsAbout,
+            onUpdate = onUpdate,
+        )
+    }
+}
+
+/**
+ * The account menu's header: the picture at 48 dp, the name in two lines at most, and the @username
+ * under it when Telegram has one, so two profiles of the same name read apart (one node for a
+ * screen reader), then Refresh and the switcher as 48 dp icon buttons, each named for TalkBack.
+ */
+@Composable
+private fun AccountMenuHead(
+    account: Account?,
+    profile: com.tmplayer.data.Profile?,
+    name: String,
+    onRefresh: (() -> Unit)?,
+    onSwitch: (() -> Unit)?,
+) {
+    val s = LocalStrings.current
+    val username = account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() }
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-            .semantics(mergeDescendants = true) {}
-            .testTag(ACCOUNT_HEAD_TAG),
+            .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        androidx.compose.runtime.key(profile?.id) { AccountPicture(account, profile, size = ACCOUNT_HEAD_PICTURE) }
-        Column(Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val username = account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() }
-            if (username != null) {
-                Text("@$username", style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) {}
+                .testTag(ACCOUNT_HEAD_TAG),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.runtime.key(profile?.id) { AccountPicture(account, profile, size = ACCOUNT_HEAD_PICTURE) }
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.titleMedium, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (username != null) {
+                    Text("@$username", style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
+        if (onRefresh != null) HeadButton(TmIcons.Refresh, s.commonRefresh, REFRESH_BUTTON_TAG, onRefresh)
+        if (onSwitch != null) HeadButton(TmIcons.ChevronDown, s.profilesSwitchProfile, SWITCH_BUTTON_TAG, onSwitch)
     }
 }
+
+/** A small icon button of the header: a 48 dp target, ripple and press scale, its name for TalkBack. */
+@Composable
+private fun HeadButton(icon: ImageVector, label: String, tag: String, onClick: () -> Unit) {
+    val press = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .size(POPOVER_ROW)
+            .pressScale(press)
+            .clip(CircleShape)
+            .clickable(interactionSource = press, indication = ripple(), role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label }
+            .testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** Test tags of the header's two buttons. */
+internal const val REFRESH_BUTTON_TAG = "account-menu-refresh"
+internal const val SWITCH_BUTTON_TAG = "account-menu-switch"
 
 @Composable
 internal fun PopoverRow(
@@ -1507,7 +1726,7 @@ private val MOVED_HINT_WIDTH = 300.dp
 private const val SEARCH_KEY = "search-field"
 
 /** The bar's height: a button of icon and caption with a little room above and below it. */
-internal val BAR_HEIGHT = 64.dp
+internal val BAR_HEIGHT = 68.dp
 
 /** Between the bar and the navigation bar (or the screen's edge). */
 internal val BAR_MARGIN = 16.dp
@@ -1517,7 +1736,7 @@ internal val BAR_GAP = 8.dp
 
 /** One of the bar's buttons, its icon over its caption. */
 private val BUTTON_WIDTH = 64.dp
-private val BUTTON_HEIGHT = 52.dp
+private val BUTTON_HEIGHT = 56.dp
 
 /** The highlight under the chosen button, and the shape a press ripples in: a pill, as the bar is. */
 private val HIGHLIGHT_SHAPE = CircleShape
@@ -1535,21 +1754,31 @@ internal const val DEFAULT_PAGE = "page"
 internal val RAIL_FROM = 600.dp
 
 /** The rail's width: one button and the bar's inner margin either side. */
-private val RAIL_WIDTH = 76.dp
+private val RAIL_WIDTH = 80.dp
 
 /** The rail's corners and the room above its first button and under its last, matching the bar's. */
 private val RAIL_SHAPE = RoundedCornerShape(32.dp)
-private val RAIL_INSET = 6.dp
+private val RAIL_INSET = 8.dp
 
 /** Between the rail and the screen's start edge (or the cutout). */
 private val RAIL_MARGIN = 12.dp
 
 /** Between two of the bar's buttons. */
-private val BAR_SPACING = 4.dp
+private val BAR_SPACING = 6.dp
 
 /** The floating bar's buttons: Home, Chats, Search, Downloads. */
 private const val BAR_BUTTONS = 4
-private val PICTURE = 30.dp
+
+/** The pill's room round its slots, and its widest: four 64 dp slots, three gaps and the room either side. */
+private val PILL_PADDING = 10.dp
+private val PILL_MAX_WIDTH = 294.dp
+
+/** Every icon of the bar: one size, over one gap to its caption. */
+internal val BAR_ICON = 24.dp
+
+/** Test tags of the pill and of its Search button. */
+internal const val BAR_PILL_TAG = "bar-pill"
+internal const val BAR_SEARCH_TAG = "bar-search"
 internal val BAR_SHADOW = 8.dp
 private val POPOVER_WIDTH = 208.dp
 internal val POPOVER_ROW = 48.dp
