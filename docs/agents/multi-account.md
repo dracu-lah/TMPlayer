@@ -472,7 +472,9 @@ Two choke points, one rule each:
 | Recents thumbnail | while the open profile has a PIN: Android 13 and later `setRecentsScreenshotEnabled(false)`; below 13 `FLAG_SECURE`, which also blocks screenshots, screen recording and some casting of that window (MainActivity and PlayerActivity); off when the open profile has no PIN |
 | Trailers, offline downloads | drawn inside `ProfilesGate`, keyed on the open profile: a switch or a lock closes them |
 | "Wrong title?" and the toasts (`TopMessageHost`) | where they always were, over everything, but only while the open profile's shell shows (`profileShellShown`); "Wrong title?" keyed on the open profile |
-| Share targets, shortcuts | none exist today |
+| Launcher shortcuts (WP-42) | Continue watching, Search and Downloads hold nothing of a profile; the last chat's shortcut names the chat only while `LauncherShortcuts.hiddenFor` is false (no PIN on the open profile, not hidden, no lock over the app, the lock read, outside writes allowed), followed process wide by `LauncherShortcuts.follow` (the lock, `ProfileUnlock.hidden()` and `ProfileUnlock.activeHasPin()`, so a PIN set now hides it at once) and on every switch; taking it off rewrites every copy, a copy pinned to the home screen too, as "Last chat" with no chat in its intent (`updateShortcuts`, SEC2-03), then removes the dynamic one |
+| Share target (text shared to TMPlayer) | capped at 8,000 characters and handed as a link to `LinkRequests`, which opens only behind the lock and the profile gate |
+| App lock's fingerprint or face (WP-41) | the app lock's own pad only, never Settings, sign out, profile PINs or the kids lock; Class 3 (strong) biometrics only (`BiometricPrompter.AUTHENTICATORS`, SEC2-07): a Class 2 2D camera face unlock may accept a photo, so a phone with only that sees no row; each prompt answers only while it is the open one (SEC2-06) |
 
 ## Phase B2: the desktop and iOS
 
@@ -537,7 +539,7 @@ Outside the window (`ProfileOutside`, tested in `ProfileOutsideTest`):
 | Low storage, a new version, the support ask | the device's, unchanged |
 | Media controls (MPRIS on Linux, SMTC on Windows) | `ProfileOutside.mediaTitle`: the app's name while hidden, the title again once shown |
 | On a switch or a sign out | every transfer, result and alert of the profile left comes off the system's list |
-| Window title | always "TMPlayer": nothing of a profile |
+| Window title | `WindowTitle.of` (WP-51): the page or the video's name (never a chat's) while the open profile is shown, only "TMPlayer" while a PIN profile is hidden; the video is named only for the profile it was opened under (`PlayRequest.owner`, SEC2-08), as `ProfileOutside.mediaTitle` has it. The title shows in the taskbar, Alt+Tab and screen sharing |
 | Not blockable | the system's own pictures of the window (taskbar and dock previews, Alt+Tab, Mission Control, screenshots) show what the window last drew; on Linux without a session bus (`notify-send`) a result cannot be taken down; on a Windows development run (no `tmplayer:` link) a result's press is the file's own URI |
 | None on the desktop | tray icon, recent items, presence (Discord or other), macOS notifications and media controls (nothing is posted there) |
 
