@@ -168,6 +168,8 @@ private val KIDS_CHATS = stringSetPreferencesKey("kids_chats")
 
 private val SETUP = stringPreferencesKey("setup")
 private val TOUR = stringPreferencesKey("tour")
+// The notifications and support steps after the setup's question: see [OnboardingSteps].
+private val ONBOARDING_STEPS = stringPreferencesKey("onboarding_steps")
 // The one-time hint registry (WP-68): "id=count,id=count", the device's. See HintRegistry.
 private val HINTS_SEEN = stringPreferencesKey("hints_seen")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
@@ -2971,6 +2973,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      */
     suspend fun markSetupDone() {
         prefs.edit {
+            // A first run (not a replay from Settings) arms the notifications and support steps, once:
+            // an install that was updated never had them armed, so never sees them.
+            if (it[SETUP] == SETUP_PENDING && it[ONBOARDING_STEPS] == null) {
+                it[ONBOARDING_STEPS] = OnboardingSteps.encode(OnboardingSteps.State(armed = true)) ?: "armed"
+            }
             it[SETUP] = SETUP_DONE
             if (it[TOUR] != TOUR_DONE) it.remove(TOUR)
         }
@@ -2992,6 +2999,19 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             TOUR_PENDING -> TourState.Pending
             TOUR_DONE -> TourState.Done
             else -> TourState.Never
+        }
+    }
+
+    /** The notifications and support steps: armed by the first run's [markSetupDone], each with its outcome. */
+    val onboardingSteps: Flow<OnboardingSteps.State> = read { OnboardingSteps.decode(it[ONBOARDING_STEPS]) }
+
+    /** Records how [step] ended, so it is not shown again (a Denied notifications step stays, in its settings form). */
+    suspend fun markOnboardingStep(step: OnboardingSteps.Step, outcome: OnboardingSteps.Outcome) {
+        prefs.edit {
+            val state = OnboardingSteps.decode(it[ONBOARDING_STEPS])
+            // Never arms by itself: a step recorded on an install that was not armed changes nothing.
+            if (!state.armed) return@edit
+            it[ONBOARDING_STEPS] = OnboardingSteps.encode(state.with(step, outcome)) ?: return@edit
         }
     }
 

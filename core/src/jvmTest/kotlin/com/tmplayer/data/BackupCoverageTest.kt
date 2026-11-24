@@ -53,6 +53,8 @@ class BackupCoverageTest {
         // Hints, walkthroughs and notices already seen.
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
         "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",
+        // The notifications and support steps after the first run: this device's, never carried (OnboardingSteps).
+        "onboarding_steps",
         "hide_default_groups", "external_hint_seen",
         // The one-time hint registry (WP-68): hints are per device, so a restore neither silences nor repeats them.
         "hints_seen",
