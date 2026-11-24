@@ -28,3 +28,8 @@ export function remoteKey(e: KeyboardEvent): RemoteKey | null {
     if (!e.key || e.key === 'Unidentified') return BY_CODE[e.keyCode || e.which] ?? null
     return null
 }
+
+/** The keys that act once per press, their repeats taken and dropped: Stop, Info, CC, Next and Previous (Android's repeatCount == 0, PB2-10). */
+export function oncePerPress(key: RemoteKey): boolean {
+    return key === 'stop' || key === 'info' || key === 'captions' || key === 'next' || key === 'previous'
+}

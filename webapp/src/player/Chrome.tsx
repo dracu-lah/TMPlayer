@@ -656,7 +656,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
 
     useKeys({
         c, tv, sheet, setSheet, visible, locked, counting, skipNow, backTo, offer, setOffer, barEl, discEl, noticeClose, rowItems, inLayer, focusIt, show, hide, poke, unlock, showUnlock,
-        flash, togglePlay, seekBy, seekTo, peekAt, jumpRemote, stepRemote, frameLength, stopCount, setNextHidden, go, skipIt, takeBack, stepChapter, setVol, stepSpeed, setSpeed, cycleSub, cycleAudio, nudgeDelay, stepSize,
+        flash, togglePlay, seekBy, seekTo, peekAt, jumpRemote, stepRemote, releaseStep: () => stepper.release(), frameLength, stopCount, setNextHidden, go, skipIt, takeBack, stepChapter, setVol, stepSpeed, setSpeed, cycleSub, cycleAudio, nudgeDelay, stepSize,
         toggleFullscreen, cycleShape, turn, duration, pickTurn, zoomBy, resetZoom, screenshot, pressRepeat, bookmarkHere, askTime, pipSupported, togglePip,
     })
 

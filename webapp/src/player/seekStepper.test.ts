@@ -103,3 +103,20 @@ test('a repeat with no press before it (focus arrived with the key down) moves t
     const r = s.press({ forward: true, repeat: true, now: 5_000, baseSec: 10, durationSec: 0 })
     assert.ok(r && r.by >= 10)
 })
+
+test('a first press that arrives as a repeat, or a repeat after the key came up, takes the base step, never the 6x one (PB2-12)', () => {
+    const two = 2 * 60 * 60
+    const s = new SeekStepper()
+    assert.equal(s.press({ forward: true, repeat: true, now: 7_000, baseSec: 10, durationSec: two })!.by, 10)
+    // A long hold, the key up, then a repeat with no press of its own (a webOS remote that dropped it).
+    const t = new SeekStepper()
+    t.press({ forward: true, repeat: false, now: 0, baseSec: 10, durationSec: two })
+    t.release()
+    assert.equal(t.press({ forward: true, repeat: true, now: 60_000, baseSec: 10, durationSec: two })!.by, 10)
+    // Useful use is unchanged: a hold from a real press still ramps.
+    const u = new SeekStepper()
+    u.press({ forward: true, repeat: false, now: 0, baseSec: 10, durationSec: two })
+    assert.ok(u.press({ forward: true, repeat: true, now: 6_000, baseSec: 10, durationSec: two })!.by > 10)
+    const chrome = readFileSync(new URL('./Chrome.tsx', import.meta.url), 'utf8')
+    assert.match(chrome, /releaseStep: \(\) => stepper\.release\(\)/)
+})

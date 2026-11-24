@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { remoteKey } from '../tv/remote.ts'
+import { oncePerPress, remoteKey } from '../tv/remote.ts'
 import { readFileSync } from 'node:fs'
+
+test('Stop, Info, CC, Next and Previous act once per press, their repeats dropped (PB2-10)', () => {
+    for (const k of ['stop', 'info', 'captions', 'next', 'previous'] as const) assert.equal(oncePerPress(k), true, k)
+    // The seek keys ramp on their repeats; play and pause have their own rule.
+    for (const k of ['left', 'right', 'forward', 'rewind', 'up', 'down', 'ok', 'back', 'playpause'] as const) assert.equal(oncePerPress(k), false, k)
+    const src = readFileSync(new URL('./chrome/useKeys.ts', import.meta.url), 'utf8')
+    const tv = src.slice(src.indexOf('function tvKey('), src.indexOf("case 'play':"))
+    assert.match(tv, /if \(e\.repeat && oncePerPress\(key\)\) return true/)
+})
 
 const key = (init: { key?: string; keyCode?: number }) => remoteKey({ key: init.key ?? '', keyCode: init.keyCode ?? 0, which: init.keyCode ?? 0 } as KeyboardEvent)
 

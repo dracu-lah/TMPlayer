@@ -59,7 +59,8 @@ export interface Step {
 }
 
 export class SeekStepper {
-    private heldFrom = 0
+    /** When the hold of the key down now started; null when no key is down (none yet, or it came up). */
+    private heldFrom: number | null = null
     private lastMoved = -Infinity
     private lastDir = 0
     private total = 0
@@ -71,13 +72,15 @@ export class SeekStepper {
         const base = Math.round(p.baseSec * 1000)
         const durationMs = Number.isFinite(p.durationSec) && p.durationSec > 0 ? Math.round(p.durationSec * 1000) : 0
         let stepMs: number
-        if (!p.repeat) {
-            // A new press: the plain step, and the hold starts here.
+        if (!p.repeat || this.heldFrom === null) {
+            // A new press: the plain step, and the hold starts here. So does a repeat whose first
+            // press never came (the key held as the player opened, a remote that drops it), which
+            // otherwise counted from 0 and took the 6x step at once (PB2-12).
             this.heldFrom = p.now
             stepMs = base
         } else {
             if (p.now - this.lastMoved < GATE_MS) return null
-            const count = Math.floor((p.now - this.heldFrom) / REPEAT_MS)
+            const count = Math.floor((p.now - (this.heldFrom ?? p.now)) / REPEAT_MS)
             stepMs = holdStepMs(count - (count % HOLD_EVERY), base, durationMs)
             // A hold the first press did not start (focus came to the key already down): the plain step.
             if (stepMs <= 0) stepMs = base
@@ -94,6 +97,6 @@ export class SeekStepper {
 
     /** The key came up: the next press starts a run of its own. */
     release() {
-        this.heldFrom = 0
+        this.heldFrom = null
     }
 }

@@ -3,7 +3,7 @@
 // handed in as `Keys`, so the focus order and the shortcuts are in one place and the actions are not repeated.
 import { onCleanup, onMount } from 'solid-js'
 import { t } from '../../i18n'
-import { remoteKey } from '../../tv/remote'
+import { oncePerPress, remoteKey } from '../../tv/remote'
 import { confirmOpen } from '../../ui/Confirm'
 import { onGlobal } from '../../ui/globalInput'
 import { nextTurn } from '../extras'
@@ -47,6 +47,8 @@ export interface Keys {
     jumpRemote: (forward: boolean) => void
     /** A held or tapped seek key through the one stepper (seekStepper.ts): 10 s a step on the TV layout, 5 s on a keyboard. */
     stepRemote: (forward: boolean, repeat: boolean) => void
+    /** A key came up: the stepper's next press starts a hold of its own (PB2-12). */
+    releaseStep: () => void
     /** One frame, in seconds, as this video shows it. */
     frameLength: () => number
     stopCount: () => void
@@ -83,6 +85,9 @@ function tvKey(k: Keys, e: KeyboardEvent): boolean | 'native' {
     const v = c.video
     const key = remoteKey(e)
     if (!key) return false
+    // Stop, Info, CC, Next and Previous act once per press, as on Android (repeatCount == 0): a held
+    // or bouncing Stop left two pages, a held CC spun through every track (PB2-10).
+    if (e.repeat && oncePerPress(key)) return true
     const active = document.activeElement as HTMLElement | null
     switch (key) {
         case 'play':
@@ -291,4 +296,6 @@ export function useKeys(k: Keys) {
     }
     // Not while the profile is locked: no key of the page may play, skip or open the locked video.
     onMount(() => onCleanup(onGlobal(document, 'keydown', onKey)))
+    // Any key up ends a hold: a repeat that comes without its first press then starts with the plain step (PB2-12).
+    onMount(() => onCleanup(onGlobal(document, 'keyup', () => k.releaseStep())))
 }
