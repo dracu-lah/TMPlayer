@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onboarding: notifications and support steps</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 64px; background: #0c0e10; color: #f2f4f5; font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 36px 0 12px; }
+  p.lede { color: #aeb5bb; max-width: 70ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; width: 230px; }
+  figure.wide { width: 460px; }
+  figure.tv { width: 400px; }
+  figure.tablet { width: 260px; }
+  img { display: block; width: 100%; height: auto; border: 1px solid #23272a; border-radius: 8px; }
+  figcaption { color: #aeb5bb; font-size: 13px; margin-top: 6px; }
+  code { background: #15181b; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Onboarding: notifications and support steps</h1>
+<p class="lede">Rendered by <code>OnboardingStepShots</code> (app render tests, dark theme, reduced motion so each step is shown at rest). They come after the chats question and before Home. Phone portrait 411 x 891 dp, landscape 891 x 411 dp, tablet 800 x 1280 dp, TV 960 x 540 dp. The TV has no notification step; its support step shows the page as a code and Skip holds the remote.</p>
+
+<h2>Phone portrait</h2>
+<div class="row">
+  <figure><img src="phone-portrait-1-notifications.png" alt=""><figcaption>Notifications: asked from the button only</figcaption></figure>
+  <figure><img src="phone-portrait-2-notifications-settings.png" alt=""><figcaption>After a no: the settings route</figcaption></figure>
+  <figure><img src="phone-portrait-3-support.png" alt=""><figcaption>Support: one button and Skip</figcaption></figure>
+</div>
+
+<h2>Phone landscape</h2>
+<div class="row">
+  <figure class="wide"><img src="phone-landscape-1-notifications.png" alt=""><figcaption>Notifications</figcaption></figure>
+  <figure class="wide"><img src="phone-landscape-2-notifications-settings.png" alt=""><figcaption>Settings route</figcaption></figure>
+  <figure class="wide"><img src="phone-landscape-3-support.png" alt=""><figcaption>Support</figcaption></figure>
+</div>
+
+<h2>Tablet</h2>
+<div class="row">
+  <figure class="tablet"><img src="tablet-1-notifications.png" alt=""><figcaption>Notifications</figcaption></figure>
+  <figure class="tablet"><img src="tablet-2-notifications-settings.png" alt=""><figcaption>Settings route</figcaption></figure>
+  <figure class="tablet"><img src="tablet-3-support.png" alt=""><figcaption>Support</figcaption></figure>
+</div>
+
+<h2>TV</h2>
+<div class="row">
+  <figure class="tv"><img src="tv-3-support.png" alt=""><figcaption>Support: code and short address, Skip is the one button and the default focus</figcaption></figure>
+</div>
+</body>
+</html>
