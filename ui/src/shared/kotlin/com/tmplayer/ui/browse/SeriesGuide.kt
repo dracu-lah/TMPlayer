@@ -209,7 +209,7 @@ fun GapRow(
     ) {
         Box(
             Modifier
-                .width(if (large) GAP_ART_LARGE else if (tv) GAP_ART_TV else GAP_ART_TOUCH)
+                .width(episodeArtWidth(large, tv))
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(Corner.Small))
                 .background(Tone.surfaceHigh),
@@ -246,7 +246,7 @@ fun GapRow(
             }
             Text(
                 name,
-                style = if (tv || large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -279,9 +279,6 @@ fun GapRow(
 internal const val GAP_ALPHA = 0.45f
 
 private const val GAP_MAX_RUNTIME_MIN = 24 * 60
-private val GAP_ART_TOUCH = 128.dp
-private val GAP_ART_TV = 176.dp
-private val GAP_ART_LARGE = 208.dp
 
 /**
  * A season, or several, posted as one file ([com.tmplayer.data.SeriesPack]): a card that plays the

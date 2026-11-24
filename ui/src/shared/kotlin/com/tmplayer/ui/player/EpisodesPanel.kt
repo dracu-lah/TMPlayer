@@ -128,6 +128,7 @@ class EpisodesActions(
  *
  * [trailing] sits at the end of the heading, for the window's own way out.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun EpisodesPanel(
     state: EpisodesState,
@@ -138,6 +139,8 @@ fun EpisodesPanel(
     /** Focus the episode playing on open: under a remote, and on a desktop for the keyboard. */
     focusCurrent: Boolean = !isTouch(),
     trailing: @Composable () -> Unit = {},
+    /** The window's own colour, which the season chips are drawn on while they stay at the top of the list. */
+    surface: Color = com.tmplayer.ui.theme.FloatingTone.sheet,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -171,6 +174,10 @@ fun EpisodesPanel(
 
     BoxWithConstraints(modifier) {
         val wide = maxWidth >= WIDE_FROM
+        // The picture takes about 40 percent of the list's width, as a phone's show page does; the list is
+        // the window less the choices column when wide, so the side panel and the sheet read alike.
+        val listWidth = (if (wide) maxWidth - CHOICES_WIDTH - 20.dp else maxWidth) - contentPadding * 2 - 24.dp
+        val artWidth = (listWidth * 0.4f).coerceIn(ART_MIN, ART_MAX)
         val pad = PaddingValues(horizontal = contentPadding)
         Column(Modifier.fillMaxWidth()) {
             Row(
@@ -199,13 +206,16 @@ fun EpisodesPanel(
             // The rows, as either layout lists them. The tabs only once there is a choice to make.
             val rows: LazyListScope.() -> Unit = {
                 if (series.seasons.size > 1) {
-                    item(key = "seasons") {
-                        SeasonTabs(
-                            series.seasons,
-                            shown.number,
-                            onSelect = { season = it },
-                            modifier = Modifier.padding(pad).padding(vertical = 8.dp),
-                        )
+                    // The chips stay at the top while the episodes scroll under them.
+                    stickyHeader(key = "seasons") {
+                        Box(Modifier.fillMaxWidth().background(surface)) {
+                            SeasonTabs(
+                                series.seasons,
+                                shown.number,
+                                onSelect = { season = it },
+                                modifier = Modifier.padding(pad).padding(vertical = 8.dp),
+                            )
+                        }
                     }
                 }
                 items(shown.episodes, key = { it.item.id }) { episode ->
@@ -231,6 +241,8 @@ fun EpisodesPanel(
                         holdOk = true,
                         name = com.tmplayer.online.EpisodeNames.listName(episode.season, episode.episode, names),
                         guide = com.tmplayer.online.EpisodeNames.listed(episode.season, episode.episode, names),
+                        compact = true,
+                        artWidth = artWidth,
                         modifier = Modifier.padding(pad).secondaryClick { actions.onToggleWatched(chosen) },
                         lineModifier = if (isPlaying) {
                             Modifier.focusRequester(currentFocus).onFocusChanged { currentFocused = it.isFocused }
@@ -515,6 +527,10 @@ private val KNOB_ON: Dp = 19.dp
 private val WIDE_FROM: Dp = 640.dp
 
 private val CHOICES_WIDTH: Dp = 280.dp
+
+/** The episode picture's width in the list: 40 percent of the list, between these two. */
+private val ART_MIN: Dp = 104.dp
+private val ART_MAX: Dp = 220.dp
 
 /** How long the open-time focus waits for the window to take focus before trying anyway. */
 private const val WINDOW_FOCUS_WAIT_MS = 2_000L

@@ -144,13 +144,20 @@ class SeriesEpisodeRowsRenderTest {
         // The gaps are read as one line each, and nothing in them takes the focus.
         val spoken = all.mapNotNull { it.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull() }
         assertTrue(spoken.toString(), "Episode 3, not in this chat" in spoken)
-        assertTrue(spoken.toString(), spoken.any { it.startsWith("Episode 4, airs ") })
+        // The cards are taller now (a bigger picture): a short screen (a television, a phone on its side) shows
+        // the first rows, the second gap only where the screen is tall enough.
+        val tall = activity.resources.configuration.screenHeightDp >= 700
+        if (tall) assertTrue(spoken.toString(), spoken.any { it.startsWith("Episode 4, airs ") })
         val gaps = all.filter { n -> n.config.getOrNull(SemanticsProperties.ContentDescription)?.any { it.startsWith("Episode ") } == true }
-        assertEquals(2, gaps.size)
+        assertEquals(if (tall) 2 else 1, gaps.size)
         gaps.forEach { assertNull("a gap is not focusable", it.config.getOrNull(SemanticsProperties.Focused)) }
-        // The held episodes carry the provider's title and the file size last in the line of facts.
+        // The held episodes carry the provider's title and the running time first in the line of facts, the day
+        // only where there is room for it (a television, a large window), and never the file's size.
         val texts = all.flatMap { words(it) }
-        assertTrue(texts.toString(), texts.any { it.startsWith("43m") && it.contains("Oct 3, 2024") && it.endsWith("GB") })
+        assertTrue(texts.toString(), texts.any { it.startsWith("43m") && it.contains("Oct 3, 2024") == (tv || large) })
+        assertTrue(texts.toString(), texts.none { it.endsWith("GB") })
+        // The code stands on the picture, once per held episode.
+        assertTrue(texts.toString(), "S2 E1" in texts && "S2 E2" in texts)
         assertTrue(texts.toString(), "Not in this chat" in texts)
 
         val root = activity.window.decorView

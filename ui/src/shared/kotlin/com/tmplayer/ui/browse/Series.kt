@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.foundation.focusGroup
@@ -446,6 +447,13 @@ fun EpisodeRow(
      * so the cards do not grow (and the list under them move) when the words arrive.
      */
     holdOverview: Boolean = false,
+    /**
+     * The player's episode list: the picture, the title and the running time, the provider's few
+     * lines only on the card playing, no air date and no file size (those are the video's page's).
+     */
+    compact: Boolean = false,
+    /** The picture's width where the list is narrower than the window (the player's side panel); null follows the window. */
+    artWidth: Dp? = null,
 ) {
     val shape = RoundedCornerShape(Corner.Medium)
     val card = modifier
@@ -456,12 +464,14 @@ fun EpisodeRow(
     EpisodeLine(
         episode, chosen, point, finished, upNext, onClick, card.then(lineModifier), onLongClick, current, holdOk, name,
         still = guide?.stillUrl,
-        overview = guide?.overview?.trim()?.takeIf { showOverview && it.isNotEmpty() },
+        overview = guide?.overview?.trim()?.takeIf { (showOverview || (compact && current)) && it.isNotEmpty() },
         large = large,
         holdOverview = showOverview && holdOverview,
+        compact = compact,
+        artWidth = artWidth,
         credit = guide?.source?.takeIf { it.isNotBlank() }?.let { com.tmplayer.online.MetaWords.creditFrom(it) },
         // The provider's air date and running time, on the show's page only: the player's list keeps its facts.
-        airDate = guide?.airDate?.takeIf { showOverview },
+        airDate = guide?.airDate?.takeIf { showOverview && !compact },
         runtimeMin = guide?.runtimeMin?.takeIf { showOverview },
     )
 }
@@ -573,6 +583,8 @@ private fun EpisodeLine(
     airDate: String? = null,
     /** The provider's running time, for an episode whose file does not say how long it is. */
     runtimeMin: Int? = null,
+    compact: Boolean = false,
+    artWidth: Dp? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -580,6 +592,7 @@ private fun EpisodeLine(
     val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(Corner.Medium)
     val cover = rememberCover(item)
+    val art = artWidth ?: episodeArtWidth(large, tv)
     Row(
         modifier
             .fillMaxWidth()
@@ -601,9 +614,10 @@ private fun EpisodeLine(
     ) {
         Box(
             Modifier
-                .width(if (large) EPISODE_ART_LARGE else if (tv) EPISODE_ART_TV else EPISODE_ART_TOUCH)
+                .width(art)
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(Corner.Small)),
+                .clip(RoundedCornerShape(Corner.Small))
+                .testTag(EPISODE_ART_TAG),
         ) {
             MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = cover, compactCover = true, showCoverTitle = false)
             // The provider's still for the episode, over the frame once it is decoded, at the
@@ -624,6 +638,13 @@ private fun EpisodeLine(
                     modifier = Modifier.align(Alignment.TopEnd).padding(TileBadgeInset),
                 )
             }
+            // The code on the picture ("S8 E6a" and "S8 E6b": the two halves of a split episode are not told
+            // apart otherwise), always: it is also what a screen reader reads first, and a bare cover's big
+            // number is the picture's own.
+            EpisodeNumberBadge(
+                s.seriesEpisodeShort(episode.season, episode.episode) + episode.partLetter,
+                Modifier.align(Alignment.TopStart).padding(TileBadgeInset),
+            )
             if (upNext && !finished) {
                 Icon(
                     TmIcons.Play,
@@ -638,55 +659,53 @@ private fun EpisodeLine(
                 )
             }
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    // "S8 E6a" and "S8 E6b": the two halves of a split episode are not told apart otherwise.
-                    s.seriesEpisodeShort(episode.season, episode.episode) + episode.partLetter,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Tone.muted,
-                    maxLines = 1,
-                )
-                when {
-                    current -> EpisodeBadge(s.episodesPlaying)
-                    upNext && !finished -> EpisodeBadge(s.seriesUpNextBadge)
-                }
-            }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            // The code ("S8 E6a" and "S8 E6b": the two halves of a split episode are not told apart
+            // otherwise) is on the picture's badge, not repeated here.
             Text(
                 name ?: s.seriesEpisode(episode.episode),
-                style = if (tv || large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                maxLines = if (compact) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // No Telegram file name line: the S1 E5 line, the name and the facts already say which
-            // episode it is (user, 2026-10-22), and a card that never gains or loses a line keeps its
-            // height when the provider's name arrives.
+            // No Telegram file name line, and no file size (user, 2026-11-25): the badge, the name and
+            // the running time already say which episode it is, and the size is on the video's own
+            // page. A card that never gains or loses a line keeps its height when the provider's
+            // name arrives.
             val stopped = point?.takeIf { it.positionMs > 0 && !finished }
                 ?.let { s.seriesStoppedAt(StreamStats.formatClock(it.positionMs)) }
             val aired = remember(airDate, s) { airDate?.let { day(it, s) } }
             val meta = listOfNotNull(
                 MediaMapper.formatDuration(item.durationSec).ifEmpty { null }
                     ?: runtimeMin?.takeIf { it in 1..MAX_RUNTIME_MIN }?.let { MediaMapper.formatDuration(it * 60) }?.ifEmpty { null },
-                aired,
+                // The day only where there is room for it: a phone's card keeps to the name and the time.
+                aired.takeIf { tv || large },
                 // Which of the episode's copies the card plays, where it has more than one.
                 item.takeIf { episode.copies.size > 1 && VideoCopies.heightOf(it) != null }?.copyQuality(),
                 stopped ?: s.seriesWatchedLabel.takeIf { finished },
-                credit,
-                // The file's size is a detail, last in the line, never dropped.
-                MediaMapper.formatSize(item.sizeBytes).ifEmpty { null },
+                credit.takeIf { !compact },
             ).joinToString("  ·  ")
-            if (meta.isNotEmpty()) {
-                Text(
-                    meta,
-                    style = if (large) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
-                    color = if (stopped != null || finished) Tone.accent else Tone.muted,
-                    // On the show page the size is last: it wraps rather than being cut off.
-                    maxLines = if (airDate != null) 2 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            val badge = when {
+                current -> s.episodesPlaying
+                upNext && !finished -> s.seriesUpNextBadge
+                else -> null
+            }
+            if (meta.isNotEmpty() || badge != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (badge != null) EpisodeBadge(badge)
+                    if (meta.isNotEmpty()) {
+                        Text(
+                            meta,
+                            style = if (large) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
+                            color = if (stopped != null || finished) Tone.accent else Tone.muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                }
             }
             if (overview != null || holdOverview) {
                 Text(
@@ -1889,11 +1908,49 @@ private const val FIRST_EPISODE_ITEM = 2
 
 /** A season longer than this opens on its up-next episode on a phone or a desktop. */
 private const val LONG_SEASON = 12
-private val EPISODE_ART_TOUCH: Dp = 128.dp
-private val EPISODE_ART_TV: Dp = 176.dp
 
-/** A large window's episode card: at 2x still within a `w300` still (see EpisodeStill). */
-private val EPISODE_ART_LARGE: Dp = 208.dp
+/** The episode picture's test tag, for the tests that measure it. */
+const val EPISODE_ART_TAG = "episode-art"
+
+/** A phone's episode picture is this share of the window (about 40 percent of the card), kept between these two. */
+private const val EPISODE_ART_SHARE = 0.4f
+private val EPISODE_ART_TOUCH_MIN: Dp = 136.dp
+private val EPISODE_ART_TOUCH_MAX: Dp = 220.dp
+
+/** A television's episode picture: 16:9 and big enough to read from the sofa (was 176 dp, 2026-11-25). */
+private val EPISODE_ART_TV: Dp = 264.dp
+
+/** A large window's episode card: 256 dp is within a `w300` still at 1x, a little soft at 2x (see EpisodeStill). */
+private val EPISODE_ART_LARGE: Dp = 256.dp
+
+/**
+ * The width of an episode card's 16:9 picture: about 40 percent of a phone's width (136 to 220 dp),
+ * a fixed size on a television and in a large window. The held episode's card, the gap's and the
+ * player's list all use it, so a season's rows keep one left edge for their words.
+ */
+@Composable
+internal fun episodeArtWidth(large: Boolean, tv: Boolean): Dp {
+    if (large) return EPISODE_ART_LARGE
+    if (tv) return EPISODE_ART_TV
+    val window = with(androidx.compose.ui.platform.LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    return (window * EPISODE_ART_SHARE).coerceIn(EPISODE_ART_TOUCH_MIN, EPISODE_ART_TOUCH_MAX)
+}
+
+/** "S2 E3" on the picture's top start: a small dark pill that reads over any frame. */
+@Composable
+internal fun EpisodeNumberBadge(label: String, modifier: Modifier = Modifier) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = Color.White,
+        maxLines = 1,
+        modifier = modifier
+            .clip(RoundedCornerShape(Corner.ExtraSmall))
+            .background(Color.Black.copy(alpha = 0.6f))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
+}
 
 /**
  * OK plays, holding OK is [onHold]: the remote's long press, written out of key events because
