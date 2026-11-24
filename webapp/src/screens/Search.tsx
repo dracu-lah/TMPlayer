@@ -96,7 +96,7 @@ export function Search() {
     }
     const clearRecents = () => {
         clearSearches()
-        showToast({ text: t('search.recent_cleared') })
+        showToast({ kind: 'success', text: t('search.recent_cleared') })
         input?.focus()
     }
     const recents = () => (!locked() && !text().trim() ? recentSearches() : [])

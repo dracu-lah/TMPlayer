@@ -33,7 +33,7 @@ export function SafariClearsCard() {
     const keep = () => {
         close()
         void setSyncOn(true)
-        showToast({ text: t('syncplace.started') })
+        showToast({ kind: 'success', text: t('syncplace.started') })
     }
     return (
         <Show when={showSafariCard({ inTab: iosBrowser && !inAppIos, signedIn: !!me(), dismissed: closed() })}>

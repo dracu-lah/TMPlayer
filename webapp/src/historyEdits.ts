@@ -19,6 +19,7 @@ export async function removeWithUndo(ids: string[], undo = true): Promise<number
         const removed = await removeFromHistory([...new Set(ids)])
         if (!removed) return 0
         showToast({
+            kind: 'success',
             text: t('browse.removed_from_history', { count: removed.count }),
             action: undo ? { label: t('browse.undo'), run: () => restoreHistory(removed.snapshot) } : undefined,
         })
@@ -41,6 +42,7 @@ export async function removeLaterWithUndo(keys: string[] | null, undo = true): P
         const gone = await removeLater(keys ? [...new Set(keys)] : null)
         if (!gone.length) return 0
         showToast({
+            kind: 'success',
             text: keys ? t('browse.removed_from_watch_later', { count: gone.length }) : t('browse.watch_later_cleared'),
             action: undo ? { label: t('browse.undo'), run: () => restoreLater(gone) } : undefined,
         })

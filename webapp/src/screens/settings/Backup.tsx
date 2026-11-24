@@ -31,9 +31,9 @@ export function BackupBlock() {
         try {
             const { name, text } = await backupNow()
             saveFile(name, text)
-            showToast({ text: t('backup.saved') })
+            showToast({ kind: 'success', text: t('backup.saved') })
         } catch {
-            showToast({ text: t('backup.failed') })
+            showToast({ kind: 'error', text: t('backup.failed') })
         } finally {
             setBusy(false)
         }
@@ -46,15 +46,15 @@ export function BackupBlock() {
         setBusy(true)
         try {
             // A file far past any backup is refused before it is read into memory.
-            if (file.size > 16 * 1024 * 1024) return void showToast({ text: t('backup.not_backup') })
+            if (file.size > 16 * 1024 * 1024) return void showToast({ kind: 'error', text: t('backup.not_backup') })
             const text = await file.text().catch(() => null)
-            if (text === null) return void showToast({ text: t('backup.read_failed') })
+            if (text === null) return void showToast({ kind: 'error', text: t('backup.read_failed') })
             const plan = await planRestore(text)
             if ('kind' in plan) {
-                showToast({ text: plan.kind === 'tooNew' ? t('backup.too_new') : t('backup.not_backup') })
+                showToast({ kind: 'error', text: plan.kind === 'tooNew' ? t('backup.too_new') : t('backup.not_backup') })
                 return
             }
-            if (plan.nothing) return void showToast({ text: t('backup.restore_nothing') })
+            if (plan.nothing) return void showToast({ kind: 'info', text: t('backup.restore_nothing') })
             if (plan.otherAccount && !(await askConfirm({ title: t('backup.restore_title'), message: t('web.backup_other_account'), confirm: t('backup.restore_confirm'), danger: false }))) return
             const from = plan.read.createdAt > 0 ? t('backup.restore_from', { date: new Date(plan.read.createdAt).toLocaleDateString(), version: plan.read.app || '?' }) : ''
             const yes = await askConfirm({
@@ -66,9 +66,9 @@ export function BackupBlock() {
             })
             if (!yes) return
             await restore(plan)
-            showToast({ text: t('backup.restored') })
+            showToast({ kind: 'success', text: t('backup.restored') })
         } catch {
-            showToast({ text: t('backup.read_failed') })
+            showToast({ kind: 'error', text: t('backup.read_failed') })
         } finally {
             setBusy(false)
         }

@@ -203,7 +203,7 @@ export function CardMenu() {
             if (target() !== now) return
             if (out.done === 'shown') return void setManual(out.link)
             close()
-            showToast({ text: out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links') })
+            showToast({ kind: out.done === 'copied' ? 'success' : 'warning', text: out.done === 'copied' ? t('common.link_copied') : out.why === 'gone' ? t('link.not_found') : t('share.no_message_links') })
         } finally {
             copying = false
         }

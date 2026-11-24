@@ -22,7 +22,7 @@ function Feedback() {
     const copy = async () => {
         try {
             await navigator.clipboard.writeText(copyText(facts()))
-            showToast({ text: t('player.details_copied') })
+            showToast({ kind: 'success', text: t('player.details_copied') })
         } catch {
             // No clipboard: the facts are in the row under its title.
         }

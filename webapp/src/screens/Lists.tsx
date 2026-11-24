@@ -59,9 +59,9 @@ export function ListPicker() {
         if (!p) return
         if (inIt) {
             removeFromList(id, [keyOf(p)])
-            showToast({ text: t('lists.removed', { title: title(p), list: listName }) })
+            showToast({ kind: 'success', text: t('lists.removed', { title: title(p), list: listName }) })
         } else {
-            showToast({ text: said(addToList(id, p.item, p.show), title(p), listName) })
+            showToast({ kind: 'success', text: said(addToList(id, p.item, p.show), title(p), listName) })
         }
     }
     const make = (e: Event) => {
@@ -70,8 +70,8 @@ export function ListPicker() {
         const made = createList(name())
         close()
         if (!p) return
-        if (!made) showToast({ text: namedLists().length >= MAX_LISTS ? t('lists.too_many', { count: MAX_LISTS }) : t('lists.name_empty') })
-        else showToast({ text: said(addToList(made.id, p.item, p.show), title(p), made.name) })
+        if (!made) showToast({ kind: 'warning', text: namedLists().length >= MAX_LISTS ? t('lists.too_many', { count: MAX_LISTS }) : t('lists.name_empty') })
+        else showToast({ kind: 'success', text: said(addToList(made.id, p.item, p.show), title(p), made.name) })
     }
     return (
         <dialog class="confirm card-menu" ref={dialog} aria-label={t('lists.add_to')} onClose={close} onClick={(e) => e.target === dialog && close()}>
@@ -159,7 +159,7 @@ export function ListsPage() {
         const items = (tiles.latest ?? []).map((tile) => tile.item)
         if (!items.length) return
         const done = await watchedIds().catch(() => [] as string[])
-        await playRandomOf({ scope: randomScope('list', listId), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ text: errorText(e) }))
+        await playRandomOf({ scope: randomScope('list', listId), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ kind: 'error', text: errorText(e) }))
     }
     // Play all (WP-32): the list's cards in the order shown, from the first that is still in its chat (a gone one is let go, HX21, a few tried);
     // the rest follow one at a time as each ends (Watch.tsx). The queue is the list's keys, so a reload of the tab picks it up where it was.
@@ -183,9 +183,9 @@ export function ListsPage() {
                 navigate(watchPath(item), { state: { video: item } })
                 return
             }
-            showToast({ text: t('web.gone_from_chat') })
+            showToast({ kind: 'warning', text: t('web.gone_from_chat') })
         } catch (e) {
-            showToast({ text: errorText(e) })
+            showToast({ kind: 'error', text: errorText(e) })
         } finally {
             starting = false
             if (gone.length) void forgetGone(gone)
@@ -204,13 +204,13 @@ export function ListsPage() {
         })
         if (!yes) return
         deleteList(gone.id)
-        showToast({ text: t('lists.deleted', { list: gone.name }) })
+        showToast({ kind: 'success', text: t('lists.deleted', { list: gone.name }) })
     }
     const remove = (tile: Tile) => {
         const list = shown()
         if (!list) return
         removeFromList(list.info.id, keysOf(tile).length ? keysOf(tile) : [`${tile.item.chatId}:${tile.item.messageId}`])
-        showToast({ text: t('lists.removed', { title: tile.title, list: list.info.name }) })
+        showToast({ kind: 'success', text: t('lists.removed', { title: tile.title, list: list.info.name }) })
     }
     return (
         <>
@@ -288,7 +288,7 @@ export function ListsPage() {
                 onSave={() => {
                     const made = createList(name())
                     if (made) navigate(`/lists/${made.id}`)
-                    else showToast({ text: namedLists().length >= MAX_LISTS ? t('lists.too_many', { count: MAX_LISTS }) : t('lists.name_empty') })
+                    else showToast({ kind: 'warning', text: namedLists().length >= MAX_LISTS ? t('lists.too_many', { count: MAX_LISTS }) : t('lists.name_empty') })
                 }}
             />
         </>

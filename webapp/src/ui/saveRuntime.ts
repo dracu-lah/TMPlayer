@@ -58,7 +58,7 @@ function end(id: string, state: 'done' | 'failed' | 'cancelled', why?: string) {
     streams.delete(streamKeyOf(id))
     dropFrame(id)
     setSaves((all) => apply(all, { type: 'save', id, state, ...(why ? { why } : {}) }))
-    showToast({ text: state === 'done' ? t('web.save_done', { name: was.name }) : state === 'cancelled' ? t('web.save_cancelled', { name: was.name }) : why === 'gone' ? t('web.gone_from_chat') : t('web.save_failed', { name: was.name }) })
+    showToast({ kind: state === 'done' ? 'success' : state === 'cancelled' || why === 'gone' ? 'warning' : 'error', text: state === 'done' ? t('web.save_done', { name: was.name }) : state === 'cancelled' ? t('web.save_cancelled', { name: was.name }) : why === 'gone' ? t('web.gone_from_chat') : t('web.save_failed', { name: was.name }) })
     window.setTimeout(() => setSaves((all) => all.filter((s) => s.id !== id)), 4000)
 }
 

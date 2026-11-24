@@ -399,7 +399,11 @@ html[data-form=tv] .work-status-line button.link { padding: calc(var(--dp) * 4) 
 html[data-form=tv] .work-status-line progress { flex-basis: calc(var(--dp) * 120); max-width: calc(var(--dp) * 240); }
 html[data-form=tv] .work-spinner { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); border-width: calc(var(--dp) * 2); }
 html[data-form=tv] .work-status.pill .work-status-line { bottom: var(--tv-safe-v); max-width: calc(100vw - 2 * var(--tv-safe-h)); min-height: 0; margin: 0; padding: calc(var(--dp) * 6) calc(var(--dp) * 14); }
-html[data-form=tv][data-status-pill] .toast { bottom: calc(var(--tv-safe-v) + var(--dp) * 44); }
+/* The toast: no bar at the foot on a TV, so it stands inside the safe area, its words 16 dp (32 px at 1920) and its width inside the side margins; the status pill, when up, is measured over by the page. */
+html[data-form=tv] .toast { bottom: var(--toast-bottom, calc(var(--tv-safe-v) + var(--dp) * 12)); width: min(calc(var(--dp) * 560), calc(100vw - 2 * var(--tv-safe-h))); min-height: calc(var(--dp) * 56); gap: calc(var(--dp) * 14); padding: calc(var(--dp) * 10) calc(var(--dp) * 10) calc(var(--dp) * 10) calc(var(--dp) * 12); }
+html[data-form=tv] .toast p { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+html[data-form=tv] .toast-chip { width: calc(var(--dp) * 36); height: calc(var(--dp) * 36); }
+html[data-form=tv] .toast-icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
 html[data-form=tv] .sponsored-title { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 24); }
 html[data-form=tv] .sponsored-body { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
 html[data-form=tv] .sponsored-label { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }

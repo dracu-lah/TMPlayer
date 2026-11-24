@@ -37,7 +37,7 @@ export function KeepPlaceCard(props: { eligible: boolean }) {
         setKeep(false)
         settle()
         void keepPlaceYes()
-        showToast({ text: t('syncplace.started') })
+        showToast({ kind: 'success', text: t('syncplace.started') })
     }
     const notNow = () => {
         setKeep(false)

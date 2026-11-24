@@ -192,7 +192,7 @@ export function HistoryPage() {
         const items = (entries.latest ?? []).map((e) => e.item)
         if (!items.length) return
         const done = await watchedIds().catch(() => [] as string[])
-        await playRandomOf({ scope: randomScope('later', 'all'), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ text: errorText(e) }))
+        await playRandomOf({ scope: randomScope('later', 'all'), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ kind: 'error', text: errorText(e) }))
     }
     onMount(() => {
         const keys = (e: KeyboardEvent) => {

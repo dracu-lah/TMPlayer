@@ -59,6 +59,6 @@ export async function playRandomOf(opts: {
         running = false
         if (gone.length) void forgetGone(gone)
     }
-    showToast({ text: t('web.gone_from_chat') })
+    showToast({ kind: 'warning', text: t('web.gone_from_chat') })
     return false
 }

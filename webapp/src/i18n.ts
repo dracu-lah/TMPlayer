@@ -169,7 +169,7 @@ export function retryLanguage(): Promise<boolean> {
 export function languageFailedToast() {
     const tag = failed()
     if (!tag) return
-    showToast({ text: t('web.language_failed', { language: languageName(tag) }), action: { label: t('common.try_again'), run: () => void retryLanguage().then((ok) => !ok && languageFailedToast()) } })
+    showToast({ kind: 'error', text: t('web.language_failed', { language: languageName(tag) }), action: { label: t('common.try_again'), run: () => void retryLanguage().then((ok) => !ok && languageFailedToast()) } })
 }
 
 /** The hashed file of [tag]'s page strings (English has none: it is in the first load), for the worker's rules to read in the same words. */

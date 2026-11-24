@@ -3,7 +3,7 @@ import { CloudSyncIcon, Delete02Icon } from '@hugeicons/core-free-icons'
 import { t } from '../../i18n'
 import { askConfirm } from '../../ui/Confirm'
 import { setSyncOn, statusLine, syncHasFile, syncNow, syncOn, syncRunning, syncStatus, turnOffAndDelete } from '../../sync'
-import { showToast } from '../../ui/Toast'
+import { showToast, type ToastKind } from '../../ui/Toast'
 import { ActionRow, ToggleRow } from '../../ui/SettingsParts'
 
 /**
@@ -14,7 +14,7 @@ import { ActionRow, ToggleRow } from '../../ui/SettingsParts'
  */
 export function Privacy() {
     let enable!: HTMLDialogElement
-    const say = (text: string) => showToast({ text })
+    const say = (text: string, kind: ToastKind = 'success') => showToast({ kind, text })
     const change = (on: boolean) => (on ? enable.showModal() : void setSyncOn(false))
     const turnOn = () => {
         enable.close()
@@ -30,7 +30,7 @@ export function Privacy() {
             confirm: t('settings.resume_sync_delete'),
             run: async () => (gone = await turnOffAndDelete()),
         })
-        if (yes) say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'))
+        if (yes) say(gone ? t('settings.resume_sync_deleted') : t('settings.resume_sync_delete_failed'), gone ? 'success' : 'error')
     }
     const replaced = async () => {
         const yes = await askConfirm({

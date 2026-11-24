@@ -32,6 +32,7 @@ export async function clearHistoryWithUndo() {
         if (!yes) return
         const snap = await clearHistory()
         showToast({
+            kind: 'success',
             text: t('browse.history_cleared'),
             action: snap ? { label: t('browse.undo'), run: () => restoreHistory(snap) } : undefined,
         })

@@ -34,7 +34,7 @@ export function SubmakerBlock() {
         if (setSubmakerBase(text())) {
             setText('')
             setInvalid(false)
-            showToast({ text: t('submaker.settings_saved') })
+            showToast({ kind: 'success', text: t('submaker.settings_saved') })
         } else setInvalid(true)
     }
     return (
@@ -61,7 +61,7 @@ export function SubmakerBlock() {
             <div style={{ display: 'flex', gap: '12px', 'flex-wrap': 'wrap' }}>
                 <button class="primary" type="submit" disabled={!text().trim()}>{t('common.done')}</button>
                 <Show when={submakerSet()}>
-                    <button class="outline-button" type="button" onClick={() => (removeSubmaker(), setText(''), setInvalid(false), showToast({ text: t('submaker.settings_removed') }))}>{t('submaker.settings_remove')}</button>
+                    <button class="outline-button" type="button" onClick={() => (removeSubmaker(), setText(''), setInvalid(false), showToast({ kind: 'success', text: t('submaker.settings_removed') }))}>{t('submaker.settings_remove')}</button>
                 </Show>
             </div>
         </form>

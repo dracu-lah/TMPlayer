@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toasts, web</title>
+<style>
+  body { margin: 0; padding: 24px; font: 14px/1.4 system-ui, sans-serif; background: #15181b; color: #e6eaed; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin: 0 0 12px; color: #9aa4ab; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; }
+  img { display: block; max-width: 100%; height: auto; border: 1px solid #2b3238; border-radius: 8px; }
+  figcaption { margin-top: 6px; color: #9aa4ab; font-size: 12px; }
+  .phone img { width: 240px; }
+  .desktop img { width: 480px; }
+</style>
+</head>
+<body>
+<h1>Toasts, web</h1>
+<p>Made by <code>SHOTS=1 playwright test e2e/toasts.spec.ts</code> (webapp). Each stands 12 px above the floating bar, centred; the icon alone moves once.</p>
+<h2>Phone, 390 x 844</h2>
+<div class="row phone">
+  <figure><img src="phone-success.png" alt=""><figcaption>success (with Undo)</figcaption></figure>
+  <figure><img src="phone-info.png" alt=""><figcaption>info</figcaption></figure>
+  <figure><img src="phone-warning.png" alt=""><figcaption>warning</figcaption></figure>
+  <figure><img src="phone-error.png" alt=""><figcaption>error</figcaption></figure>
+</div>
+<h2>Desktop, 1280 x 800</h2>
+<div class="row desktop">
+  <figure><img src="desktop-success.png" alt=""><figcaption>success (with Undo)</figcaption></figure>
+  <figure><img src="desktop-info.png" alt=""><figcaption>info</figcaption></figure>
+  <figure><img src="desktop-warning.png" alt=""><figcaption>warning</figcaption></figure>
+  <figure><img src="desktop-error.png" alt=""><figcaption>error</figcaption></figure>
+</div>
+</body>
+</html>

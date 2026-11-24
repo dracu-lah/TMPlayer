@@ -186,7 +186,7 @@ export function Profiles() {
                                 onClose={close}
                             />
                         )
-                    if (s.kind === 'newPin') return <NewPinDialog name={nameOf(p)} onClose={close} onPin={(pin) => void changePin(p.id, pin).then(() => (close(), showToast({ text: t('accounts.pin_set_toast') })))} />
+                    if (s.kind === 'newPin') return <NewPinDialog name={nameOf(p)} onClose={close} onPin={(pin) => void changePin(p.id, pin).then(() => (close(), showToast({ kind: 'success', text: t('accounts.pin_set_toast') })))} />
                     if (s.kind === 'rename') return <RenameDialog name={nameOf(p)} onClose={close} onSave={(name) => (renameProfile(p.id, name), close())} />
                     return (
                         <OptionsDialog
@@ -324,7 +324,7 @@ function OptionsDialog(props: { profile: B.Profile; name: string; onClose: () =>
                         <button
                             class="outline-button"
                             type="button"
-                            onClick={then(() => void changePin(p.id, null).then(() => showToast({ text: t('accounts.pin_removed_toast') })))}
+                            onClick={then(() => void changePin(p.id, null).then(() => showToast({ kind: 'success', text: t('accounts.pin_removed_toast') })))}
                         >
                             {t('accounts.pin_remove')}
                         </button>

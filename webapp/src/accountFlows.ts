@@ -198,10 +198,10 @@ async function freeBytes(): Promise<number | null> {
 /** Add account: a profile of its own, then the normal sign in in it; Cancel there comes back here (or to the picker). */
 export async function addAccount() {
     const book = freshBook()
-    if (!B.canAdd(book)) return showToast({ text: t('accounts.limit', { count: B.MAX_PROFILES }) })
+    if (!B.canAdd(book)) return showToast({ kind: 'warning', text: t('accounts.limit', { count: B.MAX_PROFILES }) })
     const made = B.addProfile(book, B.newFolder(book, Math.random), Date.now(), await freeBytes())
-    if ('full' in made) return showToast({ text: t('accounts.limit', { count: B.MAX_PROFILES }) })
-    if ('noSpace' in made) return showToast({ text: t('accounts.no_space', { needed: sizeText(made.noSpace.needed), free: sizeText(made.noSpace.free) }) })
+    if ('full' in made) return showToast({ kind: 'warning', text: t('accounts.limit', { count: B.MAX_PROFILES }) })
+    if ('noSpace' in made) return showToast({ kind: 'error', text: t('accounts.no_space', { needed: sizeText(made.noSpace.needed), free: sizeText(made.noSpace.free) }) })
     if (!(await okToLeave())) return
     // Only a profile this tab had open (and unlocked) is somewhere to come back to.
     const from = B.addingFromFor(book, activeId, tabChose(), unlockedId())
@@ -286,7 +286,7 @@ export async function signOutProfile(id: string): Promise<boolean> {
  */
 async function pendingSignOut(id: string): Promise<boolean> {
     if (await heldElsewhere(id, true)) {
-        showToast({ text: t('accounts.open_elsewhere') })
+        showToast({ kind: 'warning', text: t('accounts.open_elsewhere') })
         return false
     }
     if (!(await okToLeave())) return false
@@ -309,7 +309,7 @@ export async function removeProfile(id: string): Promise<boolean> {
     // not even be readable): removed here, from this browser only, and said so.
     if (id === activeId) {
         if (await heldElsewhere(id, true)) {
-            showToast({ text: t('accounts.open_elsewhere') })
+            showToast({ kind: 'warning', text: t('accounts.open_elsewhere') })
             return false
         }
         closeWrites()
@@ -322,12 +322,12 @@ export async function removeProfile(id: string): Promise<boolean> {
         return true
     }
     if (await heldElsewhere(id)) {
-        showToast({ text: t('accounts.open_elsewhere') })
+        showToast({ kind: 'warning', text: t('accounts.open_elsewhere') })
         return false
     }
     await wipeLocal(id)
     saveBook(B.removeProfile(freshBook(), id))
-    showToast({ text: t('accounts.removed_toast') })
+    showToast({ kind: 'success', text: t('accounts.removed_toast') })
     return true
 }
 
@@ -339,7 +339,7 @@ export async function signInAgain(id: string) {
         closePicker()
         return
     }
-    if (await heldElsewhere(id, true)) return showToast({ text: t('accounts.open_elsewhere') })
+    if (await heldElsewhere(id, true)) return showToast({ kind: 'warning', text: t('accounts.open_elsewhere') })
     if (B.find(freshBook(), id)?.pin) unlock(id)
     if (id === activeId) {
         // Not opened yet (the picker at launch): its session alone goes (it may be unreadable), its lists
@@ -386,7 +386,7 @@ async function removeAllClear(): Promise<boolean> {
     if (removeAllNeeds().length) return false
     for (const p of freshBook().profiles) {
         if (p.id !== activeId && (await heldElsewhere(p.id))) {
-            showToast({ text: t('accounts.remove_all_elsewhere') })
+            showToast({ kind: 'warning', text: t('accounts.remove_all_elsewhere') })
             return false
         }
     }
@@ -433,7 +433,8 @@ export function showCarriedNotice() {
     if (intent?.kind !== 'notice') return
     takeIntent()
     const text = { same: t('accounts.same_account'), removed: t('accounts.signed_out_toast'), cancelled: t('accounts.add_cancelled'), failed: t('accounts.signout_failed'), deleted: t('accounts.removed_toast') }[intent.text]
-    showToast({ text })
+    // A line a reload carried over: the removals are done things, a failure is an error, the rest are notes.
+    showToast({ kind: intent.text === 'failed' ? 'error' : intent.text === 'removed' || intent.text === 'deleted' ? 'success' : 'info', text })
 }
 
 function peekIntent(): Intent | null {

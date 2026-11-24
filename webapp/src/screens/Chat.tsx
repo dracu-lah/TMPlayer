@@ -233,7 +233,7 @@ export function Chat() {
                 open: (path, item) => navigate(path, { state: { video: item } }),
             })
         } catch (e) {
-            showToast({ text: errorText(e) })
+            showToast({ kind: 'error', text: errorText(e) })
         }
     }
 

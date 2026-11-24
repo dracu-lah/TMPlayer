@@ -41,7 +41,7 @@ export function InAppCard(props: { onContinue: () => void }) {
     onMount(() => log('W', 'install', `in-app browser, ${inAppName(navigator.userAgent)}, ios ${iosVersion}`))
     const copyLink = async () => {
         const ok = await copy(address())
-        showToast({ text: ok ? t('common.link_copied') : address() })
+        showToast({ kind: ok ? 'success' : 'info', text: ok ? t('common.link_copied') : address() })
     }
     return (
         <section class="in-app-card" aria-labelledby="in-app-title">
