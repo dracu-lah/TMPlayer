@@ -5,7 +5,7 @@ package com.tmplayer.data
  * the catalog so they are translated with everything else, and the same sheet from Settings.
  *
  * The highlights describe one release, [VERSION], held in [ReleaseHighlights] (which the web app
- * reads too). Release prep moves the two together: new `whatsnew.highlight_*` keys and
+ * reads too). Release prep moves the two together: new `whatsnew.line_*` keys and
  * [ReleaseHighlights.VERSION]. A patch release that keeps them shows nothing, because the viewer
  * has already seen those highlights.
  */
@@ -17,9 +17,12 @@ object WhatsNew {
     /** Where "Full changelog" and the Settings "Changelog" row go. */
     const val CHANGELOG = ReleaseHighlights.CHANGELOG
 
-    /** The highlights, in the order the sheet lists them. */
+    /** The highlights, in the order the sheet lists them, without headings: the phone's lines. */
     val highlights: List<String>
         get() = ReleaseHighlights.highlights
+
+    /** The headings and lines the sheet shows on a device of [form]: the TV's about its remote, the phone's about touch. */
+    fun sections(form: DeviceForm): List<ReleaseHighlights.Section> = ReleaseHighlights.sectionsFor(form)
 
     /** What a launch does: show the sheet or not, and the version to remember, if any. */
     data class Launch(val show: Boolean, val remember: String?)
