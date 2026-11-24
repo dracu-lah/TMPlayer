@@ -29,6 +29,8 @@ import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.SplitPieces
 import com.tmplayer.data.Td
 import com.tmplayer.data.WatchedRecord
+import com.tmplayer.data.WorkStatus
+import com.tmplayer.data.Failures
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -388,6 +390,24 @@ class HomeViewModel(
     /** True while a refresh in place is fetching: the refresh control turns, the tiles stay up. */
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
+    private val _status = MutableStateFlow<WorkStatus>(WorkStatus.Idle)
+
+    /**
+     * What Home's rows are doing, for the status line (WP-93): Syncing while a refresh fetches
+     * (for [SYNC_BOX_MS] at most: a row still retrying after that is no longer called updating),
+     * Partial when some rows could not be read after their retries ("2 chats could not be read for
+     * now", Try again with [retryFailedRows]), Failed when every row Home asked for failed, with the
+     * time the tiles on screen are from. Idle otherwise. "Up to date" is the asked refresh's to say.
+     */
+    val status: StateFlow<WorkStatus> = _status.asStateFlow()
+
+    /** True once a refresh has said Syncing for [SYNC_BOX_MS]: it goes on quietly. */
+    private val syncBoxed = MutableStateFlow(false)
+    private var syncBox: Job? = null
+
+    /** When the rows on screen were last fresh from Telegram, on the wall clock (or the cache's own time); 0 for never. */
+    @Volatile private var freshWallAt = 0L
+
     /** When the rows were last brought up to date from Telegram, in elapsed real time; 0 for never. */
     @Volatile private var refreshedAt = 0L
 
@@ -448,6 +468,21 @@ class HomeViewModel(
         viewModelScope.launch {
             fetches.busy.collect { busy -> if (!busy) _refreshing.value = false }
         }
+        // The status line's state, from the flows above; nothing runs while they stand still.
+        viewModelScope.launch {
+            combine(_refreshing, fetches.failed, syncBoxed) { refreshing, failed, boxed ->
+                if (!refreshing) {
+                    syncBox?.cancel()
+                    syncBox = null
+                }
+                statusOf(
+                    syncing = refreshing && !boxed,
+                    failed = failed,
+                    asked = fetches.count(CHAT_KEY) + fetches.count(RECENT_KEY),
+                    keptAt = freshWallAt,
+                )
+            }.collect { _status.value = it }
+        }
     }
 
     /** Returns once no video is playing ([busy]) and Home is on screen ([shown]), checking every [BUSY_RECHECK_MS]. */
@@ -488,6 +523,7 @@ class HomeViewModel(
             _partial.value = snapshot.partial
             _art.value = snapshot.art
             _own.value = snapshot.chats
+            freshWallAt = snapshot.savedAt
             snapshot.art.values.forEach(RecordItems::keep)
             com.tmplayer.data.PerfLog.mark("home rows from cache (${snapshot.loaded.size} chats)", com.tmplayer.data.PerfLog.processStart)
             // Written moments ago (the desktop builds Home again on every visit): good as it is.
@@ -569,7 +605,7 @@ class HomeViewModel(
         // Before Home's chats are known, the rows drawn from the cache; after, only Home's chats.
         val chats = if (filled) order else _loaded.value.keys.toList()
         stale += chats
-        _refreshing.value = true
+        startSyncing()
         chats.take(REFRESH_CHATS).forEach { chatId ->
             stale -= chatId
             // The timed refresh leaves the chats Home follows: their posts ask for their rows
@@ -591,6 +627,27 @@ class HomeViewModel(
     /** Asks again for every row whose fetches failed, past their retries. */
     fun retryFailed() {
         fetches.retryFailed()
+    }
+
+    /**
+     * Try again on the status line's "2 chats could not be read for now" (WP-93): the rows that
+     * failed are asked again, and the line says Updating meanwhile rather than going blank.
+     */
+    fun retryFailedRows() {
+        if (fetches.retryFailed().isEmpty()) return
+        startSyncing()
+        if (!fetches.busy.value) _refreshing.value = false
+    }
+
+    /** [refreshing] on, and the time box that ends its Syncing started afresh. */
+    private fun startSyncing() {
+        syncBox?.cancel()
+        syncBoxed.value = false
+        _refreshing.value = true
+        syncBox = viewModelScope.launch {
+            delay(SYNC_BOX_MS)
+            syncBoxed.value = true
+        }
     }
 
     override fun onCleared() {
@@ -699,6 +756,7 @@ class HomeViewModel(
     }
 
     private fun noteFresh() {
+        freshWallAt = System.currentTimeMillis()
         if (firstFresh) return
         firstFresh = true
         com.tmplayer.data.PerfLog.mark("home first fresh row", com.tmplayer.data.PerfLog.processStart)
@@ -815,6 +873,7 @@ class HomeViewModel(
         feeds.clear()
         _refreshing.value = false
         refreshedAt = 0L
+        freshWallAt = 0L
         if (cached) HomeCache.clear()
         // The shows are asked again past their cache. What they found stays up meanwhile, so the
         // New episodes row does not blink out and back.
@@ -955,6 +1014,34 @@ class HomeViewModel(
     companion object {
         /** Rows fetched at once: enough to fill a screen quickly, few enough to stay polite to Telegram. */
         const val PARALLEL = 3
+
+        /** The longest a refresh says Syncing (the 3.10 spec's time box); what still runs after it goes on quietly. */
+        const val SYNC_BOX_MS = 60_000L
+
+        private const val CHAT_KEY = "chat:"
+        private const val RECENT_KEY = "recent"
+
+        /**
+         * Home's status from its parts, pure for the tests (WP-93). [failed] are the fetch keys
+         * that failed for good, [asked] how many row keys (chats and Recently added) Home holds,
+         * [keptAt] when the rows on screen were fresh (0 for never). Every row failing is Failed,
+         * with the tiles kept from [keptAt]; some chats failing is Partial with their count; a
+         * refresh running is Syncing.
+         */
+        fun statusOf(syncing: Boolean, failed: Set<String>, asked: Int, keptAt: Long): WorkStatus {
+            val rows = failed.count { it.startsWith(CHAT_KEY) || it == RECENT_KEY }
+            val chats = failed.count { it.startsWith(CHAT_KEY) }
+            return when {
+                rows > 0 && rows >= asked -> WorkStatus.Failed(Failures.DEFAULT, keptAt = keptAt.takeIf { it > 0 })
+                chats > 0 -> WorkStatus.Partial(
+                    okCount = (asked - rows).coerceAtLeast(0),
+                    failedCount = chats,
+                    what = com.tmplayer.i18n.L.homeRowsFailed(count = chats),
+                )
+                syncing -> WorkStatus.Syncing()
+                else -> WorkStatus.Idle
+            }
+        }
 
         /**
          * Home's chats asked for as soon as they are picked ([fill]): a screen and a half of rows.

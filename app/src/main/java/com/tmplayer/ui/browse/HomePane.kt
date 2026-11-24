@@ -74,8 +74,11 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import com.tmplayer.ui.components.liveMessage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -85,6 +88,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
+import com.tmplayer.data.WorkStatus
 import com.tmplayer.data.MediaItem
 import com.tmplayer.ui.components.warmUpOnIntent
 import com.tmplayer.data.ResumeRecord
@@ -204,6 +208,17 @@ internal fun HomePane(
      * ([com.tmplayer.ui.browse.HomeViewModel.seeAll]); null keeps each row to what Home holds.
      */
     feedOf: (HomeRow) -> com.tmplayer.ui.browse.RowFeed? = { null },
+    /**
+     * What Home's rows are doing ([com.tmplayer.ui.browse.HomeViewModel.status], WP-93): rows that
+     * could not be read (Partial), or none at all (Failed), said in Home's foot with Try again.
+     */
+    work: WorkStatus = WorkStatus.Idle,
+    /** Telegram has been slow for a few seconds with rows still out: the foot says so, with Retry (LS-06). */
+    stalled: Boolean = false,
+    /** Try again on the foot's failure: the rows that failed are asked again. */
+    onRetryRows: () -> Unit = {},
+    /** Retry on the foot's slow line: Home's rows asked again in place. */
+    onRefresh: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
@@ -249,9 +264,12 @@ internal fun HomePane(
             waitedOut = true
         }
         if (held && !waitedOut) {
+            // Placeholder rows under the heading, and from a second on the words for them (LS-05):
+            // a heading over a blank page for up to ten seconds read as a Home that had broken.
             Column(Modifier.fillMaxSize().padding(top = under)) {
                 tvHeader?.invoke(false)
                 if (touch) PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP), onArt = false)
+                HomeRowsWaiting(start = start, touch = touch, label = s.homeLoadingRows)
             }
             return
         }
@@ -364,6 +382,8 @@ internal fun HomePane(
     val restored = remember { booleanArrayOf(false) }
     // Each row's tiles, by row key, for putting the remote back into the row it was in.
     val rowFocus = remember { HashMap<String, FocusRequester>() }
+    // Whether the foot's status line was up last time (WP-93): kept through the retry it offered.
+    val footHeld = remember { booleanArrayOf(false) }
     if (!touch) {
         androidx.compose.runtime.DisposableEffect(shellLifecycle) {
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -808,6 +828,43 @@ internal fun HomePane(
                                     returnTo = null
                                 }
                                 ShelfRows(row.entries, watch, touch, isFirst, first, chatTitle, onPlay, onHoldMedia, start, end, rowTiles, seeAllEnd) { opened.open(it) }
+                            }
+                        }
+                    }
+                }
+                // Rows that could not be read, or a Telegram slow enough that rows are still out,
+                // said under the last row with Try again (WP-93, LS-06): before this a failed row
+                // went empty and vanished, and a stall dropped the rows still out, both silently.
+                // In the foot, so it never pushes a row; reached with Down from the last row. On a
+                // phone a failure of every row is the line under the title's to say.
+                val footWork: WorkStatus? = when {
+                    work is WorkStatus.Partial -> work
+                    work is WorkStatus.Failed && !touch -> work
+                    // Kept through the retry it offered, so focus on Try again has somewhere to go.
+                    footHeld[0] && work is WorkStatus.Syncing -> work
+                    else -> null
+                }
+                footHeld[0] = footWork != null
+                if (footWork != null || stalled) {
+                    item(key = WORK_FOOT_KEY, contentType = WORK_FOOT_KEY) {
+                        Box(Modifier.fillMaxWidth().padding(start = start, end = end, top = 8.dp)) {
+                            if (footWork != null) {
+                                com.tmplayer.ui.components.WorkStatusLine(
+                                    status = footWork,
+                                    asked = true,
+                                    onRetry = onRetryRows,
+                                    sendLogs = { com.tmplayer.ui.settings.SendLogsButton() },
+                                    // Try again leaves focus on the last row, never on a line that goes.
+                                    focusAfterRetry = if (touch) null else listed.lastOrNull()?.let { rowFocus[it.key] },
+                                )
+                            } else {
+                                // The desktop's slow line (HomeStalledLine): "Telegram is slow to answer", Retry.
+                                com.tmplayer.ui.components.WorkStatusLine(
+                                    shown = com.tmplayer.ui.components.ShownWork(WorkStatus.Syncing(), slow = true),
+                                    asked = true,
+                                    onRetry = onRefresh,
+                                    focusAfterRetry = if (touch) null else listed.lastOrNull()?.let { rowFocus[it.key] },
+                                )
                             }
                         }
                     }
@@ -1354,6 +1411,41 @@ private fun PlaceholderRow(start: Dp, poster: Boolean = false) {
     }
 }
 
+/**
+ * Home while its first rows are still being built (LS-05): three [PlaceholderRow]s where the rows
+ * will be, and from a second on one line that says what loads, spoken once. One node for a screen
+ * reader, an indeterminate progress bar named by [label], as every skeleton is (WP-92). Never
+ * focusable: the remote stays where it is (the top bar) until the rows come.
+ */
+@Composable
+internal fun HomeRowsWaiting(start: Dp, touch: Boolean, label: String) {
+    val due = com.tmplayer.ui.components.rememberSkeletonLabelDue(label)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo.Indeterminate
+            },
+        verticalArrangement = Arrangement.spacedBy(if (touch) ROW_GAP_TOUCH else ROW_GAP_TV),
+    ) {
+        // Its height held from the first frame, so the rows under it never move when the words come.
+        Box(Modifier.fillMaxWidth().padding(start = start, end = start, top = if (touch) 12.dp else 0.dp).height(HOME_WAIT_LABEL_HEIGHT), contentAlignment = Alignment.CenterStart) {
+            if (due) {
+                M3Text(
+                    label,
+                    style = M3MaterialTheme.typography.bodyLarge,
+                    color = Tone.muted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.liveMessage(),
+                )
+            }
+        }
+        repeat(HOME_WAIT_ROWS) { index -> PlaceholderRow(start, poster = index > 0) }
+    }
+}
+
 /** One blank card the size of a real one: a [PlaceholderRow]'s, and the foot of a row reading on. */
 @Composable
 private fun PlaceholderTile(width: Dp, touch: Boolean, poster: Boolean = false) {
@@ -1546,6 +1638,15 @@ internal fun continueStartsTheRemote(first: HomeRow?, picks: List<com.tmplayer.d
 
 /** How long an empty Home waits for its rows before it takes itself for a first run. */
 private const val ROWS_WAIT_MS = 10_000L
+
+/** Placeholder rows Home draws while its first rows are built (LS-05). */
+private const val HOME_WAIT_ROWS = 3
+
+/** The waiting line's height, held before its words show. */
+private val HOME_WAIT_LABEL_HEIGHT = 48.dp
+
+/** The key of Home's foot status line ([WorkStatus], WP-93). */
+internal const val WORK_FOOT_KEY = "work-foot"
 
 /** How long Home without a carousel waits for one to turn up before the cold start's loader lifts. */
 private const val NO_CAROUSEL_SETTLE_MS = 1_500L

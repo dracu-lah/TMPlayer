@@ -125,6 +125,31 @@ fun rememberAskedRefresh(busy: Boolean): AskedRefresh {
     return asked
 }
 
+/** What a page's status line or pill shows ([pageWork]), and whether the viewer asked for it (the ladder's `asked`). */
+@androidx.compose.runtime.Immutable
+data class PageWork(val status: WorkStatus, val asked: Boolean)
+
+/**
+ * One status for a page from its asked refresh ([AskedRefresh.status]) and what its view model says
+ * of its own work ([page]: the chat list's `listStatus`, Home's `status`), for WP-93. The asked
+ * refresh speaks while it runs or holds off for Telegram's wait; then a failure or a partial answer
+ * of the page beats its "Up to date" (a refresh that ended badly is never called up to date), and
+ * the page's own automatic Syncing shows only once the asked "Up to date" has had its two seconds.
+ * A time box failure of the asked refresh stands only while the page still has work running.
+ */
+fun pageWork(asked: WorkStatus, page: WorkStatus, now: Long): PageWork = when {
+    asked is WorkStatus.Syncing || asked is WorkStatus.RateLimited -> PageWork(asked, true)
+    page is WorkStatus.Failed || page is WorkStatus.Partial || page is WorkStatus.RateLimited -> PageWork(page, false)
+    asked is WorkStatus.Updated && now - asked.at in 0 until WorkLadder.UPDATED_FOR_MS -> PageWork(asked, true)
+    asked is WorkStatus.Failed && page != WorkStatus.Idle -> PageWork(asked, true)
+    page is WorkStatus.Syncing -> PageWork(page, false)
+    else -> PageWork(WorkStatus.Idle, false)
+}
+
+/** [status] with only what a page must still say after the work: a failure or Telegram's wait; the rest is Idle. */
+fun WorkStatus.failureOnly(): WorkStatus =
+    if (this is WorkStatus.Failed || this is WorkStatus.RateLimited) this else WorkStatus.Idle
+
 /**
  * The asked refresh's line on a phone or a desktop window, in a container of its own so it reads
  * over a carousel or a list, drawn only once the ladder says it is due (an answer in under 400 ms

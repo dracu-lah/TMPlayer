@@ -2248,6 +2248,11 @@ private fun Root() {
                     onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
                     homeRefreshing = homeViewModel.refreshing.collectAsStateWithLifecycle().value,
                     chatsRefreshing = chatsViewModel.refreshing.collectAsStateWithLifecycle().value,
+                    // What failed, what is kept and what is slow, for the status line and Home's foot (WP-93).
+                    chatsStatus = chatsViewModel.listStatus.collectAsStateWithLifecycle().value,
+                    homeStatus = homeViewModel.status.collectAsStateWithLifecycle().value,
+                    homeStalled = homeViewModel.stalled.collectAsStateWithLifecycle().value,
+                    onRetryHomeRows = homeViewModel::retryFailedRows,
                     // Home's own rows alone (HX44): the chat list no longer needs a manual sync
                     // piggybacked on this, since TDLib's own updates already keep it live.
                     onRefreshHome = { homeViewModel.refreshInPlace() },

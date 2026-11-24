@@ -32,6 +32,9 @@ import com.tmplayer.data.batched
 import com.tmplayer.data.VideoChanges
 import com.tmplayer.data.VideoBatch
 import com.tmplayer.data.TdSession
+import com.tmplayer.data.ChatSync
+import com.tmplayer.data.WorkStatus
+import com.tmplayer.data.WorkStatusWords
 import com.tmplayer.ui.components.StateAction
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.icons.TmIcons
@@ -384,6 +387,21 @@ class ChatListViewModel(
     /** Whether a load is running, so a refresh button can keep turning until the list is in. */
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
+    private val _listStatus = MutableStateFlow<WorkStatus>(WorkStatus.Idle)
+
+    /**
+     * What the chat list's sync is doing while chats are on screen, for the status line (WP-93,
+     * LS-01): Syncing while [load] runs with a list held ([ChatListStatus.SYNC_BOX_MS] at most),
+     * then Updated when the viewer asked ([refreshUnlessRateLimited]) or Idle; Failed with the time
+     * of the list kept when the sync failed, until the next success; RateLimited for a flood wait;
+     * Partial when the archive or some chats did not load; Offline when no line came in time (the
+     * offline banner says it). Idle while nothing is held: the page's own skeleton and error speak.
+     */
+    val listStatus: StateFlow<WorkStatus> = _listStatus.asStateFlow()
+
+    /** The refresh running now was pressed for: only that one ends in "Up to date". */
+    private var asked = false
+
     /**
      * The header's own channel to the drawer, because [publish] cannot carry it until the chat
      * list exists: on a cold start the name and face are read off disk in milliseconds while the
@@ -519,8 +537,12 @@ class ChatListViewModel(
      */
     fun refreshUnlessRateLimited(): Int {
         val waiting = Td.floodWaitRemainingSeconds()
-        if (waiting > 0) return waiting
-        load()
+        if (waiting > 0) {
+            // Said on the line too, with its countdown, while the toast says it once (WP-93).
+            if (chats != null) WorkStatus.rateLimited(waiting, System.currentTimeMillis())?.let { _listStatus.value = it }
+            return waiting
+        }
+        load(pressed = true)
         return 0
     }
 
@@ -636,10 +658,37 @@ class ChatListViewModel(
         Background.scope.launch(com.tmplayer.data.AccountOwner(com.tmplayer.data.Accounts.stamp)) { runCatching { store.saveChatSnapshot(chats) } }
     }
 
-    fun load() {
+    private var syncBox: Job? = null
+
+    /** [listStatus] says Syncing, once a list is held, for [ChatListStatus.SYNC_BOX_MS] at most. */
+    private fun syncingNow() {
+        if (chats == null || _listStatus.value is WorkStatus.Syncing) return
+        _listStatus.value = WorkStatus.Syncing()
+        syncBox?.cancel()
+        syncBox = viewModelScope.launch {
+            kotlinx.coroutines.delay(ChatListStatus.SYNC_BOX_MS)
+            if (_listStatus.value is WorkStatus.Syncing) _listStatus.value = WorkStatus.Idle
+        }
+    }
+
+    /** [listStatus] after the sync ended, the time box with it. */
+    private fun syncEnded(status: WorkStatus) {
+        syncBox?.cancel()
+        syncBox = null
+        _listStatus.value = status
+        asked = false
+    }
+
+    /** When the list on screen was last whole from Telegram, for "Showing what was here at"; null when not this run. */
+    private fun keptAt(): Long? = syncedAt.takeIf { it > 0 }
+
+    /** Reads the list again; [pressed] when the viewer asked for it, so its end says "Up to date". */
+    fun load(pressed: Boolean = false) {
         loadJob?.cancel()
         if (chats == null) _state.value = loading()
         _refreshing.value = true
+        asked = pressed
+        syncingNow()
         val job = viewModelScope.launch {
             val session = Td.awaitAuthorizedSession()
             val repository = ChatRepository(session.client)
@@ -675,6 +724,8 @@ class ChatListViewModel(
                 }
                 if (!session.isCurrent()) return@launch
                 if (chats != null) publish()
+                // The list from the disk is up: what follows is Telegram catching up behind it.
+                syncingNow()
 
                 // The local database is the first answer. Telegram is then synchronized when its
                 // socket is ready, without holding the saved library behind a connection wait.
@@ -685,6 +736,8 @@ class ChatListViewModel(
                     if (session.isCurrent() && chats == null) {
                         _state.value = UiState.Error(Failures.OFFLINE)
                     }
+                    // No line in time: the offline banner says so, and the list stays.
+                    syncEnded(if (chats != null) WorkStatus.Offline(keptAt()) else WorkStatus.Idle)
                     giveUpOnFolders()
                     return@launch
                 }
@@ -706,6 +759,10 @@ class ChatListViewModel(
                 if (sync.complete || sync.chats.isNotEmpty()) chats = foldered(sync.chats)
                 if (sync.complete) syncedAt = System.currentTimeMillis()
                 if (session.isCurrent()) publish()
+                // Never silent while chats are on screen (LS-01): a failure says what is kept.
+                if (session.isCurrent()) {
+                    syncEnded(ChatListStatus.afterSync(sync, held = chats != null, keptAt = keptAt(), asked = asked, now = System.currentTimeMillis()))
+                }
                 // The retired hidden chats are folded into the added chats (AddedChats.foldHiddenChats).
                 // Under "every chat" the fold keeps every chat but the hidden ones, so it is handed
                 // the list only once it is whole; a pick folds without it.
@@ -728,7 +785,13 @@ class ChatListViewModel(
                 if (session.isCurrent() && chats == null) {
                     _state.value = UiState.Error(Failures.humanise(error))
                 }
-                _paging.value = _paging.value.copy(loading = false)
+                // With chats on screen the failure is said (LS-01): on the status line, and in the
+                // list's foot with Try again, which reads the whole list again.
+                val now = System.currentTimeMillis()
+                val status = if (session.isCurrent()) ChatListStatus.afterError(error, held = chats != null, keptAt = keptAt(), now = now) else WorkStatus.Idle
+                syncEnded(status)
+                val foot = ChatListStatus.footWords(status, error, now)
+                _paging.value = if (foot != null) _paging.value.copy(loading = false, failure = foot, partial = true) else _paging.value.copy(loading = false)
                 giveUpOnFolders()
             }
         }
@@ -758,6 +821,7 @@ class ChatListViewModel(
         chats = null
         syncedAt = 0L
         limit = ChatRepository.CHAT_LIMIT
+        syncEnded(WorkStatus.Idle)
         _paging.value = ChatPaging()
         _state.value = loading()
         // The cold-start snapshots go with it: they exist so the next launch opens on the last
@@ -855,6 +919,48 @@ data class ChatPaging(
     /** The list is short of the account for a reason other than its length (HX32): Try again reads it all again. */
     val partial: Boolean = false,
 )
+
+/**
+ * How a chat list sync ends on the status line ([ChatListViewModel.listStatus], WP-93), as plain
+ * functions so the tests need no TDLib. Nothing is said while no list is held ([held] false): the
+ * page's skeleton and its error page are the first load's.
+ */
+object ChatListStatus {
+
+    /** The longest the list says Syncing; a deep archive walk past it goes on quietly. */
+    const val SYNC_BOX_MS = 60_000L
+
+    /**
+     * The main list failing is Failed with the list kept from [keptAt] (or Telegram's wait, past
+     * [WorkStatus.QUIET_WAIT_SECONDS]); the archive or some chats missing is Partial; a whole list
+     * is Updated when the viewer [asked] for it, and Idle when it came by itself.
+     */
+    fun afterSync(sync: ChatSync, held: Boolean, keptAt: Long?, asked: Boolean, now: Long): WorkStatus = when {
+        !held -> WorkStatus.Idle
+        sync.failure != null -> WorkStatus.ofFailure(sync.failure, now, keptAt)
+        sync.partial -> WorkStatus.Partial(
+            okCount = sync.chats.size,
+            failedCount = sync.dropped.coerceAtLeast(0),
+            what = L.chatsSomeNotLoaded,
+        )
+        asked -> WorkStatus.Updated(now)
+        else -> WorkStatus.Idle
+    }
+
+    /** A load that threw: said with the list kept, or nothing while no list is held. */
+    fun afterError(error: Throwable, held: Boolean, keptAt: Long?, now: Long): WorkStatus =
+        if (held) WorkStatus.ofFailure(error, now, keptAt) else WorkStatus.Idle
+
+    /**
+     * What the list's foot says for [status] beside its Try again, or null when the foot has
+     * nothing to add (offline: the banner says it; nothing failed).
+     */
+    fun footWords(status: WorkStatus, error: Throwable?, now: Long): String? = when (status) {
+        is WorkStatus.Failed -> WorkStatusWords.line(status, now)
+        is WorkStatus.RateLimited -> Failures.humanise(error)
+        else -> null
+    }
+}
 
 /**
  * Shown under the first chat list on a device, which is the slow one: every launch after it opens

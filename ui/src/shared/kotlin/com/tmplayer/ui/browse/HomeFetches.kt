@@ -72,6 +72,23 @@ internal class HomeFetches(
     /** True while any fetch is queued or running. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    private val _failed = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * The keys whose last fetch failed for good (after its retries), as a flow for Home's status
+     * line (WP-93): "2 chats could not be read for now", with Try again. Empty while none has.
+     */
+    val failed: StateFlow<Set<String>> = _failed.asStateFlow()
+
+    /** How many keys starting with [prefix] Home has asked for and still holds, answered or not. */
+    fun count(prefix: String): Int = entries.keys.count { it.startsWith(prefix) }
+
+    /** [failed] brought up to date; cheap, and only written when it changed. */
+    private fun noteFailed() {
+        val now = entries.filterValues { it.failed && it.job == null }.keys
+        if (now != _failed.value) _failed.value = now
+    }
+
     /** Fetches started, for the tests and the log. */
     var started = 0
         private set
@@ -110,6 +127,7 @@ internal class HomeFetches(
         }
         val wait = if (minGapMs > 0 && entry.answeredAt >= 0) (entry.answeredAt + minGapMs - clock()).coerceAtLeast(0) else 0
         launch(key, entry, wait, before)
+        noteFailed()
     }
 
     /**
@@ -141,12 +159,14 @@ internal class HomeFetches(
     fun forget(key: String) {
         val entry = entries.remove(key) ?: return
         if (!entry.running) entry.job?.let { it.cancel(); done(entry) }
+        noteFailed()
     }
 
     /** Stops everything and forgets every key: for a sign out. */
     fun clear() {
         entries.values.forEach { it.job?.cancel() }
         entries.clear()
+        _failed.value = emptySet()
         pending = 0
         _busy.value = false
         _stalled.value = false
@@ -216,6 +236,7 @@ internal class HomeFetches(
             entry.again = false
             launch(key, entry, 0, before)
         }
+        noteFailed()
     }
 
     private fun done(entry: Entry) {

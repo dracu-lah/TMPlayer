@@ -6,6 +6,9 @@ import androidx.compose.animation.core.snap
 import com.tmplayer.data.WorkStatus
 import com.tmplayer.ui.components.WorkStatusPill
 import com.tmplayer.ui.components.rememberAskedRefresh
+import com.tmplayer.ui.components.PageWork
+import com.tmplayer.ui.components.pageWork
+import com.tmplayer.ui.components.failureOnly
 import com.tmplayer.ui.components.BackToTop
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.components.pageKeys
@@ -314,6 +317,14 @@ internal fun BrowseScreen(
     homeRefreshing: Boolean = false,
     /** True while the chat list is being fetched again: the pull's spinner and the status line wait for it (LS-02). */
     chatsRefreshing: Boolean = false,
+    /** What the chat list's sync is doing with chats on screen ([ChatListViewModel.listStatus], WP-93). */
+    chatsStatus: WorkStatus = WorkStatus.Idle,
+    /** What Home's rows are doing ([HomeViewModel.status]): a failure or rows that could not be read. */
+    homeStatus: WorkStatus = WorkStatus.Idle,
+    /** Telegram has been slow for a few seconds with rows still out ([HomeViewModel.stalled]). */
+    homeStalled: Boolean = false,
+    /** Try again on Home's "chats could not be read" line ([HomeViewModel.retryFailedRows]). */
+    onRetryHomeRows: () -> Unit = {},
     /** "Mark as watched" (true) or back (false) from a detail panel opened here; the third is the chat's name. */
     onSetMediaWatched: (MediaItem, String, Boolean) -> Unit = { _, _, _ -> },
     /** One line for the viewer, such as what a Download from a detail panel did. */
@@ -740,6 +751,11 @@ internal fun BrowseScreen(
                                 // status bar does, and scrolls away with it.
                                 // Room for the television's top bar, which stands over the carousel's picture.
                                 tvHeader = if (touch) null else { _ -> Spacer(Modifier.fillMaxWidth().height(TV_BAR_HEIGHT)) },
+                                // Rows that failed or are slow are said in Home's foot (WP-93, LS-06).
+                                work = homeStatus,
+                                stalled = homeStalled,
+                                onRetryRows = onRetryHomeRows,
+                                onRefresh = onRefreshHome,
                             )
                             }
                         }
@@ -996,10 +1012,13 @@ internal fun BrowseScreen(
                     else -> false
                 }
             },
+            // A failure or Telegram's wait the view model saw stays on the line until the next
+            // success (WP-93, LS-01); its Syncing is the pull spinner's to show.
             refreshStatusOf = { page ->
+                val now = System.currentTimeMillis()
                 when {
-                    page.isHome -> homeAsk.status
-                    !page.listsVideos -> chatsAsk.status
+                    page.isHome -> pageWork(homeAsk.status, homeStatus.failureOnly(), now).status
+                    !page.listsVideos -> pageWork(chatsAsk.status, chatsStatus.failureOnly(), now).status
                     else -> WorkStatus.Idle
                 }
             },
@@ -1145,14 +1164,19 @@ internal fun BrowseScreen(
             // Home while it loads, starts below the bar.
             val underBar = homeShown && state is UiState.Content
             // The asked refresh's pill, where the connection's sits; never focusable (WP-40, LS-03).
+            // Updating after the menu's Refresh, or after 3 s of an automatic one, then Up to date
+            // for 2 s after a pressed one (WP-93); a failure is the page foot's line, never the pill's.
+            val pillWork = System.currentTimeMillis().let { now ->
+                when {
+                    tvSearchOpen -> PageWork(WorkStatus.Idle, false)
+                    tab.isHome -> pageWork(homeAsk.status, homeStatus, now)
+                    tab.onChatsPage -> pageWork(chatsAsk.status, chatsStatus, now)
+                    else -> PageWork(WorkStatus.Idle, false)
+                }
+            }
             WorkStatusPill(
-                status = when {
-                    tvSearchOpen -> WorkStatus.Idle
-                    tab.isHome -> homeAsk.status
-                    tab.onChatsPage -> chatsAsk.status
-                    else -> WorkStatus.Idle
-                },
-                asked = true,
+                status = pillWork.status,
+                asked = pillWork.asked,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .zIndex(1f)
