@@ -60,7 +60,7 @@ test.describe('Settings as pages', () => {
             await expect(page).toHaveURL(/\/settings\/account$/)
             const list = page.getByRole('navigation', { name: 'Settings' })
             // The apps' order (WP-78): Account, Playback, Subtitles and audio, Downloads and data, Appearance and language, Home and library, Help and About.
-            await expect(list.getByRole('link')).toHaveCount(8)
+            await expect(list.locator('.set-card').getByRole('link')).toHaveCount(8)
             await expect(list.getByRole('link', { name: /^Account/ })).toHaveAttribute('aria-current', 'page')
             await list.getByRole('link', { name: /^Appearance/ }).click()
             await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()

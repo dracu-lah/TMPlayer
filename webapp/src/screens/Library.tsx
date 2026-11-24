@@ -110,6 +110,12 @@ export function HistoryPage() {
             return both.sort((a, b) => b.time - a.time).filter((e) => !seen.has(e.key) && !!seen.add(e.key))
         },
     )
+    // What the account menu used to count in its strip (watching, watched, starred) is said here, once, under the heading.
+    const [tallies] = createResource(
+        () => watchedTick(),
+        async () => ({ watching: (await resumes()).length, watched: (await watchedList()).length }),
+    )
+    const tally = () => (tallies() ? t('profile.summary', { ...tallies()!, starred: starredIds().size }) : '')
     const progress = useProgress()
     const leftOf = useLeft()
     const days = () => byDay(entries.latest ?? [])
@@ -211,7 +217,7 @@ export function HistoryPage() {
     })
     return (
         <>
-            <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
+            <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} note={tally()} />
             {/* A question first (HX59), then the toast offers Undo for 8 s: Clear history takes Continue watching and Watched and keeps Watch later; on Watch later, Clear Watch later takes that list alone. */}
             <Show when={days().length}>
                 <div class="history-actions">
@@ -354,11 +360,14 @@ function byDay(entries: Entry[]): { label: string; entries: Entry[] }[] {
     return out
 }
 
-function PageHead(props: { title: string; blurb: string }) {
+function PageHead(props: { title: string; blurb: string; note?: string }) {
     return (
         <header class="library-head">
             <h1 class="page-title">{props.title}</h1>
             <p class="muted">{props.blurb}</p>
+            <Show when={props.note}>
+                <p class="muted small history-tally" data-history-tally>{props.note}</p>
+            </Show>
         </header>
     )
 }

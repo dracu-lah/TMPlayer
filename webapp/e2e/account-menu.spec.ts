@@ -20,8 +20,9 @@ test('the picture is named for the account, says it opens a menu, and draws the 
     await expect(you).toHaveAttribute('aria-haspopup', 'menu')
     await expect(you.locator('.nav-picture')).toHaveAttribute('data-picture', 'initial')
     await expect(you.locator('.nav-picture')).toHaveText('D')
-    // The caption under it is the first name.
-    await expect(you.locator('.nav-label')).toHaveText('Dana')
+    // No visible label (a long name never fits one): the name is its accessible name and its tooltip.
+    await expect(you.locator('.nav-label')).toHaveCount(0)
+    await expect(you).toHaveAttribute('title', 'Account, Dana Test')
     await expect(page.locator('.nav-picture-blank')).toHaveCount(0)
 })
 
@@ -62,26 +63,39 @@ test('Enter opens the menu with whose account it is, the arrows walk it, Escape 
     await expect(card).toHaveAccessibleName('Account, Dana Test')
     await expect(card.locator('.you-who')).toContainText('Dana Test')
     await expect(card.locator('.you-who')).toContainText('@danatest')
-    // One profile: Add account first, then Settings, one press from the open menu as the gear was.
-    expect(await focusedText(page)).toBe('Add account')
+    // The first tile has the keyboard; the three tiles are one row (Left and Right), then Settings, Add account and the version.
+    expect(await focusedText(page)).toContain('Favourites')
+    await page.keyboard.press('ArrowRight')
+    expect(await focusedText(page)).toContain('History')
+    await page.keyboard.press('ArrowRight')
+    expect(await focusedText(page)).toContain('Watch later')
+    await page.keyboard.press('ArrowRight')
+    expect(await focusedText(page)).toContain('Watch later')
     await page.keyboard.press('ArrowDown')
     expect(await focusedText(page)).toContain('Settings')
-    // End is the menu's last line, the version (WP-104); Sign out is the one above it.
-    await page.keyboard.press('End')
-    expect(await focusedText(page)).toMatch(/^TMPlayer web \(/)
+    await page.keyboard.press('ArrowDown')
+    expect(await focusedText(page)).toBe('Add account')
     await page.keyboard.press('ArrowUp')
-    expect(await focusedText(page)).toBe('Sign out')
+    await page.keyboard.press('ArrowUp')
+    expect(await focusedText(page)).toContain('Watch later')
+    // End is the menu's last line, the compact version (WP-104); Add account is the one above it.
+    await page.keyboard.press('End')
+    expect(await focusedText(page)).toMatch(/^(v\d+\.\d+(\.\d+)?|web)$/)
+    await page.keyboard.press('ArrowUp')
+    expect(await focusedText(page)).toBe('Add account')
     await page.keyboard.press('Escape')
     await expect(card).toHaveCount(0)
     await expect(picture(page)).toBeFocused()
 })
 
-test('Sign out from the menu asks first, naming the account, and Escape keeps the session', async ({ page }) => {
+test('the menu has no Sign out (Settings has it, and asks first)', async ({ page }) => {
     await page.goto('/')
     await picture(page).click()
-    await menu(page).getByRole('menuitem', { name: 'Sign out' }).click()
+    await expect(menu(page).getByRole('menuitem', { name: /Sign out/ })).toHaveCount(0)
+    await menu(page).getByRole('menuitem', { name: /^Settings/ }).click()
+    await expect(page).toHaveURL(/\/settings(\/[a-z-]+)?$/)
+    await page.getByRole('button', { name: 'Sign out of Telegram' }).click()
     await expect(page.getByRole('dialog', { name: 'Sign out of Telegram as Dana Test?' })).toBeVisible()
-    await expect(menu(page)).toHaveCount(0)
     await page.keyboard.press('Escape')
     await expect(page.locator('dialog[open]')).toHaveCount(0)
     await expect(picture(page)).toBeVisible()

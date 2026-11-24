@@ -34,6 +34,9 @@ const THUMB = '/__e2e/media/thumb.jpg'
 /** The accounts the fake knows (HX88's profiles): 1 is the one every test starts signed in as. */
 const NAMES: Record<number, string> = { 1: 'Dana Test', 2: 'Robin Test', 3: 'Sam Test' }
 
+/** 60 characters, with no space to wrap at once (the `longname` case). */
+export const LONG_NAME = 'Maximilian-Alexander Featherstonehaugh-Montgomery Fitzgerald'
+
 export class User {
     constructor(public raw: unknown) {}
     get id() {
@@ -43,6 +46,8 @@ export class User {
     get displayName() {
         // `noname`: an account Telegram gives no name (the bar's picture falls back to the person glyph).
         if (flags.has('noname')) return ''
+        // `longname`: a name no bar label fits (it ellipsizes in its own cell).
+        if (flags.has('longname') && this.id === 1) return LONG_NAME
         return NAMES[this.id] ?? `User ${this.id}`
     }
     get username() {

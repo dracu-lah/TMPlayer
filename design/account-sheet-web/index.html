@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account sheet, web</title>
+<style>
+  body { margin: 0; padding: 24px; font: 14px/1.4 system-ui, sans-serif; background: #15181b; color: #e6eaed; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p { margin: 0 0 20px; color: #9aa4ab; }
+  .grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  figure { margin: 0; }
+  img { display: block; max-width: 100%; height: auto; border: 1px solid #2b3238; border-radius: 8px; }
+  figcaption { margin-top: 6px; color: #9aa4ab; font-size: 12px; }
+  .phone img { width: 300px; }
+  .land img { width: 560px; }
+  .wide img { width: 520px; }
+</style>
+</head>
+<body>
+<h1>Account sheet and bottom bar, web</h1>
+<p>Made by <code>SHOTS=1 playwright test e2e/nav-sheet.spec.ts</code> (webapp). The bar keeps its five places; the account is the last item, avatar only (name in its label and tooltip).</p>
+<div class="grid phone">
+  <figure><img src="phone-390-bar.png" alt=""><figcaption>390 x 844, the bar</figcaption></figure>
+  <figure><img src="phone-390-sheet.png" alt=""><figcaption>390 x 844, the account sheet</figcaption></figure>
+  <figure><img src="phone-360x640-sheet-130.png" alt=""><figcaption>360 x 640, text at 130 percent</figcaption></figure>
+  <figure><img src="phone-390-settings.png" alt=""><figcaption>390 x 844, Settings foot</figcaption></figure>
+  <figure><img src="phone-390-mid-transition.png" alt=""><figcaption>390 x 844, a route change in flight: the avatar stays</figcaption></figure>
+</div>
+<div class="grid land" style="margin-top:20px">
+  <figure><img src="phone-844-landscape-bar.png" alt=""><figcaption>844 x 390, the bar</figcaption></figure>
+  <figure><img src="phone-844-landscape-sheet.png" alt=""><figcaption>844 x 390, the sheet</figcaption></figure>
+  <figure><img src="phone-844-landscape-settings.png" alt=""><figcaption>844 x 390, Settings foot</figcaption></figure>
+</div>
+<div class="grid wide" style="margin-top:20px">
+  <figure><img src="tablet-768-menu.png" alt=""><figcaption>768, the anchored card</figcaption></figure>
+  <figure><img src="desktop-1280-menu.png" alt=""><figcaption>1280, the anchored card</figcaption></figure>
+  <figure><img src="desktop-1280-settings.png" alt=""><figcaption>1280, Settings two panes</figcaption></figure>
+</div>
+</body>
+</html>

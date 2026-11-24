@@ -1,8 +1,12 @@
 // The app's navigation, as the phone and the desktop draw it: one rounded pill floating at the foot
 // of the page, holding Home, Chats, Search, History and the account's picture, which opens the
-// account menu (WP-103: the account, Settings, the viewer's own lists and Sign out). A pointer gets a
-// short name under each icon; a phone held sideways, where height is short, gets the compact bar of
-// round icon buttons (CSS). One highlight slides to the chosen place.
+// account menu (WP-103: the account, Settings, the viewer's own lists and Sign out). The five items
+// share the pill's width equally and one label size and line height (CSS), with roomy padding; the
+// account is the picture alone (a long name never fits a label: it is the button's name and tooltip). A
+// pointer gets a short name under each icon; a phone held sideways, where height is short, gets the
+// compact bar of round icon buttons (CSS). One highlight slides to the chosen place. On a phone width
+// the account menu is a bottom sheet (a modal dialog, so Back and the swipe back close it, WP-54);
+// on wider windows it is a card over the bar.
 import { onGlobal } from './globalInput'
 import { createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { A, useLocation, useNavigate } from '@solidjs/router'
@@ -10,11 +14,11 @@ import {
     Clock01Icon,
     History,
     Home03Icon,
-    Logout05Icon,
     Message01Icon,
     Search01Icon,
     Settings01Icon,
     StarIcon,
+    UserAdd01Icon,
     UserIcon,
     UserSwitchIcon,
 } from '@hugeicons/core-free-icons'
@@ -27,9 +31,9 @@ import { isMac } from './shellKeys'
 import { resumes, starredIds, watchedList } from '../store'
 import { activeId, activeProfile, many, openPicker, photoOf, photosVersion } from '../accounts'
 import { addAccount } from '../accountFlows'
-import { askSignOut } from '../screens/settings/SignOut'
-import { accountName, accountPicture, firstName } from './accountPicture'
+import { accountName, accountPicture } from './accountPicture'
 import { VersionFooter } from './VersionFooter'
+import { dragCloses } from './versionLine'
 
 interface Place {
     href: string
@@ -47,6 +51,9 @@ const PLACES: Place[] = [
     // The fourth place was Downloads, a card that said the browser cannot keep videos: History holds the slot until it can (WP-59, user default D7).
     { href: '/history', label: () => t('browse.tab_history'), icon: History, on: (p) => p === '/history' || p.startsWith('/history/'), key: '' },
 ]
+
+/** A window this narrow, or a phone, gets the account menu as a bottom sheet. */
+const sheetWidth = () => form() === 'phone' || (typeof matchMedia === 'function' && matchMedia('(max-width: 599px)').matches)
 
 /** The card's width (POPOVER_WIDTH). */
 const WIDTH = 232
@@ -78,7 +85,7 @@ export function Nav() {
     onMount(() => onCleanup(onGlobal(document, 'keydown', onKey)))
     return (
         <nav class="nav" id="main-nav" aria-label="TMPlayer">
-            <div class="nav-cells" style={{ '--i': Math.max(0, chosen()) }}>
+            <div class="nav-cells nav-pill" style={{ '--i': Math.max(0, chosen()) }}>
                 <span class="nav-highlight" classList={{ shown: chosen() >= 0 }} aria-hidden="true" />
                 <For each={PLACES}>
                     {(p, i) => (
@@ -105,10 +112,9 @@ export function Nav() {
                     <span class="nav-glyph">
                         <AccountPicture name={name()} class="nav-picture" ringed={inProfile() || open()} />
                     </span>
-                    <span class="nav-label" aria-hidden="true">{name() ? firstName(name()) : t('nav.account')}</span>
                 </button>
                 <Show when={open()}>
-                    <YouMenu anchor={you} onClose={() => setOpen(false)} />
+                    <YouMenu anchor={you} sheet={sheetWidth()} onClose={() => setOpen(false)} />
                 </Show>
             </div>
         </nav>
@@ -150,24 +156,94 @@ function AccountPicture(props: { name: string; class: string; ringed?: boolean }
 }
 
 /**
- * The account menu behind the picture (ProfilePopover, WP-103): a small card that grows out of the
- * bar. First whose account it is (the picture, the name, the @username), then Switch profile (two
- * or more) or Add account (one), Settings, the counts of what is being watched, watched and
- * starred, Favourites, History and Watch later, and Sign out last, which asks first. A click
- * outside, Escape or picking a line closes it; Up and Down walk the lines, and focus starts on the first.
+ * The account menu behind the picture (ProfilePopover, WP-103), kept short: a head (the picture, the
+ * name, the @username, and with two or more accounts a switch button), the library as one row of three
+ * tiles (Favourites with its starred count, History with how many are being watched, Watch later), two
+ * plain rows (Settings, Add account) and the compact version, which opens About. Sign out lives in
+ * Settings; the watched count is in History's heading. On a phone width it is a bottom sheet (a modal
+ * dialog: the swipe back and Back close it, a drag on the grip too, focus stays inside); on a wider
+ * window a card over the bar. A click outside, Escape or picking a line closes it; Up and Down walk
+ * the rows, Left and Right the tiles, and focus starts on the first tile.
  */
-function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
+function YouMenu(props: { anchor: HTMLElement; sheet: boolean; onClose: () => void }) {
+    let dialog: HTMLDialogElement | undefined
+    // The sheet is a dialog: closing it goes through close(), so the history entry it took (modalHistory) is given back.
+    const close = () => {
+        if (dialog?.open) dialog.close()
+        props.onClose()
+    }
+    // Children mount first and the dialog is not showing yet: AccountMenu takes its focus a microtask later, after this opens it.
+    onMount(() => dialog?.showModal())
+    onCleanup(() => dialog?.open && dialog.close())
+    return (
+        <Show when={props.sheet} fallback={<AccountMenu anchor={props.anchor} onClose={props.onClose} />}>
+            <dialog
+                ref={dialog}
+                class="you-sheet"
+                aria-label={t('nav.account')}
+                onClose={() => props.onClose()}
+                onClick={(e) => e.target === dialog && close()}
+            >
+                <SheetHandle onClose={close} dialog={() => dialog} />
+                <AccountMenu anchor={props.anchor} onClose={close} sheet />
+            </dialog>
+        </Show>
+    )
+}
+
+/**
+ * The sheet's grip: a drag down on it (or on the head under it) follows the finger and closes the sheet
+ * when far or quick enough (dragCloses), else springs back. A keyboard has Escape, a screen reader the
+ * Close button of the sheet's last line is not needed: the dialog's own Escape and Back do it.
+ */
+function SheetHandle(props: { onClose: () => void; dialog: () => HTMLDialogElement | undefined }) {
+    let from: { y: number; at: number } | null = null
+    const move = (e: PointerEvent) => {
+        const d = props.dialog()
+        if (!from || !d) return
+        d.style.transform = `translateY(${Math.max(0, e.clientY - from.y)}px)`
+    }
+    const end = (e: PointerEvent) => {
+        const d = props.dialog()
+        const start = from
+        from = null
+        if (!d || !start) return
+        d.style.transition = ''
+        const dy = e.clientY - start.y
+        if (e.type !== 'pointercancel' && dragCloses(dy, e.timeStamp - start.at)) props.onClose()
+        else d.style.transform = ''
+    }
+    return (
+        <div
+            class="sheet-handle"
+            aria-hidden="true"
+            onPointerDown={(e) => {
+                from = { y: e.clientY, at: e.timeStamp }
+                props.dialog()!.style.transition = 'none'
+                e.currentTarget.setPointerCapture?.(e.pointerId)
+            }}
+            onPointerMove={move}
+            onPointerUp={end}
+            onPointerCancel={end}
+        >
+            <span />
+        </div>
+    )
+}
+
+function AccountMenu(props: { anchor: HTMLElement; onClose: () => void; sheet?: boolean }) {
     const navigate = useNavigate()
     const name = () => accountName(me()?.name, activeProfile()?.name)
     let card!: HTMLDivElement
-    const [counts] = createResource(async () => {
-        const [left, done] = await Promise.all([resumes(), watchedList()])
-        return { watching: left.length, watched: done.length }
-    })
+    const [counts] = createResource(async () => (await resumes()).length)
+    // Navigate first: the route change closes the dialog and takes its history entry over (modalHistory.write).
     const go = (href: string) => {
-        props.onClose()
         navigate(href)
+        props.onClose()
     }
+    const items = () => [...card.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    // The tile the keyboard was last on, where Up from the rows below comes back to.
+    let lastCol = 0
     const onKey = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
             props.onClose()
@@ -175,20 +251,33 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
             e.preventDefault()
             return
         }
-        // Tab leaves a menu: it closes and the keyboard goes on from where the menu was.
-        if (e.key === 'Tab') return (props.anchor.focus(), props.onClose())
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return
-        const items = [...card.querySelectorAll<HTMLElement>('button')]
-        const at = items.indexOf(document.activeElement as HTMLElement)
-        const to = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
-        items[to]?.focus()
+        // Tab leaves a card: it closes and the keyboard goes on from where the card was. A sheet keeps it inside (the dialog traps it).
+        if (e.key === 'Tab') return props.sheet ? undefined : (props.anchor.focus(), props.onClose())
+        if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+        const all = items()
+        const here = document.activeElement as HTMLElement
+        const tiles = all.filter((el) => el.classList.contains('you-tile'))
+        const col = tiles.indexOf(here)
+        if (col >= 0) lastCol = col
+        // The tiles are one row: Left and Right walk it (the end stays put, never wraps out of the row).
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            if (col >= 0) tiles[Math.max(0, Math.min(tiles.length - 1, col + (e.key === 'ArrowRight' ? 1 : -1) * (isRtl() ? -1 : 1)))]?.focus()
+            e.preventDefault()
+            return
+        }
+        // The rows: the three tiles count as one, entered on the column the last row had.
+        const rows = all.filter((el) => !el.classList.contains('you-tile') || el === tiles[0])
+        const at = rows.indexOf(col >= 0 ? tiles[0] : here)
+        const to = e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : Math.max(0, Math.min(rows.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))
+        const next = rows[to]
+        ;(next === tiles[0] ? (tiles[lastCol] ?? next) : next)?.focus()
         e.preventDefault()
     }
     const outside = (e: PointerEvent) => {
         if (!card.contains(e.target as Node) && !props.anchor.contains(e.target as Node)) props.onClose()
     }
     // Over the bar, centred on the picture as far as the window allows (the phone keeps 16 px from its edge).
-    // A short window (a phone on its side, a 200 percent zoom) scrolls the card rather than cutting its top off.
+    // A short window (a 200 percent zoom) scrolls the card rather than cutting its top off.
     const [place, setPlace] = createSignal<{ left: string; bottom: string; 'max-height': string }>()
     const measure = () => {
         const a = props.anchor.getBoundingClientRect()
@@ -197,15 +286,28 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
         setPlace({ left: `${left}px`, bottom: `${innerHeight - bar.top + 8}px`, 'max-height': `${Math.max(120, bar.top - 16)}px` })
     }
     onMount(() => {
-        measure()
-        addEventListener('resize', measure)
-        onCleanup(onGlobal(document, 'pointerdown', outside, true))
-        card.querySelector<HTMLElement>('.you-row')?.focus({ preventScroll: true })
+        if (!props.sheet) {
+            measure()
+            addEventListener('resize', measure)
+            onCleanup(onGlobal(document, 'pointerdown', outside, true))
+        }
+        const first = () => card.querySelector<HTMLElement>('.you-tile')?.focus({ preventScroll: true })
+        if (props.sheet) queueMicrotask(first)
+        else first()
     })
     onCleanup(() => removeEventListener('resize', measure))
     const command = isMac() ? '⌘' : 'Ctrl+'
+    const starred = () => starredIds().size
     return (
-        <div ref={card} class="you-menu" role="menu" aria-label={name() ? t('nav.account_named', { name: name() }) : t('nav.account')} style={place()} onKeyDown={onKey}>
+        <div
+            ref={card}
+            class="you-menu"
+            classList={{ 'in-sheet': !!props.sheet }}
+            role="menu"
+            aria-label={name() ? t('nav.account_named', { name: name() }) : t('nav.account')}
+            style={props.sheet ? undefined : place()}
+            onKeyDown={onKey}
+        >
             <div class="you-head">
                 <AccountPicture name={name()} class="you-picture" />
                 <div class="you-who">
@@ -214,64 +316,64 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
                         <span>@{me()?.username?.trim().replace(/^@/, '')}</span>
                     </Show>
                 </div>
+                {/* Two or more accounts: the switch is one press from the head. */}
+                <Show when={many()}>
+                    <button
+                        type="button"
+                        class="you-icon"
+                        role="menuitem"
+                        aria-label={t('accounts.switch')}
+                        title={t('accounts.switch')}
+                        onClick={() => {
+                            props.onClose()
+                            openPicker()
+                        }}
+                    >
+                        <Icon icon={UserSwitchIcon} size={22} />
+                    </button>
+                </Show>
             </div>
-            <Row
-                icon={UserSwitchIcon}
-                label={many() ? t('accounts.switch') : t('accounts.add')}
-                onClick={() => {
-                    props.onClose()
-                    if (many()) openPicker()
-                    else void addAccount()
-                }}
-            />
+            {/* The library, one row of three equal tiles; the counts that were a strip are small lines on them. */}
+            <div class="you-tiles" role="presentation">
+                <Tile icon={StarIcon} label={t('browse.tab_favourites')} sub={`${t('profile.starred')} ${starred()}`} onClick={() => go('/favourites')} />
+                <Tile icon={History} label={t('browse.tab_history')} sub={`${t('profile.watching')} ${counts() ?? 0}`} onClick={() => go('/history')} />
+                <Tile icon={Clock01Icon} label={t('browse.tab_watch_later')} onClick={() => go('/history/later')} />
+            </div>
             <Row icon={Settings01Icon} label={t('nav.settings')} shortcut={form() === 'desktop' ? `${command},` : undefined} onClick={() => go('/settings')} />
-            <hr />
-            <div class="you-summary">
-                <span class="you-heading">{t('profile.heading')}</span>
-                <div class="you-counts">
-                    <Count value={counts()?.watching ?? 0} label={t('profile.watching')} onClick={() => go('/history/continue')} />
-                    <Count value={counts()?.watched ?? 0} label={t('profile.watched')} onClick={() => go('/history/watched')} />
-                    <Count value={starredIds().size} label={t('profile.starred')} onClick={() => go('/favourites')} />
-                </div>
-            </div>
-            <hr />
-            <Row icon={StarIcon} label={t('browse.tab_favourites')} badge={starredIds().size || undefined} onClick={() => go('/favourites')} />
-            <Row icon={History} label={t('browse.tab_history')} onClick={() => go('/history')} />
-            <Row icon={Clock01Icon} label={t('browse.tab_watch_later')} onClick={() => go('/history/later')} />
-            <hr />
-            {/* Last, in the danger colour: the question names the account and has Cancel focused. */}
             <Row
-                icon={Logout05Icon}
-                label={t('settings.sign_out_confirm')}
-                danger
+                icon={UserAdd01Icon}
+                label={t('accounts.add')}
                 onClick={() => {
                     props.onClose()
-                    void askSignOut()
+                    void addAccount()
                 }}
             />
-            {/* The version, the build and the update state; a press copies them for support (WP-104). */}
             <hr />
-            <VersionFooter look="menu" />
+            {/* The compact version, last: the icon and "v1.28.7"; a press opens About, where the full line is (WP-104). */}
+            <VersionFooter look="menu" onOpen={props.onClose} />
         </div>
     )
 }
 
-function Count(props: { value: number; label: string; onClick: () => void }) {
+/** The reading direction of the page, for Left and Right in the tiles. */
+const isRtl = () => typeof document !== 'undefined' && getComputedStyle(document.documentElement).direction === 'rtl'
+
+function Tile(props: { icon: IconData; label: string; sub?: string; onClick: () => void }) {
     return (
-        <button type="button" class="you-count" role="menuitem" aria-label={`${props.value} ${props.label}`} onClick={props.onClick}>
-            <strong>{props.value}</strong>
-            <span>{props.label}</span>
+        <button type="button" class="you-tile" role="menuitem" aria-label={props.sub ? `${props.label}, ${props.sub}` : props.label} onClick={props.onClick}>
+            <Icon icon={props.icon} size={24} />
+            <span class="you-tile-label">{props.label}</span>
+            <span class="you-tile-sub">{props.sub ?? ' '}</span>
         </button>
     )
 }
 
-function Row(props: { icon: IconData; label: string; badge?: number; shortcut?: string; danger?: boolean; onClick: () => void }) {
+function Row(props: { icon: IconData; label: string; shortcut?: string; onClick: () => void }) {
     return (
-        <button type="button" class="you-row" classList={{ 'you-danger': !!props.danger }} role="menuitem" onClick={props.onClick}>
+        <button type="button" class="you-row" role="menuitem" onClick={props.onClick}>
             <Icon icon={props.icon} size={20} />
             <span class="you-label">{props.label}</span>
             <Show when={props.shortcut}><span class="you-shortcut">{props.shortcut}</span></Show>
-            <Show when={props.badge}><span class="you-badge">{props.badge}</span></Show>
         </button>
     )
 }
