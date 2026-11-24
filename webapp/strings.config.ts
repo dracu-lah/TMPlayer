@@ -348,6 +348,8 @@ export const PAGE_STRINGS = [
     'player.chapter_next',
     'player.chapter_of',
     'player.chapter_previous',
+    'player.chapter_untitled',
+    'player.chapters',
     'player.copies',
     'player.copies_note',
     'player.copy_details',
