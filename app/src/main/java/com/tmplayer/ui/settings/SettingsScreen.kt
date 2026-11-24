@@ -114,7 +114,10 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
@@ -480,6 +483,9 @@ fun SettingsScreen(
     // Library's rows that remove themselves (Forget last chat, Clear favourites, Clear history) and
     // the rows around them, where the remote goes when one is gone (WP-06, TV only).
     val remoteHere = !isTouch()
+    // A tablet's or unfolded foldable's window (840 dp and wider) shows the category list and the
+    // open page side by side (WP-76); a phone, and a television (its own rail), do not.
+    val twoPane = !remoteHere && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= TWO_PANE_MIN_DP
     val rememberSearchesRow = remember { FocusRequester() }
     val chooseChatsRow = remember { FocusRequester() }
     val clearFavouritesRow = remember { FocusRequester() }
@@ -699,7 +705,8 @@ fun SettingsScreen(
     // Back on a page goes to the list, not out of Settings. Composed after the caller's own
     // handler, so it is the one asked first while a page is open. A television's Back is the
     // pane's (TvSettingsPane): to the rail, then out.
-    BackHandler(enabled = !remoteHere && page != null) { closePage() }
+    // Side by side the list is always there, so Back only leaves a sub-page (Troubleshooting).
+    BackHandler(enabled = !remoteHere && page != null && (!twoPane || page?.parent != null || cameFromStep != null)) { closePage() }
     // The pane following the rail (WP-07): the page changes, the remote stays on the rail.
     val followRail = { target: SettingsPage ->
         cameFromStep = null
@@ -878,10 +885,15 @@ fun SettingsScreen(
         0.dp
     }
 
-    val list: @Composable () -> Unit = { androidx.compose.runtime.CompositionLocalProvider(LocalSettingsSeek provides seek) {
+    // The page the right hand pane shows: the one open, or Playback before a category is chosen.
+    val paneOpen = (page ?: SettingsPage.Playback).railItem
+    // [page] the page to draw (null: the category list), [paneWidth] the room it has when it shares the screen.
+    val list: @Composable (page: SettingsPage?, paneWidth: Dp?) -> Unit = { page, paneWidth -> androidx.compose.runtime.CompositionLocalProvider(LocalSettingsSeek provides seek) {
     // The category list keeps one state for as long as Settings is open, so coming back from
     // a page finds it scrolled where it was left. Each page starts at its own top.
     val shownState = if (page == null) listState else pageState
+    // A list in half the screen centres by the room it has, not by the window's.
+    val paneGutter = if (paneWidth != null) com.tmplayer.ui.components.largePaneGutter(paneWidth, touch) else largeGutter
     LazyColumn(
         state = shownState,
         modifier = Modifier
@@ -901,8 +913,8 @@ fun SettingsScreen(
             // A television's pane sits inside the safe area already (TvSettingsPane).
             .padding(horizontal = if (touch) PhonePad.Side else 0.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = largeGutter,
-            end = largeGutter,
+            start = paneGutter,
+            end = paneGutter,
             // The app bar already clears the status bar on a phone, so the list only owes the
             // gesture bar at the bottom.
             // A television's pane starts under its pinned header, which says where the remote is.
@@ -935,7 +947,7 @@ fun SettingsScreen(
         // for a device short of memory or storage is still off. It draws nothing otherwise. A
         // television has no category list (WP-07): there it heads Playback, the page Settings
         // first opens on.
-        if ((page == null || (!touch && page == SettingsPage.Playback)) && searchQuery.isBlank()) {
+        if (((page == null && !twoPane) || (page == SettingsPage.Playback && (!touch || twoPane))) && searchQuery.isBlank()) {
             item {
                 com.tmplayer.ui.onboarding.DeviceFitSettingsCard(
                     settings,
@@ -2549,7 +2561,7 @@ fun SettingsScreen(
                             title = titleOf(SettingsPage.Accounts),
                             subtitle = s.settingsGroupAccountSummary,
                             icon = TmIcons.Account,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Accounts)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Accounts)).selectedInPane(twoPane && paneOpen == SettingsPage.Accounts),
                             onClick = { showPage(SettingsPage.Accounts) },
                         )
                     }
@@ -2558,7 +2570,7 @@ fun SettingsScreen(
                             title = titleOf(SettingsPage.Playback),
                             subtitle = if (touch) s.settingsGroupPlaybackSummaryTouch else s.settingsGroupPlaybackSummary,
                             icon = TmIcons.Play,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Playback)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Playback)).selectedInPane(twoPane && paneOpen == SettingsPage.Playback),
                             onClick = { showPage(SettingsPage.Playback) },
                         )
                     }
@@ -2573,7 +2585,7 @@ fun SettingsScreen(
                                 s.settingsGroupSubtitlesAudioSummary(style)
                             },
                             icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Subtitles)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Subtitles)).selectedInPane(twoPane && paneOpen == SettingsPage.Subtitles),
                             onClick = { showPage(SettingsPage.Subtitles) },
                         )
                     }
@@ -2588,7 +2600,7 @@ fun SettingsScreen(
                                 s.settingsGroupStorageBackupSummary
                             },
                             icon = TmIcons.Download,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Storage)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Storage)).selectedInPane(twoPane && paneOpen == SettingsPage.Storage),
                             onClick = { showPage(SettingsPage.Storage) },
                         )
                     }
@@ -2602,7 +2614,7 @@ fun SettingsScreen(
                                 language = com.tmplayer.ui.i18n.languageShortName(language),
                             ),
                             icon = TmIcons.Palette,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Appearance)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Appearance)).selectedInPane(twoPane && paneOpen == SettingsPage.Appearance),
                             onClick = { showPage(SettingsPage.Appearance) },
                         )
                     }
@@ -2611,7 +2623,7 @@ fun SettingsScreen(
                             title = titleOf(SettingsPage.Library),
                             subtitle = s.settingsPageHomeLibrarySummary,
                             icon = TmIcons.Home,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Library)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Library)).selectedInPane(twoPane && paneOpen == SettingsPage.Library),
                             onClick = { showPage(SettingsPage.Library) },
                         )
                     }
@@ -2621,7 +2633,7 @@ fun SettingsScreen(
                             // The lock's state when it is set, which is the thing worth knowing at a glance.
                             subtitle = if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacySummary,
                             icon = TmIcons.Lock,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Privacy)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Privacy)).selectedInPane(twoPane && paneOpen == SettingsPage.Privacy),
                             onClick = { showPage(SettingsPage.Privacy) },
                         )
                     }
@@ -2632,7 +2644,7 @@ fun SettingsScreen(
                                 title = titleOf(SettingsPage.Notifications),
                                 subtitle = s.settingsPageNotificationsSummaryShort,
                                 icon = TmIcons.Bell,
-                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)),
+                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)).selectedInPane(twoPane && paneOpen == SettingsPage.Notifications),
                                 onClick = { showPage(SettingsPage.Notifications) },
                             )
                         }
@@ -2642,7 +2654,7 @@ fun SettingsScreen(
                             title = titleOf(SettingsPage.Help),
                             subtitle = s.settingsGroupHelpSummary,
                             icon = TmIcons.Info,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Help)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Help)).selectedInPane(twoPane && paneOpen == SettingsPage.Help),
                             onClick = { showPage(SettingsPage.Help) },
                         )
                     }
@@ -2659,7 +2671,7 @@ fun SettingsScreen(
                             },
                             icon = TmIcons.Info,
                             tint = if (offered != null) Tone.caution else Color.Unspecified,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)),
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)).selectedInPane(twoPane && paneOpen == SettingsPage.About),
                             onClick = { showPage(SettingsPage.About) },
                         )
                     }
@@ -2737,7 +2749,61 @@ fun SettingsScreen(
         devicesClosed = false
     }
 
-    if (touch && page != null) {
+    if (twoPane) {
+        // Side by side (WP-76): the category list with its search box at 280 dp, the open page beside
+        // it, rows with their description in the row (no strip on touch). A screen reader reads the
+        // list, then the page.
+        val twoScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+        Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = Modifier.nestedScroll(twoScroll.nestedScrollConnection),
+                topBar = { FloatingPageTitle({ M3Text(s.settingsTitle) }, twoScroll) },
+            ) { padding ->
+                Row(Modifier.fillMaxSize().padding(padding)) {
+                    BoxWithConstraints(
+                        Modifier
+                            .width(TWO_PANE_RAIL)
+                            .fillMaxHeight()
+                            .testTag(SETTINGS_TWO_PANE_LIST_TAG)
+                            .semantics { isTraversalGroup = true; traversalIndex = 0f },
+                    ) {
+                        list(null, maxWidth)
+                        FastScroller(listState)
+                    }
+                    androidx.compose.material3.VerticalDivider(color = Tone.surfaceHigh)
+                    BoxWithConstraints(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .testTag(SETTINGS_TWO_PANE_PAGE_TAG)
+                            .semantics { isTraversalGroup = true; traversalIndex = 1f },
+                    ) {
+                        val open = page ?: SettingsPage.Playback
+                        val paneWidth = maxWidth
+                        Column(Modifier.fillMaxSize()) {
+                            // A sub-page (Troubleshooting under Help) says where it is and the way back.
+                            if (open.parent != null) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    IconButton(onClick = { closePage() }) {
+                                        M3Icon(TmIcons.ArrowBack, contentDescription = s.aboutBackToSettings)
+                                    }
+                                    M3Text(titleOf(open), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                list(open, paneWidth)
+                                FastScroller(pageState)
+                            }
+                        }
+                    }
+                }
+            }
+            FloatingBackButton(TmIcons.ArrowBack, s.commonBack, onBack, Modifier.align(Alignment.TopStart))
+        }
+    } else if (touch && page != null) {
         // A page: its name along the top beside the round Back, which goes back to the list, the
         // same as the hardware key. The floating bar is the list's, not the page's.
         val pageScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -2747,7 +2813,7 @@ fun SettingsScreen(
                 topBar = { FloatingPageTitle({ M3Text(titleOf(page!!)) }, pageScroll) },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
-                    list()
+                    list(page, null)
                     // Only a page long enough to need it shows the handle.
                     FastScroller(if (page == null) listState else pageState)
                 }
@@ -2764,7 +2830,7 @@ fun SettingsScreen(
                 topBar = { FloatingPageTitle({ M3Text(s.settingsTitle) }, listScroll) },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
-                    list()
+                    list(page, null)
                     // Only a page long enough to need it shows the handle.
                     FastScroller(if (page == null) listState else pageState)
                 }
@@ -2825,7 +2891,7 @@ fun SettingsScreen(
                 )
             },
         ) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalSettingsBreadcrumb provides breadcrumb) { list() }
+            androidx.compose.runtime.CompositionLocalProvider(LocalSettingsBreadcrumb provides breadcrumb) { list(page, null) }
         }
     }
 
@@ -4033,6 +4099,29 @@ private fun NoticeToggleRow(
         },
     )
 }
+
+/**
+ * The category row whose page the right hand pane shows, in the two pane layout (WP-76): a tint
+ * and the selected state for a screen reader. Nothing in any other layout.
+ */
+@Composable
+private fun Modifier.selectedInPane(selected: Boolean): Modifier =
+    if (!selected) {
+        this
+    } else {
+        this
+            .background(Tone.accent.copy(alpha = 0.14f), RoundedCornerShape(Corner.Large))
+            .semantics { this.selected = true }
+    }
+
+/** The window width, in dp, from which a tablet's Settings shows the list and the page side by side. */
+internal const val TWO_PANE_MIN_DP = 840
+
+/** The category list's width beside the page (the large pane widths). */
+private val TWO_PANE_RAIL = 280.dp
+
+internal const val SETTINGS_TWO_PANE_LIST_TAG = "settings-two-pane-list"
+internal const val SETTINGS_TWO_PANE_PAGE_TAG = "settings-two-pane-page"
 
 /** How long the row a search found stays lit once its page has opened on it. */
 private const val SEEK_GLOW_MS = 1_600L
