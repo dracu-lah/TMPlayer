@@ -66,6 +66,7 @@ import com.tmplayer.data.AuthState
 import com.tmplayer.data.LegacyDownloads
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.components.pageBackScale
 import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.CoalescingTransferNotifier
 import com.tmplayer.data.CacheShelf
@@ -251,6 +252,10 @@ internal val ScreenSaver = listSaver<Screen, Any>(
     },
 )
 
+/** The last window ground the shell drew, for the next launch to paint before its first frame (WP-44). */
+private const val LAUNCH_PREFS = "launch"
+private const val LAUNCH_GROUND = "ground"
+
 private const val SCREEN_CHATS = "chats"
 private const val SCREEN_MEDIA = "media"
 private const val SCREEN_SETTINGS = "settings"
@@ -383,6 +388,14 @@ class MainActivity : FragmentActivity() {
         noteRequestedScreen(intent)
         // The retired mini player switch (T12): an old stored value is dropped, never read.
         lifecycleScope.launch { runCatching { SettingsStore(this@MainActivity).dropRetiredMiniPlayer() } }
+        // The window's ground from the theme the viewer chose, before the first frame (WP-44): the launch
+        // resource follows the system's night mode only, so a dark choice under a light system (or the
+        // reverse) flashed the wrong colour for a few frames. Mirrored from the shell's own ground below,
+        // one synchronous read of a small file. A television paints its own ground and keeps none.
+        if (!FormFactor.isTv(this)) {
+            val ground = getSharedPreferences(LAUNCH_PREFS, MODE_PRIVATE).getInt(LAUNCH_GROUND, 0)
+            if (ground != 0) window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ground))
+        }
         setContent {
             TMPlayerTheme {
                 // Shared screens (a video's copies) open their sheets as the phone's own sheet.
@@ -783,6 +796,8 @@ private fun Root() {
             return@LaunchedEffect
         }
         activity?.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ground.toArgb()))
+        // Kept for the next cold start (onCreate reads it before the first frame).
+        activity?.getSharedPreferences(LAUNCH_PREFS, android.content.Context.MODE_PRIVATE)?.edit()?.putInt(LAUNCH_GROUND, ground.toArgb())?.apply()
     }
 
     // The setup after sign in (CP67), armed by a sign in screen. False until the store answers,
@@ -2184,6 +2199,8 @@ private fun Root() {
         // Back from Settings to Downloads puts the remote back on the bar's picture, which opened it.
         var tvBarHold by remember { mutableStateOf(0) }
         var tvBarFocused by remember { mutableStateOf(false) }
+        // The page shrinking under a back gesture (WP-44): chat, Settings and About leave with the system's preview.
+        val pageBack = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
         val screens: @Composable (Screen) -> Unit = screens@{ current ->
         when (current) {
             is Screen.Chats -> {
@@ -2335,7 +2352,7 @@ private fun Root() {
                     autoOpened = true
                     screen = Screen.Chats
                 }
-                BackHandler(onBack = leaveChat)
+                com.tmplayer.ui.components.PredictivePageBack(pageBack, onBack = leaveChat)
                 // Another chat is another screen (WP-94): its own remembered state, shelf and scroll,
                 // so nothing of the chat left shows under the new chat's header.
                 androidx.compose.runtime.key(current.chat.id) {
@@ -2422,7 +2439,7 @@ private fun Root() {
                     if (tvBar && settingsCameFrom is Screen.Downloads) tvBarHold++
                     screen = settingsCameFrom
                 }
-                BackHandler(onBack = leaveSettings)
+                com.tmplayer.ui.components.PredictivePageBack(pageBack, onBack = leaveSettings)
                 val lock = appLock
                 // With no PIN there is nothing to ask, and a PIN set from inside Settings must not
                 // lock the viewer out of the page they set it on.
@@ -2466,7 +2483,7 @@ private fun Root() {
 
             is Screen.About -> {
                 val leaveAbout = { screen = Screen.Settings }
-                BackHandler(onBack = leaveAbout)
+                com.tmplayer.ui.components.PredictivePageBack(pageBack, onBack = leaveAbout)
                 AboutScreen(onBack = leaveAbout)
             }
 
@@ -2618,7 +2635,11 @@ private fun Root() {
                         val key = TouchScreens.key(shown)
                         holder.SaveableStateProvider(key) {
                             CompositionLocalProvider(LocalTouchPageKey provides key) {
-                                com.tmplayer.ui.browse.ListPickerHost(watchedStore.lists, toast) { screens(shown) }
+                                com.tmplayer.ui.browse.ListPickerHost(watchedStore.lists, toast) {
+                                    androidx.compose.foundation.layout.Box(
+                                        Modifier.pageBackScale(pageBack.floatValue, com.tmplayer.ui.theme.rememberReducedMotion()),
+                                    ) { screens(shown) }
+                                }
                             }
                         }
                     }

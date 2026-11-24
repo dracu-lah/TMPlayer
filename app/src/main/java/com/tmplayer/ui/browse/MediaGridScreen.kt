@@ -1284,6 +1284,7 @@ fun MediaGridScreen(
                         onSelectAll = { selected = listedItems.associateBy { it.id } },
                         onCancel = { leaveSelection() },
                         edge = edge,
+                        shown = listedItems.size,
                     )
                 }
             },
@@ -1315,6 +1316,7 @@ fun MediaGridScreen(
                     onSelectAll = { selected = listedItems.associateBy { it.id } },
                     onCancel = { leaveSelection() },
                     edge = edge,
+                    shown = listedItems.size,
                 )
             } else {
                 Header(
@@ -1962,9 +1964,15 @@ internal fun SelectionBar(
     onSelectAll: () -> Unit,
     onCancel: () -> Unit,
     edge: Dp,
+    /**
+     * How many videos Select all takes: the ones the page has loaded so far, which in a very large chat is
+     * not the chat (WP-44), so the action says the number. 0 keeps the plain words.
+     */
+    shown: Int = 0,
 ) {
     val s = LocalStrings.current
     val label = s.gridSelectedCount(count)
+    val selectAllLabel = if (shown > 0) s.gridSelectAllShown(shown) else s.gridSelectAll
 
     if (isTouch()) {
         // At the foot, where the sticky bar was; Close is the round button at the top start.
@@ -1981,11 +1989,11 @@ internal fun SelectionBar(
                 // At a large font the words would push the count out of the bar, and the count is
                 // what the viewer needs to see: the two actions shrink to icons, named for a screen
                 // reader and in a tooltip.
-                FloatingBarIcon(TmIcons.Check, s.gridSelectAll, onSelectAll)
+                FloatingBarIcon(TmIcons.Check, selectAllLabel, onSelectAll)
                 if (onDownload != null) FloatingBarIcon(TmIcons.Download, s.gridDownloadSelected, onDownload, enabled = count > 0)
                 return@StickyActionBar
             }
-            TextButton(onClick = onSelectAll) { M3Text(s.gridSelectAll, maxLines = 1) }
+            TextButton(onClick = onSelectAll) { M3Text(selectAllLabel, maxLines = 1) }
             // Words, not a bare arrow: this is the one control on the bar that acts on the
             // ticked videos, and a corner glyph would say nothing about what it starts.
             if (onDownload != null) Button(
@@ -2020,7 +2028,7 @@ internal fun SelectionBar(
             modifier = Modifier.weight(1f),
         )
         if (onDownload != null) Pill(s.gridDownload, TmIcons.Download, onClick = onDownload)
-        Pill(s.gridSelectAll, TmIcons.Check, onClick = onSelectAll)
+        Pill(selectAllLabel, TmIcons.Check, onClick = onSelectAll)
         Pill(s.commonCancel, TmIcons.Close, onClick = onCancel)
     }
 }

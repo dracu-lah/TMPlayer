@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -1104,17 +1105,32 @@ private fun BarCaption(text: String, chosen: Boolean) {
     // Clip, not Ellipsis, because an ellipsized line never reports an overflow and so never steps.
     // The side padding keeps it clear of the pill's rounded ends, which the button clips to and
     // which reach about 7 dp in at the caption's height.
-    val style = captionStyle()
-    Text(
-        text,
-        style = style,
-        color = ink,
-        maxLines = 1,
-        overflow = TextOverflow.Clip,
-        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
-        modifier = Modifier.padding(top = 2.dp, start = 7.dp, end = 7.dp),
-    )
+    // 12 sp, Material's own label size (WP-44), and the system's font size stops growing it at 1.3: the
+    // button is 64 dp wide whatever the font, so past that a word only gets cut. The long press on the
+    // button says the name in full size for whoever needs it larger.
+    val style = captionStyle().copy(fontSize = BAR_CAPTION_SP.sp, lineHeight = (BAR_CAPTION_SP + 2).sp)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+            density.density,
+            density.fontScale.coerceAtMost(BAR_CAPTION_MAX_SCALE),
+        ),
+    ) {
+        Text(
+            text,
+            style = style,
+            color = ink,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+            modifier = Modifier.padding(top = 2.dp, start = 7.dp, end = 7.dp),
+        )
+    }
 }
+
+/** The bar caption's base size, and the most the system's font size may scale it (WP-44). */
+internal const val BAR_CAPTION_SP = 12
+internal const val BAR_CAPTION_MAX_SCALE = 1.3f
 
 @Composable
 private fun BarButton(
@@ -1132,12 +1148,21 @@ private fun BarButton(
 ) {
     val s = LocalStrings.current
     val press = remember { MutableInteractionSource() }
+    var showLarge by remember { mutableStateOf(false) }
     Column(
         modifier
             .size(BUTTON_WIDTH, BUTTON_HEIGHT)
             .pressScale(press)
             .clip(HIGHLIGHT_SHAPE)
-            .clickable(interactionSource = press, indication = ripple(), role = role, onClick = onClick)
+            .combinedClickable(
+                interactionSource = press,
+                indication = ripple(),
+                role = role,
+                onClick = onClick,
+                // The name at full size, for a person the capped caption is too small for (WP-44).
+                onLongClickLabel = label,
+                onLongClick = { showLarge = true },
+            )
             .semantics {
                 // The count is read with the name ("Downloads, 2 in progress"), not as a stray number.
                 contentDescription = if (badge > 0) s.navInProgress(label, badge.toString()) else label
@@ -1171,8 +1196,42 @@ private fun BarButton(
             }
         }
         BarCaption(label, chosen)
+        if (showLarge) LargeBarLabel(label) { showLarge = false }
     }
 }
+
+/**
+ * The bar button's name at 20 sp in a small card over the button, for a moment (WP-44): the large content
+ * viewer pattern, since the caption under the icon is capped at 1.3 times its size. Closes by itself,
+ * and on a tap anywhere outside.
+ */
+@Composable
+private fun LargeBarLabel(label: String, onDismiss: () -> Unit) {
+    androidx.compose.runtime.LaunchedEffect(label) {
+        kotlinx.coroutines.delay(LARGE_LABEL_MS)
+        onDismiss()
+    }
+    androidx.compose.ui.window.Popup(
+        alignment = Alignment.TopCenter,
+        offset = androidx.compose.ui.unit.IntOffset(0, -LARGE_LABEL_LIFT_PX),
+        onDismissRequest = onDismiss,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp),
+            color = Tone.text,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(FloatingTone.menu)
+                .border(1.dp, Tone.outline, RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
+    }
+}
+
+private const val LARGE_LABEL_MS = 1_800L
+private const val LARGE_LABEL_LIFT_PX = 160
 
 /**
  * The account menu behind the picture (WP-103), the phone's and tablet's copy of the television's

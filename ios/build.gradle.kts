@@ -185,6 +185,8 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
         exclude("com/tmplayer/ui/browse/DebugFakeChats.kt")
         // Android's biometric prompt (androidx.biometric); iOS has a no-op of the same name in src/iosMain (WP-41).
         exclude("com/tmplayer/ui/lock/BiometricPrompter.kt")
+        // Android 14's back preview (PredictiveBackHandler); iOS has a plain Back of the same name in src/iosMain (WP-44).
+        exclude("com/tmplayer/ui/components/PredictivePageBack.kt")
         // Android's trailer player is a WebView (android.webkit); iOS's is a WKWebView in the Swift
         // shell (iosApp/TMPlayer/Player/TrailerSheet.swift), reached through src/iosMain/.../ui/trailer/TrailerPlayerRoot.kt,
         // which keeps the name MainActivity calls. TrailerControls.kt (the state machine over core's

@@ -1207,6 +1207,7 @@
     "section_films": "Videos and shows",
     "section_videos": "Videos",
     "select_all": "Select all",
+    "select_all_shown": "Select all {count} shown",
     "select_videos": "Select videos",
     "select_videos_detail": "Download several at once",
     "selected": "Selected",
