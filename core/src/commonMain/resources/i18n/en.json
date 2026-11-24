@@ -1869,6 +1869,7 @@
   "notify": {
     "action_not_now": "Not now",
     "blocked": "Notifications are off for TMPlayer in the system settings.",
+    "blocked_card_line": "Progress shows here only: notifications are off",
     "cache_over_body": "{size} of videos you played is kept on this device. Free up space to give it back.",
     "cache_over_title": "Recently played videos are taking a lot of space",
     "carry_on": "They carry on by themselves when the signal is back.",
@@ -1907,6 +1908,9 @@
     "new_videos_offer": "Get a notification when your starred chats post new videos?",
     "new_videos_private": "New videos in your starred chats",
     "new_videos_turn_on": "Turn on",
+    "off_body": "Downloads still run. Turn notifications on to pause and cancel them from the shade.",
+    "off_title": "Notifications are off for TMPlayer",
+    "open_settings": "Open settings",
     "paused": "{count, plural, one {Download paused} other {# downloads paused}}",
     "piece_arrived": "Part {number} of {title} is in {chat}",
     "piece_arrived_body": "It now plays up to part {playable} of {total}.",

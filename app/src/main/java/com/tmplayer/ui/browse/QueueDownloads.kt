@@ -1,16 +1,10 @@
 package com.tmplayer.ui.browse
 
-import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
 import android.widget.Toast
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.LocalDownloads
@@ -101,7 +95,8 @@ private suspend fun planAndQueue(
     }
     taken.forEach { OfflineDownloads.start(context, it, chatTitle(it)) }
     QueueingDownloads.releaseOnceQueued(chosen.map { it.fileId }.toSet(), taken)
-    return message
+    // A refusal costs the progress in the shade: the line says so, once the system has nothing left to ask.
+    return if (taken.isEmpty()) message else withBlockedLine(context, message)
 }
 
 /**
@@ -303,37 +298,25 @@ private fun batchMessage(batch: CacheShelf.Batch, wanted: Int, big: MediaItem? =
 }
 
 /**
- * Asks for the notification permission, once, on the versions that have one.
+ * Asks for the notification permission on the versions that have one, when the system will still
+ * show its question ([NotificationAsk]; the answer is read there, through the Activity Result API).
  *
  * A refusal is not treated as a failure: the download still runs, it simply runs without a bar to
- * watch. Nothing here waits on the answer, because the fetch is the thing the viewer pressed.
+ * watch, and the line under it says so. Nothing here waits on the answer, because the fetch is the
+ * thing the viewer pressed.
  */
-internal fun askForNotifications(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-    if (
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-        PackageManager.PERMISSION_GRANTED
-    ) {
-        return
-    }
-    val activity = context.findActivity() ?: return
-    ActivityCompat.requestPermissions(
-        activity,
-        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-        NOTIFICATION_REQUEST,
-    )
-}
+internal fun askForNotifications(context: Context) = com.tmplayer.data.NotificationAsk.request(context)
 
-private fun Context.findActivity(): Activity? {
-    var current: Context? = this
-    while (current is ContextWrapper) {
-        if (current is Activity) return current
-        current = current.baseContext
+/**
+ * [message] with what a refusal costs, when notifications cannot reach the viewer and the system
+ * has no question left to put (WP-38): the progress shows in Downloads only.
+ */
+internal fun withBlockedLine(context: Context, message: String): String =
+    if (com.tmplayer.data.NotificationAsk.pending || com.tmplayer.data.BackgroundChecks.canNotify(context)) {
+        message
+    } else {
+        "$message\n${L.notifyBlockedCardLine}"
     }
-    return null
-}
-
-private const val NOTIFICATION_REQUEST = 7301
 
 /**
  * Hands the downloaded file to another app, either to send or to play.

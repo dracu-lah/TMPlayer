@@ -561,6 +561,8 @@ fun SettingsScreen(
     // change. On Appearance that is Language, not the Theme stepper above it, which once turned a
     // tester's TV to Light with a stray Left before they had even seen the screen.
     val landing = remember { FocusRequester() }
+    // Whether notifications can reach the person (WP-38), read again on every return to the screen.
+    val canNotify by rememberCanNotify()
     val listState = rememberLazyListState()
 
     // The page open over the category list, or null for the list itself. Saved, so a rotation
@@ -1781,13 +1783,21 @@ fun SettingsScreen(
                         add(Triple(Notice.Support, s.settingsSponsorReminders, s.settingsSponsorRemindersDetail))
                     }
                 }
+                // Android 13's permission refused for good, or the app's notifications off in the system
+                // settings (WP-38): the card says so and opens them; the switches below are drawn off
+                // and cannot be pressed, since turning one on could never make anything arrive. Read
+                // again on every return, so turning them on there is seen here.
+                if (!canNotify) {
+                    item(key = "notifications_off") { NotificationsOffCard() }
+                }
                 noticeRows.forEachIndexed { index, (notice, title, detail) ->
                     item(key = "notice-${notice.name}") {
                         NoticeToggleRow(
                             notice = notice,
                             title = title,
                             subtitle = detail,
-                            modifier = if (index == 0) Modifier.focusRequester(landing) else Modifier,
+                            modifier = if (index == 0 && canNotify) Modifier.focusRequester(landing) else Modifier,
+                            blocked = !canNotify,
                             onBlocked = { toast(s.notifyBlocked) },
                         )
                     }
@@ -3539,11 +3549,13 @@ internal fun ActionRow(
      */
     mark: (@Composable () -> Unit)? = null,
     markSize: Dp = SettingIconChipSize,
+    /** False for a line that is not a setting of its own (the Notifications card, WP-38): the search and SettingsMap do not know it. */
+    searchable: Boolean = true,
     onClick: () -> Unit,
 ) {
     val iconTint = if (tint == Color.Unspecified) Tone.accent else tint
     FocusRow(
-        modifier = modifier.seekable(title),
+        modifier = if (searchable) modifier.seekable(title) else modifier,
         onClick = onClick,
         headline = {
             M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -3893,6 +3905,8 @@ private fun NoticeToggleRow(
     title: String,
     subtitle: String,
     modifier: Modifier = Modifier,
+    /** Notifications cannot reach the person now: drawn off, not pressable (the card above says why). */
+    blocked: Boolean = false,
     onBlocked: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -3903,7 +3917,8 @@ private fun NoticeToggleRow(
         title = title,
         subtitle = subtitle,
         icon = TmIcons.Bell,
-        checked = on,
+        checked = on && !blocked,
+        enabled = !blocked,
         modifier = modifier,
         onToggle = {
             val next = !on

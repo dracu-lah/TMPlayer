@@ -194,9 +194,6 @@ private const val GATE_RUN = -1
  * before the viewer has decided their press was missed.
  */
 
-/** A small store for asks that happen once per install, and so are not settings or in backups. */
-private const val ONCE_PREFS = "once"
-private const val ASKED_NOTIFICATIONS = "asked_notifications"
 
 /** Where the user is. Deliberately three screens deep and no more. */
 private sealed interface Screen {
@@ -922,9 +919,18 @@ private fun Root() {
     // The notification permission, asked for once, after the first video watched to the end: the
     // notifications that are on from the start (new episodes, downloads, low storage, updates, the
     // support ask) can only reach someone who has allowed them, and launch is the wrong moment.
+    // The answer is read (WP-38): the "asked" mark is written when it comes, not before the question,
+    // and the downloads' and Settings' asks go through the same launcher ([NotificationAsk]). The
+    // registry takes it at composition, ahead of anything that can ask.
     val askNotifications = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { }
+    ) { com.tmplayer.data.NotificationAsk.answered(context) }
+    androidx.compose.runtime.DisposableEffect(askNotifications) {
+        com.tmplayer.data.NotificationAsk.launcher = {
+            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        onDispose { com.tmplayer.data.NotificationAsk.launcher = null }
+    }
     LaunchedEffect(Unit) {
         SupportReminder.finished.collect { done ->
             runCatching { settings.noteSupportCompleted(done.key, done.at) }
@@ -933,11 +939,9 @@ private fun Root() {
                 !FormFactor.isTv(context) &&
                 !com.tmplayer.data.BackgroundChecks.canNotify(context)
             ) {
-                val once = context.getSharedPreferences(ONCE_PREFS, android.content.Context.MODE_PRIVATE)
-                if (!once.getBoolean(ASKED_NOTIFICATIONS, false)) {
-                    once.edit().putBoolean(ASKED_NOTIFICATIONS, true).apply()
-                    runCatching { askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
-                }
+                // Once, and only where the system will still show its question: a refusal that
+                // Android treats as final is answered by the card in Settings, not by a silent launch.
+                if (!com.tmplayer.data.NotificationAsk.asked(context)) com.tmplayer.data.NotificationAsk.request(context)
             }
         }
     }
