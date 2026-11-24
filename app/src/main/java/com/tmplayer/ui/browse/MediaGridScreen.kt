@@ -88,6 +88,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -576,6 +577,19 @@ fun MediaGridScreen(
     fun leaveSelection() {
         selecting = false
         selected = emptyMap()
+    }
+
+    // Ctrl+A from a hardware keyboard (WP-39): the same as the bar's Select all, entering the mode if need be.
+    val latestListed by rememberUpdatedState(listedItems)
+    DisposableEffect(chatId) {
+        val handler: () -> Boolean = handler@{
+            if (latestListed.isEmpty()) return@handler false
+            selecting = true
+            selected = latestListed.associateBy { it.id }
+            true
+        }
+        GridKeys.selectAll = handler
+        onDispose { if (GridKeys.selectAll === handler) GridKeys.selectAll = null }
     }
 
     fun toggle(item: MediaItem) {
@@ -3295,4 +3309,16 @@ private fun feedContentType(entry: MediaFeedEntry<ShelfEntry>, posterKeys: Set<S
         entry.item.key in posterKeys -> 2
         else -> 3
     }
+}
+
+/**
+ * Keys the shell hands to the chat grid that is open (WP-39): the activity sees the key, the grid
+ * owns the selection. Null while no grid is on screen, so the key does nothing elsewhere.
+ */
+internal object GridKeys {
+    @Volatile
+    var selectAll: (() -> Boolean)? = null
+
+    /** Ticks every loaded video of the open grid; false when no grid is open or it has none. */
+    fun askSelectAll(): Boolean = selectAll?.invoke() == true
 }

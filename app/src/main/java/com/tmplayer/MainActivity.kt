@@ -196,7 +196,7 @@ private const val GATE_RUN = -1
 
 
 /** Where the user is. Deliberately three screens deep and no more. */
-private sealed interface Screen {
+internal sealed interface Screen {
     data object Chats : Screen
     data class Media(val chat: ChatSummary) : Screen
     data object Settings : Screen
@@ -214,7 +214,7 @@ private sealed interface Screen {
  * needs restored, so only the fields the media screen actually reads are written down and the row
  * is rebuilt from them. The picture reappears the moment the chat list lands.
  */
-private val ScreenSaver = listSaver<Screen, Any>(
+internal val ScreenSaver = listSaver<Screen, Any>(
     save = { screen ->
         when (screen) {
             is Screen.Chats -> listOf(SCREEN_CHATS)
@@ -541,6 +541,13 @@ class MainActivity : ComponentActivity() {
         if (SearchKeyGuard.swallows(keyCode)) return true
         if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE && !FormFactor.isTv(this)) {
             event.startTracking()
+            return true
+        }
+        // Ctrl+A in a chat's grid ticks every video it has loaded (a tablet or Chromebook keyboard, as
+        // on the desktop). Not in a text field: the field has focus and takes the key before it comes here.
+        if (keyCode == android.view.KeyEvent.KEYCODE_A && event.isCtrlPressed && !FormFactor.isTv(this) &&
+            com.tmplayer.ui.browse.GridKeys.askSelectAll()
+        ) {
             return true
         }
         return super.onKeyDown(keyCode, event)
@@ -1190,9 +1197,11 @@ private fun Root() {
     // reads as the app talking about something else entirely.
     val device = remember { if (FormFactor.isTv(context)) "tv" else "phone" }
     // Where leaving the Downloads screen goes back to.
-    var downloadsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
+    // Saved with the screen itself (WP-39): after a turn, a fold or a split screen resize Back goes
+    // where it went before, not to the chat list.
+    var downloadsCameFrom by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Chats) }
     // Where leaving Settings goes back to: the page the profile popover's Settings was picked on.
-    var settingsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
+    var settingsCameFrom by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Chats) }
     // On a television, the rail item to put the remote back on when Back from Settings or
     // Downloads returns to the browser: the place it was pressed, not the first tile of the page.
     var railReturn by remember { mutableStateOf<com.tmplayer.ui.browse.RailReturn?>(null) }
