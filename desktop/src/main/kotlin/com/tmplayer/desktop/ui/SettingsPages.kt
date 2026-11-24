@@ -763,9 +763,12 @@ internal fun BackupRows(state: ShellState, version: String) {
             destructive = false,
             onConfirm = {
                 restorePlan = null
-                // Once at a time, off the window's thread, and the truth when it fails (RestoreRun).
-                com.tmplayer.platform.Background.scope.launch {
-                    when (com.tmplayer.data.RestoreRun.run { withContext(Dispatchers.IO) { backups.restore(plan.backup) } }) {
+                // Once at a time, off the window's thread, and the truth when it fails (RestoreRun); for
+                // the profile open now, so a switch from the profile menu part way stops it (SEC2-04).
+                com.tmplayer.data.RestoreRun.start(
+                    work = { withContext(Dispatchers.IO) { backups.restore(plan.backup) } },
+                ) { outcome ->
+                    when (outcome) {
                         com.tmplayer.data.RestoreRun.Outcome.Done -> toast(s.backupRestored)
                         com.tmplayer.data.RestoreRun.Outcome.Failed -> toast(s.backupRestoreFailed)
                         com.tmplayer.data.RestoreRun.Outcome.AlreadyRunning -> Unit

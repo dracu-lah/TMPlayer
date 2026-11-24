@@ -18,7 +18,6 @@ import com.tmplayer.data.BackupService
 import com.tmplayer.data.BackupWords
 import com.tmplayer.data.RestorePlan
 import com.tmplayer.data.RestoreRun
-import com.tmplayer.platform.Background
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.i18n.L
@@ -130,12 +129,12 @@ internal fun rememberBackupActions(
             }
         },
         apply = { backup ->
-            // In the app's own scope, so a rotation or leaving Settings does not cut a restore short, and
-            // once at a time (RestoreRun): the confirm pressed twice merges the backup once.
-            Background.scope.launch {
-                val outcome = RestoreRun.run {
-                    withContext(Dispatchers.IO) { service.restore(backup) }
-                }
+            // In the open profile's scope, so a rotation or leaving Settings does not cut a restore short
+            // but a switch does (SEC2-04: nothing of it lands in the next profile), and once at a time
+            // (RestoreRun): the confirm pressed twice merges the backup once.
+            RestoreRun.start(
+                work = { withContext(Dispatchers.IO) { service.restore(backup) } },
+            ) { outcome ->
                 when (outcome) {
                     RestoreRun.Outcome.Done -> say(L.backupRestored)
                     RestoreRun.Outcome.Failed -> say(L.backupRestoreFailed)
