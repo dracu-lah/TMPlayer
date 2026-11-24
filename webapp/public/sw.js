@@ -58,7 +58,7 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(request.url)
     if (url.origin !== self.location.origin || request.method !== 'GET') return
     // A request for a download (no range, a name to save as) is answered whole, a piece at a time (saveStream); the player's reads are ranges.
-    if (url.pathname.startsWith('/stream/') && url.searchParams.has('save') && !request.headers.get('range')) return event.respondWith(saveStream(event, url))
+    if (url.pathname.startsWith('/stream/') && url.searchParams.has('save') && !request.headers.get('range')) return event.respondWith(saveStream(event, url, request))
     if (url.pathname.startsWith('/stream/')) return event.respondWith(stream(event, url))
     if (VERSION === 'dev') return
     // libav.js and its sources (/libav/sources/, linked from /licenses.txt) come from the network as they are.
@@ -174,8 +174,12 @@ async function stream(event, url) {
  * ends the stream with an error, and the browser drops what it had (no partial file is kept by the app).
  * The page is told how far it has got, and how it ended, to show the bar and the summary.
  */
-async function saveStream(event, url) {
+async function saveStream(event, url, request) {
     const key = decodeURIComponent(url.pathname.slice('/stream/'.length))
+    // Only a save the page started (saveRuntime.ts registers it under `save:<id>` after checking that the
+    // chat allows saving), and only as its hidden frame asks: never the player's own key of a restricted
+    // video, and never a top-level navigation from another site (SEC2-05).
+    if (!key.startsWith('save:') || request.mode !== 'navigate' || request.destination !== 'iframe') return new Response(null, { status: 403 })
     const size = Number(url.searchParams.get('size'))
     const name = url.searchParams.get('save') || 'video'
     const id = url.searchParams.get('id') || key

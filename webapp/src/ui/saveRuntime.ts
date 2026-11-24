@@ -68,7 +68,8 @@ export async function saveToDevice(item: VideoItem): Promise<void> {
     listen()
     const room = space(item.size, await navigator.storage?.estimate?.().catch(() => null))
     if (!room.ok) return void showToast({ text: t('web.save_needs_space', { needed: size(room.needed), free: size(room.free ?? 0) }) })
-    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    // Not guessable: the key is all that names this file to the service worker (SEC2-05).
+    const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
     const name = fileNameOf(item)
     const file = openFile({ key: item.key, size: item.size, duration: item.duration })
     // Nothing is read ahead of the worker's own asks.

@@ -14,7 +14,7 @@ interface FakeClient {
     profile: string
     keys: Set<string>
     asked: number
-    postMessage(message: { key: string; p?: string | null }, ports: MessagePort[]): void
+    postMessage(message: { key: string; p?: string | null }, ports?: MessagePort[]): void
 }
 
 function client(id: string, profile: string, focused: boolean, keys: string[] = []): FakeClient {
@@ -24,7 +24,10 @@ function client(id: string, profile: string, focused: boolean, keys: string[] = 
         profile,
         keys: new Set(keys),
         asked: 0,
-        postMessage(message, [port]) {
+        postMessage(message, ports) {
+            // A save's progress note to the window carries no port.
+            const port = ports?.[0]
+            if (!port) return
             this.asked++
             // As src/stream/reader.ts answers: another profile's read is refused, a file it does not have is gone.
             if (typeof message.p === 'string' && message.p !== this.profile) return port.postMessage({ error: 'other' })
@@ -35,7 +38,7 @@ function client(id: string, profile: string, focused: boolean, keys: string[] = 
 }
 
 /** Loads the worker with these windows open; returns what a fetch of `url` (from `clientId`) answers. */
-async function fetchFrom(windows: FakeClient[], url: string, clientId = '') {
+async function fetchFrom(windows: FakeClient[], url: string, clientId = '', request?: unknown) {
     const listeners: Record<string, (event: unknown) => void> = {}
     const self = {
         location: { origin: 'https://example.test' },
@@ -47,11 +50,11 @@ async function fetchFrom(windows: FakeClient[], url: string, clientId = '') {
         },
         skipWaiting: () => {},
     }
-    runInNewContext(SOURCE, { self, URL, Response, MessageChannel, setTimeout, clearTimeout, caches: {}, fetch, console })
+    runInNewContext(SOURCE, { self, URL, Response, ReadableStream, MessageChannel, setTimeout, clearTimeout, caches: {}, fetch, console })
     let answer: Promise<Response> | undefined
     listeners.fetch({
         clientId,
-        request: new Request(`https://example.test${url}`, { headers: { range: 'bytes=0-3' } }),
+        request: request ?? new Request(`https://example.test${url}`, { headers: { range: 'bytes=0-3' } }),
         respondWith: (p: Promise<Response>) => (answer = p),
     })
     assert.ok(answer, 'the worker answers stream requests')
@@ -86,4 +89,22 @@ test('the page that asked answers for itself', async () => {
 test('a page of the same profile without the file says it is gone; no page at all is a 503', async () => {
     assert.equal((await fetchFrom([client('b', 'abc123', true)], STREAM)).status, 410)
     assert.equal((await fetchFrom([], STREAM)).status, 503)
+})
+
+// Node's Request cannot be made with mode 'navigate', so a save's request is stood in for.
+const saveRequest = (url: string, mode: string, destination: string) => ({ url: `https://example.test${url}`, method: 'GET', headers: new Headers(), mode, destination })
+
+test('Save to device streams only a save the page registered, asked by its hidden frame (SEC2-05)', async () => {
+    const page = () => client('b', 'abc123', true, ['f1', 'save:0f9c'])
+    // The player's own key of a playing (maybe restricted) video is never a download.
+    const player = '/stream/f1?save=x.mp4&size=4&p=abc123'
+    assert.equal((await fetchFrom([page()], player, 'b', saveRequest(player, 'navigate', 'iframe'))).status, 403)
+    // A save key asked any other way (a fetch, a top-level navigation from another site) is refused.
+    const save = '/stream/save%3A0f9c?save=x.mp4&size=4&p=abc123&id=0f9c'
+    assert.equal((await fetchFrom([page()], save, 'b', saveRequest(save, 'cors', ''))).status, 403)
+    assert.equal((await fetchFrom([page()], save, 'b', saveRequest(save, 'navigate', 'document'))).status, 403)
+    const ok = await fetchFrom([page()], save, 'b', saveRequest(save, 'navigate', 'iframe'))
+    assert.equal(ok.status, 200)
+    assert.match(ok.headers.get('content-disposition') ?? '', /^attachment/)
+    assert.deepEqual([...new Uint8Array(await ok.arrayBuffer())], [1, 2, 3, 4])
 })
