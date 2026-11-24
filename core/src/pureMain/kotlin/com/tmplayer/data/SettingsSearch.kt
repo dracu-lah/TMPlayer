@@ -174,6 +174,9 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
 
     /** "Developer options are on. Save name check is in Settings, under Save logs." */
     DeveloperOn("logs.developer_on", SettingsGroup.Troubleshooting, "name_report", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+
+    /** The status corner's sync hints (unreadable file, newer file, other account): Open settings, Account (WP-100). */
+    SyncHint("settings.resume_sync_unreadable", SettingsGroup.Accounts, "resume_sync", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
     ;
 
     /** Where Setup choices' "Also in" goes is in the ui module (SetupStep lives there). */
