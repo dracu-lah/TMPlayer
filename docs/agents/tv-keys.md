@@ -128,7 +128,7 @@ the key fails the test: add it here with its context first.
 
 | Key | Bound in |
 | --- | --- |
-| Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt`, `TvTopBar.kt`, `TvMenu.kt` |
+| Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt`, `TvTopBar.kt`, `TvMenu.kt`, `TvAccountSheet.kt` |
 | Info | `Holdable.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (short Info), `PlaybackMarks.kt` (held) |
 | Search | `BrowseScreen.kt`, `MainActivity.kt` (a chat's videos and Downloads, WP-22), `SearchKeyGuard.kt` (swallows it on a phone) |
 | Page, Channel | `PageKeys.kt` (every long list: the key names live there only), `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel steps the video, Page a chapter or a minute) |

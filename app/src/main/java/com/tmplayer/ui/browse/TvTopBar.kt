@@ -190,16 +190,10 @@ internal fun TvTopBar(
     LaunchedEffect(Unit) { TvBarSignals.accountMenuAsked.collect { profileOpen = true } }
     // The shell's sign out (WP-02): under its first question the menu stays, and Cancel puts the remote
     // back on Sign out; once it has started the menu closes, since nothing of it belongs to the menu.
-    val signOutFocus = remember { FocusRequester() }
-    val signOutPhase = nav.signOutPhase
-    var wasAsking by remember { mutableStateOf(false) }
-    LaunchedEffect(signOutPhase, profileOpen) {
-        if (signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Running && profileOpen) profileOpen = false
-        if (signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Idle && wasAsking && profileOpen) {
-            withFrameNanos { }
-            runCatching { signOutFocus.requestFocus() }
-        }
-        wasAsking = signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Asking
+    // The sheet does not hold Sign out any more (it is in Settings, Account); a sign out started
+    // elsewhere still closes it, since nothing under it is the viewer's to use.
+    LaunchedEffect(nav.signOutPhase, profileOpen) {
+        if (nav.signOutPhase == com.tmplayer.ui.settings.SignOutPhase.Running && profileOpen) profileOpen = false
     }
     // Who is signed in: Telegram's name once it is known, else the profile's own (saved on this
     // device, so it is there offline and while Telegram connects).
@@ -261,7 +255,6 @@ internal fun TvTopBar(
             ProfileButton(
                 account = nav.account,
                 profile = nav.profile,
-                firstName = FirstName.of(shownName),
                 chosen = inProfile && !searchOpen && !downloadsShown,
                 // An update waiting; the running downloads count on the Downloads tab now.
                 badge = if (nav.updateVersion != null) Tone.caution else null,
@@ -279,7 +272,8 @@ internal fun TvTopBar(
             Spacer(Modifier.width(18.dp - Tv.FocusClearance))
             Row(
                 Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = Tv.FocusClearance),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // The width the account's name used to take goes to the gaps, one gap between every item (user, 2026-11-25).
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BarTab(s.commonSearch, TmIcons.Search, searchOpen, onSearch, Modifier.focusRequester(searchRequester).tvReturnPoint(searchRequester))
@@ -305,7 +299,7 @@ internal fun TvTopBar(
             }
             Spacer(Modifier.width(18.dp))
             // The app's own mark at the picture's size, the way a television's home screen signs
-            // itself. The name is left out: its width pays for the account's first name (WP-01).
+            // itself. The name is left out.
             Image(
                 com.tmplayer.ui.components.AppLogo.Mark,
                 contentDescription = null,
@@ -326,118 +320,32 @@ internal fun TvTopBar(
             }
         }
         val menuName = shownName ?: s.navAccount
-        // "Your viewing" under the name, as the phone's and the desktop's menus head theirs;
-        // the rows below go to each list.
-        val menuSummary = listOfNotNull(
-            nav.account?.username?.takeIf { it.isNotBlank() }?.let { "@$it" },
-            s.profileSummary(
-                s.formatter.number(nav.watchingCount),
-                s.formatter.number(nav.watchedCount),
-                s.formatter.number(nav.favoriteCount),
-            ),
-        ).joinToString("  ·  ")
-        val several = nav.onSwitchProfile != null
-        val switchOrAdd = nav.onSwitchProfile ?: nav.onSwitchOrAdd
-        val signOut = nav.onSignOut
-        TvMenu(
-            title = menuName,
-            subtitle = menuSummary,
-            header = if (switchOrAdd != null || signOut != null) {
-                { first ->
-                    AccountMenuHeader(
-                        account = nav.account,
-                        profile = nav.profile,
-                        name = menuName,
-                        summary = menuSummary,
-                        switchLabel = if (several) s.profilesSwitchProfile else s.profilesAdd,
-                        onSwitchOrAdd = switchOrAdd?.let(go),
-                        onSignOut = signOut,
-                        first = first,
-                        signOutFocus = signOutFocus,
-                    )
-                }
-            } else {
-                null
-            },
-            closeOnMenu = true,
-            footer = {
-                // The version, the build and the update state; OK copies them (WP-104). The update
-                // itself is the row above, so the state here is words only.
-                com.tmplayer.ui.components.VersionFooter(
-                    info = com.tmplayer.ui.components.rememberVersionInfo(),
-                    tv = true,
-                )
-            },
+        // A sheet down the right edge (user, 2026-11-25), not a modal in the middle: the account, your
+        // library with its counts on the rows, Settings, Switch or add account, Refresh, the version.
+        // Sign out is in Settings, Account, behind the Settings PIN, as on the phone.
+        TvAccountSheet(
+            account = nav.account,
+            profile = nav.profile,
+            name = menuName,
+            username = nav.account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() },
+            favouriteCount = nav.favoriteCount,
+            watchingCount = nav.watchingCount,
+            watchedCount = nav.watchedCount,
+            several = nav.onSwitchProfile != null,
+            updateVersion = nav.updateVersion,
+            onFavourites = go(nav.onFavourites),
+            onHistory = go { nav.onHistory(HistoryTab.Continue) },
+            onWatchLater = go { nav.onHistory(HistoryTab.WatchLater) },
+            onSettings = go(nav.onSettings),
+            onSwitchOrAdd = (nav.onSwitchProfile ?: nav.onSwitchOrAdd)?.let(go),
+            onRefresh = onRefresh?.let { refresh -> { profileOpen = false; refresh() } },
+            onUpdate = go(nav.onUpdate),
+            onAbout = go(nav.onAbout ?: nav.onSettings),
             onDismiss = { profileOpen = false },
-            actions = buildList {
-                add(MenuAction(s.browseTabFavourites, TmIcons.StarOutline, detail = nav.favoriteCount.takeIf { it > 0 }?.toString(), onSelect = go(nav.onFavourites)))
-                add(MenuAction(s.browseTabHistory, TmIcons.History, detail = nav.watchingCount.takeIf { it > 0 }?.toString(), onSelect = go { nav.onHistory(HistoryTab.Continue) }))
-                add(MenuAction(s.profileWatched, TmIcons.Check, detail = nav.watchedCount.takeIf { it > 0 }?.toString(), onSelect = go { nav.onHistory(HistoryTab.Watched) }))
-                add(MenuAction(s.browseTabWatchLater, TmIcons.Clock, onSelect = go { nav.onHistory(HistoryTab.WatchLater) }))
-                // Settings, with the account at its top and Sign out at its foot, as on the phone.
-                add(MenuAction(s.navSettings, TmIcons.Settings, onSelect = go(nav.onSettings)))
-                // Switch profile (HX88) and Add account are the header's two buttons (WP-02).
-                // Home and the chat list fetch again from here: Home also refreshes itself when
-                // the app comes back after a while (MainActivity).
-                if (onRefresh != null) add(MenuAction(s.commonRefresh, TmIcons.Refresh, onSelect = { profileOpen = false; onRefresh() }))
-                nav.updateVersion?.let { version -> add(MenuAction(s.navUpdate, TmIcons.Refresh, detail = version, onSelect = go(nav.onUpdate))) }
-            },
         )
     }
 }
 
-/**
- * The account menu's head (WP-02): whose account it is, as the picture at [Avatar.Card] with the name
- * and the summary beside it, then the two buttons that act on the account: Add account (one
- * profile) or Switch profile (two or more), and Sign out, quiet at rest and red only under the
- * remote. Sign out is one Right from the first button; its question names the account and has Cancel
- * focused. The buttons wrap under a large font.
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun AccountMenuHeader(
-    account: com.tmplayer.data.Account?,
-    profile: com.tmplayer.data.Profile?,
-    name: String,
-    summary: String,
-    switchLabel: String,
-    onSwitchOrAdd: (() -> Unit)?,
-    onSignOut: (() -> Unit)?,
-    first: FocusRequester,
-    signOutFocus: FocusRequester,
-) {
-    val s = LocalStrings.current
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            Modifier.semantics(mergeDescendants = true) {},
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AccountPicture(account, profile, size = Avatar.Card)
-            Column(Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.titleLarge, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(summary, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (onSwitchOrAdd != null) {
-                // 48 dp targets: the buttons alone are 40 dp.
-                TmButton(onClick = onSwitchOrAdd, modifier = Modifier.heightIn(min = 48.dp).focusRequester(first)) { Text(switchLabel) }
-            }
-            if (onSignOut != null) {
-                TmButton(
-                    onClick = onSignOut,
-                    destructive = true,
-                    quietAtRest = true,
-                    modifier = Modifier.heightIn(min = 48.dp).focusRequester(signOutFocus).then(if (onSwitchOrAdd == null) Modifier.focusRequester(first) else Modifier),
-                ) { Text(s.settingsSignOutConfirm) }
-            }
-        }
-    }
-}
 
 /** How many frames, about a second and a half at 60 Hz, a page opened from the bar leaves the remote on it. */
 private const val BAR_HOLD_FRAMES = 90
@@ -460,7 +368,6 @@ private val CLUSTER_ITEM = 40.dp
 private val PROFILE_RECT = CLUSTER_ITEM + 8.dp
 
 /** The widest the first name at rest is drawn: longer ends in an ellipsis. */
-private val FIRST_NAME_MAX = 120.dp
 
 /** One of the tabs: its icon and name in a pill, the icon filled while its page is shown. */
 @Composable
@@ -554,19 +461,17 @@ private fun BarTab(
 }
 
 /**
- * The account's picture and first name, first in the bar: opens the account's menu. The focus rect
+ * The account's picture alone (no name drawn: a long name took the tabs' room), first in the bar: opens the account's menu. The focus rect
  * is 48 dp ([PROFILE_RECT]) with the 40 dp picture centred, and the ring and halo are drawn inside
  * it (the avatar role of [com.tmplayer.ui.theme.FocusRole]); the page shown from here is marked by
  * a short accent line under the picture, the selected indicator a chosen tab carries, never a
- * second ring. The first name is there at rest and its width never changes with focus, so the tabs
+ * second ring. Its width never changes with focus, so the tabs
  * beside it never move.
  */
 @Composable
 private fun ProfileButton(
     account: com.tmplayer.data.Account?,
     profile: com.tmplayer.data.Profile?,
-    /** The first word of the name at rest, or null when no name is known at all. */
-    firstName: String?,
     chosen: Boolean,
     /** A dot on the picture: an update waiting (amber). */
     badge: Color?,
@@ -656,19 +561,6 @@ private fun ProfileButton(
                         .clip(CircleShape)
                         .background(badge)
                         .testTag("tv-bar-update-dot"),
-                )
-            }
-        }
-        if (firstName != null) {
-            // Read once, in the button's description: the chip is for the eye.
-            Box(Modifier.clearAndSetSemantics { }) {
-                Text(
-                    firstName,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Tone.text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = FIRST_NAME_MAX).padding(start = 8.dp, end = 4.dp).testTag("tv-bar-first-name"),
                 )
             }
         }

@@ -18,6 +18,8 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -187,7 +189,7 @@ class TvBarAccountRenderTest {
         val bitmap = frame("tv-bar-account-name-only.png")
         val pixel = discPixel(bitmap, "Maya Lee")
         assertNotEquals("a coloured disc, not surfaceHigh", surfaceHigh.toArgb(), pixel)
-        rule.onNodeWithTag("tv-bar-first-name", useUnmergedTree = true).assertExists()
+        rule.onAllNodesWithTag("tv-bar-first-name", useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
@@ -218,7 +220,7 @@ class TvBarAccountRenderTest {
         open(account = null, profile = null)
         val bitmap = frame("tv-bar-account-no-name.png")
         assertEquals(surfaceHigh.toArgb(), discPixel(bitmap, L.navAccount))
-        rule.onNodeWithTag("tv-bar-first-name", useUnmergedTree = true).assertDoesNotExist()
+        rule.onAllNodesWithTag("tv-bar-first-name", useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
@@ -299,13 +301,21 @@ class TvBarAccountRenderTest {
         frame("tv-bar-account-longest-name.png")
         val width = rule.activity.window.decorView.width.toFloat()
         val mark = rule.onNodeWithContentDescription("TMPlayer").fetchSemanticsNode().boundsInRoot
-        val chip = rule.onNodeWithTag("tv-bar-first-name", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertTrue("the chip is one line at most 120 dp wide, ellipsized", chip.width <= 120f * density + 1f)
+        // The picture alone, no name drawn (user, 2026-11-25): a long name takes no room on the bar.
+        rule.onAllNodesWithTag("tv-bar-first-name", useUnmergedTree = true).assertCountEquals(0)
+        assertTrue("no text for the name at all", rule.onAllNodesWithText(longest, substring = true).fetchSemanticsNodes().isEmpty())
+        val picture = button("$longest, @w, ${L.navUpdateWaiting}").fetchSemanticsNode().boundsInRoot
+        var previous = picture.right
+        val gaps = ArrayList<Float>()
         for (name in listOf(L.commonSearch, L.browseTabHome, L.browseTabChats, L.navDownloads)) {
             val b = rule.onNodeWithText(name).fetchSemanticsNode().boundsInRoot
-            assertTrue("$name is after the chip", b.left >= chip.right)
+            assertTrue("$name is after the picture", b.left >= picture.right)
             assertTrue("$name is before the mark", b.right <= mark.left)
+            gaps += b.left - previous
+            previous = b.right
         }
+        // One consistent gap between the items (the first one carries the picture's own margin).
+        assertTrue("one gap between the tabs: $gaps", gaps.drop(1).all { kotlin.math.abs(it - gaps[1]) < 1.5f * density })
         // Watch later left the bar (WP-14): the account menu and History keep it.
         rule.onAllNodesWithContentDescription(L.browseTabWatchLater).assertCountEquals(0)
         val choose = rule.onNodeWithContentDescription(L.pickerChooseChats).fetchSemanticsNode().boundsInRoot
@@ -314,14 +324,13 @@ class TvBarAccountRenderTest {
     }
 
     @Test
-    fun `at 130 percent text the name stays on one line and the bar keeps its height`() {
+    fun `at 130 percent text the picture stays 48 dp with no name beside it and the bar keeps its height`() {
         open(account = asha, profile = null, fontScale = 1.3f)
-        val chip = rule.onNodeWithTag("tv-bar-first-name", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        rule.onAllNodesWithTag("tv-bar-first-name", useUnmergedTree = true).assertCountEquals(0)
         val node = button("Asha Rao, @asha").fetchSemanticsNode().boundsInRoot
         assertEquals("the button is 48 dp whatever the text size", 48f * density, node.height, 1f)
-        // One line of labelLarge (15 sp, 20 sp line) at 1.3: 26 sp at most, never two lines.
-        assertTrue("one line (${chip.height} px)", chip.height < 30f * density)
-        assertTrue("inside the bar", chip.bottom <= TV_BAR_HEIGHT.value * density)
+        assertEquals("and 48 dp wide: the picture alone", 48f * density, node.width, 1f)
+        assertTrue("inside the bar", node.bottom <= TV_BAR_HEIGHT.value * density)
         frame("tv-bar-account-font13.png")
     }
 

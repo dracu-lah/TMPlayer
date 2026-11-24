@@ -413,7 +413,7 @@ class TvKeyOwnershipTest {
     @Test
     fun `the files that bind Menu, Info, Search, Page, Channel and Stop are the ones the table lists`() {
         assertEquals(
-            listOf("AddChatsScreen.kt", "Holdable.kt", "MainActivity.kt", "PlayerActivity.kt", "ProfilePicker.kt", "TvMenu.kt", "TvTopBar.kt"),
+            listOf("AddChatsScreen.kt", "Holdable.kt", "MainActivity.kt", "PlayerActivity.kt", "ProfilePicker.kt", "TvAccountSheet.kt", "TvMenu.kt", "TvTopBar.kt"),
             claimants("""(?<![A-Za-z])Key\.Menu\b|KEYCODE_MENU\b"""),
         )
         assertEquals(

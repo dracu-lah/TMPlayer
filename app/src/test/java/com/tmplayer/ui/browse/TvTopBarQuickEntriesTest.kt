@@ -236,14 +236,14 @@ class TvTopBarQuickEntriesTest {
     fun `the profile names the button while Telegram has not answered`() {
         open(account = null, profile = Profile(id = "a", folder = null, name = "Maya Lee"))
         rule.onNodeWithContentDescription("Maya Lee").assertExists()
-        rule.onNodeWithTag("tv-bar-first-name", useUnmergedTree = true).assertTextEquals("Maya")
+        rule.onAllNodesWithTag("tv-bar-first-name", useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
     fun `Telegram's name and username win over the profile's once the account is there`() {
         open(account = asha, profile = Profile(id = "a", folder = null, name = "Maya Lee"))
         picture().assertExists()
-        rule.onNodeWithTag("tv-bar-first-name", useUnmergedTree = true).assertTextEquals("Asha")
+        rule.onAllNodesWithTag("tv-bar-first-name", useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test
