@@ -12,6 +12,9 @@ import { OptionsButton } from '../ui/CardMenu'
 import { PageBar } from '../ui/PageBar'
 import { notePool } from '../ui/PosterPicker'
 import { showToast } from '../ui/Toast'
+import { createLatest, isAbort } from '../ui/loadStates'
+import { idle, type WorkStatus } from '../ui/workStatus'
+import { WorkStatusLine } from '../ui/WorkStatus'
 import { AUTO_PAGES, AUTO_TOTAL, cleanFacets, filterLabel, filterState, filtersOn, NO_FACETS, NO_PREF, randomScope, wantsMore, type ChatFilter, type ChatPref, type Facets } from '../ui/videoFilter'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
@@ -79,34 +82,42 @@ export function Chat() {
         ...(lastPlayedSort() && touchVer() > 0 ? { touches: touchVer() } : {}),
     })
 
-    let seq = 0
+    // One read at a time (LS-28): a new read, another chat or another topic aborts the one running, and the worker is told.
+    const latest = createLatest()
+    onCleanup(() => latest.cancel())
     const run = async (mode: 'open' | 'more' | 'refresh' | 'view') => {
-        const mine = ++seq
+        const read = latest.begin()
         const id = chatId()
         const before = page()?.tiles.length ?? 0
         setBusy(mode)
         if (mode === 'more') setMoreFailed(false)
         try {
-            const next = await call('chat', [id, view(), mode])
-            if (mine !== seq || id !== chatId()) return
+            const next = await call('chat', [id, view(), mode], { signal: read.signal })
+            if (!read.current() || id !== chatId()) return
             setPage(next)
             setError(null)
             if (mode === 'more') setIdlePages(next.tiles.length > before ? 0 : idlePages() + 1)
             else if (mode !== 'view') setIdlePages(0)
         } catch (e) {
-            if (mine !== seq) return
+            if (!read.current() || isAbort(e)) return
             const err = e as Partial<RpcError>
             if (mode === 'more') setMoreFailed(true)
             else if (mode === 'refresh' && err.text?.startsWith('FLOOD_WAIT') && page()) setRefreshWait(err.seconds ?? 0)
             else setError(e)
         } finally {
-            if (mine === seq) setBusy(null)
+            if (read.current()) setBusy(null)
         }
     }
+
+    const headStatus = (): WorkStatus => (busy() === 'open' && !page() ? { kind: 'loading', what: t('browse.finding_videos') } : busy() === 'refresh' ? { kind: 'syncing', what: '' } : idle)
+    const footStatus = (): WorkStatus => (busy() === 'more' ? { kind: 'syncing', what: t('grid.loading_more') } : idle)
 
     // A new chat (the address changed under the same page) starts afresh.
     createEffect(
         on(chatId, (id) => {
+            // The old chat's read stops now, and the loading line is up while its filters are read (no blank wait on a change of chat).
+            latest.cancel()
+            setBusy('open')
             setPage(null)
             setError(null)
             setShowAll(false)
@@ -132,6 +143,7 @@ export function Chat() {
     // Another topic, or every topic again: that grid is read afresh (the old one is not shown under the new name).
     createEffect(
         on(topic, () => {
+            latest.cancel()
             setPage(null)
             setError(null)
             setAutoPages(0)
@@ -433,9 +445,8 @@ export function Chat() {
             <Show when={refreshWait() != null}>
                 <p class="notice" role="status">{t('chats.refresh_wait', { seconds: refreshWait()! })}</p>
             </Show>
-            <Show when={busy() === 'open' && !page()}>
-                <p class="muted">{t('browse.finding_videos')}</p>
-            </Show>
+            {/* The first read of a chat or topic, and Refresh: one status line, a polite status (LS-28). */}
+            <WorkStatusLine status={headStatus()} />
             <Show when={error()}>
                 <div class="notice error-notice">
                     <p class="error" role="alert">{errorText(error())}</p>
@@ -494,9 +505,7 @@ export function Chat() {
             </Show>
             <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} />
             <div class="list-foot">
-                <Show when={busy() === 'more'}>
-                    <p class="muted">{t('grid.loading_more')}</p>
-                </Show>
+                <WorkStatusLine status={footStatus()} />
                 <Show when={moreFailed()}>
                     <p class="error" role="alert">{t('grid.more_failed')}</p>
                     <button class="link" type="button" onClick={() => run('more')}>{t('common.try_again')}</button>

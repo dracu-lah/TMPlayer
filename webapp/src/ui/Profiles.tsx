@@ -12,7 +12,7 @@ import { render } from 'solid-js/web'
 import { Add01Icon, Cancel01Icon, LockKeyholeIcon, Logout05Icon, UserGroupIcon, UserSwitchIcon } from '@hugeicons/core-free-icons'
 import * as B from './accountBook'
 import { activeId, book, closePicker, closeTopLayer, many, openPicker, photoOf, photosVersion, picker } from '../accounts'
-import { addAccount, changePin, forgetVerified, pinOpened, pinsWork, pinVerified, removeAll, removeAllNeeds, removeProfile, renameProfile, signInAgain, signOutProfile, switchTo, tryPin } from '../accountFlows'
+import { addAccount, changePin, forgetVerified, pinOpened, pinsWork, pinVerified, removeAll, removeAllNeeds, removeProfile, renameProfile, signInAgain, signOutProfile, switchingId, switchTo, tryPin } from '../accountFlows'
 import { me } from '../session'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -125,6 +125,9 @@ export function Profiles() {
             </Show>
             <img class="boot-mark profiles-mark" src="/icon.svg" alt="" width="48" height="48" />
             <h1 id="profiles-title">{t('accounts.title')}</h1>
+            <p class="visually-hidden" role="status" aria-live="polite">
+                <Show when={switchingId()}>{(id) => { const target = profileOf(id()); return target ? t('profiles.switching', { name: nameOf(target) }) : '' }}</Show>
+            </p>
             <Show when={editing()}>
                 <p class="muted profiles-hint" role="status">{t('accounts.manage_hint')}</p>
             </Show>
@@ -240,7 +243,11 @@ function ProfileTile(props: { profile: B.Profile; name: string; editing: boolean
                 </Show>
             </span>
             <span class="profile-name" aria-hidden="true">{props.name}</span>
-            <Show when={p().state !== 'ok'}>
+            {/* The tile that is being opened says so (LS-30); the picker's status line speaks it. */}
+            <Show when={switchingId() === p().id}>
+                <span class="profile-note" aria-hidden="true">{t('profiles.switching', { name: props.name })}</span>
+            </Show>
+            <Show when={p().state !== 'ok' && switchingId() !== p().id}>
                 <span class="profile-note" classList={{ warn: p().state === 'attention' }} aria-hidden="true">
                     {p().state === 'attention' ? t('accounts.needs_attention') : t('accounts.adding')}
                 </span>

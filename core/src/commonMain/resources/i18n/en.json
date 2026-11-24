@@ -1316,6 +1316,7 @@
     "row_scroll_on": "Scroll on",
     "row_shows": "Shows",
     "row_watch_later": "Watch later",
+    "rows_failed": "{count, plural, one {# chat could not be read for now.} other {# chats could not be read for now.}}",
     "see_all": "See all",
     "see_all_count": "{count, plural, one {# video} other {# videos}}",
     "see_all_count_at_least": "{count, plural, one {#+ video} other {#+ videos}}",

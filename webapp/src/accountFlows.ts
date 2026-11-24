@@ -7,7 +7,9 @@
 // A profile with a PIN never opens without it: the picker asks it, a switch refuses a PIN profile
 // this tab has not unlocked, signing out or removing one asks it first (unless it is the profile open
 // and unlocked here), and Remove all asks every locked profile's PIN before anything is wiped.
+import { createSignal } from 'solid-js'
 import * as B from './ui/accountBook'
+import { createSwitchGuard } from './ui/loadStates'
 import {
     activeId,
     activeProfile,
@@ -148,15 +150,30 @@ function stayHere() {
     openSession()
 }
 
-/** Opens a profile: this one stays, another reloads the page into it. A PIN profile opens only once this tab unlocked it. */
+const [switching, setSwitching] = createSignal<string | null>(null)
+/** The profile a switch is opening now (the tile says "Opening {name}"), or null. */
+export const switchingId = switching
+const switchGuard = createSwitchGuard(setSwitching)
+
+/**
+ * Opens a profile: this one stays, another reloads the page into it. A PIN profile opens only once this tab unlocked it.
+ * One switch at a time (LS-30): a second press while one runs does nothing, so two reloads never start.
+ */
 export async function switchTo(id: string) {
     const book = freshBook()
     if (!B.find(book, id) || !B.mayOpen(book, id, unlockedId())) return
     if (id === activeId) return stayHere()
-    if (!(await okToLeave())) return
-    await leave()
-    saveBook(B.setActive(freshBook(), id))
-    reloadInto(id)
+    if (!switchGuard.start(id)) return
+    try {
+        if (!(await okToLeave())) return switchGuard.release()
+        await leave()
+        saveBook(B.setActive(freshBook(), id))
+        // The page reloads: the guard stays held until it has gone, so a late press cannot start a second reload.
+        reloadInto(id)
+    } catch (e) {
+        switchGuard.release()
+        throw e
+    }
 }
 
 /** Free bytes for this site, or null when the browser does not say. */

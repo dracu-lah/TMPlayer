@@ -363,6 +363,8 @@ export interface HomePage {
     selfId: number | null
     /** Everything has answered. */
     settled: boolean
+    /** Chats whose row could not be read (an error or no answer in time): their rows left; the page says so with Try again. */
+    failed?: number
 }
 
 /** A country for the sign in's number, from Telegram's own list (help.getCountriesList). */

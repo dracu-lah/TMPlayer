@@ -332,8 +332,14 @@ export const api = {
     },
 
     /** A chat's grid as the app arranges it (see library.ts for the modes). */
-    async chat(_: Ctx, chatId: number, view: ChatView, mode: 'open' | 'more' | 'refresh' | 'view'): Promise<ChatPage> {
-        return chatPage(tg, chatId, view, mode)
+    async chat(ctx: Ctx, chatId: number, view: ChatView, mode: 'open' | 'more' | 'refresh' | 'view'): Promise<ChatPage> {
+        // The page left this chat or topic (LS-28): the call ends at once and is not waited for. The chat's own read goes on into its
+        // kept state, one at a time per chat, so coming back finds it read; nothing else waits on it.
+        ctx.signal.throwIfAborted()
+        return Promise.race([
+            chatPage(tg, chatId, view, mode),
+            new Promise<never>((_, reject) => ctx.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })),
+        ])
     },
 
     /** Videos across every chat within the size limits, grouped as a chat's are, newest first. */

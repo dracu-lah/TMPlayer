@@ -41,6 +41,8 @@ export function Privacy() {
         if (yes) void syncNow({ replace: true })
     }
     const unreadable = () => syncStatus()?.kind === 'unreadable'
+    // The last run failed: the same button says Try again beside the line that says why (LS-31).
+    const failed = () => !syncRunning() && syncStatus()?.kind === 'failed'
     return (
         <>
             <div class="set-card">
@@ -51,7 +53,7 @@ export function Privacy() {
                         <div class="sync-buttons">
                             <Show
                                 when={unreadable()}
-                                fallback={<button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>}
+                                fallback={<button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void syncNow()}>{failed() ? t('common.try_again') : t('settings.resume_sync_now')}</button>}
                             >
                                 <button type="button" class="outline-button" disabled={syncRunning()} onClick={() => void replaced()}>{t('settings.resume_sync_replace')}</button>
                             </Show>

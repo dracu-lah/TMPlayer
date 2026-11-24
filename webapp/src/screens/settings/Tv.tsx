@@ -7,7 +7,7 @@ import { t } from '../../i18n'
 import { clearHistoryWithUndo } from '../../clearHistory'
 import { layoutFixed } from '../../form'
 import { msoneOn } from '../../msoneFlag'
-import { setSyncOn, statusLine, syncNow, syncOn, syncRunning } from '../../sync'
+import { setSyncOn, statusLine, syncNow, syncOn, syncRunning, syncStatus } from '../../sync'
 import { openFeedback } from '../../ui/FeedbackForm'
 import { TmdbCredit, TvPanel, TvSwitch } from '../../ui/SettingsParts'
 import { AboutNews, rowDomId } from '../SettingsFind'
@@ -51,7 +51,7 @@ export function TvSettings() {
             <p class="muted small">{t('syncplace.privacy')}</p>
             <Show when={syncOn()}>
                 <p class="muted small" role="status">{statusLine()}</p>
-                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" disabled={syncRunning()} onClick={() => void syncNow()}>{t('settings.resume_sync_now')}</button>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" disabled={syncRunning()} onClick={() => void syncNow()}>{!syncRunning() && syncStatus()?.kind === 'failed' ? t('common.try_again') : t('settings.resume_sync_now')}</button>
             </Show>
             <TvPanel title={t('browse.clear_history')} id="history-label" anchor={rowDomId('clear_history')}>
                 <p class="muted small">{t('browse.clear_history_detail')}</p>

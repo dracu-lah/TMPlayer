@@ -12,6 +12,8 @@ import { scrollBehavior } from '../ui/motion'
 import { Icon } from '../ui/Icon'
 import { PullToRefresh, RefreshButton, useAskedRefresh } from '../ui/AskedRefresh'
 import { WorkStatusLine } from '../ui/WorkStatus'
+import { keptFailure, rowsFailure } from '../ui/loadStates'
+import { idle, mergeStatus, type WorkStatus } from '../ui/workStatus'
 import { KeepPlaceCard } from './KeepPlaceCard'
 import { AskGate } from './cardAsk'
 import { createDwell } from '../ui/dwell'
@@ -36,8 +38,11 @@ const [last, setLast] = createSignal<HomePage | null>(null)
 export function Home() {
     const [error, setError] = createSignal<unknown>(null)
     const [busy, setBusy] = createSignal(false)
+    // When the rows on screen last came from Telegram, for "Showing what was here at ..." after a failed load.
+    const [keptAt, setKeptAt] = createSignal<number | null>(null)
     const apply = (page: HomePage) => {
         setLast(page)
+        setKeptAt(Date.now())
         setError(null)
         // Named in Settings > Home's order list, which does not ask Telegram for them.
         rememberHomeChats(page.rows.flatMap((row) => (row.kind === 'chat' && row.chatId !== null && row.title ? [{ chatId: row.chatId, title: row.title }] : [])))
@@ -80,6 +85,19 @@ export function Home() {
     )
 
     const page = () => last()
+    // One status line under the heading (WP-99): a load that failed with rows on screen keeps them and says since when (LS-25),
+    // beside the asked refresh's own words, and the first read says what it is doing under the placeholders.
+    const headStatus = createMemo<WorkStatus>(() => {
+        const kept = keptFailure({ failed: !!error(), online: online(), rows: page()?.rows.length ?? 0, keptAt: keptAt() })
+        const first: WorkStatus = !page() && busy() ? { kind: 'loading', what: t('browse.finding_videos') } : idle
+        return mergeStatus(mergeStatus(kept, refresh.status()), first)
+    })
+    // Chats whose rows could not be read left the page: the foot says how many, with Try again (LS-26, as the apps' foot).
+    const footStatus = () => {
+        const p = page()
+        if (!p?.settled) return idle
+        return rowsFailure(p.failed ?? 0, p.rows.filter((r) => r.loaded).length, (count) => t('home.rows_failed', { count }))
+    }
     // Every row off in Settings > Home: Home says so and leads there, rather than standing blank.
     const allOff = () => {
         const l = homeLayout()
@@ -107,7 +125,7 @@ export function Home() {
                 </h1>
                 <RefreshButton busy={refresh.busy()} onRefresh={refresh.ask} />
             </div>
-            <WorkStatusLine status={refresh.status()} onRetry={refresh.ask} />
+            <WorkStatusLine status={headStatus()} onRetry={refresh.ask} />
             <PullToRefresh onRefresh={refresh.ask} />
             <Show when={settings().carousel}>
                 <Show when={form() === 'tv'} fallback={<Hero rows={page()?.rows} />}>
@@ -178,6 +196,7 @@ export function Home() {
                     )
                 }}
             </For>
+            <WorkStatusLine status={footStatus()} onRetry={refresh.ask} />
             {/* The one question about keeping the place on every device: after a Home that has rows, never over a first run or an empty page. */}
             <KeepPlaceCard eligible={!!page()?.settled && rows().length > 0 && !firstRun() && !allOff()} />
         </>

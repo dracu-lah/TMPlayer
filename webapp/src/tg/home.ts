@@ -35,6 +35,17 @@ const SHOWN_MAX = 120
 /** Every row on: Home as it was before Settings > Home. */
 const ALL_ON: HomeView['layout'] = { carousel: true, continueWatching: true, recentlyAdded: true, starredRows: true, order: '' }
 
+/** A chat row's read that has not answered in this long counts as failed (LS-26): its row leaves and the page's foot says so, with Try again. */
+const ROW_READ_MS = 45_000
+
+/** `work`, or a rejection after `ms`; the work itself goes on into the chat's cache, so Try again finds it read. */
+function readWithin<T>(work: Promise<T>, ms: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('row read timed out')), ms)
+        work.then(resolve, reject).finally(() => clearTimeout(timer))
+    })
+}
+
 /** Telegram's answer for a chat this account can no longer read: its videos are gone for it. */
 const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID)/.test(String((e as { text?: string })?.text ?? ''))
 
@@ -85,6 +96,8 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     const gone: HomePage['gone'] = []
     let recent: Video[] | null = null
     const loaded = new Map<number, { chatId: number; videos: Video[]; complete: boolean }>()
+    // Chats whose read failed (not a chat this account lost): Home says how many could not be read.
+    const failed = new Set<number>()
     // Starred chats and Saved Messages the chat list has not reached yet.
     const early = new Map<number, ChatItem>()
     let selfId: number | null = null
@@ -106,14 +119,17 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
             const id = queue.shift()!
             active++
             loads.push(
-                newestOf(tg, id)
+                readWithin(newestOf(tg, id), ROW_READ_MS)
                     .then(
                         (got) => {
                             for (const [k, v] of got.items) items.set(k, v)
                             loaded.set(id, { chatId: id, videos: got.videos.filter(within), complete: got.complete })
                         },
                         // A chat that cannot be read has nothing for Home: its row goes rather than waiting for ever.
-                        () => void loaded.set(id, { chatId: id, videos: [], complete: true }),
+                        (e) => {
+                            if (!chatGone(e)) failed.add(id)
+                            loaded.set(id, { chatId: id, videos: [], complete: true })
+                        },
                     )
                     .finally(() => {
                         active--
@@ -180,7 +196,7 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         // Recently added's See all reads on through the same chats, and says "in starred chats" as the row does.
         if (listEnough() && recent !== null) rememberHomeChats(plan.recentFrom ?? pickedChats.map((c) => c.id), rows.find((row) => row.kind === 'recent')?.starredOnly ?? false)
         const settled = resumes !== null && recent !== null && listEnough() && chosenLooked && reads.every((id) => loaded.has(id))
-        return { rows, gone, selfId, settled }
+        return { rows, gone, selfId, settled, failed: failed.size }
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined

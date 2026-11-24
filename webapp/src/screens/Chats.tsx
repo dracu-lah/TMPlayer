@@ -8,6 +8,7 @@ import { addedGate, addedShows, setStarred, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
 import { PullToRefresh, RefreshButton, useAskedRefresh } from '../ui/AskedRefresh'
 import { WorkStatusLine } from '../ui/WorkStatus'
+import { idle, mergeStatus, type WorkStatus } from '../ui/workStatus'
 import { ChooseChatsButton } from '../ui/ChooseChatsButton'
 import { tvDp, VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
 import { form } from '../form'
@@ -87,6 +88,8 @@ export function Chats() {
         }, 200)
     }
     createEffect(on(() => params.q, (q) => !typing && setText(q ?? ''), { defer: true }))
+    // The first read of the list is a status line too (LS-27), merged with the asked refresh's: one region, Failed first.
+    const loadingStatus = (): WorkStatus => (chats.loading && !list().length ? { kind: 'loading', what: t('browse.loading_chats') } : idle)
     return (
         <>
             <div class="list-head">
@@ -99,7 +102,7 @@ export function Chats() {
                     </Show>
                 </div>
             </div>
-            <WorkStatusLine status={refresh.status()} onRetry={refresh.ask} />
+            <WorkStatusLine status={mergeStatus(refresh.status(), loadingStatus())} onRetry={refresh.ask} />
             <PullToRefresh onRefresh={refresh.ask} />
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
@@ -109,11 +112,9 @@ export function Chats() {
                 <div class="notice error-notice">
                     {/* Part of the list came before the failure: it stays, and the line says the rest is missing (HX32). */}
                     <p class="error" role="alert">{partial().length ? t('chats.some_not_loaded') : errorText(chats.error)}</p>
-                    <button class="link" type="button" onClick={refetch}>{t('common.try_again')}</button>
+                    {/* One read at a time: Try again waits while the list is being read (LS-27). */}
+                    <button class="link" type="button" disabled={chats.loading} onClick={() => !chats.loading && void refetch()}>{t('common.try_again')}</button>
                 </div>
-            </Show>
-            <Show when={chats.loading && !list().length}>
-                <p class="muted">{t('browse.loading_chats')}</p>
             </Show>
             {/* Every chat removed from the picked set: a choice to make, not Telegram still sending the list. */}
             <Show when={!chats.loading && !chats.error && !list().length}>

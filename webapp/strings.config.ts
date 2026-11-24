@@ -202,6 +202,7 @@ export const PAGE_STRINGS = [
     'home.row_recent_all',
     'home.row_scroll_back',
     'home.row_scroll_on',
+    'home.rows_failed',
     'home.see_all',
     'home.small_left_out',
     'keys.audio_keys',
@@ -827,6 +828,8 @@ export const PAGE_STRINGS = [
     'state.rate_limited',
     'state.updated',
     'state.updating',
+    // WP-99 A profile switch says which profile it opens (ui/Profiles.tsx).
+    'profiles.switching',
     // WB18 Report stutter.
     'player.report_stutter',
     'player.stutter_marked_already',
