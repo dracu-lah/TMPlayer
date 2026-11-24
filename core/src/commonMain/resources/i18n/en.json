@@ -432,6 +432,7 @@
     "kind_channels": "Channels",
     "kind_groups": "Groups",
     "kind_people": "People",
+    "last_shortcut": "Last chat",
     "no_match": "No chat matches \"{query}\".",
     "pinned_label": "Pinned",
     "refresh_wait": "Telegram asked to wait {seconds} s before refreshing again",

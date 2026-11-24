@@ -169,4 +169,14 @@ class ProfileUnlockTest {
         val open = ContinueWidget.decide(ContinueWidget.Account.SignedIn, ContinueWidget.lockedBy(AppLockSettings(), profileLocked = false), listOf(record))
         assertNotEquals(ContinueWidget.Tile.Locked, open)
     }
+
+    @Test
+    fun `a PIN set on the open profile is told at once, for the launcher's shortcut (SEC2-11)`() = kotlinx.coroutines.runBlocking {
+        val own = AccountBook(AccountStore(File(Files.createTempDirectory("haspin").toFile(), Accounts.FILE_NAME)))
+        Accounts.resetForTest(own)
+        val flow = ProfileUnlock.activeHasPin()
+        assertFalse(flow.first())
+        own.update { it.replace(ProfilePin.set(it.active!!, "1234")!!) }
+        assertTrue("no lock change, no switch: the PIN alone", flow.first())
+    }
 }

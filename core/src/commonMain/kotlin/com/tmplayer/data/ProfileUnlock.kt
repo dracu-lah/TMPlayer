@@ -138,6 +138,12 @@ object ProfileUnlock {
         }.distinctUntilChanged()
     }
 
+    /** Whether the open profile has a PIN, as it changes (a PIN set or taken off, a switch), from its first value. */
+    fun activeHasPin(): Flow<Boolean> {
+        val book = Accounts.book ?: return flowOf(Accounts.active.pin != null)
+        return book.list.map { it.active?.pin != null }.distinctUntilChanged()
+    }
+
     /** For tests: nothing unlocked, nobody away. */
     internal fun resetForTest() {
         timer?.cancel()

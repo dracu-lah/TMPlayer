@@ -61,10 +61,25 @@ object LauncherShortcuts {
     fun hiddenFor(lock: AppLockSettings?, profileHidden: Boolean, profileHasPin: Boolean, mayWrite: Boolean): Boolean =
         lock == null || profileHidden || profileHasPin || ContinueWidget.lockedBy(lock) || !mayWrite
 
-    /** Takes the last chat off the launcher, whatever else is published. */
+    /**
+     * Takes the last chat off the launcher, whatever else is published. A copy pinned to the home
+     * screen (dragged out of the long press list) is not removed by that and would keep the chat's
+     * name (SEC2-03), so every copy is first rewritten with a plain label and no chat in its intent:
+     * [ShortcutManager.updateShortcuts] reaches pinned ones too. [publish] names the chat again when
+     * nothing hides it.
+     */
     fun removeLastChat(context: Context) {
         if (!supported()) return
-        runCatching { context.getSystemService(ShortcutManager::class.java)?.removeDynamicShortcuts(listOf(ID_LAST_CHAT)) }
+        runCatching {
+            val manager = context.getSystemService(ShortcutManager::class.java) ?: return
+            unnameLastChat(context, manager)
+            manager.removeDynamicShortcuts(listOf(ID_LAST_CHAT))
+        }
+    }
+
+    /** Every copy of the last chat's shortcut, pinned ones too, as "Last chat" that only opens the app. */
+    private fun unnameLastChat(context: Context, manager: ShortcutManager) {
+        runCatching { manager.updateShortcuts(listOf(build(context, ID_LAST_CHAT, L.chatsLastShortcut, R.mipmap.ic_launcher) { })) }
     }
 
     /**
@@ -78,8 +93,10 @@ object LauncherShortcuts {
         val hidden = combine(
             SettingsStore(app).appLock.map<AppLockSettings, AppLockSettings?> { it }.onStart { emit(null) },
             ProfileUnlock.hidden(),
-        ) { lock, profileHidden ->
-            hiddenFor(lock, profileHidden, Accounts.active.pin != null, OutsideWrites.mayWriteNow())
+            // A PIN set on the open profile hides its chat at once, not at the next lock change (SEC2-11).
+            ProfileUnlock.activeHasPin(),
+        ) { lock, profileHidden, hasPin ->
+            hiddenFor(lock, profileHidden, hasPin, OutsideWrites.mayWriteNow())
         }.distinctUntilChanged()
         return OutsideSurfaces.follow(scope, hidden = hidden) { removeLastChat(app) }
     }
@@ -89,7 +106,10 @@ object LauncherShortcuts {
         if (!supported()) return
         runCatching {
             val manager = context.getSystemService(ShortcutManager::class.java) ?: return
-            val shortcuts = planIds(hidden, lastChatId, lastChatTitle).mapNotNull { id ->
+            val ids = planIds(hidden, lastChatId, lastChatTitle)
+            // A pinned copy outlives the dynamic list: it loses the chat's name with it (SEC2-03).
+            if (ID_LAST_CHAT !in ids) unnameLastChat(context, manager)
+            val shortcuts = ids.mapNotNull { id ->
                 when (id) {
                     ID_CONTINUE -> build(context, id, L.continueShortcut, R.mipmap.ic_launcher) { it.putExtra(MainActivity.EXTRA_OPEN, OPEN_CONTINUE) }
                     ID_SEARCH -> build(context, id, L.searchShortcut, R.mipmap.ic_launcher) { it.putExtra(MainActivity.EXTRA_OPEN, OPEN_SEARCH) }
