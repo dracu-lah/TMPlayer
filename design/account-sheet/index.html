@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account sheet and bar review</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 64px; background: #0c0e10; color: #f2f4f5; font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 36px 0 12px; }
+  p.lede { color: #aeb5bb; max-width: 70ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; width: 230px; }
+  figure.wide { width: 460px; }
+  figure.tv { width: 480px; }
+  figure.desk { width: 560px; }
+  img { display: block; width: 100%; height: auto; border: 1px solid #23272a; border-radius: 8px; }
+  figcaption { color: #aeb5bb; font-size: 13px; margin-top: 6px; }
+  ul { max-width: 80ch; color: #d4d9dd; }
+  li { margin: 4px 0; }
+  code { background: #15181b; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Account menu and bar review</h1>
+<p class="lede">Rendered by <code>PhoneBarLayoutTest</code>, <code>PhoneAccountRenderTest</code>, <code>TvAccountMenuTest</code> (app render tests, no device) and the desktop <code>NavBarAccountTest</code>. Dark theme. The phone's bar keeps its structure: Home, Chats, Search and Downloads in one pill, the picture at the top end. A bottom sheet is a window the render tests cannot photograph, so its content is drawn on its own.</p>
+
+<h2>What changed</h2>
+<ul>
+  <li><b>Bar</b>: one caption size for all four items (12 sp, or 11 or 10 sp for all four when the longest word does not fit, icons only below that), one icon size and gap, four slots of one width, more room round them. Tested at 360 and 320 dp, on its side, a tablet, 1.3 and 2 times the font.</li>
+  <li><b>Picture</b>: one instance owned by the shell, over every bar page, so it never moves or blinks as pages change or Home and Chats are swiped (frames: at rest, mid swipe, after Chats, Downloads and a list page).</li>
+  <li><b>Account menu</b>: header (picture, name, @handle, Refresh, the switcher with two profiles or more), three tiles (Favourites, History, Watch later) with the old viewing counts on them, two rows (Settings, Add or switch account), the version (tile and v1.28.7). A bottom sheet on a phone, an anchored card beside a rail and on the desktop, a right side sheet on the television. Sign out is in Settings, Account on every device.</li>
+  <li><b>Television</b>: the picture alone in the top bar (the name is its label), the tabs spaced evenly.</li>
+</ul>
+
+<h2>Bar</h2>
+<div class="row">
+  <figure><img src="bar-360-port.png" alt=""><figcaption>360 dp</figcaption></figure>
+  <figure><img src="bar-320-port.png" alt=""><figcaption>320 dp, 12 downloads</figcaption></figure>
+  <figure><img src="bar-360-font1.3.png" alt=""><figcaption>font 1.3</figcaption></figure>
+  <figure><img src="bar-360-font2.png" alt=""><figcaption>font 2</figcaption></figure>
+  <figure class="wide"><img src="bar-800-land.png" alt=""><figcaption>on its side (rail)</figcaption></figure>
+  <figure class="wide"><img src="bar-tablet.png" alt=""><figcaption>tablet (rail), font 1.3</figcaption></figure>
+</div>
+
+<h2>The picture while pages change</h2>
+<div class="row">
+  <figure><img src="avatar-swipe-0-home.png" alt=""><figcaption>Home at rest</figcaption></figure>
+  <figure><img src="avatar-swipe-1-mid.png" alt=""><figcaption>mid swipe: the highlight half way, the picture where it was</figcaption></figure>
+  <figure><img src="avatar-swipe-2-home-again.png" alt=""><figcaption>after Chats, Downloads and a list page</figcaption></figure>
+</div>
+
+<h2>The phone's sheet content</h2>
+<div class="row">
+  <figure><img src="sheet-content-360x640.png" alt=""><figcaption>360 x 640, one profile</figcaption></figure>
+  <figure><img src="sheet-content-360x640-font1.3.png" alt=""><figcaption>1.3 times the font, two profiles</figcaption></figure>
+  <figure class="wide"><img src="phone-account-menu-800-land.png" alt=""><figcaption>on its side: the card</figcaption></figure>
+  <figure class="wide"><img src="phone-account-menu-tablet.png" alt=""><figcaption>tablet: the card</figcaption></figure>
+</div>
+
+<h2>Desktop</h2>
+<div class="row">
+  <figure class="desk"><img src="desktop-bar-long-name.png" alt=""><figcaption>bar with a 60 character name: the picture alone</figcaption></figure>
+  <figure class="desk"><img src="desktop-account-popover.png" alt=""><figcaption>the popover, 320 dp, with the long name in its header</figcaption></figure>
+</div>
+
+<h2>Television</h2>
+<div class="row">
+  <figure class="tv"><img src="tv-account-sheet-drawn-960x540.png" alt=""><figcaption>sheet, 960 x 540 (the column scrolls, a fade at the cut)</figcaption></figure>
+  <figure class="tv"><img src="tv-account-sheet-drawn-1920x1080.png" alt=""><figcaption>sheet, 1920 x 1080</figcaption></figure>
+  <figure class="tv"><img src="tv-bar-account-rest-960.png" alt=""><figcaption>top bar, 960 x 540: the picture alone</figcaption></figure>
+  <figure class="tv"><img src="tv-bar-account-longest-name.png" alt=""><figcaption>top bar with the longest name: no text for it</figcaption></figure>
+</div>
+</body>
+</html>
