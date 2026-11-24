@@ -1812,18 +1812,27 @@ internal fun BoxScope.EpisodesSheet(
 ) {
     val s = LocalStrings.current
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    // A panel at the end, about a third of the window (380 to 520 dp), full height, as the television's
+    // and the tablet's is: it slides in on 200 ms (none under reduced motion) over the dimmed picture.
+    val still = com.tmplayer.ui.components.rememberLessMotion()
+    val slide = remember { Animatable(if (still) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (slide.value > 0f) slide.animateTo(0f, tween(200, easing = com.tmplayer.ui.theme.Motion.Standard))
+    }
     BoxWithConstraints(
         Modifier.matchParentSize().background(FloatingTone.scrim).scrimDismiss(onClose),
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.CenterEnd,
     ) {
+        val width = (maxWidth * 0.32f).coerceIn(380.dp, 520.dp).coerceAtMost(maxWidth)
         Surface(
-            shape = Floating.DialogShape,
+            shape = RoundedCornerShape(topStart = com.tmplayer.ui.theme.Corner.ExtraLarge, bottomStart = com.tmplayer.ui.theme.Corner.ExtraLarge),
             color = FloatingTone.dialog,
             border = floatingBorder(),
             modifier = Modifier
-                .widthIn(max = 1040.dp)
-                .heightIn(max = maxHeight - 32.dp)
-                .padding(16.dp)
+                .graphicsLayer { translationX = slide.value * size.width }
+                .width(width)
+                .fillMaxHeight()
+                .testTag(EPISODES_PANEL_TAG)
                 // A click inside the panel is the panel's, not the dim's.
                 .swallowClicks()
                 .onPreviewKeyEvent { event ->
@@ -1845,6 +1854,7 @@ internal fun BoxScope.EpisodesSheet(
                 actions = actions,
                 modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
                 focusCurrent = true,
+                surface = FloatingTone.dialog,
                 trailing = { OverlayButton(TmIcons.Close, s.commonClose, onClose, size = 36) },
             )
         }
@@ -2230,3 +2240,6 @@ internal fun stereoSummary(stereo: Stereo3d): String = when (stereo.layout) {
     Stereo3d.Layout.RowInterleaved -> L.playerStereoDetail(L.playerStereoRows, stereoGlassesLabel(stereo.view))
     Stereo3d.Layout.ColumnInterleaved -> L.playerStereoDetail(L.playerStereoColumns, stereoGlassesLabel(stereo.view))
 }
+
+/** The episode panel's test tag, for the layout tests. */
+internal const val EPISODES_PANEL_TAG = "episodes-panel"

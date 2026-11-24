@@ -2,6 +2,28 @@ package com.tmplayer.player
 
 import android.view.ViewGroup
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.tmplayer.ui.components.PhoneSheet
+import com.tmplayer.ui.components.keepScrollInSheet
+import com.tmplayer.ui.components.rememberLessMotion
+import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.Motion
+import com.tmplayer.ui.theme.floatingBorder
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -24,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
 import androidx.fragment.app.FragmentActivity
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchPoint
@@ -40,13 +61,12 @@ import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.floatingSurface
 import kotlinx.coroutines.flow.Flow
 
 /**
- * The player's episode list (CP40) over the dimmed video: the shared [EpisodesPanel] in a window of
- * its own, as [PlayerSheets] hosts the pickers. Full screen on a phone, which a landscape phone
- * needs to show more than two episodes; a panel inside the overscan on a television and a tablet.
+ * The player's episode list (CP40) over the dimmed video: the shared [EpisodesPanel] in a bottom
+ * sheet ([PhoneSheet], as the More panel is) on a phone held upright, and in a panel at the end,
+ * about a third of the width, on a television, a tablet and a phone on its side (W15).
  *
  * Back closes it first, as the window's dismissal. The activity keeps every action; this draws the
  * list from [state] and reports what was pressed.
@@ -88,6 +108,7 @@ class PlayerEpisodes(
         onClosed()
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun ListContent() {
         val state = shown.value ?: return
@@ -102,42 +123,72 @@ class PlayerEpisodes(
         val touch = isTouch()
         val screen = LocalConfiguration.current
         val phone = touch && minOf(screen.screenWidthDp, screen.screenHeightDp) < PHONE_BELOW
-        FloatingWindow(onDismiss = ::close, immersive = phone) {
-            if (phone) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .background(FloatingTone.dialog)
-                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
-                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
-                ) {
-                    EpisodesPanel(
-                        state = state,
-                        watch = watch,
-                        actions = actions,
-                        modifier = Modifier.padding(top = 4.dp),
-                        contentPadding = 16.dp,
-                        trailing = { CloseButton() },
-                    )
-                }
-            } else {
-                val width = min(maxWidth - Tv.SafeH * 2, PANEL_MAX)
-                Box(
-                    Modifier
-                        .width(width)
-                        .height(maxHeight - Tv.SafeV * 2)
-                        .floatingSurface(FloatingTone.sheet)
-                        .padding(start = 24.dp, end = 16.dp, top = 16.dp),
-                ) {
-                    EpisodesPanel(
-                        state = state,
-                        watch = watch,
-                        actions = actions,
-                        // A tablet keeps its close button; a remote has Back.
-                        trailing = { if (touch) CloseButton() },
-                    )
-                }
+        val upright = screen.screenHeightDp > screen.screenWidthDp
+        if (phone && upright) {
+            // A phone held upright: the bottom sheet, as the player's More panel is. The video stays
+            // playing behind it; swiping it down, the scrim and Back all close it.
+            PhoneSheet(onDismissRequest = ::close) {
+                EpisodesPanel(
+                    state = state,
+                    watch = watch,
+                    actions = actions,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height((screen.screenHeightDp * SHEET_HEIGHT).dp)
+                        .keepScrollInSheet(),
+                    contentPadding = 16.dp,
+                    trailing = { CloseButton() },
+                )
             }
+        } else {
+            // A television, a tablet and a phone on its side: a panel at the end, about a third of the
+            // width, over the dimmed video. It slides in on 200 ms (none under reduced motion), Back
+            // closes it, and the remote stays inside it.
+            FloatingWindow(onDismiss = ::close, immersive = phone) {
+                SidePanel(state, watch, touch, phone)
+            }
+        }
+    }
+
+    @Composable
+    private fun BoxWithConstraintsScope.SidePanel(state: EpisodesState, watch: SeriesWatch, touch: Boolean, phone: Boolean) {
+        val still = rememberLessMotion()
+        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        val slide = remember { Animatable(if (still) 0f else 1f) }
+        LaunchedEffect(Unit) {
+            if (slide.value > 0f) slide.animateTo(0f, tween(SLIDE_MS, easing = Motion.Standard))
+        }
+        val width = (maxWidth * PANEL_SHARE).coerceIn(PANEL_MIN, PANEL_MAX).coerceAtMost(maxWidth * 0.92f)
+        val shape = RoundedCornerShape(topStart = Corner.ExtraLarge, bottomStart = Corner.ExtraLarge)
+        // Outside the panel a tap closes it, as it does in the More panel.
+        Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { close() } })
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .graphicsLayer { translationX = slide.value * size.width * (if (rtl) -1f else 1f) }
+                .width(width)
+                .fillMaxHeight()
+                .clip(shape)
+                .background(FloatingTone.sheet)
+                .border(floatingBorder(), shape)
+                // A tap on the panel's own blank space is not a tap outside it.
+                .pointerInput(Unit) { detectTapGestures { } }
+                .then(
+                    if (phone) {
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End))
+                    } else {
+                        Modifier.padding(vertical = if (touch) 0.dp else Tv.SafeV)
+                    },
+                )
+                .padding(start = 20.dp, end = if (touch) 8.dp else 16.dp, top = 12.dp),
+        ) {
+            EpisodesPanel(
+                state = state,
+                watch = watch,
+                actions = actions,
+                // A tablet and a phone keep their close button; a remote has Back.
+                trailing = { if (touch) CloseButton() },
+            )
         }
     }
 
@@ -154,6 +205,13 @@ class PlayerEpisodes(
         /** Below this short side a touch screen is a phone, and the list fills it. */
         const val PHONE_BELOW = 600
 
-        val PANEL_MAX = 1100.dp
+        /** The side panel: about 32 percent of the width, between these, as the account's side sheet is. */
+        const val PANEL_SHARE = 0.32f
+        val PANEL_MIN = 340.dp
+        val PANEL_MAX = 480.dp
+        const val SLIDE_MS = 200
+
+        /** The phone sheet's height, as a share of the screen. */
+        const val SHEET_HEIGHT = 0.82f
     }
 }

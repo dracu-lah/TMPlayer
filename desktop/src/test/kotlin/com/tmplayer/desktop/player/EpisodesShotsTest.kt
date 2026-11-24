@@ -81,6 +81,7 @@ class EpisodesShotsTest {
         shot("sheet") { sheet(state(items[3])) }
         shot("sheet-season-2") { sheet(state(items[7])) }
         shot("sheet-narrow", width = 600, height = 800) { sheet(state(items[3])) }
+        shot("sheet-1920", width = 1920, height = 1080) { sheet(state(items[3])) }
         shot("sheet-rtl") {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { sheet(state(items[3])) }
         }
