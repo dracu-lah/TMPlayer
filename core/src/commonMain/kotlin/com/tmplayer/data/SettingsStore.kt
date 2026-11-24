@@ -203,6 +203,7 @@ private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 
 /** The interface size (CP59), a [UiScale] by name. About the screen, so it outlives a sign out. */
 private val UI_SCALE = stringPreferencesKey("ui_scale")
+private val UI_SCALE_TENTATIVE = stringPreferencesKey("ui_scale_tentative")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
 /** The last few searches inside a chat, one per line, newest first. See [RecentSearches]. */
@@ -3058,7 +3059,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
                 theme = p[THEME_CHOICE], pureBlack = p[PURE_BLACK], accent = p[ACCENT], customAccent = p[ACCENT_CUSTOM]?.toInt(),
                 dynamic = p[DYNAMIC_COLOUR], uiScale = p[UI_SCALE], typeface = p[APP_TYPEFACE], highContrast = p[HIGH_CONTRAST],
             )
-            listOf(THEME_CHOICE, ACCENT, UI_SCALE, APP_TYPEFACE).forEach { p.remove(it) }
+            listOf(THEME_CHOICE, ACCENT, UI_SCALE, UI_SCALE_TENTATIVE, APP_TYPEFACE).forEach { p.remove(it) }
             listOf(PURE_BLACK, DYNAMIC_COLOUR, HIGH_CONTRAST).forEach { p.remove(it) }
             p.remove(ACCENT_CUSTOM)
         }
@@ -3104,7 +3105,45 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * what an unchosen size is, so choosing Default on the desktop sticks.
      */
     suspend fun setUiScale(value: UiScale) {
-        prefs.edit { if (value == UiScale.Default && unchosenUiScale == UiScale.Default) it.remove(UI_SCALE) else it[UI_SCALE] = value.name }
+        prefs.edit { putUiScale(it, value) }
+    }
+
+    private fun putUiScale(prefs: MutablePreferences, value: UiScale) {
+        if (value == UiScale.Default && unchosenUiScale == UiScale.Default) prefs.remove(UI_SCALE) else prefs[UI_SCALE] = value.name
+    }
+
+    /**
+     * Interface size tried (WP-10): [next] applies at once and the size before it, [previous], is
+     * kept marked until [keepUiScale]. If the app dies before an answer, [revertUiScale] on the next
+     * start puts [previous] back, so a stray press can never leave a screen nobody can read. A trial
+     * already marked keeps its first old size: that is the one to go back to.
+     */
+    suspend fun tryUiScale(next: UiScale, previous: UiScale) {
+        prefs.edit {
+            if (it[UI_SCALE_TENTATIVE] == null) it[UI_SCALE_TENTATIVE] = previous.name
+            putUiScale(it, next)
+        }
+    }
+
+    /** The size tried is the viewer's now: the mark goes, the size stays. */
+    suspend fun keepUiScale() {
+        prefs.edit { it.remove(UI_SCALE_TENTATIVE) }
+    }
+
+    /**
+     * Puts back the size before a trial that was never answered (Undo, the countdown, or a start
+     * after the app died with the question open), and clears the mark. The size put back, or null
+     * when no trial was marked.
+     */
+    suspend fun revertUiScale(): UiScale? {
+        var back: UiScale? = null
+        prefs.edit {
+            val old = it[UI_SCALE_TENTATIVE] ?: return@edit
+            back = UiScale.from(old, unchosenUiScale)
+            putUiScale(it, back!!)
+            it.remove(UI_SCALE_TENTATIVE)
+        }
+        return back
     }
 
     /**

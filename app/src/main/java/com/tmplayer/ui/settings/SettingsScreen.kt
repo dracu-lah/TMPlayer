@@ -470,6 +470,8 @@ fun SettingsScreen(
         }
     }
     val uiScale by rememberUiScale(settings)
+    // An interface size being tried (WP-10): when the question was asked (0: none), kept over a rotation.
+    var sizeTrialStart by rememberSaveable { mutableStateOf(0L) }
     val lighterPictures by settings.lighterPictures.collectAsStateWithLifecycle(initialValue = false)
     val reduceMotion by settings.reduceMotion.collectAsStateWithLifecycle(initialValue = false)
     val highContrastFocus by settings.highContrastFocus.collectAsStateWithLifecycle(initialValue = false)
@@ -1321,10 +1323,26 @@ fun SettingsScreen(
                         icon = TmIcons.TextSize,
                         canDecrease = uiScale.ordinal > 0,
                         canIncrease = uiScale.ordinal < UiScale.entries.lastIndex,
-                        onStep = { direction -> scope.launch { settings.setUiScale(uiScale.step(direction)) } },
-                        // OK would jump from the largest size to the smallest: Left and Right only,
-                        // until a size change can be taken back (WP-10).
-                        okChanges = false,
+                        // The size applies at once and the question "Keep this size?" follows (WP-10): a stray
+                        // press can never leave a screen nobody can read.
+                        onStep = { direction ->
+                            val next = uiScale.step(direction)
+                            if (next != uiScale) {
+                                scope.launch {
+                                    settings.tryUiScale(next, uiScale)
+                                    sizeTrialStart = android.os.SystemClock.elapsedRealtime()
+                                }
+                            }
+                        },
+                        // OK takes the next size, from the largest back to the smallest: it can be taken back now.
+                        onWrap = {
+                            scope.launch {
+                                settings.tryUiScale(UiScale.entries.first(), uiScale)
+                                sizeTrialStart = android.os.SystemClock.elapsedRealtime()
+                            }
+                        },
+                        // A held Right steps once in 600 ms, so the answer is asked at most that often.
+                        repeatStepMs = SIZE_REPEAT_MS,
                     )
                 }
 
@@ -2960,6 +2978,23 @@ fun SettingsScreen(
     if (supporting) SupportDialog(onClose = { supporting = false; if (!touch) scope.launch { supportRow.settle() } })
     if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false; if (!touch) scope.launch { landing.settle() } })
     if (pickingLayout) LayoutSheet(onClose = { pickingLayout = false })
+    if (sizeTrialStart != 0L) {
+        KeepChangePrompt(
+            startedAt = sizeTrialStart,
+            title = s.settingsKeepChangeTitle,
+            body = s::settingsKeepChangeBody,
+            keepLabel = s.settingsKeepChangeKeep,
+            undoLabel = s.settingsAppearanceUndo,
+            onKeep = {
+                sizeTrialStart = 0L
+                scope.launch { settings.keepUiScale() }
+            },
+            onUndo = {
+                sizeTrialStart = 0L
+                scope.launch { settings.revertUiScale() }
+            },
+        )
+    }
     if (showingLearnt) {
         LearntLanguagesSheet(
             learnt = learntLanguages,
@@ -3443,10 +3478,13 @@ internal fun StepperRow(
     modifier: Modifier = Modifier,
     okChanges: Boolean = true,
     onWrap: (() -> Unit)? = null,
+    /** More than 0: a held Left or Right steps once per this many ms (WP-10), the repeats between ignored. */
+    repeatStepMs: Long = 0L,
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
     val step = com.tmplayer.ui.components.rememberStepTick()
+    val lastStepAt = remember { LongArray(1) }
 
     if (touch) {
         ListItem(
@@ -3513,6 +3551,12 @@ internal fun StepperRow(
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Left and Right, not Up and Down: Up and Down move between settings, and Left
                 // and Right lead nowhere in a single column, so they are the pair to spend.
+                // A held key repeats fast; a row whose step is a big change takes it once per [repeatStepMs].
+                if ((event.key == previousKey || event.key == nextKey) && repeatStepMs > 0 && event.nativeKeyEvent.repeatCount > 0) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now - lastStepAt[0] < repeatStepMs) return@onKeyEvent true
+                }
+                if (event.key == previousKey || event.key == nextKey) lastStepAt[0] = android.os.SystemClock.elapsedRealtime()
                 when (event.key) {
                     previousKey -> { if (canDecrease) onStep(-1); true }
                     nextKey -> { if (canIncrease) onStep(1); true }
@@ -4189,6 +4233,9 @@ internal fun soundLine(line: String, bypassed: Boolean, note: String): String = 
 
 /** How long the row a search found stays lit once its page has opened on it. */
 private const val SEEK_GLOW_MS = 1_600L
+
+/** A held Right on Interface size steps once per this many ms (WP-10). */
+private const val SIZE_REPEAT_MS = 600L
 
 /** How long Undo stands in for Back to the defaults. */
 private const val APPEARANCE_UNDO_MS = 10_000L

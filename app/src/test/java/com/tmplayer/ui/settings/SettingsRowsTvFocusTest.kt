@@ -264,17 +264,47 @@ class SettingsRowsTvFocusTest {
         rule.onAllNodes(row("Typeface") and isFocused()).assertCountEquals(0)
     }
 
+    /** A button of the "Keep this size?" prompt, by the remote (the TV button takes keys, not taps). */
+    private fun answer(label: String) {
+        val button = hasText(label) and hasClickAction()
+        rule.onNode(button).requestFocus()
+        rule.onNode(button).performKeyInput { pressKey(Key.Enter) }
+        rule.waitForIdle()
+    }
+
+    private fun scale() = runBlocking { settings.uiScale.first() }
+
     @Test
-    fun `OK on Interface size changes nothing, Right still does`() {
+    fun `OK on Interface size steps it and asks Keep this size, Undo and the countdown put it back, Keep keeps it (WP-10)`() {
         show(SettingsPage.Appearance)
         focus("Interface size")
-        val start = runBlocking { settings.uiScale.first() }
+        val start = scale()
         press("Interface size", Key.Enter)
-        rule.mainClock.advanceTimeBy(500)
-        rule.waitForIdle()
-        assertEquals("OK is not a step here", start, runBlocking { settings.uiScale.first() })
+        rule.waitUntil(5_000) { scale() != start }
+        // The size applied at once, and the question is up with its countdown.
+        rule.onAllNodes(hasText("Keep this size?")).assertCountEquals(1)
+        rule.onAllNodes(hasText("It changes back in 10 s", substring = true) or hasText("It changes back in 9 s", substring = true)).assertCountEquals(1)
+        answer("Undo")
+        rule.waitUntil(5_000) { scale() == start }
+        rule.onAllNodes(hasText("Keep this size?")).assertCountEquals(0)
+        assertEquals("a size put back leaves no mark", null, runBlocking { settings.revertUiScale() })
+
+        // Right asks too; Keep keeps it and clears the mark.
         press("Interface size", Key.DirectionRight)
-        rule.waitUntil(5_000) { runBlocking { settings.uiScale.first() } != start }
+        rule.waitUntil(5_000) { scale() != start }
+        val tried = scale()
+        answer("Keep")
+        rule.onAllNodes(hasText("Keep this size?")).assertCountEquals(0)
+        assertEquals(tried, scale())
+        assertEquals("kept: nothing to put back", null, runBlocking { settings.revertUiScale() })
+
+        // No answer for 10 s: the old size comes back by itself.
+        press("Interface size", Key.DirectionLeft)
+        rule.waitUntil(5_000) { scale() != tried }
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(11))
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.waitUntil(5_000) { scale() == tried }
+        rule.onAllNodes(hasText("Keep this size?")).assertCountEquals(0)
     }
 
     @Test

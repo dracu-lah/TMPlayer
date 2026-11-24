@@ -1121,6 +1121,15 @@ private fun Root() {
     // popover alike, so a backup started from a menu is not tied to the menu.
     val signOutState = com.tmplayer.ui.settings.rememberSignOutState()
 
+    // An interface size that was being tried when the app died (WP-10) goes back to the size before it,
+    // once per process: a rotation or a new activity in the same run must not undo a question still asked.
+    LaunchedEffect(Unit) {
+        if (!com.tmplayer.ui.settings.TentativeSizeGuard.checked) {
+            com.tmplayer.ui.settings.TentativeSizeGuard.checked = true
+            runCatching { settings.revertUiScale() }
+        }
+    }
+
     // A sign in screen arms the setup that follows it (CP67, see Setup).
     LaunchedEffect(auth) {
         // First a session Telegram ended (HX23): unlike Sign out, the viewer chose nothing, so
