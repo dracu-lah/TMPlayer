@@ -118,6 +118,7 @@ internal fun LazyListScope.playerRows(
                     val next = modes[(modes.indexOf(mode) + direction).coerceIn(0, modes.lastIndex)]
                     scope.launch { settings.setTunneledMode(next) }
                 },
+                onWrap = { scope.launch { settings.setTunneledMode(modes.first()) } },
             )
         }
         // Audio passthrough (A2): on, Dolby and DTS go out as they are where the output takes

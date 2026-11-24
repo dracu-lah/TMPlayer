@@ -1,6 +1,7 @@
 package com.tmplayer.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,9 +17,11 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +43,11 @@ import androidx.tv.material3.Text
  * answer and the focus ring is drawn round the group, since separate segments are a thumb's control.
  *
  * @param switchTag the one node a television's focus ring and a test find the group by.
+ *
+ * A television holds the sentence's room at the tallest of [details], by drawing all of them in one
+ * box with only the chosen one visible, so moving from one answer to the next never makes the row
+ * taller or shorter under the remote (WP-06). A `Box` of texts, not a measuring subcompose: a
+ * Settings page holds about a hundred rows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +62,8 @@ internal fun <T> SegmentedChoiceRow(
     switchTag: String,
     onPick: (T) -> Unit,
     modifier: Modifier = Modifier,
+    /** Every answer's sentence, so a television reserves the tallest one's height (see below). */
+    details: List<String> = emptyList(),
 ) {
     val touch = isTouch()
     Column(
@@ -121,7 +131,19 @@ internal fun <T> SegmentedChoiceRow(
         if (touch) {
             M3Text(detail, style = M3Theme.typography.bodyMedium, color = Tone.muted)
         } else {
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+            Box {
+                details.forEach { other ->
+                    if (other != detail) {
+                        Text(
+                            other,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Tone.muted,
+                            modifier = Modifier.alpha(0f).clearAndSetSemantics {},
+                        )
+                    }
+                }
+                Text(detail, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+            }
         }
     }
 }

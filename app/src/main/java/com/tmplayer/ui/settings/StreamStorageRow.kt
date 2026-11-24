@@ -35,6 +35,7 @@ internal fun StreamStorageRow(
         switchTag = STREAM_SWITCH_TAG,
         onPick = onPick,
         modifier = modifier,
+        details = listOf(s.settingsStreamKeepDetail, s.settingsStreamSaveDetail),
     )
 }
 
@@ -76,5 +77,6 @@ internal fun MobileDataRow(
         switchTag = MOBILE_DATA_SWITCH_TAG,
         onPick = onPick,
         modifier = modifier,
+        details = listOf(s.settingsMobileDataAskDetail, s.settingsMobileDataNeverDetail, s.settingsMobileDataAllowDetail),
     )
 }

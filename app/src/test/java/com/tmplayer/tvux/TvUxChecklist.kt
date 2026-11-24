@@ -522,7 +522,19 @@ class TvUxChecklist(
             // neutral one instead, with the remote on a node far from the region (WP-03), so the
             // neighbour's fill swap is no change and a growth into its rect still is one.
             val otherRect = layoutRect(other)
-            val skip = otherRect.inflate(max(dp(6f), 0.1f * max(other.size.width, other.size.height).toFloat())).takeUnless { it.overlaps(restRect) }
+            // The neighbour's own container too, up to the first one that comes near the node under
+            // test: a card that fills when a child has the remote (the accent colours, WP-06) changes
+            // its whole look between the two frames, which is the neighbour's change and not growth of
+            // the node. A container that holds the node itself, or a list, is never skipped.
+            var otherArea = otherRect
+            var up = other.parent
+            while (up != null && up.parent != null) {
+                val r = layoutRect(up)
+                if (r.overlaps(restRect.inflate(dp(4f)))) break
+                otherArea = r
+                up = up.parent
+            }
+            val skip = otherArea.inflate(max(dp(6f), 0.1f * max(other.size.width, other.size.height).toFloat())).takeUnless { it.overlaps(restRect) }
             var baseline = rest
             var skipNow = skip
             // The frame the focused one is read against, with the remote on a node far from the region (WP-03).
@@ -545,7 +557,7 @@ class TvUxChecklist(
                     // No neutral frame (a pair alone on the screen, or a list that moved): leave out the
                     // neighbour's own rect and 1 dp round it. A growth is symmetric, so what it adds on
                     // the node's other sides still shows; one only towards the neighbour would not.
-                    skipNow = otherRect.inflate(dp(1f)).takeUnless { it.overlaps(restRect) }
+                    skipNow = otherArea.inflate(dp(1f)).takeUnless { it.overlaps(restRect) }
                 }
                 // Put the remote back where the next check expects it.
                 current(node)?.let { if (!focus(it)) skipped += "${nameOf(it)}: refused the focus back after the neutral frame" }

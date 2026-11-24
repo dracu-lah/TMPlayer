@@ -20,6 +20,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
@@ -47,12 +48,13 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * The television's Appearance page with the remote on a row, in dark and Pure black, with and
- * without High contrast focus (the light theme does not take on this page in the harness, and is
- * read back on the picker and the tiles in [TvFocusRenderTest]): the frames in `build/device-test/review/` only, since every row
- * of it draws its focus with the same [com.tmplayer.ui.theme.focusRing] the picker line is read
- * back through in [TvFocusRenderTest]. Its own class: a Settings page left in the process throws
- * the focus requests of the next test off.
+ * The television's Appearance page with the remote on a row, in Light, Dark and Pure black, with and
+ * without High contrast focus: the frames in `build/device-test/review/`, and (WP-06) a pixel read
+ * of the ring on the focused row's top edge, which must be [com.tmplayer.ui.theme.focusRingColor]
+ * and which a row the remote is not on must not have. The rows draw the shared
+ * [com.tmplayer.ui.theme.focusRingOnTv] (the Row role of `FocusRole`); the picker line is read back
+ * through in [TvFocusRenderTest]. Its own class: a Settings page left in the process throws the
+ * focus requests of the next test off.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -72,13 +74,17 @@ class TvFocusSettingsRenderTest {
     }
 
     private enum class Page(val choice: ThemeChoice, val black: Boolean) {
+        Light(ThemeChoice.Light, false),
         Dark(ThemeChoice.Dark, false),
         Black(ThemeChoice.Dark, true),
     }
 
+    /** The ring's colour as the theme on screen draws it, read from inside the composition. */
+    private var ringColour: Color = Color.Unspecified
+
     /**
      * The television's Appearance page with the remote on a row (its landing row, then one down):
-     * the frames only, since every row of it draws its focus with the same [focusRing].
+     * the frame, and the ring read back from its pixels.
      */
     private fun shoot(page: Page, high: Boolean) {
         FormFactor.override(true)
@@ -90,6 +96,8 @@ class TvFocusSettingsRenderTest {
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
         activity.setContent {
             TMPlayerTheme {
+                val ring = com.tmplayer.ui.theme.focusRingColor()
+                androidx.compose.runtime.SideEffect { ringColour = ring }
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
                     com.tmplayer.ui.settings.SettingsScreen(
                         chats = emptyList(),
@@ -115,7 +123,58 @@ class TvFocusSettingsRenderTest {
             activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN))
             idle(500)
         }
-        save("focus-tv-${page.name.lowercase()}-${if (high) "high" else "standard"}-settings.png", capture(activity))
+        // On to a whole row when the two presses landed on a swatch or a chip: the ring is read on a row.
+        var presses = 0
+        while (rowsOf(activity).none { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Focused) == true } && presses++ < 6) {
+            activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_DOWN))
+            activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN))
+            idle(500)
+        }
+        val frame = capture(activity)
+        save("focus-tv-${page.name.lowercase()}-${if (high) "high" else "standard"}-settings.png", frame)
+        assertRing(activity, frame, "${page.name} ${if (high) "high contrast" else "standard"}")
+    }
+
+    /** Every semantics node under [node], the node itself first. */
+    private fun walk(node: androidx.compose.ui.semantics.SemanticsNode, out: MutableList<androidx.compose.ui.semantics.SemanticsNode>) {
+        out += node
+        node.children.forEach { walk(it, out) }
+    }
+
+    private fun rowsOf(activity: ComponentActivity): List<androidx.compose.ui.semantics.SemanticsNode> {
+        val roots = mutableListOf<androidx.compose.ui.platform.ViewRootForTest>()
+        fun find(v: android.view.View) {
+            if (v is androidx.compose.ui.platform.ViewRootForTest) roots += v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))
+        }
+        find(activity.window.decorView)
+        val all = mutableListOf<androidx.compose.ui.semantics.SemanticsNode>()
+        roots.forEach { walk(it.semanticsOwner.rootSemanticsNode, all) }
+        // Whole rows: wide enough to be a row, tall enough to be one and not a swatch or a chip.
+        return all.filter { n ->
+            n.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Focused) &&
+                n.boundsInWindow.width > 400f && n.boundsInWindow.height > 80f
+        }
+    }
+
+    /** The ring's colour on the row's top edge: a pixel of it in the first 14 px of the middle column. */
+    private fun ringOnTopEdge(frame: Bitmap, bounds: androidx.compose.ui.geometry.Rect): Boolean {
+        val ring = ringColour
+        val x = bounds.center.x.toInt().coerceIn(0, frame.width - 1)
+        return (0 until 14).any { dy ->
+            val y = (bounds.top.toInt() + dy).coerceIn(0, frame.height - 1)
+            val c = Color(frame.getPixel(x, y))
+            kotlin.math.abs(c.red - ring.red) < 0.02f && kotlin.math.abs(c.green - ring.green) < 0.02f && kotlin.math.abs(c.blue - ring.blue) < 0.02f
+        }
+    }
+
+    private fun assertRing(activity: ComponentActivity, frame: Bitmap, what: String) {
+        val rows = rowsOf(activity)
+        val focused = rows.filter { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Focused) == true }
+        val others = rows.filter { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Focused) != true }
+        assertTrue("$what: one row has the remote", focused.isNotEmpty())
+        assertTrue("$what: the focused row draws the ring ($ringColour)", focused.any { ringOnTopEdge(frame, it.boundsInWindow) })
+        assertTrue("$what: a row the remote is not on has no ring", others.isNotEmpty() && others.none { ringOnTopEdge(frame, it.boundsInWindow) })
     }
 
     /** A window the remote works in: out of touch mode and holding focus, as on a television. */
@@ -160,6 +219,12 @@ class TvFocusSettingsRenderTest {
             assertTrue(file.length() > 0)
         }
     }
+
+    @Test
+    fun lightStandard() = shoot(Page.Light, high = false)
+
+    @Test
+    fun lightHigh() = shoot(Page.Light, high = true)
 
     @Test
     fun darkStandard() = shoot(Page.Dark, high = false)

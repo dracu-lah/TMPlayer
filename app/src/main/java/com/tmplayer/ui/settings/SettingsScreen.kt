@@ -91,7 +91,10 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -106,7 +109,13 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -233,6 +242,19 @@ private suspend fun FocusRequester.settle(): Boolean {
         if (runCatching { requestFocus() }.getOrDefault(false)) return true
     }
     return false
+}
+
+/** How faded a switch's pill is on a row that does not apply now: its words use the muted colour instead, never alpha. */
+private const val DISABLED_PILL_ALPHA = 0.5f
+
+/**
+ * Focus on the first of [targets] that takes it. For a row that is about to remove itself (WP-06):
+ * the remote goes to the row after it, or to the row above when it was the last, instead of
+ * dropping to nothing. A target that is not there (a page without that row, a row not composed
+ * yet) is skipped.
+ */
+private suspend fun settleOn(vararg targets: FocusRequester) {
+    for (target in targets) if (target.settle()) return
 }
 
 private sealed interface Prompt {
@@ -420,6 +442,14 @@ fun SettingsScreen(
     var pickingKidsChats by remember { mutableStateOf(false) }
 
     val toast = rememberToast()
+    // Library's rows that remove themselves (Forget last chat, Clear favourites, Clear history) and
+    // the rows around them, where the remote goes when one is gone (WP-06, TV only).
+    val remoteHere = !isTouch()
+    val rememberSearchesRow = remember { FocusRequester() }
+    val chooseChatsRow = remember { FocusRequester() }
+    val clearFavouritesRow = remember { FocusRequester() }
+    val clearHistoryRow = remember { FocusRequester() }
+    val postersRow = remember { FocusRequester() }
     // Clear history: the same question and count as History's own, closed by itself when the lists empty meanwhile.
     val historyCards = com.tmplayer.data.ClearAllConfirm.historyCards(history, watchedList)
     val askClearHistory = com.tmplayer.ui.components.rememberClearAllConfirm(
@@ -428,6 +458,8 @@ fun SettingsScreen(
         message = s.browseClearHistoryMessage(historyCards),
         detail = s.browseClearHistoryDetail,
     ) {
+        // The row goes with the lists: the remote moves on first, to the posters switch under it, or up.
+        if (remoteHere) scope.launch { settleOn(postersRow, clearFavouritesRow, chooseChatsRow) }
         historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
         // What was cleared lives on History, not here, so the line is the only sign.
         toast(s.browseHistoryCleared)
@@ -987,7 +1019,7 @@ fun SettingsScreen(
                 }
                 // First, on both devices: a stick often lives on a screen in a bright room, so the theme
                 // is worth offering there too.
-                item {
+                item(key = "theme") {
                     if (touch) {
                         ThemePicker(
                             current = themeChoice,
@@ -1007,6 +1039,7 @@ fun SettingsScreen(
                                 val next = ThemeChoice.entries.getOrNull(themeChoice.ordinal + direction)
                                 if (next != null) scope.launch { settings.setThemeChoice(next) }
                             },
+                            onWrap = { scope.launch { settings.setThemeChoice(ThemeChoice.entries.first()) } },
                         )
                     }
                 }
@@ -1015,12 +1048,26 @@ fun SettingsScreen(
                 // System and Dark, and folded away under Light. Right under Theme on a TV too, one
                 // press of Down away.
                 item(key = "pure_black") {
-                    com.tmplayer.ui.components.RevealUnder(themeChoice.offersPureBlack) {
+                    if (touch) {
+                        com.tmplayer.ui.components.RevealUnder(themeChoice.offersPureBlack) {
+                            ToggleRow(
+                                title = s.settingsPureBlack,
+                                subtitle = s.themeBlackDetail,
+                                icon = TmIcons.PureBlack,
+                                checked = pureBlack,
+                                onToggle = { scope.launch { settings.setPureBlack(!pureBlack) } },
+                            )
+                        }
+                    } else {
+                        // A television never folds this row away: with the remote on Theme, Right
+                        // to Light would pull every row under it up (U-TV-57). Under Light it stays,
+                        // faded, saying why, and the remote skips it.
                         ToggleRow(
                             title = s.settingsPureBlack,
-                            subtitle = s.themeBlackDetail,
+                            subtitle = if (themeChoice.offersPureBlack) s.themeBlackDetail else s.settingsOnlyWithDarkTheme,
                             icon = TmIcons.PureBlack,
                             checked = pureBlack,
+                            enabled = themeChoice.offersPureBlack,
                             onToggle = { scope.launch { settings.setPureBlack(!pureBlack) } },
                         )
                     }
@@ -1052,6 +1099,7 @@ fun SettingsScreen(
                                 scope.launch { settings.setTypeface(next) }
                             }
                         },
+                        onWrap = { scope.launch { settings.setTypeface(com.tmplayer.data.AppTypeface.entries.first()) } },
                     )
                 }
                 item(key = "high_contrast") {
@@ -1066,7 +1114,7 @@ fun SettingsScreen(
                 }
 
                 // The language, under the theme: both are how the app looks before anything it shows.
-                item {
+                item(key = "language") {
                     ActionRow(
                         title = s.settingsLanguage,
                         subtitle = s.languageRowDetail(language),
@@ -1094,7 +1142,7 @@ fun SettingsScreen(
                 // The interface size (CP59), the same stepper on both devices: four sizes are too
                 // many words for segments across a phone, and Left and Right already mean "change
                 // this" on a TV. The whole screen, this row included, grows or shrinks as it moves.
-                item {
+                item(key = "interface_size") {
                     StepperRow(
                         title = s.interfaceSize,
                         subtitle = s.interfaceSizeDetail,
@@ -1103,12 +1151,15 @@ fun SettingsScreen(
                         canDecrease = uiScale.ordinal > 0,
                         canIncrease = uiScale.ordinal < UiScale.entries.lastIndex,
                         onStep = { direction -> scope.launch { settings.setUiScale(uiScale.step(direction)) } },
+                        // OK would jump from the largest size to the smallest: Left and Right only,
+                        // until a size change can be taken back (WP-10).
+                        okChanges = false,
                     )
                 }
 
                 // CP68: the two lightening switches the low-end device card recommends, each its own
                 // row so either can be turned back on its own.
-                item {
+                item(key = "lighter_pictures") {
                     ToggleRow(
                         title = s.settingsLighterPictures,
                         modifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Performance)),
@@ -1118,7 +1169,7 @@ fun SettingsScreen(
                         onToggle = { scope.launch { settings.setLighterPictures(!lighterPictures) } },
                     )
                 }
-                item {
+                item(key = "reduce_motion") {
                     ToggleRow(
                         title = s.settingsReduceMotion,
                         subtitle = if (reduceMotion) s.settingsReduceMotionOn else s.settingsReduceMotionOff,
@@ -1162,7 +1213,7 @@ fun SettingsScreen(
                     // Android 11 and earlier has no wallpaper palette to read, so the row would be a
                     // switch that changes nothing.
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        item {
+                        item(key = "wallpaper_colours") {
                             ToggleRow(
                                 title = s.settingsWallpaperColours,
                                 subtitle = if (dynamicColour) {
@@ -1317,6 +1368,11 @@ fun SettingsScreen(
                                 }
                             }
                         },
+                        onWrap = {
+                            scope.launch {
+                                settings.updateTouchPrefs { it.copy(controlsTimeoutMs = choices.first(), controlsTimeoutStored = true) }
+                            }
+                        },
                     )
                 }
                 // Off, 3, 5 or 10 seconds, stepped like the timeout above so the remote needs no sheet.
@@ -1334,6 +1390,7 @@ fun SettingsScreen(
                                 settings.setResumeRewindMs(TouchPrefs.step(choices, resumeRewindMs, direction))
                             }
                         },
+                        onWrap = { scope.launch { settings.setResumeRewindMs(choices.first()) } },
                     )
                 }
                 // A TV that discovery never finds: a phone casts (a television does not), so only here (and not on iOS, which does not cast).
@@ -1452,7 +1509,7 @@ fun SettingsScreen(
                 sectionTitle { s.settingsLibrary }
                 // What opens first, in the same card as which videos show: a heading of its own
                 // stood over a single row.
-                item {
+                item(key = "open_last_chat") {
                     ToggleRow(
                         title = s.settingsOpenLastChat,
                         subtitle = when {
@@ -1466,7 +1523,7 @@ fun SettingsScreen(
                     )
                 }
                 if (openLastChat && lastChatId != 0L) {
-                    item {
+                    item(key = "forget_last_chat") {
                         ActionRow(
                             title = s.settingsForgetLastChat,
                             subtitle = s.settingsForgetLastChatDetail,
@@ -1475,6 +1532,8 @@ fun SettingsScreen(
                             // press reads as having been lost.
                             onClick = {
                                 scope.launch {
+                                    // The remote moves to Remember searches under it before the row goes.
+                                    if (remoteHere) settleOn(rememberSearchesRow, chooseChatsRow)
                                     settings.forgetLastChat()
                                     toast(s.settingsForgotLastChat)
                                 }
@@ -1489,10 +1548,11 @@ fun SettingsScreen(
                 // they are a list kept like the others, not a way of playing), then a clear for
                 // each list that has anything in it.
                 sectionTitle { s.settingsLists }
-                item {
+                item(key = "remember_searches") {
                     // Off forgets the searches already kept, which is what switching it off is for.
                     ToggleRow(
                         title = s.settingsRememberSearches,
+                        modifier = Modifier.focusRequester(rememberSearchesRow),
                         subtitle = if (rememberSearches) s.settingsRememberSearchesOn else s.settingsRememberSearchesOff,
                         icon = TmIcons.Search,
                         checked = rememberSearches,
@@ -1502,31 +1562,35 @@ fun SettingsScreen(
                 // The picker, always listed: the chats added decide what Chats, Home and search
                 // show. The one list of which chats TMPlayer shows (2026-11-01): a chat's menu
                 // "Remove from TMPlayer" unticks a chat here, and Home's Recently added follows it.
-                item {
+                item(key = "choose_chats") {
                     val added by com.tmplayer.data.AddedChats.choice.collectAsState()
                     ActionRow(
                         title = s.pickerRowTitle,
+                        modifier = Modifier.focusRequester(chooseChatsRow),
                         subtitle = com.tmplayer.ui.browse.chosenChatsDetail(added, s),
                         icon = TmIcons.ChatsMany,
                         onClick = onOpenAddChats,
                     )
                 }
                 if (favorites.isNotEmpty()) {
-                    item {
+                    item(key = "clear_favourites") {
                         ActionRow(
                             title = s.settingsClearFavourites,
+                            modifier = Modifier.focusRequester(clearFavouritesRow),
                             subtitle = s.settingsClearFavouritesDetail(favorites.size),
                             icon = TmIcons.Close,
-                            onClick = { prompt = Prompt.ClearFavorites },
+                            // One prompt at a time: a second press while it is open does nothing.
+                            onClick = { if (prompt == null) prompt = Prompt.ClearFavorites },
                         )
                     }
                 }
                 // One Clear history, as History's own: Continue watching and Watched together, Watch
                 // later kept. Asked first on every screen (HX59), then said with Undo.
                 if (history.isNotEmpty() || watchedList.isNotEmpty()) {
-                    item {
+                    item(key = "clear_history") {
                         ActionRow(
                             title = s.browseClearHistory,
+                            modifier = Modifier.focusRequester(clearHistoryRow),
                             subtitle = s.browseClearHistoryDetail,
                             icon = TmIcons.Close,
                             onClick = askClearHistory,
@@ -1538,7 +1602,7 @@ fun SettingsScreen(
                 onlineMetadataSection(
                     onEditKey = { editingTmdbKey = true },
                     onEditOmdbKey = { editingOmdbKey = true },
-                    toggleModifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)),
+                    toggleModifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)).focusRequester(postersRow),
                 )
             }
 
@@ -1703,7 +1767,7 @@ fun SettingsScreen(
             SettingsPage.Account -> {
                 sectionTitle { s.lockTitle }
                 if (!appLock.pinSet) {
-                    item {
+                    item(key = "set_pin") {
                         ActionRow(
                             title = s.lockSetPin,
                             subtitle = s.lockSetPinDetail,
@@ -1713,7 +1777,7 @@ fun SettingsScreen(
                         )
                     }
                 } else {
-                    item {
+                    item(key = "change_pin") {
                         ActionRow(
                             title = s.lockChangePin,
                             subtitle = s.lockChangePinDetail,
@@ -1722,7 +1786,7 @@ fun SettingsScreen(
                             onClick = { pinFlow = PinFlow.ChangeCheck },
                         )
                     }
-                    item {
+                    item(key = "lock_on_open") {
                         ToggleRow(
                             title = s.lockOnOpen,
                             subtitle = s.lockOnOpenDetail,
@@ -1737,7 +1801,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                item {
+                item(key = "kids_lock") {
                     ToggleRow(
                         title = s.lockKids,
                         subtitle = AppLockWords.kidsDetail(appLock),
@@ -1756,7 +1820,7 @@ fun SettingsScreen(
                         },
                     )
                 }
-                item {
+                item(key = "allowed_chats") {
                     ActionRow(
                         title = s.lockAllowedChats,
                         subtitle = s.lockAllowedChatsDetail(count = appLock.kidsChats.size),
@@ -1765,7 +1829,7 @@ fun SettingsScreen(
                     )
                 }
                 if (appLock.pinSet) {
-                    item {
+                    item(key = "remove_pin") {
                         ActionRow(
                             title = s.lockRemovePin,
                             subtitle = s.lockRemovePinDetail,
@@ -1774,7 +1838,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                settingsNote {
+                settingsNote(key = "lock_forgot") {
                     Text(
                         s.lockForgot,
                         style = MaterialTheme.typography.bodyMedium,
@@ -1790,7 +1854,7 @@ fun SettingsScreen(
                 // What leaves this device and what the privacy page says about it (moved from About
                 // and help by U20): the one switch that sends anything, beside the page explaining it.
                 sectionTitle { s.settingsPrivacy }
-                item {
+                item(key = "privacy") {
                     ActionRow(
                         title = s.aboutPrivacy,
                         subtitle = s.settingsPrivacyDetail(device),
@@ -1802,7 +1866,7 @@ fun SettingsScreen(
                 // until it is asked for. A build with no DSN compiled in has nowhere to send a report, so
                 // rather than offer a switch that does nothing, it is not drawn at all.
                 if (CrashReports.available) {
-                    item {
+                    item(key = "crash_reports") {
                         ToggleRow(
                             title = s.settingsCrashReports,
                             subtitle = if (crashReports) {
@@ -1824,7 +1888,7 @@ fun SettingsScreen(
                 sectionTitle { s.settingsAccountSignedIn }
                 // Where the account is signed in, and ending a session (CP83). Inside Settings, so
                 // behind its PIN when the lock or the kids lock asks for one.
-                item {
+                item(key = "devices") {
                     ActionRow(
                         title = s.settingsDevices,
                         subtitle = s.settingsDevicesDetail,
@@ -1837,7 +1901,7 @@ fun SettingsScreen(
                 // the sync file in the viewer's own Saved Messages, with the privacy line as its words.
                 // Turning it on is the answer to the question, so it asks nothing more; off keeps the
                 // file, which "Turn off and delete the sync file" takes away.
-                item {
+                item(key = "resume_sync") {
                     ToggleRow(
                         title = s.syncplaceSwitch,
                         subtitle = if (resumeSync) s.syncplaceSwitchOn else s.syncplaceSwitchOff,
@@ -1859,7 +1923,7 @@ fun SettingsScreen(
                     )
                 }
                 // What goes into the file, in one plain line, in full under the switch.
-                settingsNote {
+                settingsNote(key = "sync_privacy") {
                     Text(
                         s.syncplacePrivacy,
                         style = MaterialTheme.typography.bodyMedium,
@@ -1874,7 +1938,7 @@ fun SettingsScreen(
                 if (resumeSync) {
                     // Sync now, with how the last sync went under it; Replace when the file there
                     // could not be read, which asks first.
-                    item {
+                    item(key = "sync_now") {
                         ActionRow(
                             title = com.tmplayer.data.SyncWords.action(resumeSyncStatus),
                             subtitle = com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
@@ -1891,7 +1955,7 @@ fun SettingsScreen(
                             },
                         )
                     }
-                    item {
+                    item(key = "sync_delete") {
                         ActionRow(
                             title = s.settingsResumeSyncDelete,
                             subtitle = s.settingsResumeSyncDeleteDetail,
@@ -1903,7 +1967,7 @@ fun SettingsScreen(
                 // Where the file and the backups are kept: Saved Messages, or a private channel of the
                 // viewer's own with only them in it (HX87). Its page has the guide. Shown with sync
                 // off too: the sign out backup goes there as well.
-                item {
+                item(key = "sync_channel") {
                     ActionRow(
                         title = s.syncchannelRowTitle,
                         subtitle = com.tmplayer.ui.settings.syncChannelRowLine(s, syncChannel, syncChannelBlock),
@@ -1916,7 +1980,7 @@ fun SettingsScreen(
                 // Add account while there is room.
                 profileList?.let { list ->
                     if (severalProfiles) {
-                        item {
+                        item(key = "switch_profile") {
                             ActionRow(
                                 title = s.profilesSwitchProfile,
                                 subtitle = list.active?.shownName.orEmpty(),
@@ -1926,7 +1990,7 @@ fun SettingsScreen(
                         }
                     }
                     if (com.tmplayer.data.AccountRules.canAdd(list)) {
-                        item {
+                        item(key = "add_profile") {
                             ActionRow(
                                 title = s.profilesAdd,
                                 subtitle = s.profilesAddDetail(count = com.tmplayer.data.AccountRules.MAX),
@@ -1938,7 +2002,7 @@ fun SettingsScreen(
                         }
                     }
                     if (severalProfiles) {
-                        item {
+                        item(key = "remove_all_profiles") {
                             ActionRow(
                                 title = s.profilesRemoveAll,
                                 subtitle = s.profilesRemoveAllDetail,
@@ -1950,7 +2014,7 @@ fun SettingsScreen(
                 }
                 // Last, under the cards rather than in one: the one press here that ends the
                 // session, asked first (Prompt.SignOut).
-                settingsNote {
+                settingsNote(key = "sign_out") {
                     SignOutButton(
                         label = s.settingsSignOut,
                         onClick = { signOutState.request() },
@@ -2642,6 +2706,9 @@ fun SettingsScreen(
                 prompt = null
                 scope.launch {
                     val count = favorites.size
+                    // The row goes with the favourites: the remote moves on first, to Clear history
+                    // under it, or the posters switch, or up to Choose chats.
+                    if (remoteHere) settleOn(clearHistoryRow, postersRow, chooseChatsRow)
                     settings.clearFavorites(allowedChats)
                     toast(s.settingsFavouritesCleared(count))
                 }
@@ -2800,6 +2867,12 @@ private fun AccentRow(
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
+    // A television: the remote is on one swatch, so the whole card takes the row look (a step up in
+    // fill and the ring, not the accent fill, which would swallow the swatch of the same colour).
+    var childFocused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(Corner.Large)
+    val shown = com.tmplayer.data.Accent.entries.filter { it != com.tmplayer.data.Accent.Custom || onCustom != null }
+    val at = shown.indexOf(selected)
     Column(
         Modifier
             .seekable(s.settingsAccent)
@@ -2809,8 +2882,13 @@ private fun AccentRow(
                     Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 } else {
                     Modifier
-                        .clip(RoundedCornerShape(Corner.Large))
-                        .background(Tone.surface)
+                        // The card is one group for a screen reader (and for the focus tests, which
+                        // read its whole look as the swatch's neighbour).
+                        .semantics { isTraversalGroup = true }
+                        .onFocusChanged { childFocused = it.hasFocus }
+                        .clip(shape)
+                        .background(if (childFocused) Tone.surfaceHigh else Tone.surface)
+                        .focusRingOnTv(childFocused, shape)
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 },
             ),
@@ -2828,6 +2906,16 @@ private fun AccentRow(
                     if (wallpaper) s.settingsAccentWallpaper else s.settingsAccentDetail,
                     style = if (touch) M3Theme.typography.bodyMedium else MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
+                )
+            }
+            if (!touch && at >= 0) {
+                Spacer(Modifier.size(12.dp))
+                com.tmplayer.ui.components.ValueChevrons(
+                    value = selected.label,
+                    canDecrease = at > 0,
+                    canIncrease = at < shown.lastIndex,
+                    focused = childFocused,
+                    ink = Tone.text,
                 )
             }
         }
@@ -2923,8 +3011,14 @@ internal fun TickRow(label: String, checked: Boolean, onToggle: () -> Unit) {
  * A row whose value is a number the viewer walks up and down.
  *
  * A phone gets two arrow buttons at the end of the row. A television has no second target to aim
- * at, so the row itself takes focus and the D-pad moves the number: the arrows are still drawn,
- * greyed at the ends, because they are what says the row can be moved at all.
+ * at, so the row itself takes focus and the D-pad moves the number: the value is drawn between two
+ * chevrons ([com.tmplayer.ui.components.ValueChevrons]), dimmed at the ends, because they are what
+ * says the row can be moved at all. OK on a television takes the next value ([okChanges]), and from
+ * the last one [onWrap] goes back to the first. The row says its value and its steps to TalkBack.
+ *
+ * @param okChanges whether OK takes the next value. False for a setting where one press must never
+ * jump far (Interface size: from the largest to the smallest), until it can be undone (WP-10).
+ * @param onWrap the first value again, for OK on the last one; null stops OK at the last value.
  */
 @Composable
 internal fun StepperRow(
@@ -2936,6 +3030,8 @@ internal fun StepperRow(
     canIncrease: Boolean,
     onStep: (direction: Int) -> Unit,
     modifier: Modifier = Modifier,
+    okChanges: Boolean = true,
+    onWrap: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
@@ -2979,24 +3075,53 @@ internal fun StepperRow(
     // 0.8 at the least: the second line has to stay legible against the accent, and anything
     // lighter drops under the 4.5:1 a small caption needs.
     val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
+    // Left and Right are the two ends of the value, so in a right-to-left layout the key under the
+    // "previous" chevron is Right.
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val previousKey = if (rtl) Key.DirectionRight else Key.DirectionLeft
+    val nextKey = if (rtl) Key.DirectionLeft else Key.DirectionRight
+    val cycle = {
+        if (okChanges) {
+            if (canIncrease) onStep(1) else onWrap?.invoke()
+        }
+    }
+    val nextWords = s.settingsNextValue
+    val previousWords = s.settingsPreviousValue
+    val shape = RoundedCornerShape(Corner.Large)
 
     Row(
         modifier.seekable(title)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
-            .clip(RoundedCornerShape(Corner.Large))
+            .clip(shape)
             .background(background)
+            // The row role (FocusRole.Row): the fill and the ring, inside the row.
+            .focusRingOnTv(focused, shape)
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Left and Right, not Up and Down: Up and Down move between settings, and Left
                 // and Right lead nowhere in a single column, so they are the pair to spend.
                 when (event.key) {
-                    Key.DirectionLeft -> { if (canDecrease) onStep(-1); true }
-                    Key.DirectionRight -> { if (canIncrease) onStep(1); true }
+                    previousKey -> { if (canDecrease) onStep(-1); true }
+                    nextKey -> { if (canIncrease) onStep(1); true }
+                    // OK takes the next value once per press, never once per held repeat.
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        if (okChanges && event.nativeKeyEvent.repeatCount == 0) cycle()
+                        okChanges
+                    }
                     else -> false
                 }
             }
             .focusable(interactionSource = interactions)
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                stateDescription = value
+                if (okChanges) onClick { cycle(); true }
+                customActions = buildList {
+                    if (canIncrease) add(CustomAccessibilityAction(nextWords) { onStep(1); true })
+                    if (canDecrease) add(CustomAccessibilityAction(previousWords) { onStep(-1); true })
+                }
+            }
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -3010,26 +3135,22 @@ internal fun StepperRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // The same words focused or not, so the row keeps its height under the remote.
             Text(
-                if (focused) s.settingsStepperHint(value) else s.settingsValueAndDetail(value, subtitle),
+                subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = dim,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Icon(
-            TmIcons.ChevronLeft,
-            contentDescription = null,
-            tint = if (canDecrease) onSurface else dim,
-            modifier = Modifier.size(26.dp),
-        )
         Spacer(Modifier.size(12.dp))
-        Icon(
-            TmIcons.ChevronRight,
-            contentDescription = null,
-            tint = if (canIncrease) onSurface else dim,
-            modifier = Modifier.size(26.dp),
+        com.tmplayer.ui.components.ValueChevrons(
+            value = value,
+            canDecrease = canDecrease,
+            canIncrease = canIncrease,
+            focused = focused,
+            ink = onSurface,
         )
     }
 }
@@ -3134,22 +3255,29 @@ private fun AccountHeader(account: com.tmplayer.data.Account) {
  */
 @Composable
 private fun SignOutButton(label: String, onClick: () -> Unit) {
-    // A remote has no pointer to show where it is, and Material's button barely changes on focus:
-    // on a television it stays dimmed until the remote is on it, then fills and takes a ring, so
-    // nobody presses Sign out without seeing that it is the button about to be pressed.
-    val tv = !isTouch()
-    val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
+    // A remote has no pointer to show where it is. On a television this is the shared TV button
+    // (FocusRole.Button: the fill swap and, in Light and under High contrast, a ring; no scale) in
+    // its destructive colours, 56 dp tall and full width, never the dimmed phone button it was.
+    if (!isTouch()) {
+        Box(Modifier.seekable(label).fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)) {
+            com.tmplayer.ui.components.TmButton(
+                onClick = onClick,
+                destructive = true,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+            ) {
+                Icon(TmIcons.SignOut, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Text(label, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        return
+    }
     Box(Modifier.seekable(label).fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)) {
         androidx.compose.material3.Button(
             onClick = onClick,
-            interactionSource = interactions,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .then(if (tv && focused) Modifier.border(3.dp, Tone.text, CircleShape) else Modifier),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                containerColor = if (tv && !focused) Tone.danger.copy(alpha = 0.4f) else Tone.danger,
+                containerColor = Tone.danger,
                 contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onError,
             ),
         ) {
@@ -3221,6 +3349,11 @@ internal fun ToggleRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     service: com.tmplayer.ui.components.Service? = null,
+    /**
+     * False for a switch that does not apply now (Pure black under the light theme): drawn in the muted colour,
+     * taking neither the remote nor a press, but still in its place so nothing moves (WP-06).
+     */
+    enabled: Boolean = true,
 ) {
     // Every switch in Settings answers the thumb (a phone only; nothing on a television).
     val tick = com.tmplayer.ui.components.rememberToggleTick()
@@ -3235,6 +3368,8 @@ internal fun ToggleRow(
             if (isTouch()) Modifier else Modifier.semantics { stateDescription = if (checked) onWord else offWord },
         ),
         onClick = toggle,
+        checked = checked,
+        enabled = enabled,
         headline = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supporting = { M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis) },
         leading = { SettingIconChip(icon, service = service) },
@@ -3250,7 +3385,8 @@ internal fun ToggleRow(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (focused) Tone.onFocusFill else Tone.text,
+                // Not applying now: the muted colour (4.5:1 on the row), not a fade of the whole row.
+                color = if (focused) Tone.onFocusFill else if (enabled) Tone.text else Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -3262,7 +3398,7 @@ internal fun ToggleRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Switch(checked = checked, focused = focused, touch = false)
+        Switch(checked = checked, focused = focused, touch = false, modifier = if (enabled) Modifier else Modifier.alpha(DISABLED_PILL_ALPHA))
     }
 }
 
@@ -3274,7 +3410,7 @@ internal fun ToggleRow(
  * beside a wrapped two-line title is the loudest thing in the list.
  */
 @Composable
-private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
+private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false, modifier: Modifier = Modifier) {
     // The pill swaps which way round it is drawn depending on what is behind it. A focused row is
     // filled in, so on it the live track has to be that fill's own contrast colour; off the row
     // the accent itself is the live one. A fixed colour cannot read against both.
@@ -3290,7 +3426,9 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
     val height = if (touch) 30.dp else 34.dp
     val knob = if (touch) 22.dp else 26.dp
     Box(
-        Modifier
+        modifier
+            // The row is the switch for a screen reader (Role.Switch on FocusRow): the pill only draws it.
+            .clearAndSetSemantics {}
             .size(width = if (touch) 52.dp else 64.dp, height = height)
             .clip(CircleShape)
             .background(track),
@@ -3330,6 +3468,10 @@ private fun FocusRow(
     supporting: @Composable () -> Unit,
     leading: @Composable () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
+    /** Not null for a switch row: the row is a switch (Role.Switch, its state), not a button. */
+    checked: Boolean? = null,
+    /** False: out of the remote's reach, never removed (WP-06). */
+    enabled: Boolean = true,
     content: @Composable androidx.compose.foundation.layout.RowScope.(focused: Boolean) -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -3354,12 +3496,26 @@ private fun FocusRow(
             modifier = modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
-                .clickable(
-                    interactionSource = interactions,
-                    indication = LocalIndication.current,
-                    // Named as a button, so a screen reader offers "double tap to activate".
-                    role = Role.Button,
-                    onClick = onClick,
+                .then(
+                    if (checked != null) {
+                        Modifier.toggleable(
+                            value = checked,
+                            enabled = enabled,
+                            interactionSource = interactions,
+                            indication = LocalIndication.current,
+                            // A switch, so a screen reader says "switch, on" and not "button".
+                            role = Role.Switch,
+                            onValueChange = { onClick() },
+                        )
+                    } else {
+                        Modifier.clickable(
+                            interactionSource = interactions,
+                            indication = LocalIndication.current,
+                            // Named as a button, so a screen reader offers "double tap to activate".
+                            role = Role.Button,
+                            onClick = onClick,
+                        )
+                    },
                 ),
         )
         return
@@ -3377,11 +3533,26 @@ private fun FocusRow(
             .background(background)
             // The row role (FocusRole.Row): the fill and the ring, inside the row, no scale.
             .focusRingOnTv(focused, RoundedCornerShape(Corner.Large))
-            .clickable(
-                interactionSource = interactions,
-                indication = null,
-                role = Role.Button,
-                onClick = onClick,
+            // Out of the remote's reach, but in its place: the rows under it do not move.
+            .then(if (enabled) Modifier else Modifier.focusProperties { canFocus = false })
+            .then(
+                if (checked != null) {
+                    Modifier.toggleable(
+                        value = checked,
+                        enabled = enabled,
+                        interactionSource = interactions,
+                        indication = null,
+                        role = Role.Switch,
+                        onValueChange = { onClick() },
+                    )
+                } else {
+                    Modifier.clickable(
+                        interactionSource = interactions,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                },
             )
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
