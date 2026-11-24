@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.GroupPlace
 import com.tmplayer.ui.components.groupedCard
@@ -29,11 +30,15 @@ import com.tmplayer.ui.components.isTouch
  */
 internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
     val collected = GroupCollector(this).apply(build).entries
+    // The heading each row sits under, for the television's breadcrumb (WP-07): null above the first.
+    var section: (@Composable () -> String)? = null
     collected.forEachIndexed { index, entry ->
+        if (entry.section != null) section = entry.section
         if (entry.breaks) {
             item(entry.key, entry.contentType, entry.content)
             return@forEachIndexed
         }
+        val under = section
         val place = GroupPlace(
             first = collected.getOrNull(index - 1)?.breaks ?: true,
             last = collected.getOrNull(index + 1)?.breaks ?: true,
@@ -50,7 +55,21 @@ internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
                         entry.content(this@item)
                     }
                 } else {
-                    entry.content(this)
+                    val crumb = LocalSettingsBreadcrumb.current
+                    if (crumb == null) {
+                        entry.content(this)
+                    } else {
+                        // The remote on this row names its section in the pinned header. Written
+                        // from the focus callback and read only by the header, so a focus move
+                        // composes the header and not the page.
+                        val title = under?.invoke()
+                        Box(
+                            Modifier.onFocusChanged { if (it.hasFocus) crumb.section = title },
+                            propagateMinConstraints = true,
+                        ) {
+                            entry.content(this@item)
+                        }
+                    }
                 }
             }
         }
@@ -59,7 +78,11 @@ internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
 
 /** A section's heading, which also closes the card above it. */
 internal fun LazyListScope.sectionTitle(text: @Composable () -> String) {
-    item(contentType = GroupBreak) { SectionTitle(text()) }
+    if (this is GroupCollector) {
+        sectionEntry(text)
+    } else {
+        item(contentType = GroupBreak) { SectionTitle(text()) }
+    }
 }
 
 /** Small print under a group, outside its card. */
@@ -83,6 +106,8 @@ private class Entry(
     val key: Any?,
     val contentType: Any?,
     val content: @Composable LazyItemScope.() -> Unit,
+    /** The heading's words when this entry is a section title, else null. */
+    val section: (@Composable () -> String)? = null,
 ) {
     val breaks: Boolean get() = contentType === GroupBreak
 }
@@ -95,6 +120,11 @@ private class Entry(
 private class GroupCollector(target: LazyListScope) : LazyListScope by target {
     val entries = mutableListOf<Entry>()
 
+    /** A section title: a break like a note, which also names the rows under it. */
+    fun sectionEntry(text: @Composable () -> String) {
+        entries += Entry(null, GroupBreak, { SectionTitle(text()) }, section = text)
+    }
+
     override fun item(key: Any?, contentType: Any?, content: @Composable LazyItemScope.() -> Unit) {
         entries += Entry(key, contentType, content)
     }
@@ -106,7 +136,7 @@ private class GroupCollector(target: LazyListScope) : LazyListScope by target {
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit,
     ) {
         repeat(count) { index ->
-            entries += Entry(key?.invoke(index), contentType(index)) { itemContent(index) }
+            entries += Entry(key?.invoke(index), contentType(index), content = { itemContent(index) })
         }
     }
 }

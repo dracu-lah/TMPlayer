@@ -38,8 +38,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The pages U20 changed, by remote on a television: the category list lands on Account, its
- * first page since WP-08, and Down goes on to Playback; Down walks Subtitles and audio from the subtitle rows through the audio
+ * The pages U20 changed, by remote on a television: the rail lands on Playback (WP-07) and walks
+ * the pages in WP-08's order from Account; Down walks Subtitles and audio from the subtitle rows through the audio
  * language and over the Sound heading to the sound rows, and the language sheet hands the focus
  * back to its row when it closes; Storage and downloads reaches Download the whole video first
  * under the location; Privacy and lock reaches the privacy page under the lock. And the phone's
@@ -64,6 +64,8 @@ class SettingsGroupsTvTest {
 
     private fun show(page: SettingsPage?, tv: Boolean = true) {
         FormFactor.override(tv)
+        // The rail's memory of this session, from the test before.
+        SettingsRail.last = null
         rule.setContent {
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
@@ -99,15 +101,26 @@ class SettingsGroupsTvTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
-    fun `the list lands on Account, its first page, and Down walks the pages in the shared order`() {
+    fun `the rail lands on Playback and Down walks the pages in the shared order`() {
         show(page = null)
         rule.mainClock.advanceTimeBy(500)
         rule.waitForIdle()
-        row("Account").assertIsFocused()
+        // The rail and pane since WP-07: Settings opens on Playback, the first time in a session.
+        rule.onNodeWithTag(railTag(SettingsPage.Playback)).assertIsFocused()
+        rule.onNodeWithTag(railTag(SettingsPage.Playback)).performKeyInput { pressKey(Key.DirectionUp) }
+        rule.waitForIdle()
         // Nine pages on a television (WP-08): no Notifications, no Redo setup choices or Launcher of their own.
-        walk("Account", "Playback", "Subtitles and audio", "Downloads and data", "Appearance and language", "Home and library", "Privacy and lock", "Help", "About")
-        rule.onNodeWithText("Notifications").assertDoesNotExist()
-        rule.onNodeWithText("Redo setup choices").assertDoesNotExist()
+        val pages = listOf(
+            SettingsPage.Accounts, SettingsPage.Playback, SettingsPage.Subtitles, SettingsPage.Storage, SettingsPage.Appearance,
+            SettingsPage.Library, SettingsPage.Privacy, SettingsPage.Help, SettingsPage.About,
+        )
+        for ((index, page) in pages.withIndex()) {
+            rule.onNodeWithTag(railTag(page)).assertIsFocused()
+            if (index < pages.lastIndex) rule.onNodeWithTag(railTag(page)).performKeyInput { pressKey(Key.DirectionDown) }
+            rule.waitForIdle()
+        }
+        rule.onNodeWithTag(railTag(SettingsPage.Notifications)).assertDoesNotExist()
+        rule.onNodeWithTag(railTag(SettingsPage.SetupChoices)).assertDoesNotExist()
         rule.onNodeWithText("Launcher").assertDoesNotExist()
     }
 
@@ -200,6 +213,14 @@ class SettingsGroupsTvTest {
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `a switch row on a television says On or Off to a screen reader`() {
         show(SettingsPage.Storage)
+        // Below the pane's fold since the rail and pane (WP-07): a lazy list composes what it
+        // shows, so the remote walks there as in the test above.
+        row("Storage location").performScrollTo().requestFocus()
+        rule.waitForIdle()
+        row("Storage location").performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
+        rule.onNodeWithTag(STREAM_SWITCH_TAG).performKeyInput { pressKey(Key.DirectionDown) }
+        rule.waitForIdle()
         val state = rule.onNode(hasText("Download the whole video first") and hasClickAction())
             .fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
         org.junit.Assert.assertTrue("the row says its state, got $state", state == "On" || state == "Off")

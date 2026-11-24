@@ -1,0 +1,290 @@
+package com.tmplayer.ui.settings
+
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import com.tmplayer.data.FormFactor
+import com.tmplayer.ui.DrainMainLooperRule
+import com.tmplayer.ui.theme.Motion
+import com.tmplayer.ui.theme.TMPlayerTheme
+import com.tmplayer.ui.theme.Tone
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * The television's Settings rail and pane by remote (WP-07): Settings opens on Playback in the rail
+ * (or the category used last), the pane follows the rail once it rests, Right and OK go into the
+ * pane on its first row, Left comes back to the open category drawn selected, Back goes from the
+ * pane to the rail and from the rail out of Settings, the rail's ends and far side hold, and a held
+ * Down over the rail shows one page when it stops, not every page it passed.
+ */
+@OptIn(ExperimentalTestApi::class)
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+class SettingsPaneTvFocusTest {
+
+    @get:Rule
+    val rule = createAndroidComposeRule<ComponentActivity>()
+
+    /** A state write left on the looper must not silence Compose for the next test (HX92). */
+    @get:Rule
+    val drain = DrainMainLooperRule()
+
+    /** Back that reached the caller: Settings left. */
+    private var leaves = 0
+
+    /** Every page the screen told its caller about, in order. */
+    private val pagesShown = mutableListOf<SettingsPage?>()
+
+    @Before
+    fun setUp() {
+        SettingsRail.last = null
+        Motion.reduced = true
+    }
+
+    @After
+    fun tearDown() {
+        FormFactor.override(false)
+        SettingsRail.last = null
+        Motion.reduced = false
+    }
+
+    private fun show(page: SettingsPage? = null) {
+        FormFactor.override(true)
+        rule.setContent {
+            TMPlayerTheme {
+                // The caller's own Back, composed first as MainActivity's is: it leaves Settings.
+                BackHandler { leaves++ }
+                Box(Modifier.fillMaxSize().background(Tone.background)) {
+                    SettingsScreen(
+                        chats = emptyList(),
+                        onLoggedOut = {},
+                        initialPage = page,
+                        onPageChange = { pagesShown += it },
+                        accountFolders = emptyList(),
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        // A window the remote works in, as on a television.
+        val viewRoot = rule.activity.window.decorView.parent
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
+            viewRoot, "ensureTouchMode",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+        )
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
+            viewRoot, "windowFocusChanged",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
+        )
+        settle()
+    }
+
+    private fun settle(ms: Long = 500) {
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(ms)
+        rule.waitForIdle()
+    }
+
+    private fun rail(page: SettingsPage): SemanticsNodeInteraction = rule.onNodeWithTag(railTag(page))
+
+    private fun row(title: String): SemanticsNodeInteraction = rule.onNode(hasText(title) and hasClickAction())
+
+    private fun SemanticsNodeInteraction.press(key: Key) {
+        performKeyInput { pressKey(key) }
+        rule.waitForIdle()
+    }
+
+    private fun back() {
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        settle()
+    }
+
+    /**
+     * A row further down the pane than it shows, reached as a remote does: Down from the focused
+     * row until it has the remote (a lazy list composes only what it shows).
+     */
+    private fun reach(title: String) {
+        var presses = 0
+        while (rule.onAllNodes(hasText(title) and hasClickAction() and androidx.compose.ui.test.isFocused()).fetchSemanticsNodes().isEmpty()) {
+            check(presses++ < 30) { "$title not reached" }
+            rule.onNode(androidx.compose.ui.test.isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
+            rule.waitForIdle()
+        }
+    }
+
+    private fun crumb(): String = rule.onNodeWithTag(SETTINGS_CRUMB_TAG, useUnmergedTree = true).fetchSemanticsNode()
+        .config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
+
+    @Test
+    fun `nine categories, the remote on Playback, the pane follows Down, Right enters, Left comes back selected`() {
+        show()
+        // Nine on a television, in the shared order (WP-08).
+        assertEquals(
+            listOf(
+                SettingsPage.Accounts, SettingsPage.Playback, SettingsPage.Subtitles, SettingsPage.Storage,
+                SettingsPage.Appearance, SettingsPage.Library, SettingsPage.Privacy, SettingsPage.Help, SettingsPage.About,
+            ),
+            SettingsRail.pages(),
+        )
+        rail(SettingsPage.Playback).assertIsFocused().assertIsSelected()
+        rule.onNodeWithTag(railTag(SettingsPage.Notifications)).assertDoesNotExist()
+        row("Play the next episode automatically").assertExists()
+
+        rail(SettingsPage.Playback).press(Key.DirectionDown)
+        settle()
+        rail(SettingsPage.Subtitles).assertIsFocused().assertIsSelected()
+        rail(SettingsPage.Playback).assertIsNotSelected()
+        assertEquals("Subtitles and audio", crumb())
+        row("Subtitle style").assertExists()
+        // The pane followed, the remote stayed on the rail.
+        row("Subtitle style").assertIsNotFocused()
+
+        rail(SettingsPage.Subtitles).press(Key.DirectionRight)
+        settle()
+        row("Subtitle style").assertIsFocused()
+
+        row("Subtitle style").press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Subtitles).assertIsFocused().assertIsSelected()
+    }
+
+    @Test
+    fun `OK on a rail item goes in on its first row, Back goes to the rail and then out`() {
+        show()
+        rail(SettingsPage.Playback).press(Key.DirectionUp)
+        settle()
+        rail(SettingsPage.Accounts).assertIsFocused()
+        rail(SettingsPage.Accounts).press(Key.DirectionCenter)
+        settle()
+        row("Connected devices").assertIsFocused()
+        rail(SettingsPage.Accounts).assertIsSelected()
+
+        back()
+        rail(SettingsPage.Accounts).assertIsFocused()
+        assertEquals("Back in the pane stays in Settings", 0, leaves)
+        back()
+        assertEquals("Back on the rail leaves Settings", 1, leaves)
+    }
+
+    @Test
+    fun `the rail's ends and far side hold, and Up from the pane's first row stays`() {
+        show()
+        rail(SettingsPage.Playback).press(Key.DirectionUp)
+        settle()
+        rail(SettingsPage.Accounts).press(Key.DirectionUp)
+        settle()
+        rail(SettingsPage.Accounts).assertIsFocused()
+        rail(SettingsPage.Accounts).press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Accounts).assertIsFocused()
+
+        // The whole rail fits (no scroll): its last item is on screen.
+        rail(SettingsPage.About).requestFocus()
+        settle()
+        rail(SettingsPage.About).press(Key.DirectionDown)
+        settle()
+        rail(SettingsPage.About).assertIsFocused()
+
+        // Up from a page's first row: nowhere, never the rail by accident.
+        rail(SettingsPage.Accounts).requestFocus()
+        settle()
+        rail(SettingsPage.Accounts).press(Key.DirectionRight)
+        settle()
+        row("Connected devices").assertIsFocused()
+        row("Connected devices").press(Key.DirectionUp)
+        settle()
+        row("Connected devices").assertIsFocused()
+    }
+
+    @Test
+    fun `a held Down over the rail shows one page when it stops`() {
+        show()
+        rule.mainClock.autoAdvance = false
+        pagesShown.clear()
+        // Four presses 50 ms apart, each well inside the settle: no page follows on the way.
+        val order = listOf(SettingsPage.Playback, SettingsPage.Subtitles, SettingsPage.Storage, SettingsPage.Appearance)
+        for (from in order) {
+            rail(from).performKeyInput { pressKey(Key.DirectionDown) }
+            rule.mainClock.advanceTimeBy(50)
+        }
+        rail(SettingsPage.Library).assertIsFocused()
+        assertEquals("nothing followed while the key was held", emptyList<SettingsPage?>(), pagesShown)
+        rule.mainClock.advanceTimeBy(400)
+        rule.mainClock.autoAdvance = true
+        settle()
+        assertEquals(listOf<SettingsPage?>(SettingsPage.Library), pagesShown)
+        rail(SettingsPage.Library).assertIsFocused().assertIsSelected()
+    }
+
+    @Test
+    fun `Settings opens on the category used last in this session`() {
+        SettingsRail.last = SettingsPage.Privacy
+        show()
+        rail(SettingsPage.Privacy).assertIsFocused().assertIsSelected()
+    }
+
+    @Test
+    fun `a deep link opens its page with the remote on the first row, Back goes to its rail item`() {
+        show(SettingsPage.Appearance)
+        row("Language").assertIsFocused()
+        rail(SettingsPage.Appearance).assertIsSelected()
+        back()
+        rail(SettingsPage.Appearance).assertIsFocused()
+        assertEquals(0, leaves)
+    }
+
+    @Test
+    fun `the header names the focused row's section`() {
+        show(SettingsPage.Subtitles)
+        reach("Downmix to stereo")
+        settle()
+        assertEquals("Subtitles and audio, Sound", crumb())
+        // On the rail: the page alone.
+        row("Downmix to stereo").press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Subtitles).assertIsFocused()
+        assertEquals("Subtitles and audio", crumb())
+    }
+
+    @Test
+    fun `a sub-page keeps Help selected and Back closes it on the row that opened it`() {
+        // Help's Troubleshooting opens in the pane, under Help on the rail.
+        show(SettingsPage.Help)
+        reach("Troubleshooting")
+        row("Troubleshooting").press(Key.DirectionCenter)
+        settle()
+        assertEquals("Troubleshooting", crumb().substringBefore(","))
+        rail(SettingsPage.Help).assertIsSelected()
+        // Back from a sub-page closes it first, on the row that opened it, still in the pane.
+        back()
+        row("Troubleshooting").assertIsFocused()
+        assertEquals(0, leaves)
+    }
+}

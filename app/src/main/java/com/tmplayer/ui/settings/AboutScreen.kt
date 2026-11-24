@@ -121,7 +121,8 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
                 .padding(horizontal = if (touch) PhonePad.Side else Tv.SafeH),
             contentPadding = PaddingValues(
-                top = if (touch) 4.dp else Tv.SafeV,
+                // A television's list starts under the pinned header, which owns the safe area's top.
+                top = 4.dp,
                 bottom = if (touch) insets.calculateBottomPadding() + 32.dp else 40.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(if (touch) 0.dp else 10.dp),
@@ -217,7 +218,14 @@ fun AboutScreen(onBack: () -> Unit) {
             )
         }
     } else {
-        list()
+        // Settings' pinned header (WP-07), outside the list, so a focused row never scrolls under
+        // it and the screen reads as part of Settings.
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+            Box(Modifier.padding(start = Tv.SafeH, end = Tv.SafeH, top = Tv.SafeV)) {
+                SettingsHeader(title = s.settingsTitle, crumb = s.aboutTitle)
+            }
+            Box(Modifier.fillMaxWidth().weight(1f)) { list() }
+        }
         // A frame first: the row is a lazy item, composed only once the list has been measured.
         LaunchedEffect(Unit) {
             withFrameNanos { }

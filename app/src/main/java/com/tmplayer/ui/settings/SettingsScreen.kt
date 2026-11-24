@@ -319,6 +319,12 @@ private const val CLEARING_WORTH_ASKING = CacheShelf.WORTH_ASKING_BYTES
  */
 private const val SUPPORTING_LINES = 4
 
+/** How long Telegram is out of reach before a television's Account page says so. */
+private const val OFFLINE_LINE_AFTER_MS = 2_000L
+
+/** How many items a television's page moves at a time while it looks for the row a sub-page opened from. */
+private const val OPENER_STEP = 4
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -547,8 +553,40 @@ fun SettingsScreen(
     val listState = rememberLazyListState()
 
     // The page open over the category list, or null for the list itself. Saved, so a rotation
-    // keeps the viewer where they were.
-    var page by rememberSaveable { mutableStateOf(initialPage) }
+    // keeps the viewer where they were. A television has no list of its own (WP-07): the rail is
+    // always beside a page, the one used last in this session or Playback the first time, and a
+    // stored page the rail does not hold (Notifications from a phone's backup) is Playback too.
+    val railPages = remember { SettingsRail.pages() }
+    var page by rememberSaveable {
+        mutableStateOf(
+            if (!remoteHere) {
+                initialPage
+            } else {
+                initialPage?.takeIf { it.railItem in railPages } ?: SettingsRail.entry(railPages)
+            },
+        )
+    }
+    // The television's rail: one focus per category, and the header's section for the page shown.
+    val railFocus = remember { SettingsPage.entries.associateWith { FocusRequester() } }
+    val tvArrived = remember { BooleanArray(1) }
+    val breadcrumb = remember(page) { SettingsBreadcrumb() }
+    // Whether the next page shown takes the remote into the pane (a row opened it, a deep link,
+    // Right or OK on the rail) or leaves it on the rail (the pane following the rail). A first
+    // arrival with a page asked for goes into it; without one the rail has the remote.
+    var paneEntry by remember { mutableStateOf(initialPage != null) }
+    // Account's offline line on a television: shown once Telegram has been out of reach for a
+    // couple of seconds, so the gap before the first connection does not flash it.
+    val connectedNow by Td.connected.collectAsStateWithLifecycle()
+    var offlineLine by remember { mutableStateOf(false) }
+    if (remoteHere) {
+        LaunchedEffect(connectedNow, page == SettingsPage.Accounts) {
+            offlineLine = false
+            if (!connectedNow && page == SettingsPage.Accounts) {
+                kotlinx.coroutines.delay(OFFLINE_LINE_AFTER_MS)
+                offlineLine = true
+            }
+        }
+    }
     // The Devices page (CP83), over Account and security while it is open.
     var devicesOpen by rememberSaveable { mutableStateOf(false) }
     var devicesClosed by remember { mutableStateOf(false) }
@@ -564,6 +602,8 @@ fun SettingsScreen(
     // The page just closed, for the list's focus to go back to; null on a first arrival.
     var returnTo by remember { mutableStateOf(initialPage) }
     val showPage = { target: SettingsPage ->
+        // Opened from a row or a link: on a television the remote goes into the page.
+        paneEntry = true
         page = target
         onPageChange(target)
     }
@@ -574,6 +614,7 @@ fun SettingsScreen(
     val jumps = remember { SetupStep.entries.associateWith { JumpTarget() } }
     val closePage = {
         val back = cameFromStep
+        paneEntry = true
         if (back != null && page != SettingsPage.SetupChoices) {
             page = SettingsPage.SetupChoices
             onPageChange(SettingsPage.SetupChoices)
@@ -602,8 +643,21 @@ fun SettingsScreen(
     }
 
     // Back on a page goes to the list, not out of Settings. Composed after the caller's own
-    // handler, so it is the one asked first while a page is open.
-    BackHandler(enabled = page != null) { closePage() }
+    // handler, so it is the one asked first while a page is open. A television's Back is the
+    // pane's (TvSettingsPane): to the rail, then out.
+    BackHandler(enabled = !remoteHere && page != null) { closePage() }
+    // The pane following the rail (WP-07): the page changes, the remote stays on the rail.
+    val followRail = { target: SettingsPage ->
+        cameFromStep = null
+        returnTo = null
+        paneEntry = false
+        page = target
+        onPageChange(target)
+    }
+    // Whatever page the rail shows is the one Settings opens on next time in this session.
+    if (remoteHere) {
+        LaunchedEffect(page) { page?.let { SettingsRail.last = it.railItem } }
+    }
 
     suspend fun refresh() {
         // A TDLib round trip per record and a walk of the files directory, kept off the thread
@@ -665,39 +719,42 @@ fun SettingsScreen(
     // Nothing on a phone is driven by focus, and stealing it there would scroll the list to a
     // control the viewer never asked for.
     if (!touch) {
+        // A television (WP-07): the rail is beside every page. Opened without a page asked for,
+        // the remote starts on the rail, on the category used last (Playback the first time).
+        LaunchedEffect(Unit) {
+            if (!paneEntry) page?.let { railFocus.getValue(it.railItem).settle() }
+        }
         LaunchedEffect(page) {
-            val open = page
+            val open = page ?: return@LaunchedEffect
+            // The pane following the rail: the remote stays where it is.
+            val intoPane = paneEntry
+            paneEntry = false
+            if (!intoPane) return@LaunchedEffect
             // A jump from Setup choices lands on its row instead (the effect below).
-            if (open != null && jumpTo != null && open != SettingsPage.SetupChoices) return@LaunchedEffect
-            if (open != null) {
-                // Back from a sub-page lands on the row of this page that opened it.
-                val opener = returnTo?.takeIf { it.parent == open }
-                returnTo = null
-                if (opener == null || !categoryFocus.getValue(opener).settle()) landing.settle()
+            if (jumpTo != null && open != SettingsPage.SetupChoices) return@LaunchedEffect
+            // Back from a sub-page lands on the row of this page that opened it.
+            val opener = returnTo?.takeIf { it.parent == open }
+            returnTo = null
+            // The pane shows about five rows, so the opener (Troubleshooting, near Help's foot) may
+            // not be composed yet: the page is stepped down until it is, a screenful at a time.
+            val openerFound = opener != null && run {
+                val row = categoryFocus.getValue(opener)
+                if (row.settle()) return@run true
+                val count = pageState.layoutInfo.totalItemsCount
+                for (index in 0 until count step OPENER_STEP) {
+                    pageState.scrollToItem(index)
+                    if (row.settle()) return@run true
+                }
+                false
+            }
+            if (!openerFound) {
+                // A page whose landing row is not there gives the remote back to the rail
+                // rather than to nothing.
+                if (!landing.settle()) railFocus.getValue(open.railItem).settle()
                 // Focus asks to be brought into view with room to spare, which can push the
-                // heading off the top; once it has settled, the page goes back to its top.
+                // notes at the top out of sight; once it has settled, the page goes back to its top.
                 withFrameNanos { }
                 pageState.scrollToItem(0)
-            } else {
-                val back = returnTo
-                returnTo = null
-                // Back from a page lands on the row that opened it, with the list scrolled where
-                // it was. A first arrival starts on the first row, at the top.
-                val row = categoryFocus.getValue(back ?: SettingsPage.entries.first())
-                // A list drawn afresh (Settings left for Downloads and come back to) starts at
-                // its top, where a row near the foot such as Storage is not laid out yet and
-                // cannot take focus: the list goes to its foot for it, and focus brings it into view.
-                if (!row.settle() && back != null && listState.layoutInfo.totalItemsCount > 0) {
-                    listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
-                    if (!row.settle()) {
-                        listState.scrollToItem(0)
-                        row.settle()
-                    }
-                }
-                if (back == null) {
-                    withFrameNanos { }
-                    listState.scrollToItem(0)
-                }
             }
         }
     }
@@ -778,37 +835,23 @@ fun SettingsScreen(
                     Modifier
                 },
             )
-            .padding(horizontal = if (touch) PhonePad.Side else Tv.SafeH),
+            // A television's pane sits inside the safe area already (TvSettingsPane).
+            .padding(horizontal = if (touch) PhonePad.Side else 0.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             start = largeGutter,
             end = largeGutter,
             // The app bar already clears the status bar on a phone, so the list only owes the
             // gesture bar at the bottom.
-            // A television's Settings opens from the account menu without the top bar over it.
-            top = if (touch) 4.dp else Tv.SafeV,
-            bottom = if (touch) maxOf(insets.calculateBottomPadding(), LocalBottomChrome.current) + 32.dp else 40.dp,
+            // A television's pane starts under its pinned header, which says where the remote is.
+            top = 4.dp,
+            bottom = if (touch) maxOf(insets.calculateBottomPadding(), LocalBottomChrome.current) + 32.dp else 16.dp,
         ),
         // The gap between two rows of a phone's preference list is a divider's worth of nothing,
         // not a card margin.
         verticalArrangement = Arrangement.spacedBy(if (touch) 0.dp else 10.dp),
     ) {
-        // TV only: the phone's app bar already says where the viewer is and offers the way out.
-        if (!touch) {
-            // No top bar over Settings on a television: the list and each page say where the
-            // remote is, in one compact line.
-            (page?.let { titleOf(it) } ?: s.settingsTitle).let { heading ->
-                item {
-                    Text(
-                        heading,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Tone.text,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
-                }
-            }
-        }
+        // A television's heading is the pane's pinned header (WP-07), outside this list, so the
+        // focused row never scrolls under it.
 
         // Whatever is currently running, at the top rather than below the last row: a viewer who
         // has just pressed a row is not looking past the end of the list.
@@ -826,8 +869,10 @@ fun SettingsScreen(
         }
 
         // "Recommended for this device" (CP68), above the categories while anything recommended
-        // for a device short of memory or storage is still off. It draws nothing otherwise.
-        if (page == null && searchQuery.isBlank()) {
+        // for a device short of memory or storage is still off. It draws nothing otherwise. A
+        // television has no category list (WP-07): there it heads Playback, the page Settings
+        // first opens on.
+        if ((page == null || (!touch && page == SettingsPage.Playback)) && searchQuery.isBlank()) {
             item {
                 com.tmplayer.ui.onboarding.DeviceFitSettingsCard(
                     settings,
@@ -1943,6 +1988,11 @@ fun SettingsScreen(
                 if (account != null) {
                     settingsNote(key = "account_header") { AccountHeader(account) }
                 }
+                // The devices and the sync read Telegram: offline, one quiet line says what they
+                // show instead of a spinner that never ends (WP-07, television).
+                if (!touch && offlineLine) {
+                    settingsNote(key = "offline_line") { SettingsNoteText(s.settingsOfflineLine) }
+                }
                 sectionTitle { s.settingsAccountSignedIn }
                 // Where the account is signed in, and ending a session (CP83). Inside Settings, so
                 // behind its PIN when the lock or the kids lock asks for one.
@@ -2633,7 +2683,50 @@ fun SettingsScreen(
             FloatingBackButton(TmIcons.ArrowBack, s.commonBack, onBack, Modifier.align(Alignment.TopStart))
         }
     } else {
-        list()
+        // A television (WP-07): the category rail, the open page beside it, the header pinned
+        // over both. The page is the same list a phone scrolls, without its heading.
+        val shown = page ?: SettingsRail.entry(railPages)
+        TvSettingsPane(
+            pages = railPages,
+            open = shown.railItem,
+            title = { titleOf(it) },
+            icon = { railIcon(it) },
+            railFocus = railFocus,
+            breadcrumb = breadcrumb,
+            paneTitle = titleOf(shown),
+            paneKey = shown,
+            onFollow = { target -> followRail(target) },
+            onEnterPane = { target ->
+                if (page?.railItem != target) {
+                    cameFromStep = null
+                    returnTo = null
+                    showPage(target)
+                } else {
+                    scope.launch { if (!landing.settle()) railFocus.getValue(target).settle() }
+                }
+            },
+            onBackInPane = {
+                // Out of a sub-page (Troubleshooting, Redo setup choices) first, as on a phone;
+                // from a page of the rail, to its rail item.
+                if (page?.parent != null || cameFromStep != null) {
+                    closePage()
+                } else {
+                    scope.launch { railFocus.getValue(shown.railItem).settle() }
+                }
+            },
+            landing = landing,
+            entry = if (initialPage != null) landing else railFocus.getValue(shown.railItem),
+            arrived = tvArrived,
+            headerEnd = {
+                com.tmplayer.ui.components.VersionNote(
+                    info = com.tmplayer.ui.components.rememberVersionInfo(),
+                    copyable = false,
+                    onUpdate = { showUpdate = true },
+                )
+            },
+        ) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalSettingsBreadcrumb provides breadcrumb) { list() }
+        }
     }
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
@@ -2823,6 +2916,21 @@ fun SettingsScreen(
     if (showUpdate) {
         UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
     }
+}
+
+/** A category's icon on the television's rail: its row's in the phone's list, Help's own so it is not About's twin. */
+@Composable
+private fun railIcon(page: SettingsPage): ImageVector = when (page) {
+    SettingsPage.Accounts -> TmIcons.Account
+    SettingsPage.Playback -> TmIcons.Play
+    SettingsPage.Subtitles -> ImageVector.vectorResource(R.drawable.ic_subtitles)
+    SettingsPage.Storage -> TmIcons.Download
+    SettingsPage.Appearance -> TmIcons.Palette
+    SettingsPage.Library -> TmIcons.Home
+    SettingsPage.Privacy -> TmIcons.Lock
+    SettingsPage.Notifications -> TmIcons.Bell
+    SettingsPage.Help, SettingsPage.Troubleshooting, SettingsPage.SetupChoices -> TmIcons.Help
+    SettingsPage.About -> TmIcons.Info
 }
 
 /**
