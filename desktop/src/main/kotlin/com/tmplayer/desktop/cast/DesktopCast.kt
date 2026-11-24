@@ -156,6 +156,8 @@ class SwitchingEngine(val local: PlaybackEngine) : PlaybackEngine {
     override fun setScale(scale: VideoScale) = active.setScale(scale)
     override fun setZoom(zoom: Double, panX: Double, panY: Double) = active.setZoom(zoom, panX, panY)
     override fun setDownmix(stereo: Boolean) = active.setDownmix(stereo)
+    override fun setSoftwareDecoding(on: Boolean) = active.setSoftwareDecoding(on)
+    override fun stutterFacts(appVersion: String) = active.stutterFacts(appVersion)
     override fun setVolumeBoost(on: Boolean) = active.setVolumeBoost(on)
     override fun setNightMode(on: Boolean) = active.setNightMode(on)
     override fun setStereo3d(stereo: com.tmplayer.player.Stereo3d) = active.setStereo3d(stereo)

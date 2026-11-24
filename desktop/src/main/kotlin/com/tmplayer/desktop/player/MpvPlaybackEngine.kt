@@ -389,6 +389,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             speed = prefs.speed,
             scale = prefs.scale,
             downmix = prefs.downmix,
+            softwareDecoding = prefs.hwdec == OpenPrefs.HWDEC_SOFTWARE,
+            decodedHere = true,
             volume = prefs.volume,
             muted = prefs.muted,
             volumeBoost = prefs.volumeBoost,
@@ -738,6 +740,15 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             applyAspect(aspect.stereo(wanted, width, height))
         }.onFailure { Logger.w(TAG, "3D shader not applied", it) }
     }
+
+    override fun setSoftwareDecoding(on: Boolean) {
+        // mpv's hwdec is a runtime property: the decoder is opened again in place.
+        runCatching { handle.setPropertyString("hwdec", OpenPrefs.hwdecFor(on)) }
+        _state.update { it.copy(softwareDecoding = on) }
+    }
+
+    override fun stutterFacts(appVersion: String): com.tmplayer.data.StutterReport.Facts? =
+        if (!_state.value.opened) null else runCatching { DesktopStutter.facts(MpvProps(handle), appVersion) }.getOrNull()
 
     override fun setDownmix(stereo: Boolean) {
         runCatching { handle.setPropertyString("audio-channels", if (stereo) "stereo" else "auto-safe") }

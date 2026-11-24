@@ -189,6 +189,12 @@ internal sealed interface MenuAction {
     /** Rotate picture's next quarter turn clockwise (#34); the menu stays open for the next. */
     data object RotatePicture : MenuAction
     data object ToggleDownmix : MenuAction
+
+    /** Force software decoding from the player (WP-25): mpv's `hwdec` in place, kept as the setting. */
+    data object ToggleSoftwareDecoding : MenuAction
+
+    /** Report stutter (WP-25): what the decoder saw goes into Send logs, and as a report with crash reporting on. */
+    data object ReportStutter : MenuAction
     data object ToggleVolumeBoost : MenuAction
     data object ToggleNightMode : MenuAction
 
@@ -1255,6 +1261,11 @@ internal fun PlayerMenu(
                     Entry(s.playerFramePrevious, trailing = ",") { onAction(MenuAction.Do(PlayerAction.FrameStep(forward = false))) }
                 }
                 Entry(s.playerIgnoreClicks, checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
+                // The decoder lines (WP-25): only for a picture decoded here, never a cast's.
+                if (status.decodedHere) {
+                    Entry(s.settingsSoftwareDecoding, checked = status.softwareDecoding) { onAction(MenuAction.ToggleSoftwareDecoding) }
+                    Entry(s.playerReportStutter, detail = s.playerReportStutterDetailDesktop) { pick(MenuAction.ReportStutter) }
+                }
                 Entry(s.playerDetails, trailing = "I") { pick(MenuAction.Details) }
             }
             MenuPage.Audio -> {

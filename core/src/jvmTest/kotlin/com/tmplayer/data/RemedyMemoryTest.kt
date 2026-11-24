@@ -29,6 +29,17 @@ class RemedyMemoryTest {
     }
 
     @Test
+    fun theViewersMoveBackToTheDeviceDecoderIsNoLongerTheStart() {
+        // WP-25: the player's decoder line learned software, then the viewer went back.
+        val software = RemedyMemory.Empty.learned(key, Remedy.Software, day).learned(key, Remedy.AudioSoftware, day)
+        assertEquals(setOf(Remedy.Software, Remedy.AudioSoftware), software.planFor(key, v1).start)
+        val back = software.unlearned(key, Remedy.Software, day)
+        assertEquals(setOf(Remedy.AudioSoftware), back.planFor(key, v1).start)
+        // Unknown class: a record with nothing learned, never a crash.
+        assertEquals(emptySet(), RemedyMemory.Empty.unlearned("x", Remedy.Software, day).planFor("x", v1).start)
+    }
+
+    @Test
     fun demotedOnlyAfterTwoFailuresOnTwoVideos() {
         var memory = RemedyMemory.Empty.worked(key, listOf(Remedy.Software), day)
         memory = memory.failed(key, Remedy.Software, "video1", v1, day)

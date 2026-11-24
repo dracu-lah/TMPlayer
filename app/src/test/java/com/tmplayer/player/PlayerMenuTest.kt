@@ -141,6 +141,7 @@ class PlayerMenuTest {
             reportStutter = true,
             copyLinkAtTime = true,
             otherEngine = true,
+            decoder = true,
             repeatVideo = true,
             markIntro = true,
             removeIntroMark = true,
@@ -169,6 +170,7 @@ class PlayerMenuTest {
                 reportStutter = true,
                 copyLinkAtTime = true,
                 otherEngine = true,
+                decoder = true,
                 repeatVideo = true,
                 markIntro = true,
                 removeIntroMark = true,
@@ -249,7 +251,7 @@ class PlayerMenuTest {
                 addToList = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, brightness = true, addToList = true, airPlay = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, brightness = true, addToList = true, airPlay = true, decoder = true).toSet())
     }
 
     @Test
@@ -376,6 +378,23 @@ class PlayerMenuTest {
     }
 
     @Test
+    fun `try the other decoder comes only with a plan, just above the other engine (WP-25)`() {
+        assertFalse(PhoneMenuEntry.Decoder in PlayerMenu.phoneEntries(true, true, true, true, otherEngine = true))
+        assertFalse(PlayerMenuEntry.Decoder in PlayerMenu.tvEntries(pictureInPicture = true, otherEngine = true))
+        val phone = PlayerMenu.phoneEntries(true, true, true, true, otherEngine = true, decoder = true)
+        assertEquals(phone.indexOf(PhoneMenuEntry.Decoder) + 1, phone.indexOf(PhoneMenuEntry.OtherEngine))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, otherEngine = true, decoder = true)
+        assertEquals(tv.indexOf(PlayerMenuEntry.Decoder) + 1, tv.indexOf(PlayerMenuEntry.OtherEngine))
+        assertEquals(PlayerMenuGroup.Playback, PlayerMenu.groupOf(PlayerMenuEntry.Decoder))
+        // Without the other engine it still comes before Start over, in the same group.
+        val alone = PlayerMenu.tvEntries(pictureInPicture = true, decoder = true)
+        assertEquals(alone.indexOf(PlayerMenuEntry.Decoder) + 1, alone.indexOf(PlayerMenuEntry.StartOver))
+        // A protected chat keeps it: the decoder is TMPlayer's own.
+        assertTrue(PhoneMenuEntry.Decoder in PlayerMenu.phoneEntries(true, false, true, true, decoder = true))
+        assertEquals(com.tmplayer.i18n.L.playerDecoderOther, PhoneMenuEntry.Decoder.label())
+    }
+
+    @Test
     fun `try the other engine sits above open in another app on the phone, in Playback ahead of start over on the television`() {
         val phone = PlayerMenu.phoneEntries(true, true, true, true, otherEngine = true)
         assertEquals(phone.indexOf(PhoneMenuEntry.OtherEngine) + 1, phone.indexOf(PhoneMenuEntry.OpenInAnotherApp))
@@ -438,6 +457,7 @@ class PlayerMenuTest {
         reportStutter = true,
         copyLinkAtTime = true,
         otherEngine = true,
+        decoder = true,
         repeatVideo = true,
         markIntro = true,
         removeIntroMark = true,

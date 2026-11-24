@@ -2137,6 +2137,25 @@ fun PlayerScreen(
                             prefs.update { it.copy(downmix = on) }
                             showFlash(Flash.Kind.Text, if (on) s.playerDownmixOn else s.playerDownmixOff)
                         }
+                        MenuAction.ToggleSoftwareDecoding -> {
+                            // mpv applies hwdec in place; kept as the setting, as the downmix is.
+                            val on = !status.softwareDecoding
+                            engine.setSoftwareDecoding(on)
+                            prefs.update { it.copy(softwareDecoding = on) }
+                            showFlash(Flash.Kind.Text, if (on) s.playerDecoderSoftwareNow else s.playerDecoderHardwareNow)
+                        }
+                        MenuAction.ReportStutter -> {
+                            val facts = engine.stutterFacts(com.tmplayer.desktop.BuildInfo.VERSION)
+                            showFlash(Flash.Kind.Text, s.playerStutterMarkedDesktop)
+                            if (facts != null) {
+                                playerScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    runCatching {
+                                        com.tmplayer.platform.Logger.i("Player", DesktopStutter.line(facts))
+                                        com.tmplayer.desktop.DesktopCrashReports.reportStutter(facts)
+                                    }
+                                }
+                            }
+                        }
                         MenuAction.ToggleVolumeBoost -> toggleVolumeBoost()
                         MenuAction.ToggleNightMode -> toggleNightMode()
                         MenuAction.ToggleRepeatVideo -> toggleRepeatVideo()

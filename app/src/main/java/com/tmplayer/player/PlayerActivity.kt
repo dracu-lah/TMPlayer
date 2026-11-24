@@ -8183,6 +8183,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
+            decoder = menuDecoderPlan() != null,
             repeatVideo = true,
             markIntro = skipCtl.canMark,
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
@@ -8211,6 +8212,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             reportStutter = stutterReportable(),
             copyLinkAtTime = linkAtTimeOffered(),
             otherEngine = otherEngineOffered(),
+            decoder = menuDecoderPlan() != null,
             repeatVideo = true,
             markIntro = skipCtl.canMark,
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
@@ -8248,6 +8250,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun jumpToChapter(startMs: Long) = jumpToChapterStart(startMs)
         override fun watched() = onWatchedList
         override fun engineNow(): String? = if (vlcEngine != null) L.settingsEngineVlc else L.settingsEngineExoplayer
+        override fun decoderDetail(): String? = menuDecoderDetail()
         override fun bookmarks() = if (hasMessage()) bookmarkActions() else null
         override fun addToList() = listTarget()
         override fun playbackDetails() = this@PlayerActivity.playbackDetails()
@@ -8300,6 +8303,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.NextFrame -> frameStep(forward = true)
             PhoneMenuEntry.PreviousFrame -> frameStep(forward = false)
             PhoneMenuEntry.SaveFrame -> saveFrame()
+            PhoneMenuEntry.Decoder -> switchDecoderFromMenu()
             PhoneMenuEntry.OtherEngine -> switchEngine()
             PhoneMenuEntry.OpenInAnotherApp -> openInAnotherApp()
             PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
@@ -8328,6 +8332,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.StartOver -> startOver()
             PlayerMenuEntry.Stereo -> showStereo()
             PlayerMenuEntry.PictureInPicture -> enterPictureInPictureNow()
+            PlayerMenuEntry.Decoder -> switchDecoderFromMenu()
             PlayerMenuEntry.OtherEngine -> switchEngine()
             PlayerMenuEntry.OpenInAnotherApp -> openInAnotherApp()
             PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
@@ -10543,6 +10548,64 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         showStatus(if (plan.toFfmpeg) L.playerDecoderSoftwareNow else L.playerDecoderDeviceNow)
         exo.prepare()
         exo.playWhenReady = true
+    }
+
+    /**
+     * The More menu's Try the other decoder while the video plays (WP-25): the switch for the
+     * picture on screen, or null where there is none to make: VLC or a cast plays it, no picture
+     * yet, or the other side has no decoder for its format ([DecoderSwitch.planForPicture]).
+     */
+    private fun menuDecoderPlan(): DecoderSwitch.Plan? {
+        if (vlcEngine != null || castUp()) return null
+        return runCatching { DecoderSwitch.planForPicture(player) }.getOrNull()
+    }
+
+    /**
+     * The decoder line's detail (WP-25): which decoder shows the picture now, or, before a move to
+     * software, what it costs: an HDR picture shown as SDR, or a large picture a weak device may
+     * not decode in time (the could-not-keep-up warning, said before rather than after).
+     */
+    private fun menuDecoderDetail(): String? {
+        val plan = menuDecoderPlan() ?: return null
+        if (!plan.toFfmpeg) return L.playerDecoderSoftwareNow
+        val format = player?.videoFormat
+        if (format != null) {
+            val color = format.colorInfo
+            if (color != null && androidx.media3.common.ColorInfo.isTransferHdr(color)) return L.playerDecoderSoftwareHdr
+            if (com.tmplayer.data.SoftwareDecode.heavy(format.sampleMimeType, format.width, format.height, hardware = false, weak = weakDevice)) {
+                return L.playerDecoderSoftwareSlow
+            }
+        }
+        return L.playerDecoderDeviceNow
+    }
+
+    /**
+     * The menu's Try the other decoder (WP-25), for a picture that plays wrong without an error
+     * (green or choppy frames): the same [DecoderSwitch] the failure sheet uses, the player
+     * stopped and prepared again where it stood, with the same tracks (the selector keeps them) and
+     * the same play or pause. It is the viewer's pick ([RemedyRunner.viewerPickedDecoder]): it
+     * spends this video's decoder level, so neither the ladder nor the player's own one-time switch
+     * moves the picture back by itself, and the class starts there next time. A second press goes
+     * back, the viewer's choice again; it never loops by itself.
+     */
+    private fun switchDecoderFromMenu() {
+        val plan = menuDecoderPlan() ?: return
+        val exo = player ?: return
+        val position = exo.currentPosition
+        val wasPlaying = exo.playWhenReady
+        decoderPlan = null
+        if (plan.trackType == C.TRACK_TYPE_VIDEO) videoSwitchedToSoftware = plan.toFfmpeg
+        decodersSwitched += plan.trackType
+        remedies.viewerPickedDecoder(plan.toFfmpeg)
+        Log.i(START_TAG, "Decoder: the viewer moved the picture to the ${if (plan.toFfmpeg) "FFmpeg" else "device"} decoder at $position ms")
+        DecoderSwitch.apply(exo, plan)
+        runCatching {
+            exo.stop()
+            exo.seekTo(position)
+            exo.prepare()
+            exo.playWhenReady = wasPlaying
+        }.onFailure { Log.w(START_TAG, "Decoder: the switch could not prepare the player again", it) }
+        showStatus(if (plan.toFfmpeg) L.playerDecoderSoftwareNow else L.playerDecoderDeviceNow)
     }
 
     /**

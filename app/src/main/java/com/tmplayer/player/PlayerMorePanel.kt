@@ -172,6 +172,12 @@ interface PlayerMoreHost {
     /** The engine playing now ("ExoPlayer", "VLC"), the Try the other engine line's detail (PR2). */
     fun engineNow(): String? = null
 
+    /**
+     * The Try the other decoder line's detail (WP-25): which decoder shows the picture now, or why
+     * the other one may disappoint (HDR shown as SDR, a weak device that may not keep up).
+     */
+    fun decoderDetail(): String? = null
+
     /** The video's bookmarks and what to do with them, or null for a video with no message. */
     fun bookmarks(): BookmarkSheetActions?
 
@@ -473,7 +479,7 @@ class PlayerMorePanel(
     private enum class Kind {
         LockScreen, PictureInPicture, AirPlay, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
         PlayerVolume, Brightness, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
-        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
+        NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, Decoder, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, AddToList, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
 
@@ -605,6 +611,7 @@ class PlayerMorePanel(
             Kind.Bookmarks -> Line(kind, s.playerBookmarks, TmIcons.Bookmark, bookmarkCount.takeIf { it > 0 }?.let { s.playerBookmarksCount(it) })
             Kind.MarkIntro -> Line(kind, if (host.introMarking()) s.playerMarkIntroEnd else s.playerMarkIntro, TmIcons.SkipNext, null)
             Kind.RemoveIntroMark -> Line(kind, s.playerMarkIntroRemove, TmIcons.Close, null)
+            Kind.Decoder -> Line(kind, s.playerDecoderOther, TmIcons.Refresh, host.decoderDetail())
             Kind.OtherEngine -> Line(kind, s.playerEngineOther, TmIcons.Play, host.engineNow()?.let { s.playerEngineOtherDetail(it) })
             Kind.OpenInAnotherApp -> Line(kind, s.playerOpenInAnotherApp, TmIcons.OpenExternal, null)
             Kind.CopyLinkAtTime -> Line(kind, s.playerCopyLinkAtTime, TmIcons.Copy, null)

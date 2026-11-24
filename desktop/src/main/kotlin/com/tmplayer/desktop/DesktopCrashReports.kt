@@ -63,6 +63,23 @@ object DesktopCrashReports {
     @Volatile
     private var limits: CrashLimits? = null
 
+    /** The daily limit of Report stutter events (WP-25), one a day for each kind of video. Set by [watch]. */
+    @Volatile
+    private var stutterReporter: com.tmplayer.data.StutterReporter? = null
+
+    /**
+     * The player's Report stutter (WP-25): sent only with crash reporting on and only when the
+     * numbers show a stutter ([com.tmplayer.data.StutterReport.worthSending]); with it off nothing
+     * is built, counted or queued. Writes a small file, so off the main thread.
+     */
+    fun reportStutter(facts: com.tmplayer.data.StutterReport.Facts): Boolean {
+        if (!available) return false
+        return runCatching { stutterReporter?.report(facts, ENGINE) == true }.getOrDefault(false)
+    }
+
+    /** The engine name the stutter counts go by: mpv on the desktop. */
+    private const val ENGINE = "mpv"
+
     /** When [watch] ran, for how far into the run a crash came. */
     private var startedAtNanos = System.nanoTime()
 
@@ -91,6 +108,10 @@ object DesktopCrashReports {
         val file = File(dir, "pending.json")
         this.file = file
         limits = CrashLimits(File(dir, "limits.json"))
+        stutterReporter = com.tmplayer.data.StutterReporter(
+            enabled = { enabledNow && started },
+            limits = com.tmplayer.data.StutterLimits(File(dir, "stutter.json")),
+        )
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             lastUncaught = error
@@ -163,6 +184,10 @@ object DesktopCrashReports {
      * against the day's limits.
      */
     private fun gate(event: SentryEvent): SentryEvent? {
+        // A Report stutter press (WP-25): the stutter's own scrub, only tags it allows, only with the switch on.
+        if (com.tmplayer.data.StutterReport.isStutter(event)) {
+            return if (enabledNow) com.tmplayer.data.StutterReport.scrub(stamp(event)) else null
+        }
         val record = sendingRecord
         val kept = when {
             record != null && event.eventId == record.second -> {

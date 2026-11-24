@@ -64,6 +64,22 @@ object DecoderSwitch {
     }
 
     /**
+     * The switch the player's menu offers for a picture that plays wrong without an error (WP-25,
+     * green or choppy frames): from the decoder showing the picture now ([softwareVideoChosen]) to
+     * the other one, only when the other side has a decoder for the picture's format at all, so
+     * the line never leads to a picture that cannot play. Null with no picture yet (sound alone,
+     * before the tracks are known) or nothing else to decode it with.
+     */
+    fun planForPicture(player: ExoPlayer?): Plan? {
+        player ?: return null
+        val mime = player.videoFormat?.sampleMimeType ?: return null
+        if (!MimeTypes.isVideo(mime)) return null
+        val onSoftware = softwareVideoChosen(player)
+        val possible = if (onSoftware) hasMediaCodec(mime) else ffmpegHas(mime)
+        return if (possible) Plan(C.TRACK_TYPE_VIDEO, toFfmpeg = !onSoftware) else null
+    }
+
+    /**
      * Turns the other renderers of [plan]'s track type off, so the chosen side takes the track at
      * the next prepare. Every other track type is left as it is.
      */

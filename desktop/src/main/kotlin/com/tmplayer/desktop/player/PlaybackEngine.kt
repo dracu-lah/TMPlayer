@@ -76,6 +76,19 @@ interface PlaybackEngine {
     fun setDownmix(stereo: Boolean)
 
     /**
+     * The menu's software decoding (WP-25, PO-09): mpv's `hwdec` set while the video plays, which
+     * mpv applies to the decoder in place, at the same position and tracks. An engine with no
+     * decoder of its own (a cast) ignores it.
+     */
+    fun setSoftwareDecoding(on: Boolean) {}
+
+    /**
+     * What the decoder saw at a Report stutter press (WP-25), as [com.tmplayer.data.StutterReport]
+     * facts, or null where there is no picture decoded here (a cast, nothing open).
+     */
+    fun stutterFacts(appVersion: String): com.tmplayer.data.StutterReport.Facts? = null
+
+    /**
      * The menu's Volume boost: the whole volume scale lifted, so full volume is mpv's
      * [BOOSTED_VOLUME_MAX] rather than 100. The volume the viewer sees and sets stays 0 to 100.
      */
@@ -189,6 +202,10 @@ data class PlaybackStatus(
     val downmix: Boolean = false,
     val volumeBoost: Boolean = false,
     val nightMode: Boolean = false,
+    /** Decoding in software now (mpv `hwdec=no`), from the setting or the menu's switch (WP-25). */
+    val softwareDecoding: Boolean = false,
+    /** The picture is decoded here (mpv), not on a cast's TV: the decoder lines of the menu need it (WP-25). */
+    val decodedHere: Boolean = false,
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     val subtitleDelayMs: Long = 0,
     val audioDelayMs: Long = 0,

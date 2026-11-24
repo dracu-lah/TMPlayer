@@ -156,6 +156,9 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
     private var builtPath = RemedyPath()
     private var exhausted = false
     private var decoderSwitchedByItself = false
+
+    /** The decoder the viewer picked for this video from the player's menu (WP-25): true for software, null until then. */
+    private var viewerSoftware: Boolean? = null
     private var engineSwitchedByItself = false
     private val firstFrameWatch = FirstFrameWatch()
     private val frozenWatch = FrozenOutputWatch()
@@ -198,6 +201,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         exhausted = false
         replacingUntilMs = -1L
         decoderSwitchedByItself = false
+        viewerSoftware = null
         engineSwitchedByItself = false
         codecErrors = 0
         viewerStepTaken = false
@@ -219,7 +223,9 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
 
     /** The path the next ExoPlayer is built on, logged by the caller. */
     fun policyForBuild(): DecoderPolicy {
-        val path = ladder?.path ?: startPath()
+        val planned = ladder?.path ?: startPath()
+        // The viewer's decoder pick (WP-25) holds through a re-open for a sound or engine step.
+        val path = viewerSoftware?.let { planned.copy(software = it) } ?: planned
         builtPath = path
         replacingUntilMs = -1L
         return DecoderPolicy.of(path, known.async, host.sdk)
@@ -227,7 +233,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
 
     /** Before the class is known: what the device list says about this device alone. */
     private fun startPath(): RemedyPath {
-        if (!active || host.facts(emptySet()).decoderPicked) return RemedyPath()
+        if (!active || facts(emptySet()).decoderPicked) return RemedyPath()
         return RemedyPath(
             excluded = known.exclude.take(RemedyLadder.MAX_EXCLUDED).toSet(),
             asyncFlipped = known.async == true && host.sdk in 1 until RemedyLadder.ASYNC_DEFAULT_SDK,
@@ -245,7 +251,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         key = k
         val plan = KnownDevices.plan(memory.planFor(k, host.appVersion), known)
         val running = host.engineRunning()
-        val made = RemedyLadder(engineInput(), running, plan, host.facts(emptySet()))
+        val made = RemedyLadder(engineInput(), running, plan, facts(emptySet()))
         ladder = made
         host.log("Remedy: class $k, start ${made.taken.joinToString(",") { it.code }.ifEmpty { "default" }}")
         host.traceFacts(SessionFacts.ladder(k, made.taken, made.visited.size, made.hops.size))
@@ -321,7 +327,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         // The app's own decoder failing goes back to the device's the way it always did (DecoderSwitch).
         if (failed?.ffmpeg == true) return false
         if (evidence != RemedyEvidence.AudioFailed && decoderSwitchedByItself) return false
-        var facts = host.facts(l.path.excluded)
+        var facts = facts(l.path.excluded)
         if (evidence == RemedyEvidence.AudioFailed) {
             // An output that refused plain PCM is not helped by FFmpeg's PCM.
             facts = facts.copy(audioSoftwareTakes = AudioPolicy.softwareHelps(error, facts.audioSoftwareTakes))
@@ -364,6 +370,38 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         engineSwitchedByItself = true
     }
 
+    /** The host's facts, with the decoder counted as picked once the viewer chose one in the menu: choices win over the ladder. */
+    private fun facts(excluded: Set<String>): LadderFacts {
+        val read = host.facts(excluded)
+        return if (viewerSoftware != null) read.copy(decoderPicked = true) else read
+    }
+
+    /**
+     * The viewer chose the other decoder from the player's menu (WP-25, "Try the other decoder"
+     * while the video plays): a choice, not an automatic hop, so it is never refused and never
+     * counted in [RemedyLadder.MAX_HOPS]. It spends this video's decoder level, so neither the
+     * ladder nor the player's own one-time switch moves the picture back by itself (no loop); it
+     * holds through a re-open ([policyForBuild]); and it is the class's start next time, software
+     * learned or unlearned in [RemedyMemory], as the ladder remembers what worked. A probation
+     * wait for the old path is dropped and the watches start again for the new one.
+     */
+    fun viewerPickedDecoder(software: Boolean) {
+        viewerSoftware = software
+        decoderSwitchedByItself = true
+        later?.let(clock::cancel)
+        later = null
+        replacing()
+        rearm()
+        val k = key ?: return
+        if (!active) return
+        memory = if (software) memory.learned(k, Remedy.Software, host.today()) else memory.unlearned(k, Remedy.Software, host.today())
+        host.saveMemory(memory)
+        host.log("Remedy: viewer picked the ${if (software) "software" else "device"} decoder, class $k")
+    }
+
+    /** The decoder the viewer picked in the menu for this video, null when none (WP-25). */
+    val viewerDecoderSoftware: Boolean? get() = viewerSoftware
+
     private fun engineInput(): EngineInput =
         host.engineInput() ?: EngineInput(choice = EngineChoice.Automatic, device = DeviceFacts(), vlcAvailable = false)
 
@@ -397,11 +435,11 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         val s = host.sample() ?: return
         val now = s.nowMs
         if (firstFrameWatch.sample(now, s.ready, s.audioPlaying, s.buffering, false, s.software, s.hidden, !s.pictureExpected)) {
-            if (perform(l.onEvidence(RemedyEvidence.NoFirstFrame, host.facts(l.path.excluded), clock.now()), RemedyEvidence.NoFirstFrame, null)) return
+            if (perform(l.onEvidence(RemedyEvidence.NoFirstFrame, facts(l.path.excluded), clock.now()), RemedyEvidence.NoFirstFrame, null)) return
         }
         val steady = s.playing && s.ready && !s.buffering && !s.hidden && s.pictureExpected
         if (pictureSeen && frozenWatch.sample(now, s.positionMs, steady, s.rendered, s.dropped, s.skipped, s.speed)) {
-            if (perform(l.onEvidence(RemedyEvidence.Frozen, host.facts(l.path.excluded), clock.now()), RemedyEvidence.Frozen, null)) return
+            if (perform(l.onEvidence(RemedyEvidence.Frozen, facts(l.path.excluded), clock.now()), RemedyEvidence.Frozen, null)) return
         }
         // A path that changed the sound is not learned while no sound plays (a track it left unsupported).
         if (steady && !s.audioPlaying && l.path.soundChanged()) silentWhileClean = true
@@ -441,7 +479,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             is RemedyAction.Offer -> {
                 host.offer(offerText(action.remedy), L.playerRemedyTry) {
                     val now = ladder ?: return@offer
-                    perform(now.accept(action, host.facts(now.path.excluded), clock.now()), action.evidence, null)
+                    perform(now.accept(action, facts(now.path.excluded), clock.now()), action.evidence, null)
                 }
                 false
             }
@@ -504,7 +542,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         val task = Runnable {
             later = null
             val l = ladder ?: return@Runnable
-            val dealt = !exhausted && perform(l.onEvidence(evidence, host.facts(l.path.excluded), clock.now()), evidence, error)
+            val dealt = !exhausted && perform(l.onEvidence(evidence, facts(l.path.excluded), clock.now()), evidence, error)
             if (!dealt && error != null) host.redeliver(error)
         }
         later = task
@@ -537,7 +575,7 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
             host.saveMemory(memory)
         }
         if (viewerStepTaken || exhausted || host.engineRunning().engine != PlayerEngine.ExoPlayer) return ViewerOutcome.Recorded
-        val action = l.onEvidence(report.evidence, host.facts(l.path.excluded), clock.now())
+        val action = l.onEvidence(report.evidence, facts(l.path.excluded), clock.now())
         if (action !is RemedyAction.Hop) return ViewerOutcome.Recorded
         viewerStepTaken = true
         stopTicking()

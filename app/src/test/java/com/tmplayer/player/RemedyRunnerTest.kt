@@ -320,6 +320,36 @@ class RemedyRunnerTest {
     }
 
     @Test
+    fun theViewersDecoderPickInTheMenuWinsOverTheLadderAndNeverLoops() {
+        open()
+        play()
+        // WP-25: Try the other decoder from the More menu while the video plays.
+        runner.viewerPickedDecoder(software = true)
+        assertEquals(true, runner.viewerDecoderSoftware)
+        assertEquals("a choice, not a hop: nothing re-opened by the runner", 0, player.reopened.size)
+        val learned = player.saved!!.records.values.single()
+        assertTrue("the class starts on software next time", Remedy.Software in learned.working)
+        assertEquals("not counted as a hop", 0, learned.hops)
+        // The player's own one-time switch may not move it back by itself.
+        play()
+        clock.advance(2_100)
+        assertFalse(runner.onPlayerError(decoderError(PlaybackException.ERROR_CODE_DECODING_FAILED)))
+        // A sound step's re-open keeps the viewer's decoder.
+        assertTrue(runner.policyForBuild().softwareVideo)
+        // A stutter press now steps somewhere other than the decoder the viewer picked.
+        val outcome = runner.viewerReported(RemedyRunner.ViewerReport.Stutter)
+        assertTrue(player.reopened.all { it.softwareVideo })
+        assertTrue(outcome == RemedyRunner.ViewerOutcome.Tried || outcome == RemedyRunner.ViewerOutcome.Recorded)
+        assertTrue("never past the budget", (runner.current?.hops?.size ?: 0) <= RemedyLadder.MAX_HOPS)
+        // Back to the device's decoder: no longer the class's start, and the next video starts clean.
+        runner.viewerPickedDecoder(software = false)
+        assertFalse(Remedy.Software in player.saved!!.records.values.single().working)
+        assertFalse(runner.policyForBuild().softwareVideo)
+        open()
+        assertEquals(null, runner.viewerDecoderSoftware)
+    }
+
+    @Test
     fun pictureLooksWrongLeavesTheDecoderNameOutEvenWithNeverSwitchOn() {
         player.autoSwitch = false
         open()

@@ -97,6 +97,14 @@ class RemedyMemory private constructor(val records: Map<String, RemedyRecord>) {
         record.copy(working = record.working.filter { it.level != remedy.level }.toSet() + remedy, fails = record.fails - remedy)
     }
 
+    /**
+     * The viewer moved a video of [key] off [remedy] from the player's menu (WP-25, the decoder line
+     * back to the device's decoder): it is no longer the class's start. Fails and crashes stay.
+     */
+    fun unlearned(key: String, remedy: Remedy, day: Int): RemedyMemory = touch(key, day) { record ->
+        record.copy(working = record.working - remedy)
+    }
+
     /** A video of [key] got a stutter verdict: its next stutter steps by itself. */
     fun stuttered(key: String, day: Int): RemedyMemory = touch(key, day) { it.copy(stutters = bump(it.stutters)) }
 

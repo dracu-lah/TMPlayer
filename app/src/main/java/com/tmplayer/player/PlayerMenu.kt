@@ -85,6 +85,12 @@ enum class PlayerMenuEntry {
     AddToList,
     PictureInPicture,
     /**
+     * "Try the other decoder" while the video plays (WP-25): a picture with green or choppy frames
+     * and no error moves to the device's decoder or the app's FFmpeg one, at the same place with
+     * the same tracks. Only when the other side decodes the picture's format ([DecoderSwitch.planForPicture]).
+     */
+    Decoder,
+    /**
      * The same video in the other engine (PR2), at the same place with the same tracks: ExoPlayer
      * to VLC or back. Only where the VLC library loads, never for 3D or a cast.
      */
@@ -165,6 +171,8 @@ enum class PhoneMenuEntry {
     /** Two presses: where the intro starts, then where it ends, as on the television. */
     MarkIntro,
     RemoveIntroMark,
+    /** The other decoder while the video plays (WP-25), as on the television. */
+    Decoder,
     /** The other engine, as on the television. */
     OtherEngine,
     OpenInAnotherApp,
@@ -219,6 +227,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.NextFrame -> L.playerFrameNext
     PhoneMenuEntry.PreviousFrame -> L.playerFramePrevious
     PhoneMenuEntry.SaveFrame -> L.playerSaveFrame
+    PhoneMenuEntry.Decoder -> L.playerDecoderOther
     PhoneMenuEntry.OtherEngine -> L.playerEngineOther
     PhoneMenuEntry.OpenInAnotherApp -> L.playerOpenInAnotherApp
     PhoneMenuEntry.CopyLinkAtTime -> L.playerCopyLinkAtTime
@@ -284,6 +293,10 @@ object PlayerMenu {
      * library loads here, a picture that is not 3D, no cast. It sits just above Open in another
      * app, the other way to a different player.
      *
+     * [decoder] is whether the picture can move to the other decoder while it plays (WP-25,
+     * [DecoderSwitch.planForPicture]): ExoPlayer's picture, no cast, the other side able to decode
+     * it. It sits just above the other engine, the next step out.
+     *
      * [markIntro] is whether the video is an episode of a show, which has a season to share a
      * mark with; [removeIntroMark] whether this episode has a mark of its own to take off.
      *
@@ -314,6 +327,7 @@ object PlayerMenu {
         rotatePicture: Boolean = false,
         playerVolume: Boolean = false,
         addToList: Boolean = false,
+        decoder: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         // WP-20: Lock first, then the frequent lines under no header, then the groups. Every line
         // is added under its own gate, so a group a device leaves empty is never drawn.
@@ -344,6 +358,7 @@ object PlayerMenu {
             add(PlayerMenuEntry.NextFrame)
             add(PlayerMenuEntry.PreviousFrame)
         }
+        if (decoder) add(PlayerMenuEntry.Decoder)
         if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         add(PlayerMenuEntry.StartOver)
         if (bookmarks) {
@@ -378,7 +393,7 @@ object PlayerMenu {
         -> PlayerMenuGroup.Sound
         PlayerMenuEntry.RepeatVideo, PlayerMenuEntry.AbLoop, PlayerMenuEntry.Chapters, PlayerMenuEntry.NextChapter,
         PlayerMenuEntry.PreviousChapter, PlayerMenuEntry.NextFrame, PlayerMenuEntry.PreviousFrame,
-        PlayerMenuEntry.OtherEngine, PlayerMenuEntry.StartOver, PlayerMenuEntry.AddBookmark,
+        PlayerMenuEntry.Decoder, PlayerMenuEntry.OtherEngine, PlayerMenuEntry.StartOver, PlayerMenuEntry.AddBookmark,
         PlayerMenuEntry.Bookmarks, PlayerMenuEntry.MarkIntro, PlayerMenuEntry.RemoveIntroMark,
         -> PlayerMenuGroup.Playback
         PlayerMenuEntry.SaveToDownloads, PlayerMenuEntry.OpenInAnotherApp, PlayerMenuEntry.CopyLinkAtTime,
@@ -418,7 +433,7 @@ object PlayerMenu {
      * (false on a cast, which plays on the other screen). [copyLinkAtTime] is false for a chat that
      * restricts saving, a video with no message and one built from pieces. [zoomed] adds Reset zoom under the
      * shape while a pinch has the picture enlarged. [otherEngine] adds Try the other engine, as on
-     * the television. [repeatVideo] adds Repeat this video under the A-B repeat (a video, not sound
+     * the television, and [decoder] Try the other decoder above it (WP-25). [repeatVideo] adds Repeat this video under the A-B repeat (a video, not sound
      * alone, which has its own repeat in the list). [addToList] offers "Add to a list" under Mark as
      * watched (a video from a message; see [tvEntries]). [airPlay] is iOS's AirPlay line, after
      * picture in picture (never on Android; a chat that restricts saving leaves it out). The lock stays first: the line people come here for.
@@ -447,6 +462,7 @@ object PlayerMenu {
         brightness: Boolean = false,
         addToList: Boolean = false,
         airPlay: Boolean = false,
+        decoder: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -480,6 +496,7 @@ object PlayerMenu {
         }
         if (markIntro) add(PhoneMenuEntry.MarkIntro)
         if (removeIntroMark) add(PhoneMenuEntry.RemoveIntroMark)
+        if (decoder) add(PhoneMenuEntry.Decoder)
         if (otherEngine) add(PhoneMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PhoneMenuEntry.CopyLinkAtTime)
