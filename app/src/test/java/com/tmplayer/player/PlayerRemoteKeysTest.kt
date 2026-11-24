@@ -185,4 +185,15 @@ class PlayerRemoteKeysTest {
         assertEquals(PlayerRemoteKeys.NextUpKey.Release, PlayerRemoteKeys.nextUpKey(KeyEvent.KEYCODE_DPAD_UP, engaged = true))
         assertEquals(PlayerRemoteKeys.NextUpKey.Release, PlayerRemoteKeys.nextUpKey(KeyEvent.KEYCODE_DPAD_DOWN, engaged = true))
     }
+
+    @Test
+    fun `the CC toggle turns the shown track off, else the last or default one on, else says there is none`() {
+        assertEquals(PlayerRemoteKeys.CaptionsToggle.None, PlayerRemoteKeys.captionsToggle(0, null, null, null))
+        assertEquals(PlayerRemoteKeys.CaptionsToggle.Off, PlayerRemoteKeys.captionsToggle(3, selected = 1, last = null, defaultIndex = null))
+        assertEquals(PlayerRemoteKeys.CaptionsToggle.On(2), PlayerRemoteKeys.captionsToggle(3, null, last = 2, defaultIndex = 1))
+        assertEquals(PlayerRemoteKeys.CaptionsToggle.On(1), PlayerRemoteKeys.captionsToggle(3, null, last = null, defaultIndex = 1))
+        assertEquals(PlayerRemoteKeys.CaptionsToggle.On(0), PlayerRemoteKeys.captionsToggle(3, null, null, null))
+        // A remembered track the new file lacks falls back to the first.
+        assertEquals(PlayerRemoteKeys.CaptionsToggle.On(0), PlayerRemoteKeys.captionsToggle(1, null, last = 4, defaultIndex = null))
+    }
 }

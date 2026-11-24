@@ -377,6 +377,9 @@ open class View(context: Context?, attrs: AttributeSet?, @Suppress("UNUSED_PARAM
     var isLongClickable: Boolean = false
     var isFocusable: Boolean = false
     var isFocusableInTouchMode: Boolean = false
+
+    /** Takes the parent's drawable state (the skip pill's words turn dark with its focused chip). */
+    var isDuplicateParentStateEnabled: Boolean = false
     var isSelected: Boolean = false
         set(value) {
             if (field == value) return

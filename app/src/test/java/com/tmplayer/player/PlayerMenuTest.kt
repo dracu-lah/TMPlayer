@@ -303,7 +303,7 @@ class PlayerMenuTest {
     fun `the key table names every key the player answers, each once`() {
         val keys = RemoteKeys.ROWS.map { it.first }
         assertEquals(keys.size, keys.toSet().size)
-        listOf("OK", "Play / Pause", "Next / Previous", "Back", "Hold OK, controls up", "OK on the time", "0 to 9", "Up, after a long jump").forEach {
+        listOf("OK", "Play / Pause", "Next / Previous", "Back", "CC (if your remote has it)", "Hold OK, controls down", "OK on the time", "0 to 9", "Up, after a long jump").forEach {
             assertTrue("missing $it", it in keys)
         }
         assertTrue(RemoteKeys.ROWS.all { (key, does) -> key.isNotBlank() && does.isNotBlank() })

@@ -89,6 +89,138 @@ object PlayerRemoteKeys {
         else -> null
     }
 
+    /** A second CC press within this opens the picker; the first only toggles (WP-19). */
+    const val CAPTIONS_AGAIN_MS = 3_000L
+
+    /** How long OK is held over the bare picture before the "open in another app" chooser (WP-19). */
+    const val HANDOVER_HOLD_MS = 1_500L
+
+    /** What a press of the CC key does. */
+    enum class CaptionsPress { Toggle, OpenPicker }
+
+    /**
+     * The first press toggles subtitles; a second within [CAPTIONS_AGAIN_MS] or a long press opens the
+     * picker. [lastToggleAtMs] is 0 when the key has not toggled yet.
+     */
+    fun captionsPress(longPress: Boolean, lastToggleAtMs: Long, nowMs: Long): CaptionsPress =
+        if (longPress || (lastToggleAtMs > 0L && nowMs - lastToggleAtMs in 0L..CAPTIONS_AGAIN_MS)) {
+            CaptionsPress.OpenPicker
+        } else {
+            CaptionsPress.Toggle
+        }
+
+    /**
+     * One press of the CC key, from key down to release. A hold only opens the picker: the toggle
+     * waits for the release and is dropped when the press became a hold (WP-19), so a long press
+     * never also changes the subtitles.
+     */
+    class CaptionsKeyPress {
+        private var down = false
+        private var opened = false
+
+        /** A key down or repeat; true once, on the long press, when the picker opens now. */
+        fun onDown(repeatCount: Int, longPress: Boolean): Boolean {
+            if (repeatCount == 0) {
+                down = true
+                opened = false
+                return false
+            }
+            if (!down || opened || !longPress) return false
+            opened = true
+            return true
+        }
+
+        /** True while a press waits for its release to be judged. */
+        val pending: Boolean get() = down && !opened
+
+        /** The release: true when it ends a short press (the toggle, or the second press's picker). */
+        fun onUp(canceled: Boolean): Boolean {
+            val short = pending && !canceled
+            down = false
+            return short
+        }
+    }
+
+    /** What the CC toggle does to the file's [count] subtitle tracks. */
+    sealed interface CaptionsToggle {
+        /** The file has no subtitle track. */
+        data object None : CaptionsToggle
+
+        /** A track shows: turn subtitles off. */
+        data object Off : CaptionsToggle
+
+        /** Nothing shows: turn track [index] on. */
+        data class On(val index: Int) : CaptionsToggle
+    }
+
+    /**
+     * Subtitles on to the track the viewer last used ([last], an index among the text tracks) or else
+     * the one the file marks as its default ([defaultIndex]) or the first; off when one shows
+     * ([selected]).
+     */
+    fun captionsToggle(count: Int, selected: Int?, last: Int?, defaultIndex: Int?): CaptionsToggle = when {
+        count <= 0 -> CaptionsToggle.None
+        selected != null -> CaptionsToggle.Off
+        else -> CaptionsToggle.On((last ?: defaultIndex ?: 0).takeIf { it in 0 until count } ?: 0)
+    }
+
+    /** The playback keys that keep working under the More panel and a track picker. */
+    enum class PanelMedia { Toggle, Play, Pause, Stop }
+
+    /** Which playback key [keyCode] is for the panels, or null: only Play/Pause, Play, Pause and Stop pass through. */
+    fun panelMedia(keyCode: Int): PanelMedia? = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> PanelMedia.Toggle
+        KeyEvent.KEYCODE_MEDIA_PLAY -> PanelMedia.Play
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> PanelMedia.Pause
+        KeyEvent.KEYCODE_MEDIA_STOP -> PanelMedia.Stop
+        else -> null
+    }
+
+    /**
+     * A held OK on a television hands the video over once, after [HANDOVER_HOLD_MS], and only when the
+     * press began over the bare picture (row down). With the row up a held OK is a plain OK, so a slow
+     * press on a button never leaves the app. [repeatCount] is above 0 on a repeat, [heldMs] the time
+     * since the key went down.
+     */
+    fun isHandoverHold(startedOverPicture: Boolean, alreadyHandedOver: Boolean, repeatCount: Int, heldMs: Long): Boolean =
+        startedOverPicture && !alreadyHandedOver && repeatCount > 0 && heldMs >= HANDOVER_HOLD_MS
+
+    /**
+     * One press of OK on a television, from its key down to its release. Over the bare picture the
+     * pause waits for the release, so a press that becomes the 1.5 s handover never also pauses
+     * (WP-19): [onUp] says whether the release is the pause. Anywhere else the press is not this
+     * object's: OK did its own thing on the way down.
+     */
+    class OkPress {
+        private var overPicture = false
+        private var handedOver = false
+
+        /**
+         * A key down or repeat. [overPicture] is read on the first event only. True once, on the
+         * repeat that has been held [HANDOVER_HOLD_MS]: that is the handover.
+         */
+        fun onDown(repeatCount: Int, heldMs: Long, overPicture: Boolean): Boolean {
+            if (repeatCount == 0) {
+                this.overPicture = overPicture
+                handedOver = false
+                return false
+            }
+            if (!isHandoverHold(this.overPicture, handedOver, repeatCount, heldMs)) return false
+            handedOver = true
+            return true
+        }
+
+        /** Whether the first press of this OK waits for its release to pause. */
+        val pausesOnRelease: Boolean get() = overPicture
+
+        /** The release: true when it is the pause (a plain press over the picture, not a cancel or a handover). */
+        fun onUp(canceled: Boolean): Boolean {
+            val pause = overPicture && !handedOver && !canceled
+            overPicture = false
+            return pause
+        }
+    }
+
     /** The Stop key: the position is saved and the player is left, as Back does. */
     fun isStop(keyCode: Int): Boolean = keyCode == KeyEvent.KEYCODE_MEDIA_STOP
 

@@ -1,0 +1,8 @@
+<!--
+  The second line of the television's skip pill: the accent on the dark chip, near-black once focus
+  turns the chip white (player_control_icon's dark, for the same reason).
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="#FF111111" android:state_focused="true" />
+    <item android:color="@color/accent" />
+</selector>

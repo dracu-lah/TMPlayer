@@ -716,6 +716,23 @@
                             android:visibility="gone" />
                     </LinearLayout>
 
+                    <!-- Television only: the previous episode, left of Next. The remote of a Google
+                         TV or a Mi TV has no media-previous key either. Shown only while the chat
+                         has an earlier episode (the first one has none). -->
+                    <ImageButton
+                        android:id="@+id/control_tv_previous_episode"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Previous episode"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_player_previous"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+
                     <!-- Television only: the next episode, one press from the row. The remote of a
                          Google TV or a Mi TV has no media-next key, and the list was seven presses
                          away. Shown only while the chat has a next episode to play. -->

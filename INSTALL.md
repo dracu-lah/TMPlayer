@@ -98,8 +98,9 @@ keeps it up to date.
 | **0 - 9** (if your remote has them) | Jump to that tenth of the video; 5 is halfway |
 | **Up** (after a long jump) | Back to where you were before it, while the "Back to" sign is up in the corner |
 | **⏪ / ⏩** (if your remote has them) | Jump back or forward 10 seconds, faster while held; hold ⏩ to play faster until you let go |
-| **⏮ / ⏭** (if your remote has them) | The previous or next episode, when the chat has one; also in the More menu |
-| **Hold OK** (controls up) | Open the video in another app |
+| **⏮ / ⏭** (if your remote has them) | The previous or next episode, when the chat has one; also the Previous and Next buttons on the row and in the More menu |
+| **CC** (if your remote has it) | Subtitles on or off, the track you used last; press again within 3 seconds, or hold, for the subtitle list |
+| **Hold OK** (controls down) | After 1.5 seconds, choose another app to open the video in. With the controls up OK is a plain press |
 | **Back** | Close what is on top: the controls, then the player; the position is remembered |
 
 ## Using a phone

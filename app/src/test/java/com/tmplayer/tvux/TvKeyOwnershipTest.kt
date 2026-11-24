@@ -194,27 +194,61 @@ class TvKeyOwnershipTest {
     }
 
     @Test
-    fun `player panels, Menu closes the More panel only, where the quirk says so, and every other key is the panel's`() {
+    fun `player panels, Menu closes the More panel only, where the quirk says so, Play Pause and Stop still act, the rest is the panel's`() {
         val panel = playerDispatch().substringAfter("morePanel?.takeIf { it.isOpen }?.let { panel ->").substringBefore("// Fire TV's Menu key is the player's options")
         assertTrue("event.keyCode == KeyEvent.KEYCODE_MENU && remoteQuirks.menuOpensPlayerMenu" in panel)
         assertTrue("panel.close()" in panel)
         assertTrue("return super.dispatchKeyEvent(event)" in panel)
-        // Only More is covered here: a picker (TrackPickerFragment) hands every key to its own view.
-        assertTrue("if (pickerOpen) return super.dispatchKeyEvent(event)" in playerDispatch())
+        // WP-19: the playback keys pass through, once per press, before the panel gets the key.
+        assertTrue("if (panelPlaybackKey(event)) return true" in panel)
+        assertTrue(panel.indexOf("panelPlaybackKey(event)") < panel.indexOf("return super.dispatchKeyEvent(event)"))
+        // A picker (TrackPickerFragment) hands every other key to its own view.
+        val picker = playerDispatch().substringAfter("val pickerOpen = TrackPickerFragment.isOpen(supportFragmentManager)").substringBefore("// Before anything else claims the same key")
+        assertTrue("if (panelPlaybackKey(event)) return true" in picker)
+        assertTrue("return super.dispatchKeyEvent(event)" in picker)
+        assertEquals(PlayerRemoteKeys.PanelMedia.Toggle, PlayerRemoteKeys.panelMedia(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+        assertEquals(PlayerRemoteKeys.PanelMedia.Play, PlayerRemoteKeys.panelMedia(KeyEvent.KEYCODE_MEDIA_PLAY))
+        assertEquals(PlayerRemoteKeys.PanelMedia.Pause, PlayerRemoteKeys.panelMedia(KeyEvent.KEYCODE_MEDIA_PAUSE))
+        assertEquals(PlayerRemoteKeys.PanelMedia.Stop, PlayerRemoteKeys.panelMedia(KeyEvent.KEYCODE_MEDIA_STOP))
+        for (other in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_PAGE_UP)) {
+            assertNull("only the playback keys pass through a panel", PlayerRemoteKeys.panelMedia(other))
+        }
+        val source = text("src/main/java/com/tmplayer/player/PlayerActivity.kt")
+        val body = source.substringAfter("private fun panelPlaybackKey(event: KeyEvent): Boolean {").substringBefore("\n    }\n")
+        assertTrue("if (event.repeatCount > 0) return true" in body)
+        assertTrue("PlayerRemoteKeys.PanelMedia.Stop -> leaveByBack()" in body)
+        assertTrue("PanelMedia.Toggle -> togglePlayback()" in body)
+        // The pause does not raise the row under a panel (it would take the panel's focus).
+        val raise = source.substringAfter("private fun raiseRowForPause() {").substringBefore("\n    }")
+        assertTrue("morePanel?.isOpen == true || TrackPickerFragment.isOpen(supportFragmentManager)" in raise)
     }
 
     @Test
-    fun `player, a held Menu or a held OK with the row up hands the video to another app`() {
+    fun `player, a held Menu hands the video to another app, a held OK only after 1_5 s and only from the bare picture`() {
         val dispatch = playerDispatch()
         val held = dispatch.substringAfter("if (isLongPressOnTheVideo(event)) {").substringBefore("return true")
         assertTrue("if (event.keyCode == KeyEvent.KEYCODE_MENU) menuHeld = true" in held)
         assertTrue("openInAnotherApp()" in held)
         val rule = text("src/main/java/com/tmplayer/player/PlayerActivity.kt")
-            .substringAfter("private fun isLongPressOnTheVideo(event: KeyEvent): Boolean {").substringBefore("\n    }")
-        assertTrue("if (!event.isLongPress) return false" in rule)
+            .substringAfter("private fun isLongPressOnTheVideo(event: KeyEvent): Boolean {").substringBefore("\n    }\n")
         assertTrue("if (statusOverlay.visibility == View.VISIBLE) return false" in rule)
         assertTrue("a held Menu is always the handover", "KeyEvent.KEYCODE_MENU -> true" in rule)
-        assertTrue("a held OK only with the row up", "KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> controlsUp" in rule)
+        // WP-19: a television's OK is judged by where the press began and how long it was held.
+        assertTrue("okPress.onDown(event.repeatCount, event.eventTime - event.downTime, overPicture = false)" in rule)
+        val began = dispatch.substringAfter("// Where a television's OK began (WP-19)").substringBefore("if (isLongPressOnTheVideo(event)) {")
+        assertTrue("overPicture = !controlsUp" in began)
+        assertTrue("event.repeatCount == 0" in began)
+        // The pause over the bare picture waits for the release, so a press never pauses and hands over.
+        assertTrue("if (event.repeatCount == 0 && !okPress.pausesOnRelease) togglePlayback()" in dispatch)
+        assertTrue("if (okPress.onUp(event.isCanceled)" in dispatch)
+        assertEquals(1_500L, PlayerRemoteKeys.HANDOVER_HOLD_MS)
+        assertTrue(PlayerRemoteKeys.isHandoverHold(startedOverPicture = true, alreadyHandedOver = false, repeatCount = 5, heldMs = 1_500))
+        assertFalse("not before 1.5 s", PlayerRemoteKeys.isHandoverHold(true, false, 5, 1_000))
+        assertFalse("with the row up it is a plain OK", PlayerRemoteKeys.isHandoverHold(false, false, 20, 5_000))
+        assertFalse("once per press", PlayerRemoteKeys.isHandoverHold(true, true, 21, 5_100))
+        assertFalse("the first event is no hold", PlayerRemoteKeys.isHandoverHold(true, false, 0, 2_000))
+        // The handover is a chooser, never a direct launch.
+        assertTrue("Intent.createChooser" in text("src/main/java/com/tmplayer/player/ExternalPlayer.kt"))
     }
 
     // ---- Info, CC, Audio, Play/Pause, Stop, Page and Channel in the player ----
@@ -239,13 +273,21 @@ class TvKeyOwnershipTest {
     }
 
     @Test
-    fun `player, CC and Audio each open their own picker, once per press`() {
+    fun `player, CC toggles subtitles then a second press or a long press opens the picker, Audio opens its picker`() {
         assertEquals(C.TRACK_TYPE_TEXT, TrackKeys.pickerFor(KeyEvent.KEYCODE_CAPTIONS))
         assertEquals(C.TRACK_TYPE_AUDIO, TrackKeys.pickerFor(KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK))
         assertNull(TrackKeys.pickerFor(KeyEvent.KEYCODE_INFO))
+        assertEquals(PlayerRemoteKeys.CaptionsPress.Toggle, PlayerRemoteKeys.captionsPress(longPress = false, lastToggleAtMs = 0, nowMs = 50_000))
+        assertEquals(PlayerRemoteKeys.CaptionsPress.OpenPicker, PlayerRemoteKeys.captionsPress(false, lastToggleAtMs = 10_000, nowMs = 12_900))
+        assertEquals("after 3 s the key toggles again", PlayerRemoteKeys.CaptionsPress.Toggle, PlayerRemoteKeys.captionsPress(false, 10_000, 13_100))
+        assertEquals(PlayerRemoteKeys.CaptionsPress.OpenPicker, PlayerRemoteKeys.captionsPress(longPress = true, lastToggleAtMs = 0, nowMs = 1))
         val branch = playerDispatch().substringAfter("KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> {").substringBefore("KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ->")
         assertTrue("event.repeatCount == 0" in branch)
         assertTrue("showTrackPicker(type)" in branch)
+        assertTrue("captionsKey.onDown(event.repeatCount, event.isLongPress)" in branch)
+        assertFalse("a hold only opens the picker, the toggle waits for the release", "toggleCaptions()" in branch)
+        assertTrue("toggleCaptions()" in playerDispatch())
+        assertTrue("PlayerRemoteKeys.captionsPress(longPress = false, lastToggleAtMs = captionsToggledAt, nowMs = now)" in playerDispatch())
         assertTrue("statusOverlay.visibility != View.VISIBLE" in branch)
     }
 

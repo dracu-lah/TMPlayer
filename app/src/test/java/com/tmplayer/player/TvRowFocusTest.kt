@@ -147,6 +147,40 @@ class TvRowFocusTest {
     }
 
     @Test
+    fun `Previous episode shows left of Next with an earlier episode, plays it and goes on the first one`() {
+        val (controls, root) = row()
+        controls.show()
+        val previous = root.findViewById<View>(R.id.control_tv_previous_episode)
+        val next = root.findViewById<View>(R.id.control_tv_next_episode)
+        assertEquals(View.GONE, previous.visibility)
+        controls.setEpisodes(episode(1), episode(3), "Previous: S01E01", "Next: S01E03", "S01E01", "S01E03")
+        assertEquals(View.VISIBLE, previous.visibility)
+        assertEquals("Previous: S01E01", previous.contentDescription)
+        assertTrue(previous.isFocusable)
+        val row = previous.parent as android.view.ViewGroup
+        assertEquals("Previous sits just before Next", row.indexOfChild(next) - 1, row.indexOfChild(previous))
+        previous.performClick()
+        assertEquals(1L, played?.messageId)
+        // The first episode: no Previous, Next stays.
+        controls.setEpisodes(null, episode(2), "", "Next", "", "")
+        assertEquals(View.GONE, previous.visibility)
+        assertEquals(View.VISIBLE, next.visibility)
+    }
+
+    @Test
+    fun `Right from Previous lands on Next and Left from Next on Previous`() {
+        val (controls, root) = row()
+        controls.show()
+        val previous = root.findViewById<View>(R.id.control_tv_previous_episode)
+        val next = root.findViewById<View>(R.id.control_tv_next_episode)
+        controls.setEpisodes(episode(1), episode(3), "Previous", "Next", "", "")
+        repeat(5) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+        assertTrue(previous.requestFocus())
+        assertTrue(previous.focusSearch(View.FOCUS_RIGHT) === next)
+        assertTrue(next.focusSearch(View.FOCUS_LEFT) === previous)
+    }
+
+    @Test
     fun `the remote on Next episode when it goes lands back on the row`() {
         val (controls, root) = row()
         controls.show()

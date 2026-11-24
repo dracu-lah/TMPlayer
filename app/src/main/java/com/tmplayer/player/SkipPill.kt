@@ -23,10 +23,12 @@ import com.tmplayer.online.SkipSource
  * where the eye left it whether the row is up or down; the two never show together, since a
  * stretch that runs to the end of an episode with a successor is the card's to cover.
  *
- * A phone taps it. A television never focuses it: focus moving to something that appeared on its
- * own would turn the next arrow press into a walk across the screen rather than the jump the
- * viewer meant. The activity hands it OK instead while the row is down, which the second line,
- * "OK to skip", says out loud.
+ * A phone taps it. A television never takes focus by itself: focus moving to something that
+ * appeared on its own would turn the next arrow press into a walk across the screen rather than
+ * the jump the viewer meant. The activity hands it OK instead while the row is down, which the
+ * second line, "OK to skip", says out loud. With the row up the pill joins the focus chain (WP-19,
+ * [reachable]): Up from the bar lands on it, OK skips, and its second line reads "Up, then OK to
+ * skip" until the remote is on it.
  *
  * Built in code and added to [root] under [below], the overlay container, the same way as
  * [NextUpCard], so the gesture HUD and the phone's flashes still draw over it. The activity owns
@@ -45,7 +47,13 @@ class SkipPill(
     private fun px(dp: Int) = (dp * density).toInt()
 
     private val label = TextView(context).apply {
-        setTextColor(context.getColor(R.color.text_primary))
+        if (tv) {
+            // Takes the pill's focused state, so its colour list turns dark on the white focused pill.
+            isDuplicateParentStateEnabled = true
+            setTextColor(context.getColorStateList(R.color.player_control_icon))
+        } else {
+            setTextColor(context.getColor(R.color.text_primary))
+        }
         textSize = if (tv) 18f else 15f
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
@@ -53,7 +61,12 @@ class SkipPill(
 
     /** The remote's half of the offer; a phone's pill is its own button and needs no instruction. */
     private val hint = TextView(context).apply {
-        setTextColor(context.getColor(R.color.accent))
+        if (tv) {
+            isDuplicateParentStateEnabled = true
+            setTextColor(context.getColorStateList(R.color.skip_pill_hint))
+        } else {
+            setTextColor(context.getColor(R.color.accent))
+        }
         // 14 sp: the television's type floor (this hint only shows there).
         textSize = 14f
         maxLines = 1
@@ -77,12 +90,24 @@ class SkipPill(
     val view: LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
-        background = context.getDrawable(R.drawable.bg_player_chip)
+        background = context.getDrawable(if (tv) R.drawable.bg_player_chip_focus else R.drawable.bg_player_chip)
         setPadding(px(22), px(if (tv) 12 else 11), px(22), px(if (tv) 10 else 11))
         visibility = View.GONE
+        id = View.generateViewId()
         isFocusable = false
         if (tv) {
+            // Focusable only while the row is up ([reachable]); the remote cannot leave it sideways
+            // or upward, only Down to the bar.
             isClickable = false
+            nextFocusUpId = id
+            nextFocusLeftId = id
+            nextFocusRightId = id
+            nextFocusDownId = R.id.controls_timebar
+            setOnClickListener { onSkip() }
+            onFocusChangeListener = View.OnFocusChangeListener { _, focused ->
+                renderHint()
+                if (focused) onFocused?.invoke()
+            }
         } else {
             isClickable = true
             setOnClickListener { onSkip() }
@@ -117,17 +142,55 @@ class SkipPill(
         isCounting = secondsLeft != null
         if (secondsLeft == null) {
             label.text = words(segment)
-            hint.text = L.playerSkipOkHint
-            hint.visibility = if (tv) View.VISIBLE else View.GONE
             cancel.visibility = View.GONE
         } else {
             label.text = L.playerSkipIn(secondsLeft)
-            hint.text = L.playerSkipBackCancel
-            hint.visibility = if (tv) View.VISIBLE else View.GONE
             cancel.visibility = if (tv) View.GONE else View.VISIBLE
         }
+        renderHint()
         view.visibility = View.VISIBLE
+        if (tv) {
+            view.isFocusable = rowUp
+            view.isClickable = rowUp
+        }
     }
+
+    /** True while the transport row is up on a television: the pill can then be walked onto. */
+    private var rowUp = false
+
+    /**
+     * The second line: "OK to skip" where OK skips (row down, or the remote on the pill), "Up, then
+     * OK to skip" with the row up and the remote still elsewhere, "Back to cancel" while a
+     * countdown runs over the bare picture.
+     */
+    private fun renderHint() {
+        hint.visibility = if (tv) View.VISIBLE else View.GONE
+        hint.text = when {
+            isCounting && !rowUp -> L.playerSkipBackCancel
+            rowUp && !view.hasFocus() -> L.playerSkipHintRowUp
+            else -> L.playerSkipOkHint
+        }
+    }
+
+    /**
+     * Whether the remote may walk onto the pill ([up]: the row is up on a television). The pill is
+     * focusable only while it is shown with the row up; turning that off while the remote is on it
+     * lets go of the focus. True when it did, so the caller puts the remote back on the row.
+     */
+    fun reachable(up: Boolean): Boolean {
+        if (!tv) return false
+        val had = view.hasFocus()
+        rowUp = up
+        val focusable = up && isShown
+        view.isFocusable = focusable
+        view.isClickable = focusable
+        if (!focusable && had) view.clearFocus()
+        renderHint()
+        return !focusable && had
+    }
+
+    /** The view's id, for the bar's nextFocusUp. */
+    val viewId: Int get() = view.id
 
     /** Whether a countdown is what the pill shows now. */
     var isCounting: Boolean = false
@@ -150,8 +213,20 @@ class SkipPill(
 
     fun hide() {
         isCounting = false
+        val had = view.hasFocus()
+        if (tv) {
+            view.isFocusable = false
+            view.isClickable = false
+        }
         view.visibility = View.GONE
+        if (had) onLostFocus?.invoke()
     }
+
+    /** Called when the remote lands on the pill, so the activity keeps the row up while it is there. */
+    var onFocused: (() -> Unit)? = null
+
+    /** Called when the pill goes while the remote stands on it, so the activity can put it back on the row. */
+    var onLostFocus: (() -> Unit)? = null
 
     /**
      * One tick of the pill for [engine]'s place: asks [skip] what to offer and shows it, or hides

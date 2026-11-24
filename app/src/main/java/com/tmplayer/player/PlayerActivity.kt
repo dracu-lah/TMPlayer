@@ -2260,7 +2260,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // they cannot clear it, which on a television is always: the look lines' preview
             // and a track just chosen showed nothing at all. See [liftSubtitles].
             liftSubtitles()
-            if (!pickerOpen) controls?.focusRow()
+            if (!pickerOpen) {
+                payPauseRow()
+                controls?.focusRow()
+            }
         }
         // The manifest opts into the new back dispatch, and from Android 13 that means Back never
         // arrives in [dispatchKeyEvent] as a key: it comes here, and without this a locked screen,
@@ -3335,8 +3338,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** True once the viewer has paused this video, so the first play is not taken for a resume. */
     private var sawPause = false
 
+    /** A pause came under a panel or a picker, which kept the row down: it is raised once they close. */
+    private var pauseRowOwed = false
+
+    private fun payPauseRow() {
+        if (!pauseRowOwed) return
+        pauseRowOwed = false
+        if (playing?.playWhenReady == false) raiseRowForPause()
+    }
+
     private fun raiseRowForPause() {
         if (statusOverlay.visibility == View.VISIBLE || locked || inPictureInPicture) return
+        // A pause from the key under the More panel or a picker leaves the row alone: raising it would take their focus (WP-19).
+        if (morePanel?.isOpen == true || TrackPickerFragment.isOpen(supportFragmentManager)) {
+            // Says so now, and the row comes up when the picker closes ([payPauseRow]).
+            pauseRowOwed = true
+            showGestureFeedback(L.commonPause)
+            return
+        }
         rowDownBeforePause = !controlsUp
         pauseNoted = true
         controls?.show()
@@ -7029,6 +7048,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) panel.close()
                 return true
             }
+            // Play/Pause, Play, Pause and Stop still act under the panel (WP-19); nothing else does.
+            if (panelPlaybackKey(event)) return true
             return super.dispatchKeyEvent(event)
         }
         // Fire TV's Menu key is the player's options, as Amazon's guidelines have it: on release,
@@ -7045,6 +7066,34 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The fast-forward key let go (or cancelled): the held speed ends and the viewer's own returns (U3).
         if (remoteHolding && event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD && event.action != KeyEvent.ACTION_DOWN) {
             endRemoteHold()
+            return true
+        }
+        // OK over the bare picture pauses on its release, and only when it did not become the 1.5 s
+        // handover (WP-19): one press never both pauses and hands over.
+        if (event.action == KeyEvent.ACTION_UP && FormFactor.isTv(this) &&
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER) &&
+            okPress.pausesOnRelease
+        ) {
+            if (okPress.onUp(event.isCanceled) && statusOverlay.visibility != View.VISIBLE && !controlsUp) togglePlayback()
+            return true
+        }
+        // CC's short press, on its release (WP-19): the first toggles subtitles, a second within 3 s opens the picker.
+        if (event.action == KeyEvent.ACTION_UP && event.keyCode == KeyEvent.KEYCODE_CAPTIONS && captionsKey.pending) {
+            if (captionsKey.onUp(event.isCanceled) && player != null && statusOverlay.visibility != View.VISIBLE &&
+                !TrackPickerFragment.isOpen(supportFragmentManager)
+            ) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                when (PlayerRemoteKeys.captionsPress(longPress = false, lastToggleAtMs = captionsToggledAt, nowMs = now)) {
+                    PlayerRemoteKeys.CaptionsPress.OpenPicker -> {
+                        captionsToggledAt = 0L
+                        showTrackPicker(C.TRACK_TYPE_TEXT)
+                    }
+                    PlayerRemoteKeys.CaptionsPress.Toggle -> {
+                        captionsToggledAt = now
+                        toggleCaptions()
+                    }
+                }
+            }
             return true
         }
         // Info let go before its long press (which reports a stutter, below): what is playing.
@@ -7065,7 +7114,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             feedback?.dismissMessage()
         }
         val pickerOpen = TrackPickerFragment.isOpen(supportFragmentManager)
-        if (pickerOpen) return super.dispatchKeyEvent(event)
+        if (pickerOpen) {
+            if (panelPlaybackKey(event)) return true
+            return super.dispatchKeyEvent(event)
+        }
 
         // Before anything else claims the same key. A held select on a remote, or the menu key, is
         // the long press the browse grid answers with a menu; here the only entry that menu would
@@ -7076,6 +7128,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         ) {
             reportStutter()
             return true
+        }
+        // Where a television's OK began (WP-19): over the bare picture, taking nothing else's press,
+        // it may become the 1.5 s handover; read before the press raises the row.
+        if (FormFactor.isTv(this) && event.repeatCount == 0 &&
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
+        ) {
+            okPress.onDown(
+                repeatCount = 0,
+                heldMs = 0L,
+                overPicture = !controlsUp && statusOverlay.visibility != View.VISIBLE && !skipHasTheRemote() &&
+                    !nextUpHasTheRemote() && feedback?.offerUp != true,
+            )
         }
         if (isLongPressOnTheVideo(event)) {
             if (event.keyCode == KeyEvent.KEYCODE_MENU) menuHeld = true
@@ -7180,10 +7244,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The CC and the audio-language keys many remotes carry: the same pickers the row's
             // buttons open, a press away from the bare picture (the desktop's SubtitleNext and
             // AudioNext keys). Nothing while a status sheet owns the screen or nothing is loaded.
+            // CC (WP-19) toggles subtitles on the first press; a second within 3 s or a long press
+            // opens the picker. The audio key opens its picker at once.
             KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> {
                 val type = TrackKeys.pickerFor(event.keyCode)
-                if (type != null && event.repeatCount == 0 && player != null && statusOverlay.visibility != View.VISIBLE) {
+                val ready = type != null && player != null && statusOverlay.visibility != View.VISIBLE
+                if (ready && type == C.TRACK_TYPE_AUDIO && event.repeatCount == 0) {
                     showTrackPicker(type)
+                } else if (ready && type == C.TRACK_TYPE_TEXT) {
+                    // A short press is judged on its release; a hold only opens the picker.
+                    if (captionsKey.onDown(event.repeatCount, event.isLongPress)) {
+                        captionsToggledAt = 0L
+                        showTrackPicker(C.TRACK_TYPE_TEXT)
+                    }
                 }
                 return true
             }
@@ -7269,7 +7342,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     // middle. With the row up and the bar focused it is play or pause as well.
                     // Repeats are ignored so a held OK stays the long press it is about to become.
                     if (!controlsUp) {
-                        if (event.repeatCount == 0) togglePlayback()
+                        // A press that could become the handover pauses on its release ([okPress]).
+                        if (event.repeatCount == 0 && !okPress.pausesOnRelease) togglePlayback()
                         return true
                     }
                     if (event.repeatCount == 0 && controls?.okOnTimeBar() == true) return true
@@ -7403,12 +7477,106 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * gesture to take.
      */
     private fun isLongPressOnTheVideo(event: KeyEvent): Boolean {
-        if (!event.isLongPress) return false
         if (statusOverlay.visibility == View.VISIBLE) return false
+        // A television's OK (WP-19): only a press that began over the bare picture, held 1.5 s; with
+        // the row up it is a plain OK and never leaves the app. The handover is a chooser, never a launch.
+        if (FormFactor.isTv(this) && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)) {
+            // The first event only set where the press began (above); repeats may reach 1.5 s.
+            return event.repeatCount > 0 && okPress.onDown(event.repeatCount, event.eventTime - event.downTime, overPicture = false)
+        }
+        if (!event.isLongPress) return false
         return when (event.keyCode) {
             KeyEvent.KEYCODE_MENU -> true
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> controlsUp
             else -> false
+        }
+    }
+
+    /** The television's OK press now down: where it began, whether it handed over (WP-19). */
+    private val okPress = PlayerRemoteKeys.OkPress()
+
+    /** The CC key press now down (WP-19). */
+    private val captionsKey = PlayerRemoteKeys.CaptionsKeyPress()
+
+    /** When the CC key last toggled subtitles, 0 for not yet: a second press soon after opens the picker. */
+    private var captionsToggledAt = 0L
+
+    /** The text track (an index among the file's subtitle tracks) the CC key last turned off, to turn it back on. */
+    private var lastCaptionTrack: Int? = null
+
+    /** That track's language: across episodes the language finds it again where its index has moved. */
+    private var lastCaptionLanguage: String? = null
+
+    /**
+     * Play/Pause, Play, Pause and Stop under the More panel or a track picker (WP-19): the same
+     * actions as without a panel, once per press, and the panel stays where it is. True when the key
+     * was one of them on its press (its repeats are swallowed too).
+     */
+    private fun panelPlaybackKey(event: KeyEvent): Boolean {
+        val key = PlayerRemoteKeys.panelMedia(event.keyCode) ?: return false
+        if (event.action != KeyEvent.ACTION_DOWN) return false
+        if (event.repeatCount > 0) return true
+        when (key) {
+            PlayerRemoteKeys.PanelMedia.Toggle -> togglePlayback()
+            PlayerRemoteKeys.PanelMedia.Play -> if (playing?.playWhenReady == false) togglePlayback()
+            PlayerRemoteKeys.PanelMedia.Pause -> if (playing?.playWhenReady == true) togglePlayback()
+            PlayerRemoteKeys.PanelMedia.Stop -> leaveByBack()
+        }
+        return true
+    }
+
+    /**
+     * The CC key's first press (WP-19): subtitles off when one shows, else on with the track last
+     * turned off, the file's default or the first. Says which, or "No subtitles" for a file with none.
+     */
+    private fun toggleCaptions() {
+        val exo = playing ?: return
+        val text = tracksOfType(exo.currentTracks, C.TRACK_TYPE_TEXT)
+        val selected = text.indexOfFirst { (group, index) -> group.isTrackSelected(index) }.takeIf { it >= 0 }
+        val byLanguage = tracks.textLanguage?.let { want ->
+            text.indexOfFirst { (group, index) -> ResumeState.sameTrack(want, group.getTrackFormat(index).language) }
+        }?.takeIf { it >= 0 }
+        val defaultIndex = text.indexOfFirst { (group, index) ->
+            group.getTrackFormat(index).selectionFlags and C.SELECTION_FLAG_DEFAULT != 0
+        }.takeIf { it >= 0 } ?: byLanguage
+        val builder = exo.trackSelectionParameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_TEXT)
+        val lastByLanguage = lastCaptionLanguage?.let { want ->
+            text.indexOfFirst { (group, index) -> ResumeState.sameTrack(want, group.getTrackFormat(index).language) }
+        }?.takeIf { it >= 0 }
+        when (val plan = PlayerRemoteKeys.captionsToggle(text.size, selected, lastByLanguage ?: lastCaptionTrack, defaultIndex)) {
+            PlayerRemoteKeys.CaptionsToggle.None -> showGestureFeedback(L.playerNoSubtitles)
+            PlayerRemoteKeys.CaptionsToggle.Off -> {
+                lastCaptionTrack = selected
+                lastCaptionLanguage = selected?.let { text[it].let { (group, index) -> group.getTrackFormat(index).language } }
+                    ?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
+                exo.trackSelectionParameters = builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                subtitleChoiceMade(off = true, external = false)
+                showGestureFeedback(L.playerSubtitlesOff)
+            }
+            is PlayerRemoteKeys.CaptionsToggle.On -> {
+                val (group, index) = text[plan.index]
+                exo.trackSelectionParameters = builder
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+                    .build()
+                val format = group.getTrackFormat(index)
+                subtitleChoiceMade(off = false, external = format.id?.contains("external-") == true)
+                showGestureFeedback(L.playerSubtitlesOnTrack(captionName(format, plan.index)))
+            }
+        }
+    }
+
+    /** A subtitle track's name for the toast: its label, else its language, else "Track N". */
+    private fun captionName(format: androidx.media3.common.Format, position: Int): String {
+        val language = format.language
+            ?.takeIf { it.isNotBlank() && it != "und" }
+            ?.let { com.tmplayer.i18n.Translator.messages.formatter.trackLanguage(it) ?: it }
+        val label = format.label?.takeIf { it.isNotBlank() }
+        return when {
+            label != null && language != null && !label.contains(language, ignoreCase = true) -> "$language ($label)"
+            label != null -> label
+            language != null -> language
+            else -> L.tracksTrackNumber((position + 1).toString())
         }
     }
 
@@ -9063,7 +9231,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             tv = FormFactor.isTv(this),
             onSkip = ::skipOffered,
             onCancel = ::cancelAutoSkip,
-        )
+        ).also { pill ->
+            pill.onLostFocus = { controls?.focusBar() }
+            pill.onFocused = { controls?.poke() }
+        }
         undoChip = UndoSeekChip(
             root = findViewById(R.id.player_root),
             below = findViewById(R.id.overlay_container),
@@ -9214,6 +9385,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         offeredSkip = offer?.segment
         if (offer is SkipOffer.Fire) skipOffered()
         if (!wasShown && pill.isShown) liftCornerOffers()
+        reachSkipPill()
     }
 
     /** Cancel on the countdown (the phone's button, a television's Back): this stretch stays a plain button. */
@@ -9247,6 +9419,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun hideSkipPill() {
         offeredSkip = null
         skipPill?.hide()
+        controls?.reachSkipPill(null)
+    }
+
+    /**
+     * With the row up on a television the skip pill is part of the focus chain (WP-19): focusable
+     * while it shows, and Up from the scrub bar lands on it. With the row down OK skips and the pill
+     * is nobody's focus. A remote standing on a pill that goes is put back on the bar.
+     */
+    private fun reachSkipPill() {
+        val pill = skipPill ?: return
+        if (!FormFactor.isTv(this)) return
+        val onOffer = controlsUp && pill.isShown && offeredSkip != null
+        val lost = pill.reachable(onOffer)
+        controls?.reachSkipPill(if (onOffer) pill.viewId else null)
+        if (lost) controls?.focusBar()
     }
 
     /** Whether the skip pill is up over the bare picture on a television, so OK is the skip. */
@@ -9377,6 +9564,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The card never takes the remote by itself (Right or Down walks onto it); the row
         // taking focus walks it off.
         if (visible) nextUpEngaged = false
+        reachSkipPill()
         liftSubtitles()
         liftCornerOffers()
         updateDownloadChip()

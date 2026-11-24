@@ -156,9 +156,11 @@ class PlayerControls(
 
     /** The television's Next episode button; shown only while there is a next episode. */
     private val nextEpisodeButton: View = root.findViewById(R.id.control_tv_next_episode)
+    private val previousEpisodeButton: View = root.findViewById(R.id.control_tv_previous_episode)
 
     /** The next episode the row's button plays, or null. */
     private var nextEpisodeToPlay: MediaItem? = null
+    private var previousEpisodeToPlay: MediaItem? = null
 
     /**
      * The row button the remote was last on, so a sheet or picker that closes puts it back on that
@@ -345,6 +347,7 @@ class PlayerControls(
         wire(episodesButton) { onEpisodes() }
         wire(copyButton) { onCopies() }
         wire(nextEpisodeButton) { nextEpisodeToPlay?.let(onPlayEpisode) }
+        wire(previousEpisodeButton) { previousEpisodeToPlay?.let(onPlayEpisode) }
         episodesButton.text = L.episodesTitle
         if (isTv) {
             container.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
@@ -828,6 +831,7 @@ class PlayerControls(
             root.findViewById(R.id.control_audio),
             speedButton,
             shapeButton,
+            previousEpisodeButton,
             nextEpisodeButton,
             more,
             centerPlay,
@@ -867,6 +871,7 @@ class PlayerControls(
             R.id.control_rotate to L.playerScreenOrientation,
             R.id.control_lock to L.playerLockScreen,
             R.id.control_tv_more to L.commonMore,
+            R.id.control_tv_previous_episode to L.playerPreviousEpisode,
             R.id.control_tv_next_episode to L.playerNextEpisode,
             R.id.control_episodes to L.episodesTitle,
             R.id.control_copy to L.playerCopies,
@@ -960,8 +965,8 @@ class PlayerControls(
 
     /**
      * Offers the phone's episode steps once the chat search has answered, and never before: a
-     * button that does nothing is worse than no button. A television has no buttons for them (its
-     * More menu and the remote's keys carry the steps), so there this does nothing.
+     * button that does nothing is worse than no button. A television has Previous and Next buttons
+     * on its row (a Google TV or Mi TV remote has no media keys for them) and the remote's keys.
      *
      * [previousLabel] and [nextLabel] are the whole name ("Next: S01E05  ·  The Lighthouse"): the
      * button's description and tooltip. [previousCaption] and [nextCaption] are the short form
@@ -977,7 +982,8 @@ class PlayerControls(
         nextCaption: String = "",
     ) {
         if (isTv) {
-            setNextEpisodeButton(nextEpisode, nextLabel)
+            setEpisodeButton(previousEpisodeButton, previousEpisode, previousLabel) { previousEpisodeToPlay = it }
+            setEpisodeButton(nextEpisodeButton, nextEpisode, nextLabel) { nextEpisodeToPlay = it }
             return
         }
         // Invisible rather than gone keeps the play disc dead centre whether or not there are
@@ -1012,17 +1018,17 @@ class PlayerControls(
     }
 
     /**
-     * The television's Next episode button: there while the chat has a next episode, gone for a
-     * film, a last episode or a lookup that found nothing. A remote standing on it when it goes
-     * is put back on the row rather than dropped.
+     * The television's Previous or Next episode button: there while the chat has that episode, gone
+     * for a film, a first or last episode or a lookup that found nothing. A remote standing on it
+     * when it goes is put back on the row rather than dropped.
      */
-    private fun setNextEpisodeButton(next: MediaItem?, label: String) {
-        nextEpisodeToPlay = next
-        describe(nextEpisodeButton, label)
-        val wanted = if (next != null) View.VISIBLE else View.GONE
-        if (nextEpisodeButton.visibility == wanted) return
-        val hadFocus = nextEpisodeButton.hasFocus()
-        nextEpisodeButton.visibility = wanted
+    private fun setEpisodeButton(button: View, episode: MediaItem?, label: String, keep: (MediaItem?) -> Unit) {
+        keep(episode)
+        describe(button, label)
+        val wanted = if (episode != null) View.VISIBLE else View.GONE
+        if (button.visibility == wanted) return
+        val hadFocus = button.hasFocus()
+        button.visibility = wanted
         if (hadFocus) focusRow()
     }
 
@@ -1165,6 +1171,22 @@ class PlayerControls(
         // The button the remote was on before the sheet opened, else the first one.
         val back = lastRowButton?.takeIf { it.isShown && it.isFocusable }
         (back ?: container.findViewById<View>(R.id.control_subtitles)).requestFocus()
+        poke()
+    }
+
+    /**
+     * Up from the scrub bar lands on [pillId], the skip pill, while a skip is on offer with the row
+     * up (WP-19); null puts back the play disc, the bar's usual way up.
+     */
+    fun reachSkipPill(pillId: Int?) {
+        if (!isTv) return
+        timeBar.nextFocusUpId = pillId ?: R.id.center_play_pause
+    }
+
+    /** Puts the remote back on the scrub bar, where a skip pill it stood on went away. */
+    fun focusBar() {
+        if (!isTv || !visible) return
+        timeBar.requestFocus()
         poke()
     }
 

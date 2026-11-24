@@ -200,4 +200,118 @@ class SkipPillTvTest {
             engine.release()
         }
     }
+
+    /** A view cannot take focus before it has a size: measure and lay the tree out at 960 x 540. */
+    private fun laidOut(root: FrameLayout) {
+        root.measure(View.MeasureSpec.makeMeasureSpec(960, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(540, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 960, 540)
+    }
+
+    private fun SkipPill.hintWords(): String = (view.getChildAt(1) as TextView).text.toString()
+
+    /** WP-19: with the row down OK skips and the pill is nobody's focus; with the row up it is a button the remote can reach. */
+    @Test
+    fun `the pill is focusable only with the row up, says Up then OK, and OK on it skips`() {
+        settings()
+        var skipped = 0
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = FrameLayout(activity)
+        val below = View(activity)
+        root.addView(below)
+        activity.setContentView(root)
+        val pill = SkipPill(root, below, tv = true, onSkip = { skipped++ })
+        val (_, engine) = engines(atMs = 100_000L).first()
+        tick(pill, chaptered(), engine)
+        laidOut(root)
+        assertTrue(pill.isShown)
+        // Row down: not focusable, "OK to skip".
+        assertFalse(pill.reachable(false))
+        assertFalse(pill.view.isFocusable)
+        assertEquals(L.playerSkipOkHint, pill.hintWords())
+        // Row up: focusable, the hint names the way there.
+        pill.reachable(true)
+        assertTrue(pill.view.isFocusable)
+        assertTrue(pill.view.isClickable)
+        assertEquals(L.playerSkipHintRowUp, pill.hintWords())
+        // The remote on it: "OK to skip", OK (a click) skips, no way out sideways or up.
+        // Robolectric's window starts in touch mode; a remote's window is not, so stand in for that.
+        pill.view.isFocusableInTouchMode = true
+        assertTrue(pill.view.requestFocus())
+        assertEquals(L.playerSkipOkHint, pill.hintWords())
+        assertEquals(pill.view.id, pill.view.nextFocusLeftId)
+        assertEquals(pill.view.id, pill.view.nextFocusRightId)
+        assertEquals(pill.view.id, pill.view.nextFocusUpId)
+        assertEquals(com.tmplayer.R.id.controls_timebar, pill.view.nextFocusDownId)
+        pill.view.performClick()
+        assertEquals(1, skipped)
+        // The row going down takes the focus off it and says so.
+        assertTrue(pill.reachable(false))
+        assertFalse(pill.view.hasFocus())
+        engine.release()
+    }
+
+    @Test
+    fun `a pill that goes while the remote stands on it tells the activity`() {
+        settings()
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = FrameLayout(activity)
+        val below = View(activity)
+        root.addView(below)
+        activity.setContentView(root)
+        val pill = SkipPill(root, below, tv = true, onSkip = {})
+        var lost = 0
+        pill.onLostFocus = { lost++ }
+        val (_, engine) = engines(atMs = 100_000L).first()
+        tick(pill, chaptered(), engine)
+        laidOut(root)
+        pill.reachable(true)
+        pill.view.isFocusableInTouchMode = true
+        assertTrue(pill.view.requestFocus())
+        pill.hide()
+        assertEquals(1, lost)
+        assertFalse(pill.view.isFocusable)
+        engine.release()
+    }
+
+    /** Relative luminance contrast of two opaque colours (WCAG). */
+    private fun contrast(a: Int, b: Int): Double {
+        fun lum(c: Int): Double {
+            fun ch(v: Int): Double {
+                val x = v / 255.0
+                return if (x <= 0.03928) x / 12.92 else Math.pow((x + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * ch((c shr 16) and 0xFF) + 0.7152 * ch((c shr 8) and 0xFF) + 0.0722 * ch(c and 0xFF)
+        }
+        val (hi, lo) = lum(a).coerceAtLeast(lum(b)) to lum(a).coerceAtMost(lum(b))
+        return (hi + 0.05) / (lo + 0.05)
+    }
+
+    /** The focused pill is white: its words must turn dark, never white on white (4.5:1). */
+    @Test
+    fun `the words of the focused pill contrast with its white background`() {
+        settings()
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = FrameLayout(activity)
+        val below = View(activity)
+        root.addView(below)
+        activity.setContentView(root)
+        val pill = SkipPill(root, below, tv = true, onSkip = {})
+        val (_, engine) = engines(atMs = 100_000L).first()
+        tick(pill, chaptered(), engine)
+        laidOut(root)
+        pill.reachable(true)
+        val label = pill.view.getChildAt(0) as TextView
+        val hint = pill.view.getChildAt(1) as TextView
+        // Not focused: light words on the dark chip.
+        val chip = 0xFF101014.toInt()
+        assertTrue(contrast(label.currentTextColor, chip) >= 4.5)
+        assertTrue(contrast(hint.currentTextColor, chip) >= 4.5)
+        pill.view.isFocusableInTouchMode = true
+        assertTrue(pill.view.requestFocus())
+        val white = (pill.view.background.current as android.graphics.drawable.GradientDrawable).color?.defaultColor ?: 0
+        assertEquals("the focused pill is solid white", 0xFFFFFFFF.toInt(), white)
+        assertTrue("label ${Integer.toHexString(label.currentTextColor)} on white", contrast(label.currentTextColor, white) >= 4.5)
+        assertTrue("hint ${Integer.toHexString(hint.currentTextColor)} on white", contrast(hint.currentTextColor, white) >= 4.5)
+        engine.release()
+    }
 }
