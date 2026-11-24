@@ -99,6 +99,9 @@ shows through in the background. They are listed under Selected twins below.
 | `Palette` | PaintBoard |  | TmIcons.Palette | Wallpaper colours. |
 | `Image` | Image01 |  | TmIcons.Image | Posters, thumbnails. |
 | `Frames` | Album02 |  | TmIcons.Frames | Preview frames over the scrub bar. |
+| `Chip` | Cpu |  |  | The video decoder and the player engine under Playback. |
+| `Layers` | Layers01 |  |  | Play in the chat's order (Playback). |
+| `Sync` | ArrowDataTransferHorizontal |  |  | Tunneled playback, the video's direct path (Playback). |
 | `Logs` | File01 |  | TmIcons.Logs | Save logs. |
 | `Bug` | Bug01 |  | TmIcons.Bug | Report a problem. |
 | `Gavel` | Legal01 |  | TmIcons.Gavel | Lawful use. |

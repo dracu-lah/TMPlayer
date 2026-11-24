@@ -111,7 +111,7 @@ internal fun LazyListScope.playerRows(
                 title = s.settingsTunneled,
                 subtitle = s.settingsTunneledDetail,
                 value = s.tunneledLabel(mode),
-                icon = TmIcons.Play,
+                icon = TmIcons.Sync,
                 canDecrease = mode != modes.first(),
                 canIncrease = mode != modes.last(),
                 onStep = { direction ->

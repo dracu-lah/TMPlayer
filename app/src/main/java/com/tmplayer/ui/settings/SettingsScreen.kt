@@ -1443,7 +1443,7 @@ fun SettingsScreen(
                     ToggleRow(
                         title = s.settingsPlayChatOrder,
                         subtitle = if (playChatOrder) s.settingsPlayChatOrderOn else s.settingsPlayChatOrderOff,
-                        icon = TmIcons.Play,
+                        icon = TmIcons.Layers,
                         checked = playChatOrder,
                         onToggle = { scope.launch { settings.setPlayChatOrder(!playChatOrder) } },
                     )
@@ -1472,7 +1472,7 @@ fun SettingsScreen(
                             ActionRow(
                                 title = s.settingsDecoder,
                                 subtitle = videoDecoder.label,
-                                icon = TmIcons.Play,
+                                icon = TmIcons.Chip,
                                 onClick = { pickingDecoder = true },
                             )
                         }

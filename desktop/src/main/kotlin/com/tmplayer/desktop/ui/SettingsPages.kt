@@ -226,7 +226,7 @@ internal fun PlaybackRows(state: ShellState, jumps: Map<SetupStep, JumpTarget>) 
         scope.launch { settings.setAutoplayNext(it) }
     }
     // After a video that is not an episode, and whether Repeat this video outlasts it (EG-F30, EG-F52).
-    Toggle(s.settingsPlayChatOrder, if (playChatOrder) s.settingsPlayChatOrderOn else s.settingsPlayChatOrderOff, playChatOrder, icon = TmIcons.Play) {
+    Toggle(s.settingsPlayChatOrder, if (playChatOrder) s.settingsPlayChatOrderOn else s.settingsPlayChatOrderOff, playChatOrder, icon = TmIcons.Layers) {
         scope.launch { settings.setPlayChatOrder(it) }
     }
     Toggle(s.settingsKeepRepeat, if (keepRepeat) s.settingsKeepRepeatOn else s.settingsKeepRepeatOff, keepRepeat, icon = TmIcons.Repeat) {
