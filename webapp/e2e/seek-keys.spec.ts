@@ -4,6 +4,7 @@
 // player's, not the bar's.
 import { expect, test, type Page } from '@playwright/test'
 import { noSizeFloor, openCard, openClips, playsPast } from './helpers'
+import { GATE_MS } from '../src/player/seekStepper'
 
 test.beforeEach(async ({ page, isMobile }) => {
     test.skip(isMobile, 'a keyboard is a desktop input')
@@ -46,9 +47,13 @@ test('a held ArrowRight writes the time at most seven times a second, and the st
         await page.waitForTimeout(30)
     }
     await page.keyboard.up('ArrowRight')
-    const n = await writes(page)
-    expect(n).toBeGreaterThanOrEqual(1)
-    expect(n).toBeLessThanOrEqual(9)
+    // Counted against the clock the gate reads, not a fixed number: a slow or busy browser (WebKit in
+    // a container) takes longer over the 37 presses and lets more steps through, each a gate apart.
+    const at = await page.evaluate(() => (window as unknown as { __writes: number[] }).__writes)
+    const n = at.length
+    expect(n).toBeGreaterThanOrEqual(2)
+    expect(n).toBeLessThan(37)
+    for (let i = 1; i < n; i++) expect(at[i] - at[i - 1]).toBeGreaterThanOrEqual(GATE_MS - 1)
     const t1 = await page.locator('video').first().evaluate((v: HTMLVideoElement) => v.currentTime)
     expect(t1).toBeGreaterThan(t0)
 })
