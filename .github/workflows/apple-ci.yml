@@ -32,6 +32,11 @@ on:
       - "settings.gradle.kts"
       - ".github/workflows/apple-ci.yml"
   workflow_dispatch:
+    inputs:
+      accessibility_audit:
+        description: "Also run the accessibility audit (AccessibilityAuditTests, the sign in screen: no account on the runner)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -202,11 +207,26 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/derived" -clonedSourcePackagesDirPath "$HOME/spm" \
             -resultBundlePath "$RUNNER_TEMP/unit.xcresult" CODE_SIGNING_ALLOWED=NO -quiet
 
+      # By hand only (workflow_dispatch with accessibility_audit): iOS's own audit of the first screen,
+      # which on a runner with no account is the sign in. The screens after it need a signed in device
+      # (iosApp/TMPlayerUITests/AccessibilityAuditTests.swift, docs/IOS.md).
+      - name: Accessibility audit
+        if: github.event_name == 'workflow_dispatch' && inputs.accessibility_audit
+        run: |
+          set -o pipefail
+          xcodebuild test -project iosApp/TMPlayer.xcodeproj -scheme TMPlayerDeviceCheck \
+            -destination "id=$SIMULATOR" -configuration Debug \
+            -only-testing:TMPlayerUITests/AccessibilityAuditTests/testFirstScreen \
+            -derivedDataPath "$RUNNER_TEMP/derived" -clonedSourcePackagesDirPath "$HOME/spm" \
+            -resultBundlePath "$RUNNER_TEMP/audit.xcresult" CODE_SIGNING_ALLOWED=NO -quiet
+
       - name: Upload test result
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: apple-ci-unit-xcresult
-          path: ${{ runner.temp }}/unit.xcresult
+          path: |
+            ${{ runner.temp }}/unit.xcresult
+            ${{ runner.temp }}/audit.xcresult
           retention-days: 7
           if-no-files-found: ignore

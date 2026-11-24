@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0B2E2AC87503B0DB7E00C031 /* drawable in Resources */ = {isa = PBXBuildFile; fileRef = AF88D6272918A441881BD8B2 /* drawable */; };
 		184ECF126F74BCB65DB7D555 /* Media3BridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7897442E2D440D104157D3C8 /* Media3BridgeTests.swift */; };
+		5A1C0DE0A0D17A0DB10C0002 /* AccessibilityAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1C0DE0A0D17A0DB10C0001 /* AccessibilityAuditTests.swift */; };
 		18D2EF559AB426C5FFFBDB17 /* ResourcesOnDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F47EA75A38BA7FFF309F8A /* ResourcesOnDeviceTests.swift */; };
 		1EE6AF5D316A04DD7FC062D8 /* color in Resources */ = {isa = PBXBuildFile; fileRef = FADFFD843859B35CF99E61BC /* color */; };
 		24F444E8B8B54AEB7E64C15B /* AppleStreamLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FCE62B19C0D68D4156AFBC /* AppleStreamLoader.swift */; };
@@ -58,6 +59,7 @@
 /* Begin PBXFileReference section */
 		07A4D0FFA7E6BC02FC7B2280 /* i18n */ = {isa = PBXFileReference; lastKnownFileType = folder; name = i18n; path = ../core/src/commonMain/resources/i18n; sourceTree = SOURCE_ROOT; };
 		0D1564292F7FA19CE9EAE86F /* NumberPadKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberPadKeyboard.swift; sourceTree = "<group>"; };
+		5A1C0DE0A0D17A0DB10C0001 /* AccessibilityAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAuditTests.swift; sourceTree = "<group>"; };
 		16F47EA75A38BA7FFF309F8A /* ResourcesOnDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourcesOnDeviceTests.swift; sourceTree = "<group>"; };
 		34F0F5718AF47B32A8BDCF51 /* engine-sample.mkv */ = {isa = PBXFileReference; path = "engine-sample.mkv"; sourceTree = "<group>"; };
 		4329D0EF6DEE477A1ADF5F5E /* AboutOnDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutOnDeviceTests.swift; sourceTree = "<group>"; };
@@ -234,6 +236,7 @@
 			children = (
 				4329D0EF6DEE477A1ADF5F5E /* AboutOnDeviceTests.swift */,
 				8B3615DAF78CD98EBD658B4B /* PlayerOnDeviceTests.swift */,
+				5A1C0DE0A0D17A0DB10C0001 /* AccessibilityAuditTests.swift */,
 				16F47EA75A38BA7FFF309F8A /* ResourcesOnDeviceTests.swift */,
 			);
 			path = TMPlayerUITests;
@@ -476,6 +479,7 @@
 			files = (
 				DB1E0115CEFB854F7364F53C /* AboutOnDeviceTests.swift in Sources */,
 				783D0BBAEE0CB0D0305EC354 /* PlayerOnDeviceTests.swift in Sources */,
+				5A1C0DE0A0D17A0DB10C0002 /* AccessibilityAuditTests.swift in Sources */,
 				18D2EF559AB426C5FFFBDB17 /* ResourcesOnDeviceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

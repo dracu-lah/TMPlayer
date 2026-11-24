@@ -101,8 +101,8 @@ object ResourceFiles {
     /** Pixels per dp: one dp is one iOS point, as Compose draws on iOS, and a point is [density] pixels. */
     val density: Float by lazy { UIScreen.mainScreen.scale.toFloat() }
 
-    /** Pixels per sp, the same until the text size setting is followed. */
-    val scaledDensity: Float get() = density
+    /** Pixels per sp: the density times the user's text size (Dynamic Type), as Android's. */
+    val scaledDensity: Float get() = density * HostConfiguration.fontScale
 
     private val folder: String? by lazy { NSBundle.mainBundle.resourcePath }
     private val xmlCache = HashMap<String, XmlNode?>()

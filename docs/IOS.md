@@ -182,6 +182,7 @@ them off for an Android or desktop build there.
 | The View toolkit's stand-ins against Android's behaviour | `./gradlew :ui:iosSimulatorArm64Test` | Mac |
 | The Media3 stand-ins and iOS pieces | `./gradlew :ios:iosSimulatorArm64Test` | Mac |
 | Every video engine against the same rules (`EngineConformanceTests`, `Media3BridgeTests`) | `xcodebuild test -project iosApp/TMPlayer.xcodeproj -scheme TMPlayer -destination 'platform=iOS Simulator,name=iPhone 17'` | Mac |
+| The accessibility audit on the sign in, Home, a video's page, the player, its status sheet and Settings (`AccessibilityAuditTests`, `performAccessibilityAudit`; `TM_LARGER_TEXT=1` adds Larger Text; the sign in alone from GitHub with `gh workflow run apple-ci.yml -f accessibility_audit=true`) | `xcodebuild test -project iosApp/TMPlayer.xcodeproj -scheme TMPlayerDeviceCheck -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:TMPlayerUITests/AccessibilityAuditTests` | Mac (screens after the sign in need a signed in simulator or device) |
 | On a real device, with a viewer's taps (`PlayerOnDeviceTests`, `AboutOnDeviceTests`, `ResourcesOnDeviceTests`) | `xcodebuild test -project iosApp/TMPlayer.xcodeproj -scheme TMPlayerDeviceCheck -destination 'id=<device>'` | Mac and device |
 | Release scripts, the AltStore source (fields, order, checksums, news, screenshots, schema with `pip install jsonschema`), identifiers, versions, the Apple workflows' guards, no committed secrets | `python3 -I -m unittest discover -s iosApp/release` | any |
 | The same, the Kotlin compile for iOS and (when `APPLE_MAC_CI` is `true`) the Xcode build and Swift tests | `.github/workflows/apple-ci.yml` | GitHub, see "Continuous integration" |
@@ -587,6 +588,13 @@ Found while bringing the port over; fixed ones are listed under the next heading
   observers (kept, never called), Compose's `AndroidView` (draws nothing, so the Playback test's
   preview is blank on iOS), `LoopbackStream.start` (throws: no casting), metered networks (from
   NetworkMonitor). External players, decoder listing and VLC have iOS versions that offer none.
+- **The stand-in `Configuration` follows the host (WP-64, 2026-11-24).** `Resources.configuration`
+  reads the key window's size in points (the shorter side is `smallestScreenWidthDp`, wider than tall
+  is landscape), the density and light or dark from the screen, and `fontScale` from Dynamic Type
+  (`UIFontMetrics` scaling 100 points), so the player's Views (`PlayerControls` label sizes,
+  `StatusSheetShape` width) follow Larger Text and an iPad's Split View; `scaledDensity` is the
+  density times that scale, so an sp in a View's layout does too. Unchecked until a Mac run:
+  `HostConfigurationTest` (`./gradlew :ui:iosSimulatorArm64Test`), and a VoiceOver pass on an iPhone.
 - **Support links on iOS** (`SUPPORT_LINKS = true`): fine for a sideloaded app; an App Store build
   would have to drop them.
 - **Not ported:** casting, Picture in Picture, background downloads, crash reports (see "Not in scope").

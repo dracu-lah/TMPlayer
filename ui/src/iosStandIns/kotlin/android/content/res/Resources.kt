@@ -22,7 +22,8 @@ class Configuration {
 }
 
 class Resources private constructor() {
-    val configuration: Configuration get() = Configuration()
+    /** Read from the host on each call: the font scale, the window's size in dp and its orientation ([HostConfiguration]). */
+    val configuration: Configuration get() = HostConfiguration.read()
     fun getString(id: Int): String = ""
 
     private fun reference(id: Int): String =
