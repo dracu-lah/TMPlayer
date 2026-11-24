@@ -350,6 +350,31 @@ class TvKeyOwnershipTest {
     }
 
     @Test
+    fun `player, after the pause dim any key but the media ones only raises the row, Back does not leave (WP-21, PB2-03)`() {
+        val dispatch = playerDispatch()
+        val mark = dispatch.indexOf("pauseMarkKeys.onKey(")
+        assertTrue("the pause mark is asked before Back, the arrows and OK", mark in 1 until dispatch.indexOf("// Back peels the overlays off in the order"))
+        assertTrue(mark < dispatch.indexOf("okPress.pausesOnRelease"))
+        assertTrue("{ controls?.paused() }" in dispatch)
+        assertTrue(PlayerRemoteKeys.actsThroughPauseMark(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+        assertTrue(PlayerRemoteKeys.actsThroughPauseMark(KeyEvent.KEYCODE_CAPTIONS))
+        for (key in listOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_MENU)) {
+            assertFalse("$key raises the row", PlayerRemoteKeys.actsThroughPauseMark(key))
+        }
+    }
+
+    @Test
+    fun `player, the scan option takes held Left, Right and Rewind from the third repeat and is off by default (WP-79)`() {
+        val dispatch = playerDispatch()
+        assertTrue("if (scanThenJump && scanFromRemote(forward, event)) return true" in dispatch)
+        assertTrue("if (scanThenJump && FormFactor.isTv(this) && scanFromRemote(false, event)) return true" in dispatch)
+        assertTrue("one seek on release", "commitScan()" in dispatch.substringAfter("// A scan lands once, when its key is let go"))
+        assertEquals(3, PlayerRemoteKeys.SCAN_FROM_REPEAT)
+        val settings = File(repo(), "core/src/commonMain/kotlin/com/tmplayer/data/SettingsStore.kt").readText()
+        assertTrue("off by default", "it[SCAN_THEN_JUMP] ?: false" in settings)
+    }
+
+    @Test
     fun `bar, Back on a page goes up to the bar, on the bar of another page goes Home, on Home's bar leaves`() {
         val browse = text("src/main/java/com/tmplayer/ui/browse/BrowseScreen.kt")
         val page = browse.substringAfter("BackHandler(enabled = !tvBarHasFocus) {").substringBefore("}\n")

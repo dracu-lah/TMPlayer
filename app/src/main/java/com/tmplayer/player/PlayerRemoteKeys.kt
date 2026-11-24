@@ -245,6 +245,51 @@ object PlayerRemoteKeys {
         }
     }
 
+    /**
+     * The keys that keep their meaning while the pause mark stands in for the row (WP-21): the
+     * media keys and CC, which name what they do, and the volume keys, which are the system's.
+     * Every other key only brings the row back ([PauseMarkKeys]).
+     */
+    fun actsThroughPauseMark(keyCode: Int): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
+        KeyEvent.KEYCODE_MEDIA_STOP, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_REWIND,
+        KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_CAPTIONS,
+        KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE,
+        -> true
+        else -> false
+    }
+
+    /**
+     * A television paused long enough that the row made way for the small "Paused" mark (WP-21):
+     * any key but the media ones only brings the row back, with the play disc holding the remote
+     * (PB2-03). Without this Back left the video, Left and Right seeked while paused and OK resumed,
+     * all from a screen that showed no row. The press that raises the row is taken whole: its
+     * repeats and its release too, so a held arrow does not seek once the row is up and OK's or
+     * Info's release does nothing more.
+     */
+    class PauseMarkKeys {
+        private var taken = 0
+
+        /**
+         * One key event. [markShown] is whether the mark stands in for the row now; [raise] brings
+         * the row back and is called once, on the press. True when the event is taken here.
+         */
+        fun onKey(keyCode: Int, action: Int, markShown: Boolean, raise: () -> Unit): Boolean {
+            if (taken != 0) {
+                if (keyCode == taken) {
+                    if (action == KeyEvent.ACTION_UP) taken = 0
+                    return true
+                }
+                // Another key went down: the release of the first was lost (focus moved, a remote dropped it).
+                if (action == KeyEvent.ACTION_DOWN) taken = 0
+            }
+            if (action != KeyEvent.ACTION_DOWN || !markShown || actsThroughPauseMark(keyCode)) return false
+            taken = keyCode
+            raise()
+            return true
+        }
+    }
+
     /** The Stop key: the position is saved and the player is left, as Back does. */
     fun isStop(keyCode: Int): Boolean = keyCode == KeyEvent.KEYCODE_MEDIA_STOP
 

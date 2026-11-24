@@ -202,8 +202,10 @@ class PauseControlsRowTest {
         idle(2_000)
         assertFalse("then it goes", controls.visible)
         assertEquals(View.VISIBLE, mark(disc.rootView)?.visibility)
+        assertTrue(controls.pauseMarkShown)
         // A key: the row, and the mark is gone.
-        controls.show()
+        val remote = BarePicture(controls)
+        remote.tap(android.view.KeyEvent.KEYCODE_DPAD_UP)
         assertTrue(controls.visible)
         assertEquals(View.GONE, mark(disc.rootView)?.visibility)
         // And a pause that goes on counts ten seconds again from that key.
@@ -211,6 +213,101 @@ class PauseControlsRowTest {
         assertTrue(controls.visible)
         idle(2_000)
         assertFalse(controls.visible)
+    }
+
+    /**
+     * The activity's order for a key over the bare picture on a television, event by event, with
+     * the real [PlayerRemoteKeys.PauseMarkKeys] first (PlayerActivity.dispatchKeyEvent; the
+     * activity itself cannot start under Robolectric, its order is checked from the source below):
+     * Back leaves, Left and Right seek, OK toggles on its release.
+     */
+    private inner class BarePicture(private val controls: PlayerControls) {
+        val keys = PlayerRemoteKeys.PauseMarkKeys()
+        var left = false
+        var positionMs = 600_000L
+        var okDown = false
+
+        fun send(event: android.view.KeyEvent) {
+            if (keys.onKey(event.keyCode, event.action, controls.pauseMarkShown) { controls.paused() }) return
+            val down = event.action == android.view.KeyEvent.ACTION_DOWN
+            when (event.keyCode) {
+                android.view.KeyEvent.KEYCODE_BACK -> if (down) {
+                    if (controls.visible) controls.hideAnimated() else left = true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> if (down && !controls.visible) positionMs += 10_000
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER -> when {
+                    down && !controls.visible && event.repeatCount == 0 -> okDown = true
+                    !down && okDown -> {
+                        okDown = false
+                        playing = !playing
+                    }
+                }
+            }
+        }
+
+        fun tap(code: Int, repeats: Int = 0) {
+            send(android.view.KeyEvent(0L, 0L, android.view.KeyEvent.ACTION_DOWN, code, 0))
+            for (r in 1..repeats) send(android.view.KeyEvent(0L, 50L * r, android.view.KeyEvent.ACTION_DOWN, code, r))
+            send(android.view.KeyEvent(0L, 50L * repeats + 50, android.view.KeyEvent.ACTION_UP, code, 0))
+        }
+    }
+
+    /** The mark up after ten seconds of a pause on a television. */
+    private fun dimmed(): Pair<PlayerControls, View> {
+        val (controls, disc) = row(tv = true)
+        playing = false
+        controls.paused()
+        controls.onPlayingChanged()
+        idle(11_000)
+        assertTrue(controls.pauseMarkShown)
+        return controls to disc
+    }
+
+    @Test
+    fun `with the pause mark up Back, a held Right and OK only bring the row back (PB2-03)`() {
+        for (code in listOf(android.view.KeyEvent.KEYCODE_BACK, android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.KEYCODE_DPAD_CENTER)) {
+            val (controls, disc) = dimmed()
+            val remote = BarePicture(controls)
+            remote.tap(code, repeats = if (code == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) 6 else 0)
+            assertFalse("$code: the video is not left", remote.left)
+            assertEquals("$code: no seek, not even from the repeats", 600_000L, remote.positionMs)
+            assertFalse("$code: still paused, the release did not resume", playing)
+            assertTrue("$code: the row is back", controls.visible)
+            assertTrue("$code: the play disc has the remote", disc.isFocused)
+            assertFalse(controls.pauseMarkShown)
+            // The row is up now: the next Back puts it away, the one after leaves, as always.
+            remote.tap(android.view.KeyEvent.KEYCODE_BACK)
+            assertFalse(remote.left)
+            remote.tap(android.view.KeyEvent.KEYCODE_BACK)
+            assertTrue(remote.left)
+        }
+    }
+
+    @Test
+    fun `with the pause mark up the media keys keep their meaning`() {
+        val (controls, _) = dimmed()
+        val keys = PlayerRemoteKeys.PauseMarkKeys()
+        for (code in listOf(
+            android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_STOP,
+            android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, android.view.KeyEvent.KEYCODE_CAPTIONS,
+            android.view.KeyEvent.KEYCODE_VOLUME_UP,
+        )) {
+            assertFalse("$code passes", keys.onKey(code, android.view.KeyEvent.ACTION_DOWN, controls.pauseMarkShown) { controls.paused() })
+        }
+        assertTrue("the mark is still up", controls.pauseMarkShown)
+    }
+
+    @Test
+    fun `the activity asks the pause mark first, before OK's release, Back and the arrows`() {
+        val here = java.io.File("src/main/java/com/tmplayer/player/PlayerActivity.kt")
+        val source = (if (here.exists()) here else java.io.File("app/${here.path}")).readText()
+        val dispatch = source.substringAfter("override fun dispatchKeyEvent(event: KeyEvent): Boolean {").substringBefore("/** A key while the screen is locked")
+        val mark = dispatch.indexOf("pauseMarkKeys.onKey(")
+        assertTrue("dispatchKeyEvent asks PauseMarkKeys", mark > 0)
+        assertTrue("{ controls?.paused() }" in dispatch)
+        for (later in listOf("okPress.pausesOnRelease", "KeyEvent.KEYCODE_BACK ->", "KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_LEFT ->", "commitScan()", "KEYCODE_INFO && event.action == KeyEvent.ACTION_UP")) {
+            assertTrue("$later comes after the pause mark", dispatch.indexOf(later) > mark)
+        }
     }
 
     @Test

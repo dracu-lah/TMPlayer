@@ -32,7 +32,9 @@ the same change.
 | CC, Audio | nothing | nothing | nothing | nothing | CC toggles subtitles (last used track, or off), a second press within 3 s or a held CC opens the picker (WP-19, today); Audio opens its picker (today) | same | nothing | the row's subtitle and audio buttons |
 | Page, Channel | nothing | screenful (today, WP-12; Fast forward and Rewind too) | screenful (today, WP-12) | section jump: first row of the next section, Up: this section then the one before (today, WP-75, `SettingsPaneTvFocusTest`) | Page: chapter, or 60 s without chapters, once per press (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (today, WP-89) |
 | Play/Pause, Stop | nothing | nothing | nothing | nothing | toggle (today); Stop leaves (today) | same | Play/Pause, Play, Pause and Stop still work under the panel and the pickers (WP-19, today) | OK on the play button |
-| Left, Right hold | move (today, tested on tiles only) | move, stale repeats dropped (WP-13) | same | rail and pane: move, stale repeats dropped; Right or OK on the rail enters the pane (today, WP-07) | 10 s, live ramp, gated (WP-18) | bar: 10 s, ramped scrub, stale repeats dropped, one commit (WP-18) | move | n/a |
+| Left, Right hold | move (today, tested on tiles only) | move, stale repeats dropped (WP-13) | same | rail and pane: move, stale repeats dropped; Right or OK on the rail enters the pane (today, WP-07) | 10 s, live ramp, gated (WP-18); with the scan option (WP-79, behind Settings, off) a held key from its 3rd repeat moves the bar's thumb and a time card and seeks once on release | bar: 10 s, ramped scrub, stale repeats dropped, one commit (WP-18); a scan under way keeps the keys | move | n/a |
+| Rewind hold | nothing | screenful (today, WP-12) | screenful (today, WP-12) | nothing | jump back, ramped (today); with the scan option (WP-79, behind Settings, off) it scans like a held Left | same | group jump in More (WP-20) | Left |
+| Any key, paused 10 s on a TV | n/a | n/a | n/a | n/a | the row makes way for a small "Paused" mark (WP-21): any key but Play/Pause, Play, Pause, Stop, Fast forward, Rewind, Next, Previous, CC and volume only raises the row, the play disc holding the remote, its repeats and release taken too (PB2-03, `PlayerRemoteKeys.PauseMarkKeys`): Back does not leave, the arrows do not seek, OK does not resume | n/a | n/a | n/a |
 
 ## Player actions without a key
 
@@ -98,6 +100,12 @@ Found while pinning the table (WP-69):
   beside the total, to one decimal. On a TV's focused bar `FineTimeBar.onKeyDown` takes the same
   steps, drops stale
   repeats, and Media3 commits one seek a second after the last key (`FineTimeBarKeysTest`).
+  The scan option (WP-79, Settings, off by default) turns a held Left, Right or Rewind, from its
+  3rd repeat, into a scrub of the bar's thumb with a time card and no frames fetched; the seek
+  lands once when the key is let go, or 400 ms after the last repeat (`RemoteScan`).
+- **The pause mark (WP-21).** Paused 10 s on a television, the row goes and a small "Paused" mark
+  takes its place, so the first key only brings the row back (PB2-03); with the row up the keys
+  are the row's again, so Back puts the row down and the next Back leaves.
 
 - **Options without a Menu key (WP-14).** A video tile and a History row keep Menu, Info and a held OK
   for their options (`Holdable.kt`) and OK plays at once. A remote with none of those (Google TV)

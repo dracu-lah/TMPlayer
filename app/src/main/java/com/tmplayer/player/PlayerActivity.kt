@@ -7288,6 +7288,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (panelPlaybackKey(event)) return true
             return super.dispatchKeyEvent(event)
         }
+        // Paused long enough that the small mark stands in for the row (WP-21): any key but the
+        // media ones only brings the row back, the play disc holding the remote, and its repeats
+        // and release are taken too (PB2-03). Back does not leave, the arrows do not seek, OK does
+        // not resume from a screen that shows no row.
+        if (FormFactor.isTv(this) && pauseMarkKeys.onKey(
+                event.keyCode,
+                event.action,
+                markShown = controls?.pauseMarkShown == true && statusOverlay.visibility != View.VISIBLE,
+            ) { controls?.paused() }
+        ) {
+            return true
+        }
         // Fire TV's Menu key is the player's options, as Amazon's guidelines have it: on release,
         // so that holding it still reaches the long press below and hands the video over.
         if (event.keyCode == KeyEvent.KEYCODE_MENU && remoteQuirks.menuOpensPlayerMenu &&
@@ -7746,6 +7758,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** The television's OK press now down: where it began, whether it handed over (WP-19). */
     private val okPress = PlayerRemoteKeys.OkPress()
+
+    /** The key that brought the row back from the pause mark, taken until its release (PB2-03). */
+    private val pauseMarkKeys = PlayerRemoteKeys.PauseMarkKeys()
 
     /** The CC key press now down (WP-19). */
     private val captionsKey = PlayerRemoteKeys.CaptionsKeyPress()

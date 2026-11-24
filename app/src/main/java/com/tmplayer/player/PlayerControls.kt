@@ -1373,6 +1373,9 @@ class PlayerControls(
         }
     }
 
+    /** Whether the "Paused" mark stands in for the row now: the next key only brings the row back (PB2-03). */
+    val pauseMarkShown: Boolean get() = pauseMark?.visibility == View.VISIBLE
+
     private fun pausedByViewer(): Boolean = isTv && player()?.let { it.playWhenReady.not() && it.playbackState != Player.STATE_ENDED } == true
 
     private fun dimPause() {
