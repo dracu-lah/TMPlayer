@@ -1,5 +1,5 @@
 import { onGlobal } from './ui/globalInput'
-import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type Component, type ParentProps } from 'solid-js'
+import { createEffect, createMemo, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, onMount, Show, Switch, type Component, type ParentProps } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
@@ -25,6 +25,8 @@ import { TrailerSheet } from './ui/TrailerSheet'
 import { applyUpdate, updateReady } from './install'
 import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
+import { focusTarget, pageName, pageTitle } from './ui/pageTitle'
+import { PAGE_TITLES, pageFor } from './ui/settingsMap'
 
 // Home comes with the first load. Sign in (with its QR code), the watch page (with the player and
 // its remuxer) and the other pages load when needed; once signed in they are fetched while idle.
@@ -214,6 +216,58 @@ function Shell(props: ParentProps) {
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 
+    // The tab, the app switcher and a screen reader name the page (WCAG 2.4.2). A chat's or a video's name
+    // is the page's own and never shows while a profile is locked (ui/pageTitle.ts).
+    const title = createMemo(() =>
+        pageTitle({
+            path: location.pathname,
+            say: (key) => t(key as never),
+            name: pageName(),
+            settingsPage: (() => {
+                const page = pageFor(location.pathname.split('/')[2])
+                return page ? PAGE_TITLES[page] : null
+            })(),
+            locked: locked(),
+        }),
+    )
+    createEffect(() => {
+        document.title = title()
+    })
+    // After a navigation the keyboard and a screen reader start at the new page: its heading, else the page itself, unless the page took focus on purpose.
+    let firstRoute = true
+    let settleTimer = 0
+    const settleFocus = (tries = 0) => {
+        clearTimeout(settleTimer)
+        settleTimer = window.setTimeout(() => {
+            const page = document.querySelector<HTMLElement>('main.page')
+            const heading = page?.querySelector<HTMLElement>('h1') ?? null
+            // A page that draws after its data has its heading a moment later.
+            if (!heading && tries < 6) return settleFocus(tries + 1)
+            const target = focusTarget({ heading, page, active: document.activeElement, body: document.body, first: false })
+            if (!target) return
+            if (!target.hasAttribute('tabindex')) target.tabIndex = -1
+            target.focus({ preventScroll: true })
+        }, tries === 0 ? 60 : 150)
+    }
+    createEffect(
+        on(
+            () => location.pathname,
+            () => {
+                if (firstRoute) return void (firstRoute = false)
+                // The TV's remote walk is tv/focus.ts; the player has its own keys; a locked profile shows the picker.
+                if (form() === 'tv' || playing() || locked() || picker()) return
+                settleFocus()
+            },
+        ),
+    )
+    onCleanup(() => clearTimeout(settleTimer))
+    // The bar is last in the page: a keyboard user's way to it without tabbing through the page.
+    const navShown = () => form() !== 'tv' && !playing() && !detail() && !setup() && !location.pathname.startsWith('/chat/')
+    const toNav = (e: MouseEvent) => {
+        e.preventDefault()
+        document.querySelector<HTMLElement>('#main-nav .nav-cell')?.focus()
+    }
+
     return (
         <>
             <Switch fallback={<Boot />}>
@@ -225,6 +279,9 @@ function Shell(props: ParentProps) {
                 </Match>
                 <Match when={me() === null && location.pathname === '/signin'}>{props.children}</Match>
                 <Match when={signedIn()}>
+                    <Show when={navShown()}>
+                        <a class="skip-link" href="#main-nav" onClick={toNav}>{t('web.skip_to_navigation')}</a>
+                    </Show>
                     <main class="page" classList={{ playing: playing(), bleed: detail() }} inert={picker() ? true : undefined}>
                         <ErrorBoundary
                             fallback={(e, reset) => (

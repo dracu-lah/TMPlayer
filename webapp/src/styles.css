@@ -112,6 +112,14 @@ h1, h2, h3, p { margin: 0; }
 .boot-mark { width: 64px; height: 64px; border-radius: var(--r-l); }
 /* A sheet scrolls inside itself: the page behind it does not follow at the end of the list (WP-54). */
 dialog { overscroll-behavior: contain; }
+/* After a navigation focus moves to the page's heading or the page itself (WP-57): it needs no ring, it is not a control. */
+main.page:focus, main.page h1:focus { outline: none; }
+/* "Skip to navigation": first in the page, seen only while the keyboard is on it. */
+.skip-link:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip-link:focus {
+  position: fixed; z-index: 30; inset-block-start: calc(8px + env(safe-area-inset-top)); inset-inline-start: 8px;
+  padding: 10px 16px; border-radius: 999px; background: var(--menu); color: var(--fg); border: 1px solid var(--line); text-decoration: none;
+}
 /* The last stop for an uncaught error (crash.ts): over everything, clear of the edges. */
 .crash-card {
   position: fixed; z-index: 2147483647; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));

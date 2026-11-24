@@ -677,6 +677,7 @@ export const PAGE_STRINGS = [
     'web.posters_title',
     'web.quality_original',
     'web.seek_bar',
+    'web.skip_to_navigation',
     'web.settings_storage',
     'web.settings_storage_summary',
     'web.slow_decode',

@@ -78,7 +78,7 @@ export function Nav() {
     }
     onMount(() => onCleanup(onGlobal(document, 'keydown', onKey)))
     return (
-        <nav class="nav" aria-label="TMPlayer">
+        <nav class="nav" id="main-nav" aria-label="TMPlayer">
             <div class="nav-cells" style={{ '--i': Math.max(0, chosen()) }}>
                 <span class="nav-highlight" classList={{ shown: chosen() >= 0 }} aria-hidden="true" />
                 <For each={PLACES}>

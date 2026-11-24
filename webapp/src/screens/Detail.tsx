@@ -31,6 +31,7 @@ import { Episodes } from './detail/Episodes'
 import { More } from './detail/More'
 import { Round } from './detail/Round'
 import { dot } from '../ui/dot'
+import { setPageName } from '../ui/pageTitle'
 
 
 /**
@@ -206,6 +207,9 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     }
     // The viewer's own title (Rename) leads; TMDB's, then the name the worker reads, follow.
     const title = () => renamedTitle(item) || found()?.title || props.info?.title || item.title
+    // The tab's title names the video while its page is open (ui/pageTitle.ts).
+    createEffect(() => setPageName(title()))
+    onCleanup(() => setPageName(null))
     // Every copy of this video: a rename is written to all of them, so it holds whichever one a card shows.
     const copyItems = () => props.info?.group.length ? props.info.group : (props.info?.copies.map((c) => c.item) ?? [])
     const ep = () => props.info?.episode ?? null

@@ -24,6 +24,7 @@ import { ensureTouches } from './touches'
 import { SortMenu } from './SortMenu'
 import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
 import './topics.css'
+import { setPageName } from '../ui/pageTitle'
 import type { ChatPage, ChatView, RpcError, Tile } from '../tg/types'
 
 /** Pages in a row that brought no new card before the list stops paging by itself and offers a button. */
@@ -244,6 +245,9 @@ export function Chat() {
     onCleanup(() => clearTimeout(waitTimer))
 
     const title = () => (page() ? chatName(page()!) : '')
+    // The tab's title names the chat while it is open (ui/pageTitle.ts).
+    createEffect(() => setPageName(title()))
+    onCleanup(() => setPageName(null))
     const toCards = stableCards<Tile, CardData>((tile) => tileCard(tile))
     const cards = createMemo(() => toCards(page()?.tiles ?? []))
     // The videos on screen, so "Choose the right poster" can offer a pick to the others of its title.

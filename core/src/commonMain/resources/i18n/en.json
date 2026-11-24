@@ -4334,6 +4334,7 @@
     "settings_storage": "Storage",
     "settings_storage_summary": "What this browser keeps for TMPlayer",
     "signout_body": "You'll be signed out and taken back to the sign-in screen. Your favourites, your watched list and everything you were part way through go with it.",
+    "skip_to_navigation": "Skip to navigation",
     "slow_decode": "This browser decodes this video more slowly than it plays, so it will stop now and then to catch up. The TMPlayer app plays it smoothly.",
     "sound_unplayable": "This browser cannot play the {codec} sound, so the sound stays as it was.",
     "stopped_loading": "The video stopped loading. Check your connection, then try again.",

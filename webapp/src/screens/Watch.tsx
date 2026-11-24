@@ -1,4 +1,5 @@
-import { createEffect, createResource, lazy, Match, Show, Switch } from 'solid-js'
+import { createEffect, createResource, lazy, Match, onCleanup, Show, Switch } from 'solid-js'
+import { setPageName } from '../ui/pageTitle'
 import { useLocation, useNavigate, useParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
@@ -57,6 +58,9 @@ export function Watch() {
     createEffect(() => {
         if (video()) askKeepOnce().catch(() => {})
     })
+    // The tab's title names the video while it plays (ui/pageTitle.ts).
+    createEffect(() => setPageName(video()?.title))
+    onCleanup(() => setPageName(null))
     const [progress] = createResource(readProgress)
     // "After a video that is not an episode": the chat's next video in the grid's order (EG-F30).
     const [chatOrder] = createResource(() => readChatOrder().catch(() => false))
