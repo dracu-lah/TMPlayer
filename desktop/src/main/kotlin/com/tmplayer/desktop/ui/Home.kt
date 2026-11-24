@@ -168,7 +168,15 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     // ended or that Telegram asked to wait (LS-20).
     val refreshing by model.refreshing.collectAsState()
     val asked = com.tmplayer.ui.components.rememberAskedRefresh(refreshing)
-    val refreshHome: () -> Unit = { asked.ask { model.refreshInPlace() } }
+    val toast = com.tmplayer.ui.components.rememberToast()
+    val strings = LocalStrings.current
+    // F5 during a flood wait asks nothing (asking extends the wait) and says so, as the chat list does (LS-19).
+    val refreshHome: () -> Unit = {
+        asked.ask {
+            val waiting = model.refreshInPlaceUnlessRateLimited()
+            if (waiting > 0) toast(strings.chatsRefreshWait(waiting))
+        }
+    }
     Box(Modifier.fillMaxSize()) {
     // Offline (R4): the rows as an offline Home draws them, and the cards' greying.
     com.tmplayer.ui.browse.OfflineHomeScope(rows) { offlineRows ->

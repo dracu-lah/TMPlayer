@@ -618,6 +618,22 @@ class HomeViewModel(
         if (!fetches.busy.value) _refreshing.value = false
     }
 
+    /**
+     * [refreshInPlace] for a press of F5 or Refresh, unless Telegram has told us to wait: asking again
+     * during a flood wait extends it, so nothing is asked and the seconds left are returned, for the
+     * screen to say so (the chat list's [BrowseViewModel.refreshUnlessRateLimited], LS-19). The status
+     * line says it too, with its countdown. 0 when the refresh started.
+     */
+    fun refreshInPlaceUnlessRateLimited(): Int {
+        val waiting = Td.floodWaitRemainingSeconds()
+        if (waiting > 0) {
+            WorkStatus.rateLimited(waiting, System.currentTimeMillis())?.let { _status.value = it }
+            return waiting
+        }
+        refreshInPlace()
+        return 0
+    }
+
     /** [refreshInPlace] when the rows are older than [STALE_MS]: for the app coming back to the front. */
     fun refreshIfStale() {
         val at = refreshedAt
