@@ -9,7 +9,7 @@
 // `hinted` (Test Shows is named for a language: "Test Shows Malayalam", for the chat language hints of e2e/posters.spec.ts).
 // Read live, so a test can change them while the page runs (the cookie is read again): `stall` (a
 // file read answers nothing until the flag goes), `late` (it answers after 6 s), `flood:N` (file reads are told to wait N seconds, from the first one), `linkdown` (the line to
-// Telegram reports `connecting`, and nothing is answered), `topicflood` (the first ask for Language Club's topics is told to wait 2 s),
+// Telegram reports `connecting`, and nothing is answered), `linkupdating` (the line reports `updating`, catching up, and answers as usual), `topicflood` (the first ask for Language Club's topics is told to wait 2 s),
 // `countflood` (the Add chats picker's counts are told to wait 15 minutes after twenty), `countfail` (three channels of the huge account always refuse a count),`topicsrefuse` (every ask for topics is refused), `topicslow` (an ask for topics answers after 1.5 s).
 
 // Read synchronously (a worker may): a top-level await would hold back the worker's message
@@ -113,7 +113,8 @@ export class BaseTelegramClient {
         if (typeof storage === 'string') storageName = storage
         // The line follows the `linkdown` flag, polled twice a second like a socket that notices late.
         const follow = async () => {
-            const next = (await live().catch(() => new Set<string>())).has('linkdown') ? 'connecting' : 'connected'
+            const flags = await live().catch(() => new Set<string>())
+            const next = flags.has('linkdown') ? 'connecting' : flags.has('linkupdating') ? 'updating' : 'connected'
             if (next !== this.state) {
                 this.state = next
                 for (const fn of this.listeners) fn(next)

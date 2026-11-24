@@ -3,7 +3,7 @@ import { createEffect, createSignal, ErrorBoundary, lazy, Match, on, onCleanup, 
 import { Dynamic } from 'solid-js/web'
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
-import { online, unreachable, watchReach } from './net'
+import { linkLine, online, unreachable, watchReach } from './net'
 import { back, entryState, me, sessionEndedElsewhere, setMe } from './session'
 import { closeTopLayer, locked, picker, shieldPage } from './accounts'
 import { holdClose, openModal } from './ui/confirmCore'
@@ -16,6 +16,7 @@ import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
 import { ReachBanner } from './ui/ReachBanner'
+import { LinkStatusLine } from './ui/WorkStatus'
 import { CardMenu } from './ui/CardMenu'
 import { installShellKeys } from './ui/shellKeys'
 import { ListPicker, ListsPage } from './screens/Lists'
@@ -246,7 +247,7 @@ function Shell(props: ParentProps) {
             </Switch>
             <Show when={!playing()}>
                 {/* Reload cannot fetch a new version offline: the notice waits for the connection. */}
-                <Show when={!online()} fallback={<Show when={unreachable()} fallback={<UpdateNotice />}><ReachBanner /></Show>}>
+                <Show when={!online()} fallback={<Show when={unreachable()} fallback={<><LinkStatusLine /><Show when={!linkLine()}><UpdateNotice /></Show></>}><ReachBanner /></Show>}>
                     <p class="offline-line" role="status">{t('web.offline')}</p>
                 </Show>
             </Show>

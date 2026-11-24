@@ -810,7 +810,14 @@ export const PAGE_STRINGS = [
     'player.stalled_flood_wait',
     'player.stalled_no_line',
     'player.stalled_no_line_plain',
+    // WP-98 The status line (ui/WorkStatus.tsx): connecting, updating, up to date, kept after a failure, a flood wait, Send logs.
+    'logs.send',
+    'state.connecting_short',
     'state.connecting_still_trying',
+    'state.failed_kept',
+    'state.rate_limited',
+    'state.updated',
+    'state.updating',
     // WB18 Report stutter.
     'player.report_stutter',
     'player.stutter_marked_already',

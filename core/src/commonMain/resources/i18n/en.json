@@ -3607,9 +3607,13 @@
     "connecting_short": "Connecting…",
     "connecting_still_trying": "Still trying. Check that this device is online",
     "failed": "That didn't work",
+    "failed_kept": "Could not update. Showing what was here at {time}.",
     "first_open_promise": "Your Telegram videos, in one place.",
     "offline": "Offline. Your downloads still play.",
-    "reconnecting": "Back online. Reconnecting to Telegram…"
+    "rate_limited": "{seconds, plural, one {Telegram asked to wait. Trying again in # second} other {Telegram asked to wait. Trying again in # seconds}}",
+    "reconnecting": "Back online. Reconnecting to Telegram…",
+    "updated": "Up to date",
+    "updating": "Updating…"
   },
   "storage": {
     "adopt": "Use what is already there",

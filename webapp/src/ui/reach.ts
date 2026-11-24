@@ -52,6 +52,44 @@ export function createReachWatch(onChange: (shown: boolean) => void, timers: Tim
     }
 }
 
+// The line to Telegram as a status (WP-98, LS-29): 'connecting' shown after CONNECTING_MS of it and
+// 'updating' (catching up) after UPDATING_MS, so a blink of either says nothing; any other state, or
+// none, takes the line away at once. The unreachable banner above is the same wait seen at 20 s.
+export const CONNECTING_MS = 3_000
+export const UPDATING_MS = 2_000
+export type LinkLine = 'connecting' | 'updating' | null
+
+export function createLinkLine(onChange: (line: LinkLine) => void, timers: Timers = real) {
+    let shown: LinkLine = null
+    let state: string | null = null
+    let timer: number | null = null
+    const stop = () => {
+        if (timer !== null) timers.clear(timer)
+        timer = null
+    }
+    const show = (line: LinkLine) => {
+        if (shown === line) return
+        shown = line
+        onChange(line)
+    }
+    return {
+        /** The worker's line as it is now (null: not told, or not watched); a repeat changes nothing. */
+        update(next: string | null) {
+            if (next === state) return
+            state = next
+            stop()
+            show(null)
+            if (next === 'connecting') timer = timers.set(() => show('connecting'), CONNECTING_MS)
+            else if (next === 'updating') timer = timers.set(() => show('updating'), UPDATING_MS)
+        },
+        stop() {
+            stop()
+            state = null
+            show(null)
+        },
+    }
+}
+
 /** `fn` with one call in flight: a press while the last is still running does nothing (a Retry pressed ten times reconnects once). */
 export function singleFlight(fn: () => Promise<unknown>): () => void {
     let running = false

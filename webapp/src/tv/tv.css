@@ -360,6 +360,13 @@ html[data-form=tv] .archives { padding: calc(var(--dp) * 12) calc(var(--dp) * 16
 html[data-form=tv] .list-foot { min-height: calc(var(--dp) * 40); }
 html[data-form=tv] .update-notice { width: min(calc(var(--dp) * 480), calc(100vw - 2 * var(--tv-safe-h))); padding: calc(var(--dp) * 8) calc(var(--dp) * 8) calc(var(--dp) * 8) calc(var(--dp) * 16); gap: calc(var(--dp) * 16); border-radius: calc(var(--dp) * 16); }
 html[data-form=tv] .update-notice p, html[data-form=tv] .offline-line { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+/* The status line (WP-98): the offline line's corner and size, never focused. */
+html[data-form=tv] .work-status-line { min-height: calc(var(--dp) * 28); margin: 0 0 calc(var(--dp) * 8); gap: calc(var(--dp) * 4) calc(var(--dp) * 12); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .work-status-line button.link { padding: calc(var(--dp) * 4) 0; }
+html[data-form=tv] .work-status-line progress { flex-basis: calc(var(--dp) * 120); max-width: calc(var(--dp) * 240); }
+html[data-form=tv] .work-spinner { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); border-width: calc(var(--dp) * 2); }
+html[data-form=tv] .work-status.pill .work-status-line { bottom: var(--tv-safe-v); max-width: calc(100vw - 2 * var(--tv-safe-h)); min-height: 0; margin: 0; padding: calc(var(--dp) * 6) calc(var(--dp) * 14); }
+html[data-form=tv][data-status-pill] .toast { bottom: calc(var(--tv-safe-v) + var(--dp) * 44); }
 html[data-form=tv] .sponsored-title { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 24); }
 html[data-form=tv] .sponsored-body { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
 html[data-form=tv] .sponsored-label { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }

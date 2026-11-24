@@ -3,7 +3,7 @@
 // (the "Can't reach Telegram" banner, U2).
 import { createEffect, createSignal, onCleanup } from 'solid-js'
 import { api, link } from './tg/rpc'
-import { createReachWatch, singleFlight } from './ui/reach'
+import { createLinkLine, createReachWatch, singleFlight, type LinkLine } from './ui/reach'
 
 const [online, setOnline] = createSignal(navigator.onLine)
 window.addEventListener('online', () => setOnline(true))
@@ -20,7 +20,12 @@ const [unreachable, setUnreachable] = createSignal(false)
 /** The browser is online and the worker's line to Telegram has stayed down for 20 s (held through a blink for 3 s). */
 export { unreachable }
 
+const [linkLine, setLinkLine] = createSignal<LinkLine>(null)
+/** "Connecting…" after 3 s of that line and "Updating…" after 2 s of catching up, while online and watched (LS-29, reach.ts). */
+export { linkLine }
+
 let watch: ReturnType<typeof createReachWatch> | null = null
+let line: ReturnType<typeof createLinkLine> | null = null
 
 /**
  * Starts the banner's watch, once, while `active` (signed in and holding the session). Not counted
@@ -29,6 +34,7 @@ let watch: ReturnType<typeof createReachWatch> | null = null
  */
 export function watchReach(active: () => boolean) {
     watch ??= createReachWatch(setUnreachable)
+    line ??= createLinkLine(setLinkLine)
     const [seen, setSeen] = createSignal(!document.hidden)
     const onSeen = () => setSeen(!document.hidden)
     document.addEventListener('visibilitychange', onSeen)
@@ -37,11 +43,15 @@ export function watchReach(active: () => boolean) {
         // Not told yet (the worker is starting) is not down; 'updating' is connected and catching up.
         const down = state !== null && state !== 'connected' && state !== 'updating'
         watch!.update(active() && online() && seen() && down)
+        // Offline is the offline line's to say, and a page in the background says nothing.
+        line!.update(active() && online() && seen() ? state : null)
     })
     onCleanup(() => {
         document.removeEventListener('visibilitychange', onSeen)
         watch?.stop()
         watch = null
+        line?.stop()
+        line = null
         setUnreachable(false)
     })
 }
