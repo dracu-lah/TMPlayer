@@ -64,6 +64,7 @@ import com.tmplayer.online.ChatLanguageHints
 import com.tmplayer.online.MetaKind
 import com.tmplayer.online.SubtitlePickKeys
 import com.tmplayer.player.PlaybackWatch
+import com.tmplayer.player.PlayerKeyMap
 import com.tmplayer.player.SpeedMemory
 import kotlin.math.roundToInt
 
@@ -1556,6 +1557,41 @@ fun languageResolve(saved: String?, system: Array<String>): String = Languages.r
 
 /** Makes [tag], a shipped catalog [provideCatalog] was given, the language the rules speak (plurals, numbers, names). */
 fun useLanguage(tag: String) = Translator.use(tag)
+
+// ---- the player's keyboard (WP-28, WP-61) ------------------------------------------------------------
+
+/** What a key does in the player ([PlayerKeyMap.Action]): [kind] is [PlayerKeyMap.Kind.id], [value] and [flag] as the kind says. */
+interface WebKeyAction {
+    val kind: String
+    val value: Int
+    val flag: Boolean
+}
+
+/**
+ * [PlayerKeyMap.actionFor] for a browser key: [code] is `KeyboardEvent.code`, [key] its `key`.
+ * Null for a key the player leaves to the page and the browser. One table for the web, the tablets
+ * and the Chromebooks, so no page ports it by hand.
+ */
+fun playerKeyAction(
+    code: String,
+    key: String,
+    shift: Boolean,
+    ctrl: Boolean,
+    alt: Boolean,
+    meta: Boolean,
+    mac: Boolean,
+    chapters: Boolean,
+    paused: Boolean,
+    speedNormal: Boolean,
+    fullscreen: Boolean,
+    skipShown: Boolean,
+): WebKeyAction? {
+    val action = PlayerKeyMap.actionFor(
+        PlayerKeyMap.Press(code, key, shift, ctrl, alt, meta),
+        PlayerKeyMap.Context(mac, chapters, paused, speedNormal, fullscreen, skipShown),
+    ) ?: return null
+    return plain("kind" to action.kind.id, "value" to action.value, "flag" to action.flag)
+}
 
 /** A plain JS object of [fields], typed as the exported interface it stands for. */
 private fun <T> plain(vararg fields: Pair<String, Any?>): T {

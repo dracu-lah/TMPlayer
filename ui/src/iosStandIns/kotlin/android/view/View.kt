@@ -17,6 +17,13 @@ class KeyEvent(
     val isLongPress: Boolean get() = repeatCount == 1
     val eventTime: Long = android.os.SystemClock.uptimeMillis()
     val source: Int get() = 0
+
+    /** The modifiers held with the key, and the character it typed (0 for none): an iPad keyboard's Shift, Control and Option arrive with later work. */
+    val isShiftPressed: Boolean get() = false
+    val isCtrlPressed: Boolean get() = false
+    val isAltPressed: Boolean get() = false
+    val isMetaPressed: Boolean get() = false
+    val unicodeChar: Int get() = 0
     var isTracking: Boolean = false
         private set
     val isCanceled: Boolean get() = false

@@ -45,7 +45,16 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1599,6 +1608,9 @@ private fun Root() {
     // Any key on the remote puts the one-time browse hint away (see TvBrowseHint), without
     // recomposing this screen for every press.
     val remoteKeys = remember { KeyPresses() }
+    // A keyboard's shell keys (WP-28): Ctrl+F or "/" is search, Ctrl+comma Settings. Read after the
+    // focused control had the key (a search field keeps its "/"), never on a television.
+    val shellKeys = remember { ShellKeyHooks() }
     Box(
         Modifier
             .fillMaxSize()
@@ -1606,6 +1618,30 @@ private fun Root() {
             .onPreviewKeyEvent {
                 remoteKeys.fire()
                 false
+            }
+            .onKeyEvent { pressed ->
+                if (pressed.type != KeyEventType.KeyDown || FormFactor.isTv(context)) return@onKeyEvent false
+                val (code, typed) = when (pressed.key) {
+                    Key.F -> "KeyF" to "f"
+                    Key.Slash -> "Slash" to "/"
+                    Key.Comma -> "Comma" to ","
+                    else -> return@onKeyEvent false
+                }
+                val press = com.tmplayer.player.PlayerKeyMap.Press(
+                    code, typed, pressed.isShiftPressed, pressed.isCtrlPressed, pressed.isAltPressed, pressed.isMetaPressed,
+                )
+                when (com.tmplayer.player.PlayerKeyMap.shellKeyFor(press)) {
+                    com.tmplayer.player.PlayerKeyMap.ShellKey.Search -> {
+                        val onBrowse = screen is Screen.Chats
+                        if (onBrowse) touchChrome.searchAsked = true
+                        onBrowse
+                    }
+                    com.tmplayer.player.PlayerKeyMap.ShellKey.Settings -> {
+                        shellKeys.settings()
+                        true
+                    }
+                    null -> false
+                }
             },
     ) {
         // Sign out (WP-02), composed first and before every gate below (the app lock, the setup, the
@@ -1994,6 +2030,7 @@ private fun Root() {
                 screen = Screen.Settings
             }
         }
+        shellKeys.settings = openSettings
         val openDownloads: () -> Unit = {
             if (screen !is Screen.Downloads) {
                 downloadsCameFrom = TouchRoutes.backTarget(
@@ -2938,4 +2975,9 @@ private fun DeviceStruggleHint(settings: SettingsStore, inShell: Boolean) {
             )
         }
     }
+}
+
+/** What the shell's keys call, set once the screens that answer them exist (WP-28). */
+private class ShellKeyHooks {
+    var settings: () -> Unit = {}
 }

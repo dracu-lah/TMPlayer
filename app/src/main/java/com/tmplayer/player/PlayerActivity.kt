@@ -3140,6 +3140,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         player = exo
+        keyMuted = false
         exo.volume = PlayerVolume.gain(playerVolumePercent)
         crashNote.began("media3")
         startStats()
@@ -7591,7 +7592,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * and stealing them would leave the row unusable to everything except a thumb.
      */
     private fun handleTouchDeviceKey(event: KeyEvent): Boolean {
-        if (controlsUp || statusOverlay.visibility == View.VISIBLE) return false
+        if (statusOverlay.visibility == View.VISIBLE) return false
+        // A chord (Shift, Ctrl or Alt held) is the keyboard map's first: Ctrl+Left is a chapter and
+        // Shift+Left a minute, where the bare arrow keeps its jump below. A chord the map has no
+        // action for falls through to what the key did before.
+        if ((event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) && keyboardKey(event)) return true
+        if (controlsUp) return keyboardKey(event)
         when (event.keyCode) {
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> jumpFromRemote(forward = true, repeatCount = event.repeatCount)
             KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> jumpFromRemote(forward = false, repeatCount = event.repeatCount)
@@ -7601,10 +7607,74 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             KeyEvent.KEYCODE_SPACE,
             // Once per press: a held key repeats, and each repeat flipped playback back again.
             -> if (event.repeatCount == 0) togglePlayback()
+            else -> return keyboardKey(event)
+        }
+        return true
+    }
+
+    /** True while M has the sound off: the engine's gain is 0 but the stored player volume was not touched. */
+    private var keyMuted = false
+
+    /**
+     * A computer keyboard on a tablet, a Chromebook or a phone (WP-28), read through the one shared
+     * table ([PlayerKeyMap], the web player's too), never on a television, whose remote has its own
+     * rules. With the row up the keys that walk the focus (arrows, Space, Enter) stay the row's;
+     * the letters, brackets and digits work with it up or down. Nothing while a sheet, menu, list or
+     * panel is up (they own the keys, and the text field in a sheet keeps its letters). What the
+     * player has no action for (zoom, bookmark, screenshot) is left alone, so the key does what it did.
+     */
+    private fun keyboardKey(event: KeyEvent): Boolean {
+        if (FormFactor.isTv(this)) return false
+        if (sheets?.isOpen == true || menuOpen || detailsOpen || pickerOpen || episodesOpen || morePanel?.isOpen == true) return false
+        val code = PlayerKeyMap.codeOfAndroid(event.keyCode) ?: return false
+        val chord = event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed
+        if (controlsUp && !chord && PlayerKeyMap.walksFocus(code)) return false
+        val typed = if (event.unicodeChar == '?'.code) "?" else ""
+        val action = PlayerKeyMap.actionFor(
+            PlayerKeyMap.Press(code, typed, event.isShiftPressed, event.isCtrlPressed, event.isAltPressed, event.isMetaPressed),
+            PlayerKeyMap.Context(
+                chapters = chapters.isNotEmpty(),
+                paused = playing?.isPlaying == false,
+                speedNormal = playbackSpeed == PlaybackSpeed.DEFAULT,
+                skipShown = offeredSkip != null,
+            ),
+        ) ?: return false
+        return performKeyboardAction(action, event.repeatCount)
+    }
+
+    /** True when the press was the player's: the keys it has no action for come back false and stay the system's. */
+    private fun performKeyboardAction(action: PlayerKeyMap.Action, repeatCount: Int): Boolean {
+        // One action per press for everything but a held seek: a held key repeats, and each repeat
+        // would flip, step or toggle again.
+        val once = repeatCount == 0
+        when (action.kind) {
+            PlayerKeyMap.Kind.TogglePlay -> if (once) togglePlayback()
+            PlayerKeyMap.Kind.Seek -> if (once) jumpFromRemote(forward = action.value > 0, fixedStepMs = kotlin.math.abs(action.value) * 1_000L)
+            PlayerKeyMap.Kind.Chapter -> if (once) {
+                if (chapters.isNotEmpty()) stepChapter(action.flag) else jumpFromRemote(action.flag, fixedStepMs = PlayerRemoteKeys.PAGE_JUMP_MS)
+            }
+            PlayerKeyMap.Kind.Episode -> if (once) stepEpisode(action.flag)
+            PlayerKeyMap.Kind.Speed -> if (once) setSpeed(PlaybackSpeed.fine(playbackSpeed, up = action.flag))
+            PlayerKeyMap.Kind.SpeedReset -> if (once) setSpeed(PlaybackSpeed.DEFAULT)
+            PlayerKeyMap.Kind.Jump -> if (once && !jumpToTenth(action.value)) return false
+            PlayerKeyMap.Kind.Mute -> if (once) toggleKeyMute()
+            PlayerKeyMap.Kind.SubtitlesToggle -> if (once) toggleCaptions()
+            PlayerKeyMap.Kind.Details -> if (once && player != null) showPlaybackDetails()
+            PlayerKeyMap.Kind.Sheet -> if (once) morePanel?.openKeys(keyboard = true)
             else -> return false
         }
         return true
     }
+
+    /** M: the sound off and on again, said over the picture; the stored Player volume is left as it is. */
+    private fun toggleKeyMute() {
+        keyMuted = !keyMuted
+        val gain = if (keyMuted) 0f else PlayerVolume.gain(playerVolumePercent)
+        player?.volume = gain
+        vlcEngine?.volume = gain
+        showGestureFeedback(if (keyMuted) L.keysRowMute else L.playerVolumeLevelNow(L.messages.formatter.scalePercent(playerVolumePercent)))
+    }
+
 
     /**
      * Feeds the loading screen from TDLib's own download updates.
@@ -8705,6 +8775,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun setPlayerVolume(percent: Int) {
         val next = percent.coerceIn(PlayerVolume.MIN, PlayerVolume.FULL)
         playerVolumePercent = next
+        keyMuted = false
         val gain = PlayerVolume.gain(next)
         player?.volume = gain
         vlcEngine?.volume = gain

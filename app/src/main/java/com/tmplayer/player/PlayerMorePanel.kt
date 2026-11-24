@@ -217,6 +217,9 @@ class PlayerMorePanel(
         data object Stereo : Page
         data object Sleep : Page
         data object Keys : Page
+
+        /** A keyboard's keys (WP-28): opened by "?", Back closes the panel. */
+        data object KeyboardKeys : Page
         data object Rotation : Page
         data object Volume : Page
         class Details(val title: String, val lines: List<String>) : Page
@@ -267,6 +270,20 @@ class PlayerMorePanel(
         shown = MutableTransitionState(false).apply { targetState = true }
         view.visibility = View.VISIBLE
         view.bringToFront()
+    }
+
+    /**
+     * Opens it on the keys: the remote's, or with [keyboard] the keyboard's ("?" on a tablet or a
+     * Chromebook), whose Back closes the panel rather than showing the list.
+     */
+    fun openKeys(keyboard: Boolean) {
+        open()
+        if (keyboard) {
+            page = Page.KeyboardKeys
+        } else {
+            openedFrom = Kind.RemoteKeys
+            page = Page.Keys
+        }
     }
 
     /** Opens it straight on the shapes' page, Back leading to the list (the render tests' view). */
@@ -682,6 +699,7 @@ class PlayerMorePanel(
                 onClose = ::close,
             )
             Page.Keys -> RemoteKeysPage(onBack = ::back)
+            Page.KeyboardKeys -> KeyboardKeysPage(onBack = ::close)
             // A turn and a volume step act at once and the page stays, beside what they change.
             Page.Rotation -> {
                 var rotation by remember { mutableStateOf(host.pictureRotation()) }
@@ -897,6 +915,22 @@ private fun RemoteKeysPage(onBack: () -> Unit) {
         ChoiceList {
             RemoteKeys.ROWS.forEachIndexed { index, (key, does) ->
                 KeyRow(key, does, if (index == 0) Modifier.focusRequester(first) else Modifier)
+            }
+        }
+        FocusOnOpen(first)
+    }
+}
+
+/** The keyboard's keys, as [RemoteKeysPage] draws the remote's: the rows come from the shared table. */
+@Composable
+private fun KeyboardKeysPage(onBack: () -> Unit) {
+    val s = LocalStrings.current
+    val first = remember { FocusRequester() }
+    val rows = remember { PlayerKeyMap.androidSheet() }
+    ChoiceSheet(title = s.keysKeyboardTitle, note = s.playerRemoteKeysClose, onDismiss = onBack) {
+        ChoiceList {
+            rows.forEachIndexed { index, row ->
+                KeyRow(row.keys, row.what, if (index == 0) Modifier.focusRequester(first) else Modifier)
             }
         }
         FocusOnOpen(first)
