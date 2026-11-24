@@ -167,7 +167,7 @@ test('Sync file: Replace and Turn off and delete ask first; Escape and Cancel ke
     await page.goto('/settings/privacy')
     const sw = page.getByRole('switch', { name: /^Resume on your other devices/ })
     await sw.click()
-    await page.getByRole('dialog', { name: 'Resume on your other devices?' }).getByRole('button', { name: 'Yes, keep it' }).click()
+    await page.getByRole('dialog', { name: 'Resume on your other devices?' }).getByRole('button', { name: 'Yes, sync it' }).click()
     const replace = page.getByRole('button', { name: 'Replace the sync file', exact: true })
     await expect(replace).toBeVisible({ timeout: 20_000 })
     await replace.click()

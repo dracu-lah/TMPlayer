@@ -397,7 +397,8 @@ for (const size of [
             await press(page, 'ArrowDown')
             expect(await focusedText(page)).toBe('tv-menu-row|Settings')
             await press(page, 'ArrowDown')
-            expect(await focusedText(page)).toMatch(/^tv-menu-row\|TMPlayer web \(\w+, \d{4}-\d{2}-\d{2}\)/)
+            // The compact version (the TMPlayer icon and v1.28.7, or web); OK copies the full details line.
+            expect(await focusedText(page)).toMatch(/^tv-menu-row\|(v\d+\.\d+(\.\d+)?|web)$/)
             // 14 dp text at least, on the 960 x 540 dp layout (--dp is 1 px per dp there).
             const size = await page.evaluate(() => parseFloat(getComputedStyle(document.activeElement as HTMLElement).fontSize) / Math.min(innerWidth / 960, innerHeight / 540))
             expect(size).toBeGreaterThanOrEqual(14)

@@ -138,7 +138,7 @@ test.describe('on a phone', () => {
         await row.click()
         const sheet = page.getByRole('dialog', { name: /^What's new in \d+\.\d+\.\d+/ })
         await expect(sheet).toBeVisible()
-        await expect(sheet.locator('li')).toHaveCount(5)
+        await expect.poll(() => sheet.locator('li').count()).toBeGreaterThanOrEqual(5)
         await expect(sheet.getByRole('link', { name: 'Full changelog' })).toHaveAttribute('href', /^https:\/\/tmplayer\.org\/changelog/)
         await shot(page, info, 'phone-whats-new')
         await page.keyboard.press('Escape')

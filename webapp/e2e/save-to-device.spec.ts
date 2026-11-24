@@ -64,11 +64,17 @@ test.describe('with room', () => {
     test('a small storage quota does not refuse a save: it says the size and the download goes ahead', async ({ page }) => {
         await page.addInitScript(() => {
             Object.defineProperty(navigator.storage, 'estimate', { value: async () => ({ quota: 200_000, usage: 150_000 }), configurable: true })
+            // A small file saves at once and its "Saved" toast takes the place of "Saving ...": every toast text is kept.
+            const seen: string[] = []
+            ;(window as unknown as { __toasts: string[] }).__toasts = seen
+            new MutationObserver(() => {
+                for (const p of document.querySelectorAll('.toast p')) if (p.textContent && seen[seen.length - 1] !== p.textContent) seen.push(p.textContent)
+            }).observe(document, { childList: true, subtree: true, characterData: true })
         })
         await openDetail(page, '/chat/-1001234567890', 'Plain Clip')
         const downloading = page.waitForEvent('download')
         await page.locator('.detail-round', { hasText: 'Save to device' }).click()
-        await expect(page.locator('.toast').first()).toContainText(/Saving .+ to your Downloads/)
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts.join('|'))).toMatch(/Saving .+ to your Downloads/)
         const file = await downloading
         expect(await file.failure()).toBeNull()
     })
