@@ -101,7 +101,6 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val touch = isTouch()
     var qr by remember { mutableStateOf<About.Link?>(null) }
-    var supporting by remember { mutableStateOf(false) }
     var coffee by remember { mutableStateOf(false) }
     val supporter by remember { com.tmplayer.data.SettingsStore(context).supportCounters }
         .collectAsState(initial = com.tmplayer.data.SupportReminder.Counters())
@@ -186,17 +185,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         )
                     }
                 }
-                // Both support links as codes on one screen, to scan from any device.
-                if (group.support) {
-                    item {
-                        ActionRow(
-                            title = s.aboutSupportQr,
-                            subtitle = s.aboutSupportQrDetail,
-                            icon = TmIcons.Favorite,
-                            onClick = { supporting = true },
-                        )
-                    }
-                }
+                // No Support QR row here (WP-08): Settings has one Support row, and its dialog shows the codes.
                 items(group.links, key = { it.url + it.title }) { link ->
                     ActionRow(
                         title = link.title,
@@ -236,7 +225,6 @@ fun AboutScreen(onBack: () -> Unit) {
         }
     }
 
-    if (supporting) SupportDialog(onClose = { supporting = false })
     if (coffee) CoffeeDialog(supporter, asking = false, onLater = { coffee = false }, onNever = { coffee = false })
 
     qr?.let { link ->

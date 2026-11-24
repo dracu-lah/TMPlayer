@@ -207,28 +207,34 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The pages Settings is split into, each opened from a row of the category list. Named in code
- * rather than by index, so a caller can open one directly and get back to it after About or the
- * cached videos. [TvHome] is the other way round, shown only where the Android TV home screen has Play next or channels. [SetupChoices]
- * gathers the setup's answers (SetupChoicesList), each with a way to the page it also lives on.
- */
-/**
  * Settings' pages, in the order the category list shows them: grouped by what the viewer is
- * trying to do (U20, 2026-11-15), the same names and order as the shared [SettingsGroup]. The
- * player gestures are rows of [Playback] and Home's rows are on [Library], the page called Home and
- * library (Raju pass 2, 11.1). [Subtitles] is Subtitles and audio, [Storage] Storage and downloads, [Account]
- * Privacy and lock (the app lock, crash reports and the privacy page, the devices and Sign out),
- * [About] About and help; Setup choices is last, as Redo setup choices.
+ * trying to do (U20, 2026-11-15; WP-08, 2026-11-24), the same names and order as the shared
+ * [SettingsGroup]. Named in code rather than by index, so a caller can open one directly and get
+ * back to it after About or the cached videos. [Accounts] is who is signed in, the devices, the
+ * profiles, resume on other devices and Sign out; [Privacy] is Privacy and lock. The player
+ * gestures are rows of [Playback] and Home's rows are on [Library], with a television's launcher
+ * rows as a section of it. [Troubleshooting] and [SetupChoices] open from rows of [Help] and are
+ * not in the list; Back returns to Help ([parent]).
  */
 enum class SettingsPage {
-    Playback, Subtitles, Storage, Notifications, Appearance, Account, Library, TvHome, About, SetupChoices;
+    Accounts, Playback, Subtitles, Storage, Appearance, Library, Privacy, Notifications, Help, Troubleshooting, SetupChoices, About;
 
     /** The shared group this page is. */
     val group: SettingsGroup get() = SettingsGroup.valueOf(name)
 
+    /** The page this one opens from and Back returns to; null for a page of the list. */
+    val parent: SettingsPage? get() = group.parent?.let { of(it) }
+
     companion object {
         /** The page for [group]. */
         fun of(group: SettingsGroup): SettingsPage? = entries.firstOrNull { it.name == group.name }
+
+        /**
+         * The page a name stands for, one stored by an earlier version (saved state, a deep link, a
+         * backup) included: "Account" was Privacy and lock and "TvHome" is part of Home and library
+         * now (WP-08). Null for a name nobody used.
+         */
+        fun of(name: String): SettingsPage? = SettingsGroup.fromStored(name)?.let { of(it) }
     }
 }
 
@@ -574,8 +580,10 @@ fun SettingsScreen(
         } else {
             cameFromStep = null
             returnTo = page
-            page = null
-            onPageChange(null)
+            // A sub-page (Troubleshooting, Redo setup choices) goes back to Help, the rest to the list.
+            val up = page?.parent
+            page = up
+            onPageChange(up)
         }
     }
     fun titleOf(target: SettingsPage): String = when (target) {
@@ -584,11 +592,13 @@ fun SettingsScreen(
         SettingsPage.Playback -> s.settingsPlayback
         SettingsPage.Subtitles -> s.settingsPageSubtitlesAudio
         SettingsPage.Library -> s.settingsPageHomeLibrary
-        SettingsPage.TvHome -> s.settingsPageTvHome
         SettingsPage.Notifications -> s.settingsPageNotifications
         SettingsPage.Storage -> s.settingsPageDownloadsData
-        SettingsPage.Account -> s.settingsPagePrivacyLock
-        SettingsPage.About -> s.settingsPageAbout
+        SettingsPage.Privacy -> s.settingsPagePrivacyLock
+        SettingsPage.Accounts -> s.settingsGroupAccount
+        SettingsPage.Help -> s.settingsHelp
+        SettingsPage.Troubleshooting -> s.settingsPageTroubleshooting
+        SettingsPage.About -> s.settingsGroupAbout
     }
 
     // Back on a page goes to the list, not out of Settings. Composed after the caller's own
@@ -660,7 +670,10 @@ fun SettingsScreen(
             // A jump from Setup choices lands on its row instead (the effect below).
             if (open != null && jumpTo != null && open != SettingsPage.SetupChoices) return@LaunchedEffect
             if (open != null) {
-                landing.settle()
+                // Back from a sub-page lands on the row of this page that opened it.
+                val opener = returnTo?.takeIf { it.parent == open }
+                returnTo = null
+                if (opener == null || !categoryFocus.getValue(opener).settle()) landing.settle()
                 // Focus asks to be brought into view with room to spare, which can push the
                 // heading off the top; once it has settled, the page goes back to its top.
                 withFrameNanos { }
@@ -721,7 +734,7 @@ fun SettingsScreen(
                 pinPadWasOpen = true
                 return@LaunchedEffect
             }
-            if (pinPadWasOpen && page == SettingsPage.Account) landing.settle()
+            if (pinPadWasOpen && page == SettingsPage.Privacy) landing.settle()
         }
     }
 
@@ -916,6 +929,20 @@ fun SettingsScreen(
                     }
                 }
         }
+        // "Moved to {page}" (WP-08): at the top of a page that lost rows, once, for one release; a press
+        // opens the page they went to on the first of them, like a search result.
+        val movedHint: LazyListScope.(SettingsPage) -> Unit = { old ->
+            val aliases = movedAliases(old, form, needs, s)
+            if (aliases.isNotEmpty()) {
+                item(key = "moved_to") {
+                    MovedToHint(settings, old, aliases, ::titleOf, s) { alias ->
+                        seek.aim(alias.first, form, s)
+                        cameFromStep = null
+                        showPage(alias.page)
+                    }
+                }
+            }
+        }
         val homeRows: LazyListScope.() -> Unit = {
             // Which rows Home shows, each on by default (users, 2026-10-27). Which chats Recently
             // added and the carousel read is the added chats, so a note says so and points at Add
@@ -1011,6 +1038,17 @@ fun SettingsScreen(
             }
 
             SettingsPage.Appearance -> {
+                // The language first (WP-08): the page is called Appearance and language, and a person who
+                // cannot read the app looks for it before anything else. It takes the remote's first focus.
+                item(key = "language") {
+                    ActionRow(
+                        title = s.settingsLanguage,
+                        subtitle = s.languageRowDetail(language),
+                        icon = TmIcons.Language,
+                        modifier = Modifier.focusRequester(landing),
+                        onClick = { pickingLanguage = true },
+                    )
+                }
                 // The choices below, live: a card drawn in the theme, colour, typeface and contrast as they stand.
                 item(key = "appearance_preview") {
                     com.tmplayer.ui.components.AppearancePreview(
@@ -1110,17 +1148,6 @@ fun SettingsScreen(
                         icon = TmIcons.Visibility,
                         checked = highContrast,
                         onToggle = { scope.launch { settings.setHighContrast(!highContrast) } },
-                    )
-                }
-
-                // The language, under the theme: both are how the app looks before anything it shows.
-                item(key = "language") {
-                    ActionRow(
-                        title = s.settingsLanguage,
-                        subtitle = s.languageRowDetail(language),
-                        icon = TmIcons.Language,
-                        modifier = Modifier.focusRequester(landing),
-                        onClick = { pickingLanguage = true },
                     )
                 }
 
@@ -1393,6 +1420,8 @@ fun SettingsScreen(
                         onWrap = { scope.launch { settings.setResumeRewindMs(choices.first()) } },
                     )
                 }
+                // The four kinds of skip, one row (WP-08). Only where the build has the online lists.
+                if (com.tmplayer.online.OnlineMetadata.current != null) item(key = "skip_buttons") { SkipButtonsRow() }
                 // A TV that discovery never finds: a phone casts (a television does not), so only here (and not on iOS, which does not cast).
                 if (touch && com.tmplayer.cast.ADD_TV_ENTRY_AVAILABLE) {
                     item {
@@ -1504,6 +1533,7 @@ fun SettingsScreen(
             }
 
             SettingsPage.Library -> {
+                movedHint(SettingsPage.Library)
                 // Home first, then the library (Raju pass 2, 11.1: two pages for "which videos show" became one).
                 homeRows()
                 sectionTitle { s.settingsLibrary }
@@ -1604,19 +1634,19 @@ fun SettingsScreen(
                     onEditOmdbKey = { editingOmdbKey = true },
                     toggleModifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)).focusRequester(postersRow),
                 )
-            }
 
-            // What TMPlayer puts on the Android TV home screen, a page of its own rather than two rows
-            // in Playback: neither changes how a video plays. Its category row shows only where the
-            // launcher has one of the two (see the list below).
-            SettingsPage.TvHome -> {
+                // ---- the launcher ----------------------------------------------------------------------
+
+                // What TMPlayer puts on the Android TV home screen (WP-08: was a page of its own, Launcher,
+                // shown only where the launcher has one of the two; now a section here, drawn under the same
+                // rule). Neither changes how a video plays.
+                if (watchNextSupported || tvChannelsSupported) sectionTitle { s.settingsPageTvHome }
                 // The Android TV home screen's "Play next" row. Only where there is one: a phone, a Fire TV
                 // and a Fire tablet have none, and a switch for it there would do nothing.
                 if (watchNextSupported) {
-                    item {
+                    item(key = "watch_next") {
                         ToggleRow(
                             title = s.settingsWatchNext,
-                            modifier = Modifier.focusRequester(landing),
                             subtitle = if (watchNextOn) s.settingsWatchNextOn else s.settingsWatchNextOff,
                             icon = TmIcons.History,
                             checked = watchNextOn,
@@ -1636,10 +1666,9 @@ fun SettingsScreen(
                 // TMPlayer's own rows of cards on the TV home screen. Only where the launcher has
                 // channels, which rules out phones and Fire TV.
                 if (tvChannelsSupported) {
-                    item {
+                    item(key = "tv_channels") {
                         ToggleRow(
                             title = s.settingsTvChannels,
-                            modifier = if (watchNextSupported) Modifier else Modifier.focusRequester(landing),
                             subtitle = if (tvChannelsOn) s.settingsTvChannelsOn else s.settingsTvChannelsOff,
                             icon = TmIcons.Home,
                             checked = tvChannelsOn,
@@ -1760,11 +1789,33 @@ fun SettingsScreen(
                         },
                     )
                 }
+
+                // To a file the viewer keeps, and back: settings, lists and resume points, never the
+                // Telegram sign in. See BackupActions for where the file goes on a box with no picker.
+                // Here since WP-08 (was About, before that Library): where the downloads and the settings go.
+                sectionTitle { s.backupSection }
+                item {
+                    ActionRow(
+                        title = s.backupBackUp,
+                        subtitle = s.backupBackUpDetail,
+                        icon = TmIcons.Download,
+                        onClick = backup.backUp,
+                    )
+                }
+                item {
+                    ActionRow(
+                        title = s.backupRestore,
+                        subtitle = s.backupRestoreDetail,
+                        icon = TmIcons.Refresh,
+                        onClick = backup.restore,
+                    )
+                }
             }
 
-            // App lock, the devices the account is signed in on and Sign out: one page (2026-11-01),
-            // each of them about who may use this account here.
-            SettingsPage.Account -> {
+            // App lock, the privacy page and crash reports: what may use this account's videos here and
+            // what leaves the device. The devices, the profiles and Sign out are on Account (WP-08).
+            SettingsPage.Privacy -> {
+                movedHint(SettingsPage.Privacy)
                 sectionTitle { s.lockTitle }
                 if (!appLock.pinSet) {
                     item(key = "set_pin") {
@@ -1884,7 +1935,14 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
 
+            // Who is signed in, where, and how to leave (WP-08: the end of Privacy and lock, a page of its
+            // own so Sign out is where people look for it, one press from the list).
+            SettingsPage.Accounts -> {
+                if (account != null) {
+                    settingsNote(key = "account_header") { AccountHeader(account) }
+                }
                 sectionTitle { s.settingsAccountSignedIn }
                 // Where the account is signed in, and ending a session (CP83). Inside Settings, so
                 // behind its PIN when the lock or the kids lock asks for one.
@@ -1893,7 +1951,7 @@ fun SettingsScreen(
                         title = s.settingsDevices,
                         subtitle = s.settingsDevicesDetail,
                         icon = TmIcons.Phone,
-                        modifier = Modifier.focusRequester(devicesFocus),
+                        modifier = Modifier.focusRequester(landing).focusRequester(devicesFocus),
                         onClick = { devicesOpen = true },
                     )
                 }
@@ -2022,7 +2080,146 @@ fun SettingsScreen(
                 }
             }
 
+            // The tour, what is new, the ways to reach the developer, Redo setup choices and Troubleshooting
+            // (WP-08: the help rows were the middle of About and help).
+            SettingsPage.Help -> {
+                item {
+                    ActionRow(
+                        title = s.settingsTour,
+                        modifier = Modifier.focusRequester(landing),
+                        subtitle = s.settingsTourBody,
+                        icon = TmIcons.Info,
+                        onClick = { scope.launch { settings.openTour() } },
+                    )
+                }
+                item {
+                    ActionRow(
+                        title = s.settingsWhatsNew,
+                        subtitle = s.settingsWhatsNewDetail(WhatsNew.VERSION),
+                        icon = TmIcons.StarOutline,
+                        onClick = { whatsNew = true },
+                    )
+                }
+                item {
+                    ActionRow(
+                        title = s.settingsChangelog,
+                        subtitle = s.settingsChangelogDetail,
+                        icon = TmIcons.List,
+                        onClick = { openPage(WhatsNew.CHANGELOG, s.settingsQrChangelogPage) },
+                    )
+                }
+                item {
+                    ActionRow(
+                        title = s.settingsReportProblem,
+                        subtitle = if (com.tmplayer.data.FeedbackReports.available) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail,
+                        icon = TmIcons.Bug,
+                        onClick = { reporting = com.tmplayer.data.FeedbackReport.Kind.Problem },
+                    )
+                }
+                // HX64: an idea, written here with the inbox, else on the feature request page.
+                item {
+                    ActionRow(
+                        title = s.settingsRequestFeature,
+                        subtitle = s.settingsRequestFeatureDetail,
+                        icon = TmIcons.Send,
+                        onClick = { reporting = com.tmplayer.data.FeedbackReport.Kind.Feature },
+                    )
+                }
+                // The setup's answers again: each also lives on its own page, so this is a way back through
+                // them (it was the last row of the category list).
+                item(key = "setup_choices") {
+                    ActionRow(
+                        title = s.settingsRedoSetupChoices,
+                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.SetupChoices)),
+                        subtitle = s.setupChoicesSummary,
+                        icon = TmIcons.Checklist,
+                        onClick = {
+                            cameFromStep = null
+                            showPage(SettingsPage.SetupChoices)
+                        },
+                    )
+                }
+                // The logs, the playback test and the proxy: one page for when something is wrong.
+                item(key = "troubleshooting") {
+                    ActionRow(
+                        title = s.settingsPageTroubleshooting,
+                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Troubleshooting)),
+                        subtitle = s.settingsPageTroubleshootingSummary,
+                        icon = TmIcons.Logs,
+                        onClick = { showPage(SettingsPage.Troubleshooting) },
+                    )
+                }
+            }
+
+            // For when something is wrong (WP-08, inside Help): the proxy, the logs and the playback test.
+            SettingsPage.Troubleshooting -> {
+                // A proxy (CP77), for a network where Telegram is blocked; the same screen the
+                // connecting help opens before sign in.
+                item {
+                    val proxyOn by com.tmplayer.data.Td.proxyOn.collectAsStateWithLifecycle()
+                    ActionRow(
+                        title = s.proxyTitle,
+                        modifier = Modifier.focusRequester(landing),
+                        subtitle = if (proxyOn) s.proxyInUse else s.proxySettingsDetailOff,
+                        icon = TmIcons.Wifi,
+                        onClick = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
+                    )
+                }
+                // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
+                item {
+                    ActionRow(
+                        title = s.logsSave,
+                        subtitle = s.logsSaveDetail,
+                        icon = TmIcons.Logs,
+                        onClick = saveLogs,
+                    )
+                }
+                // Plays 30 seconds from the disk and says whether the decoder or the line is the trouble (L6).
+                item {
+                    ActionRow(
+                        title = s.playbacktestTitle,
+                        subtitle = s.playbacktestDetail,
+                        icon = TmIcons.Play,
+                        onClick = playbackTest,
+                    )
+                }
+                // Uploads one report after showing what is in it (L5); not drawn in a build with no inbox.
+                if (sendToDeveloper != null) {
+                    item {
+                        ActionRow(
+                            title = s.logsSendDev,
+                            subtitle = s.logsSendDevDetail,
+                            icon = TmIcons.Send,
+                            onClick = sendToDeveloper,
+                        )
+                    }
+                }
+                // How much the app keeps in its own log on this device (L4); beside Save logs, which reads it.
+                item {
+                    ToggleRow(
+                        title = s.logsDetailed,
+                        subtitle = if (detailedLogs) s.logsDetailedOn else s.logsDetailedOff,
+                        icon = TmIcons.Logs,
+                        checked = detailedLogs,
+                        onToggle = { scope.launch { settings.setDetailedLogs(!detailedLogs) } },
+                    )
+                }
+                // Hidden until a chat's search turns it on (see DEVELOPER_PHRASE): how the app read
+                // the file names of the chat opened last, to check its guesses against real chats.
+                if (developerOptions) {
+                    item {
+                        ActionRow(
+                            title = s.logsNameReport,
+                            subtitle = s.logsNameReportDetail,
+                            icon = TmIcons.Checklist,
+                            onClick = saveNameCheck,
+                        )
+                    }
+                }
+            }
+
             SettingsPage.About -> {
+                movedHint(SettingsPage.About)
                 // ---- version -------------------------------------------------------------------------
 
                 // Not in a build that a store keeps up to date (Updates.enabled, the F-Droid
@@ -2108,143 +2305,13 @@ fun SettingsScreen(
                         }
                     }
                 }
-
-                // ---- backup ----------------------------------------------------------------------------
-
-                // To a file the viewer keeps, and back: settings, lists and resume points, never the
-                // Telegram sign in. See BackupActions for where the file goes on a box with no picker.
-                // Here rather than on Library since 2026-11-01: it is the whole account's, not the
-                // library's. Without the version rows (a store build) the remote lands on it.
-                sectionTitle { s.backupSection }
-                item {
-                    ActionRow(
-                        title = s.backupBackUp,
-                        subtitle = s.backupBackUpDetail,
-                        icon = TmIcons.Download,
-                        modifier = if (Updates.enabled) Modifier else Modifier.focusRequester(landing),
-                        onClick = backup.backUp,
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = s.backupRestore,
-                        subtitle = s.backupRestoreDetail,
-                        icon = TmIcons.Refresh,
-                        onClick = backup.restore,
-                    )
-                }
-
-                // ---- help ----------------------------------------------------------------------------
-
-                sectionTitle { s.settingsHelp }
-                // A proxy (CP77), for a network where Telegram is blocked; the same screen the
-                // connecting help opens before sign in.
-                item {
-                    val proxyOn by com.tmplayer.data.Td.proxyOn.collectAsStateWithLifecycle()
-                    ActionRow(
-                        title = s.proxyTitle,
-                        subtitle = if (proxyOn) s.proxyInUse else s.proxySettingsDetailOff,
-                        icon = TmIcons.Wifi,
-                        onClick = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = s.settingsTour,
-                        subtitle = s.settingsTourBody,
-                        icon = TmIcons.Info,
-                        onClick = { scope.launch { settings.openTour() } },
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = s.settingsWhatsNew,
-                        subtitle = s.settingsWhatsNewDetail(WhatsNew.VERSION),
-                        icon = TmIcons.StarOutline,
-                        onClick = { whatsNew = true },
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = s.settingsChangelog,
-                        subtitle = s.settingsChangelogDetail,
-                        icon = TmIcons.List,
-                        onClick = { openPage(WhatsNew.CHANGELOG, s.settingsQrChangelogPage) },
-                    )
-                }
-                item {
-                    ActionRow(
-                        title = s.settingsReportProblem,
-                        subtitle = if (com.tmplayer.data.FeedbackReports.available) s.settingsReportProblemDetailInbox else s.settingsReportProblemDetail,
-                        icon = TmIcons.Bug,
-                        onClick = { reporting = com.tmplayer.data.FeedbackReport.Kind.Problem },
-                    )
-                }
-                // HX64: an idea, written here with the inbox, else on the feature request page.
-                item {
-                    ActionRow(
-                        title = s.settingsRequestFeature,
-                        subtitle = s.settingsRequestFeatureDetail,
-                        icon = TmIcons.Send,
-                        onClick = { reporting = com.tmplayer.data.FeedbackReport.Kind.Feature },
-                    )
-                }
-                // The logs to attach to that report (CP59), scrubbed of names and ids before they are written.
-                item {
-                    ActionRow(
-                        title = s.logsSave,
-                        subtitle = s.logsSaveDetail,
-                        icon = TmIcons.Logs,
-                        onClick = saveLogs,
-                    )
-                }
-                // Plays 30 seconds from the disk and says whether the decoder or the line is the trouble (L6).
-                item {
-                    ActionRow(
-                        title = s.playbacktestTitle,
-                        subtitle = s.playbacktestDetail,
-                        icon = TmIcons.Play,
-                        onClick = playbackTest,
-                    )
-                }
-                // Uploads one report after showing what is in it (L5); not drawn in a build with no inbox.
-                if (sendToDeveloper != null) {
-                    item {
-                        ActionRow(
-                            title = s.logsSendDev,
-                            subtitle = s.logsSendDevDetail,
-                            icon = TmIcons.Send,
-                            onClick = sendToDeveloper,
-                        )
-                    }
-                }
-                // How much the app keeps in its own log on this device (L4); beside Save logs, which reads it.
-                item {
-                    ToggleRow(
-                        title = s.logsDetailed,
-                        subtitle = if (detailedLogs) s.logsDetailedOn else s.logsDetailedOff,
-                        icon = TmIcons.Logs,
-                        checked = detailedLogs,
-                        onToggle = { scope.launch { settings.setDetailedLogs(!detailedLogs) } },
-                    )
-                }
-                // Hidden until a chat's search turns it on (see DEVELOPER_PHRASE): how the app read
-                // the file names of the chat opened last, to check its guesses against real chats.
-                if (developerOptions) {
-                    item {
-                        ActionRow(
-                            title = s.logsNameReport,
-                            subtitle = s.logsNameReportDetail,
-                            icon = TmIcons.Checklist,
-                            onClick = saveNameCheck,
-                        )
-                    }
-                }
                 item {
                     ActionRow(
                         title = s.aboutLawfulUse,
                         subtitle = s.aboutLawfulUseDetail,
                         icon = TmIcons.Gavel,
+                        // Without the version rows (a store build) the remote lands here.
+                        modifier = if (Updates.enabled) Modifier else Modifier.focusRequester(landing),
                         onClick = { openPage(About.LEGAL, s.settingsQrLawfulUsePage) },
                     )
                 }
@@ -2335,6 +2402,18 @@ fun SettingsScreen(
                         }
                     }
                 } else {
+                    // The pages in the shared order (WP-08, SettingsMap.pages): Account first, then what plays,
+                    // what is on screen, what is kept, and the help last. Redo setup choices and Troubleshooting
+                    // are rows of Help, not pages of this list; Launcher is a section of Home and library.
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Accounts),
+                            subtitle = s.settingsGroupAccountSummary,
+                            icon = TmIcons.Account,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Accounts)),
+                            onClick = { showPage(SettingsPage.Accounts) },
+                        )
+                    }
                     item {
                         ActionRow(
                             title = titleOf(SettingsPage.Playback),
@@ -2367,24 +2446,12 @@ fun SettingsScreen(
                             subtitle = if (disk.totalBytes > 0) {
                                 s.settingsStorageFree(s.formatter.bytes(disk.freeBytes), s.formatter.bytes(disk.totalBytes))
                             } else {
-                                s.settingsGroupStorageSummary
+                                s.settingsGroupStorageBackupSummary
                             },
                             icon = TmIcons.Download,
                             modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Storage)),
                             onClick = { showPage(SettingsPage.Storage) },
                         )
-                    }
-                    // A phone's only: a TV posts no notifications (CP76).
-                    if (touch) {
-                        item {
-                            ActionRow(
-                                title = titleOf(SettingsPage.Notifications),
-                                subtitle = s.settingsPageNotificationsSummaryShort,
-                                icon = TmIcons.Bell,
-                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)),
-                                onClick = { showPage(SettingsPage.Notifications) },
-                            )
-                        }
                     }
                     item {
                         ActionRow(
@@ -2402,16 +2469,6 @@ fun SettingsScreen(
                     }
                     item {
                         ActionRow(
-                            title = titleOf(SettingsPage.Account),
-                            // The lock's state when it is set, which is the thing worth knowing at a glance.
-                            subtitle = if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacyLockSummary,
-                            icon = TmIcons.Lock,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Account)),
-                            onClick = { showPage(SettingsPage.Account) },
-                        )
-                    }
-                    item {
-                        ActionRow(
                             title = titleOf(SettingsPage.Library),
                             subtitle = s.settingsPageHomeLibrarySummary,
                             icon = TmIcons.Home,
@@ -2419,18 +2476,36 @@ fun SettingsScreen(
                             onClick = { showPage(SettingsPage.Library) },
                         )
                     }
-                    // Android TV and Google TV only: a phone, a Fire TV and a Fire tablet have neither a
-                    // Play next row nor channels, and a page of switches that do nothing there is noise.
-                    if (watchNextSupported || tvChannelsSupported) {
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Privacy),
+                            // The lock's state when it is set, which is the thing worth knowing at a glance.
+                            subtitle = if (appLock.pinSet) AppLockWords.summary(appLock) else s.settingsGroupPrivacySummary,
+                            icon = TmIcons.Lock,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Privacy)),
+                            onClick = { showPage(SettingsPage.Privacy) },
+                        )
+                    }
+                    // A phone's only: a TV posts no notifications (CP76).
+                    if (touch) {
                         item {
                             ActionRow(
-                                title = titleOf(SettingsPage.TvHome),
-                                subtitle = s.settingsPageTvHomeSummary,
-                                icon = TmIcons.Home,
-                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.TvHome)),
-                                onClick = { showPage(SettingsPage.TvHome) },
+                                title = titleOf(SettingsPage.Notifications),
+                                subtitle = s.settingsPageNotificationsSummaryShort,
+                                icon = TmIcons.Bell,
+                                modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Notifications)),
+                                onClick = { showPage(SettingsPage.Notifications) },
                             )
                         }
+                    }
+                    item {
+                        ActionRow(
+                            title = titleOf(SettingsPage.Help),
+                            subtitle = s.settingsGroupHelpSummary,
+                            icon = TmIcons.Info,
+                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Help)),
+                            onClick = { showPage(SettingsPage.Help) },
+                        )
                     }
                     item {
                         // An update waiting is said here as well as inside, in the same colour, so it
@@ -2441,26 +2516,12 @@ fun SettingsScreen(
                             subtitle = if (offered != null) {
                                 UpdateWords.settingsRow(offered)
                             } else {
-                                s.settingsGroupAboutSummary(Updates.installedVersion)
+                                s.settingsGroupAboutPageSummary(Updates.installedVersion)
                             },
                             icon = TmIcons.Info,
                             tint = if (offered != null) Tone.caution else Color.Unspecified,
                             modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)),
                             onClick = { showPage(SettingsPage.About) },
-                        )
-                    }
-                    // The setup's answers again, last: each also lives on its own page, so this is a
-                    // way back through them rather than a page to open first (UX review, 2026-10-27).
-                    item {
-                        ActionRow(
-                            title = titleOf(SettingsPage.SetupChoices),
-                            subtitle = s.setupChoicesSummary,
-                            icon = TmIcons.Checklist,
-                            modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.SetupChoices)),
-                            onClick = {
-                                cameFromStep = null
-                                showPage(SettingsPage.SetupChoices)
-                            },
                         )
                     }
                 }

@@ -41,28 +41,57 @@ internal fun Strings.skipModeDetail(mode: SkipMode): String = when (mode) {
 }
 
 /**
- * One line per kind of skip under "Skip intro buttons": Recaps, Intros and openings, Credits and
- * endings, Previews. Each reads what is chosen and opens a [ChoiceSheet] of Ask me, Skip by
- * itself and Off, which a remote walks like every other picker. Shown only while the switch above
- * is on, since Off there already means no buttons at all.
+ * Playback's Skip buttons (WP-08): one row for the four kinds of skip, Recaps, Intros and openings,
+ * Credits and endings, Previews, which used to be four lines under the Skip intro buttons switch in
+ * Home and library (that switch and its privacy line stay with the online lookups). The row opens a
+ * [ChoiceSheet] that lists the four with what is chosen for each; a line opens a second sheet of Ask
+ * me, Skip by itself and Off, which a remote walks like every other picker, and closing it comes
+ * back to the list.
  */
 @Composable
-internal fun SkipModeRow(group: SkipGroup) {
+internal fun SkipButtonsRow(modifier: Modifier = Modifier) {
     val s = LocalStrings.current
     val online = OnlineMetadata.current ?: return
-    val settings by online.settings.collectAsState()
-    if (!settings.skipTimes) return
     var open by remember { mutableStateOf(false) }
-    val current = settings.skipModes.of(group)
     ActionRow(
-        title = s.skipGroupName(group),
-        subtitle = s.skipModeName(current),
+        title = s.settingsSkipButtons,
+        modifier = modifier,
+        subtitle = s.settingsSkipButtonsSummary,
         icon = TmIcons.Episodes,
         onClick = { open = true },
     )
     if (!open) return
+    val settings by online.settings.collectAsState()
+    var picking by remember { mutableStateOf<SkipGroup?>(null) }
     val landing = remember { FocusRequester() }
-    ChoiceSheet(title = s.skipGroupName(group), note = s.settingsSkipModeNote, onDismiss = { open = false }, onClose = { open = false }) {
+    val group = picking
+    if (group == null) {
+        ChoiceSheet(title = s.settingsSkipButtons, note = s.settingsSkipModeNote, onDismiss = { open = false }, onClose = { open = false }) {
+            ChoiceList {
+                SkipGroup.entries.forEachIndexed { index, each ->
+                    ChoiceLine(
+                        title = s.skipGroupName(each),
+                        detail = s.skipModeName(settings.skipModes.of(each)),
+                        modifier = if (index == 0) Modifier.focusRequester(landing) else Modifier,
+                    ) { picking = each }
+                }
+            }
+            FocusOnOpen(landing)
+        }
+        return
+    }
+    SkipModeSheet(group, onClose = { picking = null })
+}
+
+/** The sheet of Ask me, Skip by itself and Off for one kind of skip; [onClose] comes back to the list. */
+@Composable
+private fun SkipModeSheet(group: SkipGroup, onClose: () -> Unit) {
+    val s = LocalStrings.current
+    val online = OnlineMetadata.current ?: return onClose()
+    val settings by online.settings.collectAsState()
+    val current = settings.skipModes.of(group)
+    val landing = remember { FocusRequester() }
+    ChoiceSheet(title = s.skipGroupName(group), note = s.settingsSkipModeNote, onDismiss = onClose, onClose = onClose) {
         ChoiceList {
             SkipMode.entries.forEach { mode ->
                 val selected = mode == current
@@ -73,7 +102,7 @@ internal fun SkipModeRow(group: SkipGroup) {
                     modifier = if (selected) Modifier.focusRequester(landing) else Modifier,
                 ) {
                     online.setSkipMode(group, mode)
-                    open = false
+                    onClose()
                 }
             }
         }

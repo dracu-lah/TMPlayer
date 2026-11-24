@@ -93,7 +93,7 @@ class ResumeSyncRowsTest {
         rule.setContent {
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
-                    SettingsScreen(chats = emptyList(), onLoggedOut = {}, initialPage = SettingsPage.Account, accountFolders = emptyList())
+                    SettingsScreen(chats = emptyList(), onLoggedOut = {}, initialPage = SettingsPage.Accounts, accountFolders = emptyList())
                 }
             }
         }

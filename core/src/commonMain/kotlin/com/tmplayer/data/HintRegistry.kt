@@ -56,6 +56,13 @@ object HintIds {
      * for an install that had the gear; a fresh install has it marked seen by its first sign in screen.
      */
     const val NAV_ACCOUNT_MOVED = "nav_account_moved"
+
+    /**
+     * The "Moved to {page}" lines at the top of a Settings page whose rows moved in WP-08, once per
+     * old page for one release: `moved_privacy`, `moved_about`, `moved_library` ([page] is the
+     * old page's [SettingsGroup] name). Removed, with the aliases, in the release after the beta.
+     */
+    fun moved(page: String): String = "moved_" + page.lowercase()
 }
 
 object HintRegistry {

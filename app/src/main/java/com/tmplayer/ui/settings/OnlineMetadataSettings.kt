@@ -46,8 +46,8 @@ internal fun LazyListScope.onlineMetadataSection(
     item { MetadataToggleRow(toggleModifier) }
     item { TrailersInAppToggleRow() }
     item { SkipTimesToggleRow() }
-    // One line per kind of skip, under the switch they belong to.
-    for (group in com.tmplayer.online.SkipGroup.entries) item { SkipModeRow(group) }
+    // The four kinds of skip are one Skip buttons row in Playback now (WP-08); this switch and its
+    // privacy line stay with the lookups they ride on.
     item { MetadataKeyRow(onEditKey) }
     item { OmdbKeyRow(onEditOmdbKey) }
     item { MetadataCacheRow() }

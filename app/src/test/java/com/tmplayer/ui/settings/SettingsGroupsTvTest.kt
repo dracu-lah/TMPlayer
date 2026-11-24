@@ -38,8 +38,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The pages U20 changed, by remote on a television: the category list lands on Playback, its
- * first page now; Down walks Subtitles and audio from the subtitle rows through the audio
+ * The pages U20 changed, by remote on a television: the category list lands on Account, its
+ * first page since WP-08, and Down goes on to Playback; Down walks Subtitles and audio from the subtitle rows through the audio
  * language and over the Sound heading to the sound rows, and the language sheet hands the focus
  * back to its row when it closes; Storage and downloads reaches Download the whole video first
  * under the location; Privacy and lock reaches the privacy page under the lock. And the phone's
@@ -99,15 +99,16 @@ class SettingsGroupsTvTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
-    fun `the list lands on Playback, its first page`() {
+    fun `the list lands on Account, its first page, and Down walks the pages in the shared order`() {
         show(page = null)
         rule.mainClock.advanceTimeBy(500)
         rule.waitForIdle()
-        row("Playback").assertIsFocused()
-        row("Playback").performKeyInput { pressKey(Key.DirectionDown) }
-        rule.waitForIdle()
-        // No Player gestures on a television: Subtitles and audio is next.
-        row("Subtitles and audio").assertIsFocused()
+        row("Account").assertIsFocused()
+        // Nine pages on a television (WP-08): no Notifications, no Redo setup choices or Launcher of their own.
+        walk("Account", "Playback", "Subtitles and audio", "Downloads and data", "Appearance and language", "Home and library", "Privacy and lock", "Help", "About")
+        rule.onNodeWithText("Notifications").assertDoesNotExist()
+        rule.onNodeWithText("Redo setup choices").assertDoesNotExist()
+        rule.onNodeWithText("Launcher").assertDoesNotExist()
     }
 
     @Test
@@ -153,11 +154,20 @@ class SettingsGroupsTvTest {
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `Privacy and lock reaches the privacy page under the lock`() {
-        show(SettingsPage.Account)
+        show(SettingsPage.Privacy)
         // A build with a crash report address (a developer's, with SENTRY_DSN in local.properties)
         // has the crash switch under Privacy; a fork or CI build has none. Walk what this build has.
+        // The devices and Sign out are on Account since WP-08.
         val crash = if (com.tmplayer.data.CrashReports.available) arrayOf("Send crash reports") else emptyArray()
-        walk("Allowed chats only", "Allowed chats", "Privacy", *crash, "Connected devices")
+        walk("Allowed chats only", "Allowed chats", "Privacy", *crash)
+        rule.onNodeWithText("Connected devices").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `Account reaches the devices, the sync rows and the profiles, Sign out last`() {
+        show(SettingsPage.Accounts)
+        walk("Connected devices", "Keep my place on all my devices")
     }
 
     @Test

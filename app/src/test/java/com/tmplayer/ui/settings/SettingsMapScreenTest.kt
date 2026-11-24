@@ -88,23 +88,29 @@ class SettingsMapScreenTest {
             // Robolectric device meets. Advanced is folded until asked for.
             val expected = rows.filter { it.need != SettingsNeed.Advanced && needs.met(it) }
                 .map { L.messages.text(it.titleOn(form)) }
-            val known = rows.flatMap { row -> row.titlesOn(form).map { L.messages.text(it) } }.toSet()
+            // The "Moved to" hint's lines (WP-08) are on the old page for one release; their titles are the moved rows'.
+            val moved = movedAliases(shown, form, needs, L).map { it.title }
+            val known = rows.flatMap { row -> row.titlesOn(form).map { L.messages.text(it) } }.toSet() + moved
             expected.filter { it !in seen }.takeIf { it.isNotEmpty() }?.let { problems += "$form $shown misses $it" }
             (seen - known).takeIf { it.isNotEmpty() }?.let { problems += "$form $shown draws rows SettingsMap does not list: $it" }
         }
         assertEquals(problems.joinToString("\n"), emptyList<String>(), problems)
 
-        // The category list: one row per page this form has, in the shared order.
+        // The category list: one row per page this form has, in the shared order (WP-08): nine on a
+        // television, ten on a phone. A sub-page (Troubleshooting, Redo setup choices) is a row of Help.
         seen.clear()
         page = null
         rule.waitForIdle()
-        val listed = SettingsGroup.entries.map { L.messages.text(it.title) }.filter { it in seen }
-        val pages = seen.filter { title -> SettingsGroup.entries.any { L.messages.text(it.title) == title } }
-        assertEquals("the list follows the groups' order", listed, pages)
-        assertTrue("Playback comes first", pages.first() == L.messages.text(SettingsGroup.Playback.title))
-        // Every page a link sends this form to is one it lists.
+        val expectedPages = SettingsMap.pages(form).map { L.messages.text(it.title) }
+        val listed = seen.filter { title -> SettingsGroup.entries.any { L.messages.text(it.title) == title } }
+        assertEquals("the list follows the groups' order", expectedPages, listed)
+        assertEquals(if (form == DeviceForm.Tv) 9 else 10, listed.size)
+        assertTrue("Account comes first", listed.first() == L.messages.text(SettingsGroup.Accounts.title))
+        val pages = listed
+        // Every page a link sends this form to is one it lists, or opens from one that is.
         for (link in SettingsLink.entries.filter { form in it.forms }) {
-            assertTrue("$link: ${link.group} is a page on $form", L.messages.text(link.group.title) in pages || link.group == SettingsGroup.TvHome)
+            val listedGroup = link.group.parent ?: link.group
+            assertTrue("$link: $listedGroup is a page on $form", L.messages.text(listedGroup.title) in pages)
         }
         // Gestures and Home are rows of Playback and of Home and library now (Raju 11.1), never pages.
         assertTrue("no page named Player gestures or Home", listOf("Player gestures", "Home").none { it in pages })

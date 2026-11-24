@@ -116,8 +116,12 @@ import kotlinx.coroutines.withContext
 enum class SettingsCategory {
     Playback, Subtitles, Storage, Notifications, Appearance, Account, Library, About, SetupChoices;
 
-    /** The shared group this page is. */
-    val group: SettingsGroup get() = SettingsGroup.valueOf(name)
+    /**
+     * The shared group this page is. Read through the stored names, as the desktop's own "Account"
+     * page is still Privacy and lock until the desktop follows the new order (WP-77, which moves its
+     * rows to the pages of [SettingsGroup] and drops this).
+     */
+    val group: SettingsGroup get() = SettingsGroup.fromStored(name) ?: SettingsGroup.Privacy
 
     internal val icon: androidx.compose.ui.graphics.vector.ImageVector
         get() = when (this) {

@@ -145,7 +145,7 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     SubMakerRejected("submaker.rejected", SettingsGroup.Subtitles, "submaker_base", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
     /** The kids lock's empty Chats: "Choose them in Settings, App lock". */
-    KidsEmpty("lock.kids_empty", SettingsGroup.Account, "allowed_chats", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+    KidsEmpty("lock.kids_empty", SettingsGroup.Privacy, "allowed_chats", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
 
     /** "Posters are off. Turn them back on in Settings, Posters and details." */
     PostersOff("grid.meta_notice_turned_off", SettingsGroup.Library, "posters", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
@@ -157,7 +157,7 @@ enum class SettingsLink(val from: String, val group: SettingsGroup, val row: Str
     WifiOnly("player.mobile_data_never", SettingsGroup.Storage, "mobile_data", setOf(DeviceForm.Phone)),
 
     /** "Developer options are on. Save name check is in Settings, under Save logs." */
-    DeveloperOn("logs.developer_on", SettingsGroup.About, "name_report", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
+    DeveloperOn("logs.developer_on", SettingsGroup.Troubleshooting, "name_report", setOf(DeviceForm.Phone, DeviceForm.Tv, DeviceForm.Desktop)),
     ;
 
     /** Where Setup choices' "Also in" goes is in the ui module (SetupStep lives there). */

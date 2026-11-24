@@ -44,7 +44,6 @@ class SettingsMapTest {
         val ids = SettingsMap.rows.map { it.id }
         assertEquals(ids.groupBy { it }.filterValues { it.size > 1 }.keys, emptySet<String>())
         val onlyOn = mapOf(
-            SettingsGroup.TvHome to setOf(DeviceForm.Tv),
             // A television posts no notifications (CP76).
             SettingsGroup.Notifications to setOf(DeviceForm.Phone, DeviceForm.Desktop),
         )
@@ -86,17 +85,17 @@ class SettingsMapTest {
             "default_player" to SettingsGroup.Playback,
             "player_engine" to SettingsGroup.Playback,
             "mobile_data" to SettingsGroup.Storage,
-            "resume_sync" to SettingsGroup.Account,
+            "resume_sync" to SettingsGroup.Accounts,
             "find_subtitles" to SettingsGroup.Subtitles,
-            "detailed_logs" to SettingsGroup.About,
-            "playback_test" to SettingsGroup.About,
-            "crash_reports" to SettingsGroup.Account,
+            "detailed_logs" to SettingsGroup.Troubleshooting,
+            "playback_test" to SettingsGroup.Troubleshooting,
+            "crash_reports" to SettingsGroup.Privacy,
             // Moved by U20: the sound and the soundtrack's language beside the subtitles' languages.
             "audio_language" to SettingsGroup.Subtitles,
             "downmix" to SettingsGroup.Subtitles,
             "even_volume" to SettingsGroup.Subtitles,
             "download_first" to SettingsGroup.Storage,
-            "privacy_page" to SettingsGroup.Account,
+            "privacy_page" to SettingsGroup.Privacy,
         )
         for ((id, group) in homes) {
             val found = SettingsMap.rows.filter { it.id == id }
@@ -105,6 +104,103 @@ class SettingsMapTest {
         }
         // Suggest VLC is read by nothing (U20): gone from Settings.
         assertEquals(null, SettingsMap.row("suggest_vlc"))
+    }
+
+    /** WP-08: the pages in one order on every platform, nine on a television and ten elsewhere. */
+    @Test
+    fun `the pages are in the task order, nine on a television and ten on a phone and a desktop`() {
+        val touch = listOf("Accounts", "Playback", "Subtitles", "Storage", "Appearance", "Library", "Privacy", "Notifications", "Help", "About")
+        assertEquals(touch, SettingsMap.pages(DeviceForm.Phone).map { it.name })
+        assertEquals(touch, SettingsMap.pages(DeviceForm.Desktop).map { it.name })
+        assertEquals(touch - "Notifications", SettingsMap.pages(DeviceForm.Tv).map { it.name })
+        assertEquals(9, SettingsMap.pages(DeviceForm.Tv).size)
+        assertEquals(10, SettingsMap.pages(DeviceForm.Phone).size)
+        assertEquals(
+            listOf("Account", "Playback", "Subtitles and audio", "Downloads and data", "Appearance and language", "Home and library", "Privacy and lock", "Notifications", "Help", "About"),
+            SettingsMap.pages(DeviceForm.Phone).map { text(it.title) },
+        )
+        // Troubleshooting and Redo setup choices open from rows of Help and are not listed.
+        assertEquals(listOf(SettingsGroup.Help), listOf(SettingsGroup.Troubleshooting.parent, SettingsGroup.SetupChoices.parent).distinct())
+        for (form in DeviceForm.entries) for (group in SettingsGroup.entries.filter { !it.listed }) {
+            assertTrue("$group is not listed on $form", group !in SettingsMap.pages(form))
+        }
+        assertTrue("setup_choices" in SettingsMap.on(DeviceForm.Tv, SettingsGroup.Help).map { it.id })
+        assertTrue("troubleshooting" in SettingsMap.on(DeviceForm.Tv, SettingsGroup.Help).map { it.id })
+        // The television's launcher rows are a section of Home and library.
+        val launcher = setOf("watch_next", "tv_channels")
+        assertEquals(listOf("watch_next", "tv_channels"), SettingsMap.on(DeviceForm.Tv, SettingsGroup.Library).map { it.id }.filter { it in launcher })
+        assertEquals(emptyList<String>(), SettingsMap.on(DeviceForm.Phone, SettingsGroup.Library).map { it.id }.filter { it in launcher })
+        // Language is the first row of Appearance and language, on every form.
+        for (form in DeviceForm.entries) assertEquals("language", SettingsMap.on(form, SettingsGroup.Appearance).first().id)
+        // Sign out is on Account, Backup with the storage, Skip buttons in Playback (WP-08).
+        assertEquals(SettingsGroup.Accounts, SettingsMap.row("sign_out")!!.group)
+        assertEquals(SettingsGroup.Storage, SettingsMap.row("back_up")!!.group)
+        assertEquals(SettingsGroup.Storage, SettingsMap.row("restore")!!.group)
+        assertEquals(SettingsGroup.Playback, SettingsMap.row("skip_buttons")!!.group)
+        assertEquals(SettingsGroup.Library, SettingsMap.row("skip_times")!!.group)
+        assertEquals(null, SettingsMap.row("skip_mode_intro"))
+        // One About row and one Support row.
+        assertEquals(1, SettingsMap.rows.count { it.id == "about" })
+        assertEquals(1, SettingsMap.rows.count { it.id == "support" })
+    }
+
+    /** WP-08: every page name an earlier version stored reads as a page of this one. */
+    @Test
+    fun `every page name stored before WP-08 maps to a page of the new order`() {
+        val old = listOf("Playback", "Subtitles", "Storage", "Notifications", "Appearance", "Account", "Library", "TvHome", "About", "SetupChoices")
+        val expected = mapOf("Account" to SettingsGroup.Privacy, "TvHome" to SettingsGroup.Library)
+        for (name in old) {
+            val group = SettingsGroup.fromStored(name)
+            assertNotNull("$name maps to nothing", group)
+            assertEquals(name, expected[name] ?: SettingsGroup.valueOf(name), group)
+        }
+        // The new names read as themselves, and a name nobody used reads as nothing.
+        for (group in SettingsGroup.entries) assertEquals(group, SettingsGroup.fromStored(group.name))
+        assertEquals(null, SettingsGroup.fromStored("Nothing"))
+        assertEquals(null, SettingsGroup.fromStored(""))
+        // A retired name is never also a group's name, or it could not be told apart.
+        assertTrue(SettingsGroup.RETIRED.keys.none { SettingsGroup.of(it) != null })
+    }
+
+    /** WP-08: a row moved off a page is an alias there for one release, naming where it went. */
+    @Test
+    fun `every moved row has a Moved to alias at its old place and lands on its new page`() {
+        val moved = SettingsMap.rows.filter { it.movedFrom != null }
+        assertTrue(moved.size > 10)
+        for (row in moved) {
+            val from = row.movedFrom!!
+            assertTrue("$row is not on its old page now", row.group != from)
+            for (form in row.forms) {
+                assertTrue("$from lists no alias for $row on $form", row in SettingsMap.movedFrom(form, from))
+                // The alias reads "Moved to {page}": the page it names is one the form lists or opens from one.
+                val page = if (row.group.listed) row.group else row.group.parent!!
+                assertTrue("$row names $page, which $form does not list", page in SettingsMap.pages(form))
+            }
+        }
+        val signOut = SettingsMap.movedFrom(DeviceForm.Tv, SettingsGroup.Privacy).map { it.id }
+        assertTrue("sign_out" in signOut && "devices" in signOut && "add_account" in signOut)
+        assertEquals(listOf("back_up", "restore"), SettingsMap.movedFrom(DeviceForm.Phone, SettingsGroup.About).map { it.id }.filter { it in setOf("back_up", "restore") })
+        assertTrue("skip_buttons" in SettingsMap.movedFrom(DeviceForm.Phone, SettingsGroup.Library).map { it.id })
+        // A row a form does not have leaves no alias there (detailed logs and the playback test are no desktop's).
+        assertTrue("detailed_logs" !in SettingsMap.movedFrom(DeviceForm.Desktop, SettingsGroup.About).map { it.id })
+        // The old place is a page the form lists, or the alias has nowhere to be seen.
+        for (group in moved.map { it.movedFrom!! }.distinct()) assertTrue("$group is a listed page", group.listed)
+        assertEquals("Moved to Downloads and data", text("settings.also_in_moved").replace("{page}", text(SettingsGroup.Storage.title)))
+        // One home for every row: ids are unique, so a moved row is never listed on two pages.
+        assertEquals(SettingsMap.rows.size, SettingsMap.rows.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun `the moved rows are found by search at their new home`() {
+        val phone = SettingsMap.on(DeviceForm.Phone)
+        assertEquals("sign_out", search("sign out").first())
+        assertEquals("sign_out", SettingsSearch.match("log out", SettingsMap.on(DeviceForm.Tv), DeviceForm.Tv, ::text).first().row.id)
+        assertEquals("Account", SettingsSearch.match("sign out", phone, DeviceForm.Phone, ::text).first().page)
+        assertEquals("Downloads and data", SettingsSearch.match("back up", phone, DeviceForm.Phone, ::text).first { it.row.id == "back_up" }.page)
+        assertEquals("Troubleshooting", SettingsSearch.match("playback test", phone, DeviceForm.Phone, ::text).first { it.row.id == "playback_test" }.page)
+        assertTrue("skip_buttons" in search("intro"))
+        assertTrue("skip_buttons" in search("credits"))
+        assertTrue("setup_choices" in search("redo"))
     }
 
     @Test

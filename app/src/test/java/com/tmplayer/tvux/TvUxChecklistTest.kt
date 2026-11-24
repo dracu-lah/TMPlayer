@@ -375,7 +375,7 @@ internal val SCREENS: List<Screen> = listOf(
                 }
             }
         },
-        content = settings(SettingsPage.Account),
+        content = settings(SettingsPage.Accounts),
     ),
     Screen(
         "accountMenu",

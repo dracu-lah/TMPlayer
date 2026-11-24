@@ -5,32 +5,62 @@ import com.tmplayer.data.DeviceForm.Phone
 import com.tmplayer.data.DeviceForm.Tv
 
 /**
- * Settings' pages, grouped by what the viewer is trying to do (U20, 2026-11-15), in the order the
- * list shows them on every platform. The phone's `SettingsPage` and the desktop's
- * `SettingsCategory` carry the same names in the same order (SettingsMapTest), each leaving out
- * the pages it has not got: [TvHome] is a television's. The player gestures (a phone's) and the
- * mouse (a desktop's) are rows of [Playback], and Home's rows are on [Library], whose page is
- * called Home and library (Raju pass 2, 11.1): one page per job, not three for "what plays" and
- * two for "what shows".
+ * Settings' pages, grouped by what the viewer is trying to do (U20, 2026-11-15; reordered by
+ * WP-08, 2026-11-24), in the order the list shows them on every platform: Account (who is signed
+ * in, devices, profiles, resume on other devices, Sign out), Playback, Subtitles and audio,
+ * Downloads and storage (with Backup), Appearance and language (Language first), Home and library
+ * (a television's launcher rows are a section of it), Privacy and lock, Notifications (touch and
+ * desktop only), Help (with Troubleshooting inside it) and About. The phone's `SettingsPage` and
+ * the desktop's `SettingsCategory` carry the same names in the same order (SettingsMapTest), each
+ * leaving out the pages it has not got. The player gestures (a phone's) and the mouse (a
+ * desktop's) are rows of [Playback], and Home's rows are on [Library]: one page per job.
  *
  * [title] and [summary] are catalog keys: the page's name and its one line in the list when the
  * list has no live value to show there instead (the free space, the lock's state, an update).
+ * A group with a [parent] is not listed: it opens from a row of its parent ([Troubleshooting] and
+ * [SetupChoices] from Help) and Back returns there.
+ *
+ * The names are the pages' identity in saved state and links; a name a page had before WP-08 is
+ * read by [fromStored].
  */
-enum class SettingsGroup(val title: String, val summary: String) {
+enum class SettingsGroup(val title: String, val summary: String, val parent: SettingsGroup? = null) {
+    Accounts("settings.group_account", "settings.group_account_summary"),
     Playback("settings.playback", "settings.group_playback_summary"),
     Subtitles("settings.page_subtitles_audio", "settings.group_subtitles_audio_summary"),
-    Storage("settings.page_downloads_data", "settings.group_storage_summary"),
-    Notifications("settings.page_notifications", "settings.page_notifications_summary_short"),
+    Storage("settings.page_downloads_data", "settings.group_storage_backup_summary"),
     Appearance("settings.page_appearance", "settings.page_appearance_summary"),
-    Account("settings.page_privacy_lock", "settings.group_privacy_lock_summary"),
     Library("settings.page_home_library", "settings.page_home_library_summary"),
-    TvHome("settings.page_tv_home", "settings.page_tv_home_summary"),
-    About("settings.page_about", "settings.group_about_summary"),
-    SetupChoices("settings.redo_setup_choices", "setup.choices_summary"),
+    Privacy("settings.page_privacy_lock", "settings.group_privacy_summary"),
+    Notifications("settings.page_notifications", "settings.page_notifications_summary_short"),
+    Help("settings.help", "settings.group_help_summary"),
+    Troubleshooting("settings.page_troubleshooting", "settings.page_troubleshooting_summary", Help),
+    SetupChoices("settings.redo_setup_choices", "setup.choices_summary", Help),
+    About("settings.group_about", "settings.group_about_page_summary"),
     ;
+
+    /** Whether the category list shows this group; a sub-page opens from a row of its parent. */
+    val listed: Boolean get() = parent == null
 
     companion object {
         fun of(name: String): SettingsGroup? = entries.firstOrNull { it.name == name }
+
+        /** The names a page had before WP-08 that a group no longer has, and where each went. */
+        val RETIRED: Map<String, SettingsGroup> = mapOf(
+            // Privacy and lock was "Account"; the new Account page is [Accounts].
+            "Account" to Privacy,
+            // The television's launcher rows joined Home and library.
+            "TvHome" to Library,
+            // Pages of before Raju pass 2 (11.1).
+            "Home" to Library,
+            "Gestures" to Playback,
+            "Mouse" to Playback,
+        )
+
+        /**
+         * The group a page name stored by an earlier version (saved state, a deep link, a backup)
+         * or this one means, or null for a name nobody has used.
+         */
+        fun fromStored(name: String): SettingsGroup? = RETIRED[name] ?: of(name)
     }
 }
 
@@ -102,6 +132,13 @@ class SettingsRow(
      * language, so each locale lists its own; a locale without the key falls back to English.
      */
     val keywords: String? = null,
+    /**
+     * The page this row was drawn on before WP-08 moved it, while the "Moved to" hint of that
+     * release lasts: the old page lists the row as an alias that says where it went and jumps
+     * there ([SettingsMap.movedFrom]). Null for a row that did not move. Removed, with its
+     * aliases, in the release after the beta.
+     */
+    val movedFrom: SettingsGroup? = null,
 ) {
     fun titleOn(form: DeviceForm): String = if (form == Desktop) desktopTitle ?: title else title
 
@@ -138,8 +175,9 @@ object SettingsMap {
         desktopTitle: String? = null,
         drawnAs: List<String> = emptyList(),
         keywords: Boolean = false,
+        from: SettingsGroup? = null,
     ) {
-        add(SettingsRow(id, group, title, forms, details, need, desktopTitle, drawnAs, if (keywords) "settings.keywords_$id" else null))
+        add(SettingsRow(id, group, title, forms, details, need, desktopTitle, drawnAs, if (keywords) "settings.keywords_$id" else null, from))
     }
 
     private fun onOff(key: String) = listOf("${key}_on", "${key}_off")
@@ -158,6 +196,15 @@ object SettingsMap {
         row("picture_in_picture", g, "settings.picture_in_picture_leave", P, onOff("settings.picture_in_picture_leave"), SettingsNeed.PictureInPicture)
         row("controls_timeout", g, "settings.controls_timeout", PTD, listOf("settings.controls_timeout_detail"), desktopTitle = "settings.hide_controls")
         row("resume_rewind", g, "settings.resume_rewind", PTD, listOf("settings.resume_rewind_detail"))
+        // One row for Recap, Intro, Credits and Preview, each Ask me, Skip by itself or Off (was four lines under
+        // Skip intro buttons in Home and library; the switch and its privacy line stay in Online metadata, and
+        // the row is there in the builds that have it).
+        row(
+            "skip_buttons", g, "settings.skip_buttons", PTD,
+            listOf("settings.skip_buttons_summary", "settings.skip_recap", "settings.skip_intro", "settings.skip_credits", "settings.skip_preview", "settings.skip_mode_note"),
+            SettingsNeed.OnlineMetadata,
+            from = SettingsGroup.Library,
+        )
         // For a TV that discovery never finds: opens the same address dialog as the Cast picker's last line. A television has no casting.
         row("add_tv", g, "cast.add_entry", PD, listOf("settings.add_tv_detail"))
         row("advanced", g, "settings.advanced", PT, listOf("settings.advanced_detail"))
@@ -210,6 +257,10 @@ object SettingsMap {
         // pausing downloads while playing are always on, so neither has a row.
         row("mobile_data", st, "settings.mobile_data_title", P, listOf("settings.mobile_data_ask_detail", "settings.mobile_data_never_detail", "settings.mobile_data_allow_detail"), keywords = true)
         row("scan_folder", st, "storage.scan", D)
+        // To a file the viewer keeps, and back (WP-08: was in About; it is the whole account's data, and
+        // the one place people look for "where do my downloads and my settings go").
+        row("back_up", st, "backup.back_up", PTD, listOf("backup.back_up_detail"), from = SettingsGroup.About)
+        row("restore", st, "backup.restore", PTD, listOf("backup.restore_detail"), from = SettingsGroup.About)
 
         val n = SettingsGroup.Notifications
         row("alert_downloads", n, "settings.alert_downloads", PD, listOf("settings.alert_downloads_detail"))
@@ -220,6 +271,9 @@ object SettingsMap {
         row("sponsor_reminders", n, "settings.sponsor_reminders", PD, need = SettingsNeed.State)
 
         val a = SettingsGroup.Appearance
+        // Language is the first row (WP-08): a page called Appearance and language opens on it, so on a
+        // television it is still one press Right, then OK.
+        row("language", a, "settings.language", PTD)
         // The desktop titles its live preview card; the phone's and the television's have none.
         row("appearance_preview", a, "settings.appearance_preview", D)
         row("theme", a, "settings.theme", PTD)
@@ -227,7 +281,6 @@ object SettingsMap {
         row("accent", a, "settings.accent", PTD, listOf("settings.accent_detail"))
         row("typeface", a, "settings.typeface", PTD, listOf("settings.typeface_detail"), keywords = true)
         row("high_contrast", a, "settings.high_contrast", PTD, listOf("settings.high_contrast_detail"))
-        row("language", a, "settings.language", PTD)
         row("layout", a, "interface.layout", PTD, desktopTitle = "settings.layout")
         row("interface_size", a, "interface.size", PTD, listOf("interface.size_detail"), keywords = true)
         row("lighter_pictures", a, "settings.lighter_pictures", PT, onOff("settings.lighter_pictures"))
@@ -239,7 +292,23 @@ object SettingsMap {
         row("appearance_defaults", a, "settings.appearance_defaults", PTD, listOf("settings.appearance_defaults_detail"))
         row("wallpaper_colours", a, "settings.wallpaper_colours", P, onOff("settings.wallpaper_colours"), SettingsNeed.Android12)
 
-        val lock = SettingsGroup.Account
+        // Account (WP-08): who is signed in, where, and how to leave. It was the end of Privacy and
+        // lock, which keeps the lock, the privacy page and crash reports.
+        val acct = SettingsGroup.Accounts
+        val was = SettingsGroup.Privacy
+        row("devices", acct, "settings.devices", PTD, listOf("settings.devices_detail"), from = was)
+        row("resume_sync", acct, "syncplace.switch", PTD, onOff("syncplace.switch"), from = was)
+        // Drawn under the switch above on the page that holds it, off until the switch is on.
+        row("resume_sync_delete", acct, "settings.resume_sync_delete", PTD, need = SettingsNeed.State)
+        row("sync_place", acct, "syncchannel.row_title", PTD, listOf("syncchannel.row_detail"), from = was)
+        // The profiles (HX88): Add account while there is room, the other two with two profiles
+        // or more, on the desktop too (B2).
+        row("switch_profile", acct, "profiles.switch_profile", PTD, need = SettingsNeed.State, from = was)
+        row("add_account", acct, "profiles.add", PTD, listOf("profiles.add_detail"), from = was)
+        row("remove_all_accounts", acct, "profiles.remove_all", PTD, listOf("profiles.remove_all_detail"), SettingsNeed.State, from = was)
+        row("sign_out", acct, "settings.sign_out", PTD, keywords = true, from = was)
+
+        val lock = SettingsGroup.Privacy
         row("pin", lock, "lock.set_pin", PTD, listOf("lock.set_pin_detail"), drawnAs = listOf("lock.change_pin"))
         row("lock_on_open", lock, "lock.on_open", PTD, listOf("lock.on_open_detail"), SettingsNeed.State)
         row("kids_lock", lock, "lock.kids", PTD)
@@ -247,15 +316,6 @@ object SettingsMap {
         row("remove_pin", lock, "lock.remove_pin", PTD, listOf("lock.remove_pin_detail"), SettingsNeed.State)
         row("privacy_page", lock, "about.privacy", PTD, listOf("settings.privacy_detail"), desktopTitle = "settings.privacy")
         row("crash_reports", lock, "settings.crash_reports", PTD, onOff("settings.crash_reports"), SettingsNeed.CrashReports)
-        row("devices", lock, "settings.devices", PTD, listOf("settings.devices_detail"))
-        row("resume_sync", lock, "syncplace.switch", PTD, onOff("syncplace.switch"))
-        row("sync_place", lock, "syncchannel.row_title", PTD, listOf("syncchannel.row_detail"))
-        // The profiles (HX88): Add account while there is room, the other two with two profiles
-        // or more, on the desktop too (B2).
-        row("switch_profile", lock, "profiles.switch_profile", PTD, need = SettingsNeed.State)
-        row("add_account", lock, "profiles.add", PTD, listOf("profiles.add_detail"))
-        row("remove_all_accounts", lock, "profiles.remove_all", PTD, listOf("profiles.remove_all_detail"), SettingsNeed.State)
-        row("sign_out", lock, "settings.sign_out", PTD, keywords = true)
 
         val h = SettingsGroup.Library
         row("home_carousel", h, "settings.home_carousel", PTD, onOff("settings.home_carousel"))
@@ -268,7 +328,6 @@ object SettingsMap {
         row("open_last_chat", lib, "settings.open_last_chat", PTD)
         row("forget_last_chat", lib, "settings.forget_last_chat", PTD, need = SettingsNeed.State)
         row("remember_searches", lib, "settings.remember_searches", PTD, onOff("settings.remember_searches"))
-        row("resume_sync_delete", lib, "settings.resume_sync_delete", PTD, need = SettingsNeed.State)
         row("chosen_chats", lib, "picker.row_title", PTD)
         row("clear_favourites", lib, "settings.clear_favourites", PTD, need = SettingsNeed.State)
         row("clear_history", lib, "browse.clear_history", PTD, listOf("browse.clear_history_detail"), SettingsNeed.State)
@@ -276,38 +335,44 @@ object SettingsMap {
         // A detail page's trailer in YouTube's embedded player here, or in the YouTube app and the browser.
         row("trailers_in_app", lib, "metadata.trailers_in_app", PTD, listOf("metadata.trailers_in_app_detail"), SettingsNeed.OnlineMetadata)
         row("skip_times", lib, "metadata.skip_times", PTD, listOf("metadata.skip_times_privacy"), SettingsNeed.OnlineMetadata)
-        // One line per kind of skip, drawn only while the switch above is on (T10).
-        row("skip_mode_recap", lib, "settings.skip_recap", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
-        row("skip_mode_intro", lib, "settings.skip_intro", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
-        row("skip_mode_credits", lib, "settings.skip_credits", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
-        row("skip_mode_preview", lib, "settings.skip_preview", PTD, listOf("settings.skip_mode_note"), SettingsNeed.State)
         row("tmdb_key", lib, "metadata.key", PTD, need = SettingsNeed.OnlineMetadata)
         row("omdb_key", lib, "metadata.omdb_key", PTD, need = SettingsNeed.OnlineMetadata)
         row("details_cache", lib, "metadata.clear_cache", PTD, need = SettingsNeed.OnlineMetadata)
 
-        val tv = SettingsGroup.TvHome
+        // The television's launcher rows are a section of Home and library (WP-08), after the library.
+        val tv = SettingsGroup.Library
         row("watch_next", tv, "settings.watch_next", T, onOff("settings.watch_next"), SettingsNeed.LauncherPlayNext)
         row("tv_channels", tv, "settings.tv_channels", T, onOff("settings.tv_channels"), SettingsNeed.LauncherChannels)
 
+        // Help (WP-08): the tour, what is new, the ways to reach the developer, Redo setup choices and
+        // Troubleshooting, a page of its own for the logs, the playback test and the proxy.
+        val help = SettingsGroup.Help
+        val was2 = SettingsGroup.About
+        row("tour", help, "settings.tour", PTD, listOf("settings.tour_body"), from = was2)
+        row("whats_new", help, "settings.whats_new", PTD, from = was2)
+        row("changelog", help, "settings.changelog", PTD, listOf("settings.changelog_detail"), from = was2)
+        row("report_problem", help, "settings.report_problem", PTD, listOf("settings.report_problem_detail", "settings.report_problem_detail_inbox"), from = was2)
+        // HX64: an idea, written in the app with the build's inbox, else on GitHub's feature request page.
+        row("request_feature", help, "settings.request_feature", PTD, listOf("settings.request_feature_detail"), from = was2)
+        // Was the last row of the category list, a page of its own; now one row of Help that opens it.
+        row("setup_choices", help, "settings.redo_setup_choices", PTD, listOf("setup.choices_summary"))
+        row("troubleshooting", help, "settings.page_troubleshooting", PTD, listOf("settings.page_troubleshooting_summary"))
+
+        val fix = SettingsGroup.Troubleshooting
+        row("proxy", fix, "proxy.title", PTD, listOf("proxy.settings_detail_off"), from = was2)
+        row("save_logs", fix, "logs.save", PTD, listOf("logs.save_detail"), from = was2)
+        row("detailed_logs", fix, "logs.detailed", PT, onOff("logs.detailed"), from = was2)
+        row("playback_test", fix, "playbacktest.title", PT, listOf("playbacktest.detail"), from = was2)
+        row("send_logs", fix, "logs.send_dev", PT, listOf("logs.send_dev_detail"), SettingsNeed.LogInbox, from = was2)
+        row("name_report", fix, "logs.name_report", PTD, listOf("logs.name_report_detail"), SettingsNeed.State, from = was2)
+
+        // About (WP-08): the version and updates, the licence and notices, the links and Support. One
+        // About row and one Support row; the About screen's own Support group keeps Coffee and Sponsors.
         val ab = SettingsGroup.About
         row("check_updates", ab, "settings.check_updates", PTD, need = SettingsNeed.Updates)
         row("update_notify", ab, "settings.update_notify", PTD, listOf("settings.update_notify_detail"), SettingsNeed.Updates)
         row("test_versions", ab, "settings.test_versions", PTD, onOff("settings.test_versions"), SettingsNeed.Updates)
         row("auto_install", ab, "settings.auto_install", PT, onOff("settings.auto_install"), SettingsNeed.AutoInstall)
-        row("back_up", ab, "backup.back_up", PTD, listOf("backup.back_up_detail"))
-        row("restore", ab, "backup.restore", PTD, listOf("backup.restore_detail"))
-        row("proxy", ab, "proxy.title", PTD, listOf("proxy.settings_detail_off"))
-        row("tour", ab, "settings.tour", PTD, listOf("settings.tour_body"))
-        row("whats_new", ab, "settings.whats_new", PTD)
-        row("changelog", ab, "settings.changelog", PTD, listOf("settings.changelog_detail"))
-        row("report_problem", ab, "settings.report_problem", PTD, listOf("settings.report_problem_detail", "settings.report_problem_detail_inbox"))
-        // HX64: an idea, written in the app with the build's inbox, else on GitHub's feature request page.
-        row("request_feature", ab, "settings.request_feature", PTD, listOf("settings.request_feature_detail"))
-        row("save_logs", ab, "logs.save", PTD, listOf("logs.save_detail"))
-        row("detailed_logs", ab, "logs.detailed", PT, onOff("logs.detailed"))
-        row("playback_test", ab, "playbacktest.title", PT, listOf("playbacktest.detail"))
-        row("send_logs", ab, "logs.send_dev", PT, listOf("logs.send_dev_detail"), SettingsNeed.LogInbox)
-        row("name_report", ab, "logs.name_report", PTD, listOf("logs.name_report_detail"), SettingsNeed.State)
         row("lawful_use", ab, "about.lawful_use", PTD, listOf("about.lawful_use_detail"), desktopTitle = "settings.lawful_use")
         row("support", ab, "about.support_title", PTD, listOf("settings.support_detail"), SettingsNeed.State, drawnAs = listOf("about.support_thanks_title"))
         row("about", ab, "settings.about", PTD)
@@ -322,4 +387,19 @@ object SettingsMap {
 
     /** The rows on [group] for [form]. */
     fun on(form: DeviceForm, group: SettingsGroup): List<SettingsRow> = rows.filter { it.group == group && form in it.forms }
+
+    /**
+     * The pages [form]'s category list shows, in [SettingsGroup]'s order: the listed groups that have
+     * a row on it. A television gets 9 (no Notifications), a phone and a desktop 10 (WP-08).
+     */
+    fun pages(form: DeviceForm): List<SettingsGroup> =
+        SettingsGroup.entries.filter { it.listed && on(form, it).isNotEmpty() }
+
+    /**
+     * The rows that left [group] for another page, for the "Moved to {page}" hint [group]'s page
+     * shows for one release: each is an alias at its old place that names the page it is on now and
+     * jumps there. Rows the form does not have are left out.
+     */
+    fun movedFrom(form: DeviceForm, group: SettingsGroup): List<SettingsRow> =
+        rows.filter { it.movedFrom == group && form in it.forms }
 }
