@@ -736,3 +736,11 @@ open class PaintDrawable(color: Int = 0) : ShapeDrawable() {
         shape = if (radius <= 0f) null else android.graphics.drawable.shapes.RoundRectShape(FloatArray(8) { radius }, null, null)
     }
 }
+
+/** A resource as the picture in picture window's button face: iOS draws no such window, so only the id is kept. */
+class Icon private constructor(val resourceId: Int) {
+    companion object {
+        @Suppress("UNUSED_PARAMETER")
+        fun createWithResource(context: android.content.Context, resourceId: Int): Icon = Icon(resourceId)
+    }
+}

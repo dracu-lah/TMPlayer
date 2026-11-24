@@ -315,6 +315,8 @@ val androidPlayerForIos = tasks.register<Sync>("androidPlayerForIos") {
             "PlayerRemoteKeys",
             // The row around a pause, kept out of the activity for its focus test (PB-01).
             "PauseRow",
+            // The corner window's own buttons on Android 8 to 10 (WP-36); iOS has no such window.
+            "PipActions",
         )
             .forEach { include("com/tmplayer/player/$it.kt") }
     }

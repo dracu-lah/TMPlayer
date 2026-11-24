@@ -230,6 +230,11 @@ class ActivityManager internal constructor() {
 
 class PendingIntent private constructor() {
     companion object {
+        /** A broadcast to the app's own receiver: iOS has none, so the object only stands for the Android one. */
+        @Suppress("UNUSED_PARAMETER")
+        fun getBroadcast(context: android.content.Context, requestCode: Int, intent: android.content.Intent, flags: Int): PendingIntent =
+            PendingIntent()
+
         const val FLAG_IMMUTABLE = 0x04000000
         const val FLAG_UPDATE_CURRENT = 0x08000000
         const val FLAG_CANCEL_CURRENT = 0x10000000
@@ -237,6 +242,14 @@ class PendingIntent private constructor() {
 }
 
 class LocaleManager
+
+/** A button in the picture in picture window (Android 8 to 10); iOS shows none, so it only carries what it was built with. */
+class RemoteAction(
+    val icon: android.graphics.drawable.Icon,
+    val title: CharSequence,
+    val contentDescription: CharSequence,
+    val actionIntent: PendingIntent,
+)
 
 /** Picture in picture's settings, Android's; only the automatic entry reaches iOS's player (WP-31). */
 class PictureInPictureParams private constructor(internal val autoEnter: Boolean) {

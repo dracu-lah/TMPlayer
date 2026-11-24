@@ -2214,6 +2214,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             lifecycleScope.launch {
                 runCatching { settings.backgroundAudio.collect { backgroundAudioOn = it } }
             }
+            // Android 8 to 10 draw no buttons in the corner window themselves: ours come back here.
+            if (PipActions.wanted() && hasPictureInPicture()) {
+                pipReceiver = runCatching { PipActions.register(this, ::onPipButton) }.getOrNull()
+            }
             // Followed too: turning it off with a video open updates the system's request at once,
             // so Home from here no longer shrinks the video (Android 12 decided that in advance).
             lifecycleScope.launch {
@@ -4925,7 +4929,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // Before Android 13 the notification draws its own buttons: seek back and
                 // forward by the player's amounts either side of play, the episodes in the
                 // expanded view. From 13 the system's controls have a seek bar instead.
-                .setMediaButtonPreferences(BackgroundPlayback.notificationButtons(Skip.BACK_MS, Skip.FORWARD_MS))
+                .setMediaButtonPreferences(BackgroundPlayback.notificationButtons(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs))
                 .build()
         }.getOrNull()
     }
@@ -5025,6 +5029,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
 
         override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
+
+        // The notification's and the lock screen's seeks jump by the viewer's double tap amount both
+        // ways, as the picture does (WP-36), not by Media3's 5 back and 10 forward. [Skip.BACK_MS]
+        // itself stays what the remote's keys count from.
+        override fun getSeekBackIncrement(): Long = touchPrefs.doubleTapMs
+
+        override fun getSeekForwardIncrement(): Long = touchPrefs.doubleTapMs
+
+        override fun seekBack() {
+            skipBy(-touchPrefs.doubleTapMs)
+        }
+
+        override fun seekForward() {
+            skipBy(touchPrefs.doubleTapMs)
+        }
 
         override fun seekToNext() {
             stepEpisode(forward = true)
@@ -7954,6 +7973,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
     }
 
+    /** The corner window's receiver on Android 8 to 10 ([PipActions]); unregistered in [onDestroy]. */
+    private var pipReceiver: android.content.BroadcastReceiver? = null
+
+    /** A press on one of the corner window's buttons: the same jumps as the row's, and play or pause. */
+    private fun onPipButton(kind: PipActions.Kind) {
+        when (kind) {
+            PipActions.Kind.Back -> skipBy(-Skip.BUTTON_MS)
+            PipActions.Kind.Forward -> skipBy(Skip.BUTTON_MS)
+            PipActions.Kind.PlayPause -> playing?.let { if (it.isPlaying) it.pause() else it.play() }
+        }
+    }
+
     /** The overflow menu's and the row's picture in picture: straight into the corner. */
     private fun enterPictureInPictureNow() {
         if (!hasPictureInPicture()) return
@@ -7972,7 +8003,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the viewer goes home while something plays, never over a paused video or a status sheet.
      */
     private fun updatePictureInPictureParams() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return
+        // Android 12 for the auto enter, 8 to 10 for the corner window's own buttons (WP-36).
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S && !PipActions.wanted()) return
         if (!hasPictureInPicture()) return
         runCatching { setPictureInPictureParams(pictureInPictureParams()) }
     }
@@ -8011,6 +8043,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 builder.setAspectRatio(Rational(videoWidth, videoHeight))
             }
         }
+        // Back, play or pause and forward, drawn by the window itself on Android 8 to 10 only.
+        PipActions.apply(builder, this, playing = playing?.isPlaying == true)
         return builder.build()
     }
 
@@ -8023,7 +8057,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         wakeEndWatch()
         if (!isInPictureInPictureMode) pictureInPictureEndedAt = SystemClock.elapsedRealtime()
         // At thumbnail size there is room for the picture and nothing else. The system draws its
-        // own play and pause over the window, fed by the media session.
+        // own play and pause over the window, fed by the media session (Android 8 to 10: [PipActions]).
         if (isInPictureInPictureMode) {
             morePanel?.closeNow()
             controls?.hideNow()
@@ -8047,6 +8081,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         gestures?.prefs = touchPrefs
         feedback?.hapticsEnabled = touchPrefs.haptics
         controls?.haptics = touchPrefs.haptics
+        // The notification's seek buttons carry the double tap amount (WP-36).
+        mediaSession?.let { session ->
+            runCatching {
+                session.setMediaButtonPreferences(
+                    BackgroundPlayback.notificationButtons(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs),
+                )
+            }
+        }
         controls?.timeoutMs = touchPrefs.timeoutFor(FormFactor.isTv(this))
         controls?.showRemaining = touchPrefs.showRemaining
     }
@@ -10926,6 +10968,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun onDestroy() {
+        pipReceiver?.let { runCatching { unregisterReceiver(it) } }
+        pipReceiver = null
         // A translation belongs to the video on screen: it ends with the player.
         endTranslations()
         crashNote.ended()
