@@ -75,7 +75,7 @@ object DesktopPaths : Paths {
 
     /** The storage location saved in Settings, whether or not it can be used this run. */
     private val chosenRoot: File? = runCatching { DesktopPrefs.read(prefsFile).storageRoot }.getOrNull()
-        ?.takeIf { it.isNotBlank() }?.let(::File)
+        ?.takeIf { it.isNotBlank() }?.let { File(com.tmplayer.desktop.os.LongPaths.clean(it)) }
 
     /**
      * The folder in use, or null for the default folders. A chosen location that cannot be used
@@ -112,7 +112,8 @@ object DesktopPaths : Paths {
         val base = File(root, APP)
         StorageLayout(
             cacheDir = File(base, CacheDirRename.NAME),
-            downloadsDir = File(base, "downloads"),
+            // A folder too deep to hold a typical file name under 260 characters is reached with the long path prefix (WP-52).
+            downloadsDir = com.tmplayer.desktop.os.LongPaths.io(File(base, "downloads"), reserve = com.tmplayer.desktop.os.LongPaths.NAME_RESERVE),
             updatesDir = File(base, "updates"),
         )
     } else {

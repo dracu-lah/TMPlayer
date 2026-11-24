@@ -168,6 +168,8 @@ internal fun AppearanceRows(state: ShellState) {
             icon = TmIcons.WindowMaximize,
         ) { on -> state.extras.prefs.update { it.copy(systemTitleBar = on) } }
     }
+    // Open at sign in (WP-52): off until asked, read from the OS rather than stored.
+    LaunchAtLoginRow()
 
     // Back to the defaults, with Undo in its place for a few seconds after: one row, so the
     // keyboard stays on it through both presses.

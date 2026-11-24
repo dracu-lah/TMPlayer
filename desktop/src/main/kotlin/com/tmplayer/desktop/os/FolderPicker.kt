@@ -58,14 +58,14 @@ object FolderPicker {
             FileKit.openDirectoryPicker(directory = start, dialogSettings = dialogSettings(title))
         }
         viaFileKit.exceptionOrNull()?.let { Logger.w(TAG, "The system folder picker failed; using Swing's", it) }
-        if (viaFileKit.isSuccess) return viaFileKit.getOrNull()?.file
+        if (viaFileKit.isSuccess) return LongPaths.fromPicker(viaFileKit.getOrNull()?.file)
         return withContext(Dispatchers.Main) {
             val chooser = JFileChooser(startIn).apply {
                 dialogTitle = title
                 fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
                 isAcceptAllFileFilterUsed = false
             }
-            if (chooser.showOpenDialog(parentWindow()) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+            if (chooser.showOpenDialog(parentWindow()) == JFileChooser.APPROVE_OPTION) LongPaths.fromPicker(chooser.selectedFile) else null
         }
     }
 

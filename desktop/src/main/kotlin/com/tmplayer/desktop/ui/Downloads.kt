@@ -262,7 +262,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.profileDo
         PageHeader(
             s.navDownloads,
             if (picked.isEmpty()) {
-                s.downloadsKeptIn(downloadsDir.path)
+                s.downloadsKeptIn(com.tmplayer.desktop.os.LongPaths.shown(downloadsDir))
             } else {
                 // The running total, and a warning when the folder saved to last has less room.
                 val warning = lastFolderFree?.takeIf { pickedBytes > it.second }?.let { (name, free) ->

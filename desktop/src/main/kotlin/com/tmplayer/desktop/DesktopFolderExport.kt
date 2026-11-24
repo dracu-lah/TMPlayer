@@ -208,8 +208,11 @@ object DesktopFolderExport {
     }
 
     /** A plain directory, as java.nio reaches it on Windows, Linux and macOS. */
-    private class DirFolder(private val dir: File) : FolderCopyIo.Folder<File> {
-        override val label: String = dir.name.ifBlank { dir.path }
+    private class DirFolder(private val picked: File) : FolderCopyIo.Folder<File> {
+        // A folder deep enough to pass the 260 characters of Windows is reached with the long path
+        // prefix (WP-52); the name the viewer sees stays the plain one.
+        private val dir = com.tmplayer.desktop.os.LongPaths.io(picked)
+        override val label: String = picked.name.ifBlank { com.tmplayer.desktop.os.LongPaths.shown(picked) }
 
         override fun writable(): Boolean {
             if (!dir.isDirectory) throw NoSuchFileException(dir.path)
@@ -227,7 +230,7 @@ object DesktopFolderExport {
                 ?.takeIf(FolderCopy::isFat)?.let { FolderCopy.FAT32_MAX_BYTES }
 
         override fun create(name: String, mimeType: String): File {
-            val file = File(dir, name)
+            val file = com.tmplayer.desktop.os.LongPaths.io(File(picked, name))
             // CREATE_NEW: never over a file that appeared since the names were read.
             Files.newOutputStream(file.toPath(), StandardOpenOption.CREATE_NEW).close()
             return file

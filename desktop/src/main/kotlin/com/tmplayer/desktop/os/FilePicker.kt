@@ -26,13 +26,13 @@ object FilePicker {
             FileKit.openFilePicker(type = FileKitType.File(extensions.toSet()), dialogSettings = FolderPicker.dialogSettings(title))
         }
         viaFileKit.exceptionOrNull()?.let { Logger.w(TAG, "The system file picker failed; using Swing's", it) }
-        if (viaFileKit.isSuccess) return viaFileKit.getOrNull()?.file
+        if (viaFileKit.isSuccess) return LongPaths.forIo(viaFileKit.getOrNull()?.file)
         return withContext(Dispatchers.Main) {
             val chooser = JFileChooser().apply {
                 dialogTitle = title
                 fileFilter = FileNameExtensionFilter(extensions.joinToString(), *extensions)
             }
-            if (chooser.showOpenDialog(FolderPicker.parentWindow()) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+            if (chooser.showOpenDialog(FolderPicker.parentWindow()) == JFileChooser.APPROVE_OPTION) LongPaths.forIo(chooser.selectedFile) else null
         }
     }
 
@@ -59,6 +59,7 @@ object FilePicker {
             }
         }
         return picked?.let { if (it.name.endsWith(".$extension")) it else File(it.parentFile, "${it.name}.$extension") }
+            ?.let { LongPaths.forIo(it) }
     }
 
     private const val TAG = "FilePicker"
