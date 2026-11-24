@@ -354,6 +354,25 @@ private const val OFFLINE_LINE_AFTER_MS = 2_000L
 /** How many items a television's page moves at a time while it looks for the row a sub-page opened from. */
 private const val OPENER_STEP = 4
 
+/** The title of the category list: the app's own tile, then "Settings" (user, 2026-11-25). */
+@Composable
+internal fun SettingsTitle(text: String) {
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.testTag(SETTINGS_TITLE_TAG),
+    ) {
+        com.tmplayer.ui.components.AppTile(28.dp, Modifier.testTag(SETTINGS_ICON_TAG))
+        M3Text(text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+}
+
+/** The tag of the category list's title, for tests. */
+internal const val SETTINGS_TITLE_TAG = "settings-title"
+
+/** The tag of the app's tile in that title. */
+internal const val SETTINGS_ICON_TAG = "settings-title-icon"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -2598,19 +2617,6 @@ fun SettingsScreen(
                 if (searchOffered) {
                     settingsNote(key = "settings-search") { SettingsSearchBox(searchQuery, onQuery = { searchQuery = it }) }
                 }
-                // The version, the build and the update state, quietly (WP-104). Not a row: on a
-                // television it is read only, so the remote's order through the rows is unchanged
-                // (the account menu's footer is the TV's copy target); a press copies it elsewhere.
-                if (!searchOffered || searchQuery.isBlank()) {
-                    settingsNote(key = "version-line") {
-                        com.tmplayer.ui.components.VersionNote(
-                            info = com.tmplayer.ui.components.rememberVersionInfo(),
-                            modifier = Modifier.padding(horizontal = if (touch) 8.dp else 4.dp),
-                            copyable = touch,
-                            onUpdate = { showUpdate = true },
-                        )
-                    }
-                }
                 val hits = if (searchOffered && searchQuery.isNotBlank()) {
                     SettingsSearch.match(searchQuery, searchRows, form) { key -> s.searchText(key, touch) }
                 } else {
@@ -2755,6 +2761,20 @@ fun SettingsScreen(
                             onClick = { showPage(SettingsPage.About) },
                         )
                     }
+                    // The very last thing of the list, on a phone held either way and in the left
+                    // list of the two panes (user, 2026-11-25): the app's tile and "v1.28.7", with
+                    // the update state beside it; a press goes to About, which has the build, the
+                    // update source and the copy for support. A television shows it at the foot of
+                    // its rail instead (TvSettingsPane.railFooter), where it is no stop.
+                    item(key = "version-mark") {
+                        com.tmplayer.ui.components.VersionMark(
+                            info = com.tmplayer.ui.components.rememberVersionInfo(),
+                            modifier = Modifier.padding(top = 8.dp, start = if (touch) 8.dp else 4.dp),
+                            onClick = if (touch) ({ showPage(SettingsPage.About) }) else null,
+                            onClickLabel = s.settingsAbout,
+                            onUpdate = { showUpdate = true },
+                        )
+                    }
                 }
             }
         } }
@@ -2837,7 +2857,7 @@ fun SettingsScreen(
         Box(Modifier.fillMaxSize()) {
             Scaffold(
                 modifier = Modifier.nestedScroll(twoScroll.nestedScrollConnection),
-                topBar = { FloatingPageTitle({ M3Text(s.settingsTitle) }, twoScroll) },
+                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, twoScroll) },
             ) { padding ->
                 Row(Modifier.fillMaxSize().padding(padding)) {
                     BoxWithConstraints(
@@ -2907,7 +2927,7 @@ fun SettingsScreen(
         Box(Modifier.fillMaxSize()) {
             Scaffold(
                 modifier = Modifier.nestedScroll(listScroll.nestedScrollConnection),
-                topBar = { FloatingPageTitle({ M3Text(s.settingsTitle) }, listScroll) },
+                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, listScroll) },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     list(page, null)
@@ -2969,11 +2989,12 @@ fun SettingsScreen(
             hints = settings,
             entry = if (initialPage != null) landing else railFocus.getValue(shown.railItem),
             arrived = tvArrived,
-            headerEnd = {
-                com.tmplayer.ui.components.VersionNote(
+            railFooter = {
+                // Read only: the remote walks the pages, and the account menu's row is the copy target.
+                com.tmplayer.ui.components.VersionMark(
                     info = com.tmplayer.ui.components.rememberVersionInfo(),
-                    copyable = false,
-                    onUpdate = { showUpdate = true },
+                    modifier = Modifier.padding(top = 12.dp, start = 4.dp),
+                    tv = true,
                 )
             },
         ) {

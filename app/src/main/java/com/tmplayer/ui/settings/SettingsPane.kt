@@ -143,8 +143,10 @@ internal fun TvSettingsPane(
     findFocus: FocusRequester = remember { FocusRequester() },
     /** Where the Page and Channel keys' arrival is noted and the hint about them kept; null: no hint. */
     hints: SettingsStore? = null,
-    /** Quiet facts at the header's trailing end: the version line (WP-104). */
+    /** Quiet facts at the header's trailing end. */
     headerEnd: @Composable () -> Unit = {},
+    /** The foot of the rail, after the last category: the compact version, read only (not a stop for the remote). */
+    railFooter: @Composable () -> Unit = {},
     pane: @Composable () -> Unit,
 ) {
     var railHasFocus by remember { mutableStateOf(false) }
@@ -250,6 +252,8 @@ internal fun TvSettingsPane(
                         },
                     )
                 }
+                // The version at the foot of the rail: read only, so the remote's order is the pages'.
+                railFooter()
             }
             Spacer(Modifier.width(RAIL_GAP))
             Column(
@@ -364,6 +368,9 @@ internal fun SettingsHeader(
             .semantics(mergeDescendants = true) { heading() },
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The app's own tile before its name (user, 2026-11-25): Settings and About say whose they are.
+        com.tmplayer.ui.components.AppTile(32.dp)
+        Spacer(Modifier.width(12.dp))
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,
