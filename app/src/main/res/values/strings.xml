@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TMPlayer</string>
+    <!-- The widget picker's sentence (WP-42); a widget description is a resource, so the app's catalog cannot supply it. -->
+    <string name="widget_description">Your next video, one tap away</string>
 </resources>

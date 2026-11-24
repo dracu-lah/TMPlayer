@@ -157,6 +157,17 @@
                 <data android:scheme="tg" android:host="privatepost" />
                 <data android:scheme="tg" android:host="join" />
             </intent-filter>
+            <!--
+              A link shared to TMPlayer from a browser, Telegram or a notes app (WP-42): handed to the
+              link flow, which opens a post's video or an invite. This puts TMPlayer in every text
+              share sheet, which is accepted: a text that holds no Telegram link is answered with a
+              line saying what TMPlayer opens.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <!--

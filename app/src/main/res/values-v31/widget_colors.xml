@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 and later: the widget's accent follows the wallpaper's colours (WP-42); the card and text colours stay, for their contrast. -->
+    <color name="widget_accent">@android:color/system_accent1_600</color>
+</resources>

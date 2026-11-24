@@ -600,6 +600,19 @@ class MainActivity : FragmentActivity() {
                 intent.action = Intent.ACTION_MAIN
             }
         }
+        // A link shared to TMPlayer (WP-42): the first Telegram link in the text goes to the link flow; a
+        // text with none is answered with what TMPlayer opens. Taken off the intent like a VIEW.
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            val shared = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty().take(MAX_SHARED_TEXT)
+            val link = com.tmplayer.data.TelegramLinks.find(shared)
+            if (link != null) {
+                com.tmplayer.ui.browse.LinkRequests.ask(link)
+            } else {
+                com.tmplayer.ui.components.showMessage(this, L.linkShareNotALink)
+            }
+            intent.removeExtra(Intent.EXTRA_TEXT)
+            intent.action = Intent.ACTION_MAIN
+        }
         // A new videos notification: the chat it is about, or the list (0). Taken off the intent,
         // so a rotation does not open it again.
         if (intent?.hasExtra(com.tmplayer.data.BackgroundChecks.EXTRA_OPEN_CHAT) == true) {
@@ -624,6 +637,9 @@ class MainActivity : FragmentActivity() {
 
         /** Which screen a launch is asking for, when it is asking for one. */
         const val EXTRA_OPEN = "com.tmplayer.extra.OPEN"
+
+        /** A shared text longer than this is cut before it is searched for a link: nothing outside is trusted to be small. */
+        private const val MAX_SHARED_TEXT = 8_000
 
         /** Debug and promo builds only: show the support card now. See [SupportReminder.forced]. */
         const val EXTRA_SUPPORT_REMINDER = "support_reminder"
@@ -1308,6 +1324,28 @@ private fun Root() {
     androidx.compose.runtime.SideEffect { homeViewModel.shown = homeOnScreen }
     // The phone's one floating bar, shared by every page it is on.
     val touchChrome = remember { TouchChrome() }
+    // The launcher's Search and Continue watching shortcuts (WP-42): the chat list, with the search up for the first.
+    LaunchedEffect(requestedScreen) {
+        val asked = requestedScreen
+        if (asked != com.tmplayer.data.LauncherShortcuts.OPEN_SEARCH && asked != com.tmplayer.data.LauncherShortcuts.OPEN_CONTINUE) {
+            return@LaunchedEffect
+        }
+        screen = Screen.Chats
+        if (asked == com.tmplayer.data.LauncherShortcuts.OPEN_SEARCH) touchChrome.searchAsked = true
+        MainActivity.requestedScreen.value = null
+    }
+    // The shortcuts themselves (WP-42): kept in step with the last chat played and with the profile
+    // being hidden (a locked PIN profile takes the chat's name off the launcher).
+    val shortcutHidden by remember { com.tmplayer.data.ProfileUnlock.hidden() }.collectAsStateWithLifecycle(initialValue = true)
+    val lastChatForShortcut by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastChatTitle = chatList.value.firstOrNull { it.id == lastChatForShortcut }?.title
+    LaunchedEffect(lastChatForShortcut, lastChatTitle, shortcutHidden) {
+        // The chat's name goes out of the app only where OutsideWrites allows (a hidden PIN profile: never).
+        com.tmplayer.data.LauncherShortcuts.publish(
+            context, lastChatForShortcut, lastChatTitle,
+            hidden = shortcutHidden || !com.tmplayer.data.OutsideWrites.mayWriteNow(),
+        )
+    }
 
     // Whether a video is currently being got ready to play. Not saveable: a process death in the
     // middle of it means nothing is being prepared any more, and restoring true would leave every

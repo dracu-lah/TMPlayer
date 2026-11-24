@@ -549,6 +549,7 @@
     "gone_left_your_lists": "{count, plural, one {A video is no longer in its chat, so it left your lists} other {# videos are no longer in their chats, so they left your lists}}",
     "left": "{chat}  ·  {time} left",
     "pruned": "{count, plural, one {Removed a video TMPlayer can no longer open from Continue watching} other {Removed # videos TMPlayer can no longer open from Continue watching}}",
+    "shortcut": "Continue watching",
     "title": "Continue watching"
   },
   "detail": {
@@ -894,6 +895,7 @@
     "select_all": "Select all",
     "select_videos": "Select videos",
     "selected": "{count} selected",
+    "shortcut": "Downloads",
     "show_downloads": "Show Downloads",
     "show_in_folder": "Show in folder",
     "sort_label": "Sort downloads",
@@ -1485,7 +1487,8 @@
     "preview_join": "Preview and join",
     "preview_join_detail": "See the chat before you join it",
     "private_not_member": "This post is in a private chat you have not joined. Ask for its invite link.",
-    "request_note": "Its admins approve each new member."
+    "request_note": "Its admins approve each new member.",
+    "share_not_a_link": "TMPlayer opens links to videos in your chats"
   },
   "lists": {
     "add_to": "Add to a list",
@@ -2847,6 +2850,7 @@
     "recent_cleared": "Recent searches cleared",
     "remove_recent": "Remove “{query}” from recent searches",
     "search_for": "Search for “{word}”",
+    "shortcut": "Search",
     "show_all_chats": "{count, plural, one {Show # chat} other {Show all # chats}}",
     "show_all_topics": "{count, plural, one {Show # topic} other {Show all # topics}}",
     "size_range": "{min} to {max}",
