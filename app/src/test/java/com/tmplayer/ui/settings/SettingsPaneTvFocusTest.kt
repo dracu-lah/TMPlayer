@@ -28,13 +28,16 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.Density
+import com.tmplayer.data.ChatGate
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.UiScale
 import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.UiScaled
 import com.tmplayer.ui.theme.Tone
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -42,6 +45,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -362,5 +366,83 @@ class SettingsPaneTvFocusTest {
         settle()
         rule.onNode(inPane).assertExists()
         rule.onNode(inPane).assertIsDisplayed()
+    }
+
+    // ---- rows that remove themselves, reached in the pane (WP-06 under WP-07) --------------------
+
+    private fun seedLibrary(favourites: Boolean, history: Boolean, lastChat: Boolean) = runBlocking {
+        ChatGate.set(null)
+        val store = SettingsStore(RuntimeEnvironment.getApplication())
+        if (favourites) store.toggleFavorite(3L)
+        if (history) {
+            val line = com.tmplayer.data.ResumeRecord.encode(
+                fileId = 4, title = "Coast S01E04", chatTitle = "Nature", sizeBytes = 1_000_000,
+                durationSec = 2_640, updatedAt = System.currentTimeMillis(),
+            )
+            store.saveResumePosition(-100L, 4L, 1_320_000L, 2_640_000L, description = line)
+        }
+        if (lastChat) {
+            store.setOpenLastChat(true)
+            store.rememberChatOpened(5L)
+        }
+    }
+
+    /** Library from the rail, as a remote opens it: the rail item, then Right into the pane. */
+    private fun intoLibrary() {
+        SettingsRail.last = SettingsPage.Library
+        show()
+        rail(SettingsPage.Library).assertIsFocused()
+        rail(SettingsPage.Library).press(Key.DirectionRight)
+        settle()
+        rule.onNode(hasAnyAncestor(hasTestTag(SETTINGS_PANE_TAG)) and isFocused()).assertExists()
+    }
+
+    /** The prompt's Clear, by the remote. */
+    private fun confirmClear() {
+        val clear = hasText("Clear") and hasClickAction()
+        rule.onNode(clear).requestFocus()
+        rule.onNode(clear).performKeyInput { pressKey(Key.Enter) }
+        settle()
+    }
+
+    /** The remote is on the pane's row titled [title], waited for while the row before it goes. */
+    private fun assertPaneRowFocused(title: String) {
+        val there = hasText(title) and hasClickAction() and isFocused() and hasAnyAncestor(hasTestTag(SETTINGS_PANE_TAG))
+        rule.waitUntil(5_000) { rule.waitForIdle(); rule.onAllNodes(there).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(there).assertIsFocused()
+    }
+
+    @Test
+    fun `in the pane, Forget it hands the remote to Remember searches under it`() {
+        seedLibrary(favourites = false, history = false, lastChat = true)
+        intoLibrary()
+        reach("Forget it")
+        row("Forget it").press(Key.Enter)
+        settle()
+        assertPaneRowFocused("Remember searches")
+        assertEquals(0, rule.onAllNodes(hasText("Forget it")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `in the pane, Clear favourites, confirmed, hands the remote to Clear history under it`() {
+        seedLibrary(favourites = true, history = true, lastChat = false)
+        intoLibrary()
+        reach("Clear favourites")
+        row("Clear favourites").press(Key.Enter)
+        confirmClear()
+        assertPaneRowFocused("Clear history")
+        assertEquals(0, rule.onAllNodes(hasText("Clear favourites")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `in the pane, Clear history, confirmed, hands the remote to the row under it`() {
+        seedLibrary(favourites = false, history = true, lastChat = false)
+        intoLibrary()
+        reach("Clear history")
+        row("Clear history").press(Key.Enter)
+        confirmClear()
+        // The posters switch under it; a build without the lookups has none, and the remote goes up.
+        assertPaneRowFocused(if (com.tmplayer.online.OnlineMetadata.current != null) "Show posters and overviews" else "Chosen chats")
+        rule.waitUntil(5_000) { rule.onAllNodes(hasText("Clear history") and hasClickAction()).fetchSemanticsNodes().isEmpty() }
     }
 }

@@ -43,14 +43,16 @@ internal fun LazyListScope.onlineMetadataSection(
 ) {
     if (OnlineMetadata.current == null) return
     sectionTitle { LocalStrings.current.metadataTitle }
-    item { MetadataToggleRow(toggleModifier) }
-    item { TrailersInAppToggleRow() }
-    item { SkipTimesToggleRow() }
+    // Keyed, so a row above that removes itself (Library's Clear history, WP-06) does not dispose
+    // these with their positions and drop the remote it has just handed to the posters switch.
+    item(key = "metadata_toggle") { MetadataToggleRow(toggleModifier) }
+    item(key = "metadata_trailers") { TrailersInAppToggleRow() }
+    item(key = "metadata_skip_times") { SkipTimesToggleRow() }
     // The four kinds of skip are one Skip buttons row in Playback now (WP-08); this switch and its
     // privacy line stay with the lookups they ride on.
-    item { MetadataKeyRow(onEditKey) }
-    item { OmdbKeyRow(onEditOmdbKey) }
-    item { MetadataCacheRow() }
+    item(key = "metadata_tmdb_key") { MetadataKeyRow(onEditKey) }
+    item(key = "metadata_omdb_key") { OmdbKeyRow(onEditOmdbKey) }
+    item(key = "metadata_cache") { MetadataCacheRow() }
 }
 
 @Composable

@@ -253,15 +253,36 @@ internal suspend fun FocusRequester.settle(): Boolean {
 /** How faded a switch's pill is on a row that does not apply now: its words use the muted colour instead, never alpha. */
 private const val DISABLED_PILL_ALPHA = 0.5f
 
-/**
- * Focus on the first of [targets] that takes it. For a row that is about to remove itself (WP-06):
- * the remote goes to the row after it, or to the row above when it was the last, instead of
- * dropping to nothing. A target that is not there (a page without that row, a row not composed
- * yet) is skipped.
- */
-private suspend fun settleOn(vararg targets: FocusRequester) {
-    for (target in targets) if (target.settle()) return
+/** Focus on the first of [targets] that takes it; a target that is not there is skipped. */
+private suspend fun settleOn(targets: List<FocusRequester>): Boolean {
+    for (target in targets) if (target.settle()) return true
+    return false
 }
+
+/**
+ * For a row that is about to remove itself (WP-06): the remote goes to the first of [next] under
+ * it, or to the first of [above] when none is there, instead of dropping to nothing. The TV pane
+ * (WP-07) shows about five rows, so the row under [self] is often not composed yet and its
+ * requester would refuse: the list is then scrolled to put [self] at its top, which composes the
+ * rows under it, and for [above] scrolled back so the rows over it are there too. [self] is the
+ * removing row's item key in [list], composed as the remote is on it.
+ */
+private suspend fun handOn(list: LazyListState, self: Any, next: List<FocusRequester>, above: List<FocusRequester> = emptyList()) {
+    if (settleOn(next)) return
+    val index = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == self }?.index
+    if (index != null) {
+        list.scrollToItem(index)
+        if (settleOn(next)) return
+    }
+    if (settleOn(above)) return
+    if (index != null) {
+        list.scrollToItem((index - ABOVE_ROOM).coerceAtLeast(0))
+        settleOn(above)
+    }
+}
+
+/** Items kept over a removing row when the remote goes up from it: a section title and two rows. */
+private const val ABOVE_ROOM = 3
 
 private sealed interface Prompt {
     /**
@@ -462,20 +483,6 @@ fun SettingsScreen(
     val clearFavouritesRow = remember { FocusRequester() }
     val clearHistoryRow = remember { FocusRequester() }
     val postersRow = remember { FocusRequester() }
-    // Clear history: the same question and count as History's own, closed by itself when the lists empty meanwhile.
-    val historyCards = com.tmplayer.data.ClearAllConfirm.historyCards(history, watchedList)
-    val askClearHistory = com.tmplayer.ui.components.rememberClearAllConfirm(
-        count = historyCards,
-        title = s.browseClearHistoryTitle,
-        message = s.browseClearHistoryMessage(historyCards),
-        detail = s.browseClearHistoryDetail,
-    ) {
-        // The row goes with the lists: the remote moves on first, to the posters switch under it, or up.
-        if (remoteHere) scope.launch { settleOn(postersRow, clearFavouritesRow, chooseChatsRow) }
-        historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
-        // What was cleared lives on History, not here, so the line is the only sign.
-        toast(s.browseHistoryCleared)
-    }
     val updateState by Updates.state.collectAsStateWithLifecycle()
     val updateNotify by settings.updateNotify.collectAsStateWithLifecycle(initialValue = true)
     val updateTestVersions by settings.updateTestVersions.collectAsStateWithLifecycle(initialValue = false)
@@ -601,6 +608,37 @@ fun SettingsScreen(
     val syncChannelFocus = remember { FocusRequester() }
     // A fresh scroll position for every page opened.
     val pageState = remember(page) { LazyListState() }
+    // A Library row that removes itself hands the remote on in the list it is drawn in: the
+    // category list (no page) or the page beside the rail (WP-06, WP-07).
+    val handOnFrom: suspend (self: String, next: List<FocusRequester>, above: List<FocusRequester>) -> Unit =
+        { self, next, above -> handOn(if (page == null) listState else pageState, self, next, above) }
+    // Clear history: the same question and count as History's own, closed by itself when the lists empty meanwhile.
+    val historyCards = com.tmplayer.data.ClearAllConfirm.historyCards(history, watchedList)
+    val askClearHistory = com.tmplayer.ui.components.rememberClearAllConfirm(
+        count = historyCards,
+        title = s.browseClearHistoryTitle,
+        message = s.browseClearHistoryMessage(historyCards),
+        detail = s.browseClearHistoryDetail,
+    ) {
+        val clear = {
+            historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+            // What was cleared lives on History, not here, so the line is the only sign.
+            toast(s.browseHistoryCleared)
+        }
+        // The row goes with the lists: the remote moves on first, to the posters switch under it, or up.
+        if (remoteHere) {
+            scope.launch {
+                // Cleared even when Settings closes during the few frames the hand over takes.
+                try {
+                    handOnFrom("clear_history", listOf(postersRow), listOf(clearFavouritesRow, chooseChatsRow))
+                } finally {
+                    clear()
+                }
+            }
+        } else {
+            clear()
+        }
+    }
     // One per category row, so Back from a page can put focus on the row that opened it.
     val categoryFocus = remember { SettingsPage.entries.associateWith { FocusRequester() } }
     // The page just closed, for the list's focus to go back to; null on a first arrival.
@@ -1612,7 +1650,7 @@ fun SettingsScreen(
                             onClick = {
                                 scope.launch {
                                     // The remote moves to Remember searches under it before the row goes.
-                                    if (remoteHere) settleOn(rememberSearchesRow, chooseChatsRow)
+                                    if (remoteHere) handOnFrom("forget_last_chat", listOf(rememberSearchesRow, chooseChatsRow), emptyList())
                                     settings.forgetLastChat()
                                     toast(s.settingsForgotLastChat)
                                 }
@@ -2887,7 +2925,7 @@ fun SettingsScreen(
                     val count = favorites.size
                     // The row goes with the favourites: the remote moves on first, to Clear history
                     // under it, or the posters switch, or up to Choose chats.
-                    if (remoteHere) settleOn(clearHistoryRow, postersRow, chooseChatsRow)
+                    if (remoteHere) handOnFrom("clear_favourites", listOf(clearHistoryRow, postersRow), listOf(chooseChatsRow))
                     settings.clearFavorites(allowedChats)
                     toast(s.settingsFavouritesCleared(count))
                 }
