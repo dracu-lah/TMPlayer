@@ -149,6 +149,7 @@ class PlayerMenuTest {
             playerVolume = true,
             addToList = true,
             loadSubtitleFile = true,
+            passthroughOff = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -179,6 +180,7 @@ class PlayerMenuTest {
                 playerVolume = true,
                 addToList = true,
                 loadSubtitleFile = true,
+                passthroughOff = true,
             ).toSet(),
         )
     }
@@ -219,6 +221,7 @@ class PlayerMenuTest {
                 PhoneMenuEntry.Speed,
                 PhoneMenuEntry.VolumeBoost,
                 PhoneMenuEntry.NightMode,
+                PhoneMenuEntry.PassthroughOff,
                 PhoneMenuEntry.EvenVolume,
                 PhoneMenuEntry.SleepTimer,
                 PhoneMenuEntry.AbLoop,
@@ -251,9 +254,10 @@ class PlayerMenuTest {
                 reportStutter = true,
                 copyLinkAtTime = true,
                 addToList = true,
+                passthroughOff = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, brightness = true, addToList = true, airPlay = true, decoder = true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, paused = true, bookmarks = true, chapters = true, chapterList = true, saveFrame = true, pictureShape = true, stereo = true, zoomed = true, reportStutter = true, copyLinkAtTime = true, otherEngine = true, repeatVideo = true, markIntro = true, removeIntroMark = true, rotatePicture = true, playerVolume = true, brightness = true, addToList = true, airPlay = true, decoder = true, passthroughOff = true).toSet())
     }
 
     @Test
@@ -478,6 +482,7 @@ class PlayerMenuTest {
         playerVolume = true,
         addToList = true,
         loadSubtitleFile = true,
+        passthroughOff = true,
     )
 
     @Test
@@ -497,7 +502,7 @@ class PlayerMenuTest {
             all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Picture },
         )
         assertEquals(
-            listOf(PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.VolumeBoost, PlayerMenuEntry.NightMode, PlayerMenuEntry.EvenVolume),
+            listOf(PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.VolumeBoost, PlayerMenuEntry.NightMode, PlayerMenuEntry.PassthroughOff, PlayerMenuEntry.EvenVolume),
             all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Sound },
         )
         assertEquals(
@@ -551,5 +556,17 @@ class PlayerMenuTest {
         assertEquals(null, PlayerMenu.pageTarget(groups, 0, forward = false))
         assertEquals(null, PlayerMenu.pageTarget(groups, -1, forward = true))
         assertEquals(null, PlayerMenu.pageTarget(emptyList(), 0, forward = true))
+    }
+
+    /** WP-24: "Turn off passthrough for this video" is offered only while the sound is a bitstream, in the Sound group. */
+    @Test
+    fun `the passthrough line is offered only while it is asked for, beside the sound lines`() {
+        assertFalse(PlayerMenuEntry.PassthroughOff in PlayerMenu.tvEntries(pictureInPicture = false))
+        assertFalse(PhoneMenuEntry.PassthroughOff in PlayerMenu.phoneEntries(pictureInPicture = false, openInAnotherApp = true, saveToDownloads = false, markWatched = false))
+        val tv = PlayerMenu.tvEntries(pictureInPicture = false, passthroughOff = true)
+        assertEquals(PlayerMenuEntry.NightMode, tv[tv.indexOf(PlayerMenuEntry.PassthroughOff) - 1])
+        assertEquals(PlayerMenuGroup.Sound, PlayerMenu.groupOf(PlayerMenuEntry.PassthroughOff))
+        val phone = PlayerMenu.phoneEntries(pictureInPicture = false, openInAnotherApp = true, saveToDownloads = false, markWatched = false, passthroughOff = true)
+        assertEquals(PhoneMenuEntry.NightMode, phone[phone.indexOf(PhoneMenuEntry.PassthroughOff) - 1])
     }
 }

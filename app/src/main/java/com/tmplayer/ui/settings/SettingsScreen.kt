@@ -424,6 +424,11 @@ fun SettingsScreen(
     val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
     val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
     val evenVolume by settings.evenVolume.collectAsStateWithLifecycle(initialValue = true)
+    // Volume boost and Night mode, as the player's menu leaves them (WP-24), and whether audio passthrough
+    // is allowed: with it on, Dolby and DTS sound goes to the speakers and neither touches it.
+    val volumeBoostOn by settings.volumeBoost.collectAsStateWithLifecycle(initialValue = false)
+    val nightModeOn by settings.nightMode.collectAsStateWithLifecycle(initialValue = false)
+    val passthroughAllowed by settings.audioPassthrough.collectAsStateWithLifecycle(initialValue = true)
     val backgroundAudio by settings.backgroundAudio.collectAsStateWithLifecycle(initialValue = false)
     val pipOnLeave by settings.pictureInPictureOnLeave.collectAsStateWithLifecycle(initialValue = true)
     val pipAvailable = LocalContext.current.hasPictureInPicture()
@@ -1644,6 +1649,26 @@ fun SettingsScreen(
                         icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
                         checked = downmix,
                         onToggle = { scope.launch { settings.setDownmix(!downmix) } },
+                    )
+                }
+                // Volume boost and Night mode (WP-24): kept for every video; the player's menu switches them
+                // for the one playing. They shape PCM only, which the line says while passthrough is on.
+                item {
+                    ToggleRow(
+                        title = s.settingsVolumeBoost,
+                        subtitle = soundLine(if (volumeBoostOn) s.settingsVolumeBoostOn else s.settingsVolumeBoostOff, volumeBoostOn && passthroughAllowed, s.settingsSoundUntouched),
+                        icon = ImageVector.vectorResource(R.drawable.ic_volume),
+                        checked = volumeBoostOn,
+                        onToggle = { scope.launch { settings.setVolumeBoost(!volumeBoostOn) } },
+                    )
+                }
+                item {
+                    ToggleRow(
+                        title = s.settingsNightMode,
+                        subtitle = soundLine(if (nightModeOn) s.settingsNightModeOn else s.settingsNightModeOff, nightModeOn && passthroughAllowed, s.settingsSoundUntouched),
+                        icon = ImageVector.vectorResource(R.drawable.ic_volume),
+                        checked = nightModeOn,
+                        onToggle = { scope.launch { settings.setNightMode(!nightModeOn) } },
                     )
                 }
                 // On by default; the player's menu has the same line for the video playing now.
@@ -4122,6 +4147,9 @@ private val TWO_PANE_RAIL = 280.dp
 
 internal const val SETTINGS_TWO_PANE_LIST_TAG = "settings-two-pane-list"
 internal const val SETTINGS_TWO_PANE_PAGE_TAG = "settings-two-pane-page"
+
+/** A sound row's own line, with [note] after it while the setting is on but passthrough may bypass it (WP-24). */
+internal fun soundLine(line: String, bypassed: Boolean, note: String): String = if (bypassed) "$line. $note" else line
 
 /** How long the row a search found stays lit once its page has opened on it. */
 private const val SEEK_GLOW_MS = 1_600L

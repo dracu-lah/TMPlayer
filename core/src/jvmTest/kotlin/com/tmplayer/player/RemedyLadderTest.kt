@@ -290,4 +290,22 @@ class RemedyLadderTest {
             assertEquals(seen, ladder.visited)
         }
     }
+
+    /** WP-24: the viewer's "Turn off passthrough for this video" is the ladder's step, with no probation wait and the shared budget. */
+    @Test
+    fun aViewerPressTakesTheNamedStepWithoutWaitingAndSharesTheHopBudget() {
+        val ladder = RemedyLadder(input(), exo, RemedyPlan(), rich)
+        // A step taken a moment ago would make onEvidence wait out its probation: the press does not.
+        assertIs<RemedyAction.Hop>(ladder.onEvidence(UserReport, rich, 0L))
+        val press = ladder.viewerPress(Remedy.PassthroughOff, UserReport, rich, 100L)
+        assertIs<RemedyAction.Hop>(press)
+        assertEquals(Remedy.PassthroughOff, press.remedy)
+        assertTrue(press.path.passthroughOff)
+        assertEquals(2, ladder.hops.size)
+        // Spent: a second press, and a sound with no passthrough, change nothing.
+        assertEquals(RemedyAction.Stay, ladder.viewerPress(Remedy.PassthroughOff, UserReport, rich, 200L))
+        val without = RemedyLadder(input(), exo, RemedyPlan(), rich.copy(passthrough = false))
+        assertEquals(RemedyAction.Stay, without.viewerPress(Remedy.PassthroughOff, UserReport, rich.copy(passthrough = false), 0L))
+        assertEquals(0, without.hops.size)
+    }
 }

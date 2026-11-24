@@ -15,6 +15,9 @@ interface AnalyticsListener {
         val totalBufferedDurationMs: Long,
     )
 
+    /** The sound output opened (a new video, another track), Media3's: with the encoding it was opened for. */
+    fun onAudioTrackInitialized(eventTime: EventTime, audioTrackConfig: androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig) {}
+
     fun onAudioUnderrun(eventTime: EventTime, bufferSize: Int, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {}
 
     fun onVideoDecoderInitialized(eventTime: EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {}

@@ -636,4 +636,36 @@ class RemedyRunnerTest {
         assertNull(runner.current)
         assertTrue(clock.tasks.isEmpty())
     }
+
+    /**
+     * WP-24: "Turn off passthrough for this video" is the remedy ladder's own passthrough-off step
+     * taken as a viewer's press: the sound is rebuilt as PCM once, the hop count is the ladder's own
+     * (a stutter press before it counts too), and a second press changes nothing.
+     */
+    @Test
+    fun theViewersPassthroughOffPressIsTheLaddersStepAndSharesItsHopCount() {
+        player.autoSwitch = false
+        open()
+        assertEquals(RemedyRunner.ViewerOutcome.Tried, runner.viewerReported(RemedyRunner.ViewerReport.Stutter))
+        assertEquals(1, runner.current!!.hops.size)
+        play()
+        assertEquals(RemedyRunner.ViewerOutcome.Tried, runner.viewerPassthroughOff())
+        assertEquals("the same count as every step", 2, runner.current!!.hops.size)
+        assertTrue("the sound output now takes PCM only", player.reopened.last().passthroughOff)
+        assertEquals(com.tmplayer.i18n.L.playerRemedySoundAnotherWay, player.said.last())
+        assertTrue(player.sheets.isEmpty())
+        play()
+        assertEquals("a second press has nothing left to take", RemedyRunner.ViewerOutcome.Recorded, runner.viewerPassthroughOff())
+        assertEquals(2, runner.current!!.hops.size)
+    }
+
+    @Test
+    fun theViewersPassthroughOffPressChangesNothingWithoutPassthroughOrBeforeTheLadderExists() {
+        player.passthrough = false
+        open()
+        assertEquals(RemedyRunner.ViewerOutcome.Recorded, runner.viewerPassthroughOff())
+        assertTrue(player.reopened.isEmpty())
+        val fresh = RemedyRunner(FakePlayer(), clock)
+        assertEquals(RemedyRunner.ViewerOutcome.NoClass, fresh.viewerPassthroughOff())
+    }
 }

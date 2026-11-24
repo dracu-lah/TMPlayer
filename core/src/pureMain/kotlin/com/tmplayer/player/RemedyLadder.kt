@@ -228,6 +228,19 @@ class RemedyLadder(
         return hop(pick, offer.evidence, atMs)
     }
 
+    /**
+     * The viewer chose [remedy] themselves (Turn off passthrough for this video, WP-24): the press is
+     * its own consent, so no "Switch by itself" setting and no probation wait applies, but the hop
+     * budget is the ladder's own ([MAX_HOPS], shared with every other hop) and a step that does not
+     * apply (no passthrough on this path, the level spent) or leads to a path already visited is
+     * "Stay".
+     */
+    fun viewerPress(remedy: Remedy, evidence: RemedyEvidence, facts: LadderFacts, atMs: Long): RemedyAction {
+        if (phase == Phase.Exhausted) return RemedyAction.Stay
+        val pick = pick(listOf(remedy), facts) ?: return RemedyAction.Stay
+        return hop(pick, evidence, atMs)
+    }
+
     private class Pick(val remedy: Remedy, val path: RemedyPath, val engine: EngineDecision?)
 
     private fun pick(order: List<Remedy>, facts: LadderFacts): Pick? {

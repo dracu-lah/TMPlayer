@@ -176,4 +176,28 @@ class AudioPolicyTest {
         val stock = renderers(softwareAudio = false)
         assertTrue(stock.indexOfFirst { it is MediaCodecAudioRenderer } < stock.indexOfFirst { it is FfmpegAudioRenderer })
     }
+
+    /** WP-24: the rule behind "Not applied": only a bitstream opened on the output is beyond Volume boost and Night mode. */
+    @Test
+    fun volumeBoostAndNightModeReachPcmAndNotABitstream() {
+        for (pcm in listOf(C.ENCODING_PCM_16BIT, C.ENCODING_PCM_FLOAT, C.ENCODING_PCM_24BIT, C.ENCODING_PCM_32BIT)) {
+            assertFalse("PCM $pcm is shaped", AudioPolicy.bitstreamEncoding(pcm))
+            assertTrue(AudioPolicy.boostReaches(AudioPolicy.bitstreamEncoding(pcm)))
+        }
+        for (bits in listOf(C.ENCODING_AC3, C.ENCODING_E_AC3, C.ENCODING_E_AC3_JOC, C.ENCODING_DTS, C.ENCODING_DTS_HD, C.ENCODING_DOLBY_TRUEHD)) {
+            assertTrue("bitstream $bits goes to the speakers untouched", AudioPolicy.bitstreamEncoding(bits))
+            assertFalse(AudioPolicy.boostReaches(AudioPolicy.bitstreamEncoding(bits)))
+        }
+        // An output that did not say what it opened with is not called a bitstream.
+        assertFalse(AudioPolicy.bitstreamEncoding(C.ENCODING_INVALID))
+    }
+
+    @Test
+    fun theDetailLinesSayNotAppliedOnlyForABoostThatIsOnAndBypassed() {
+        val line = { on: Boolean, bypassed: Boolean -> soundDetail(on, "On", bypassed, "Not applied", "Off") }
+        assertEquals("Off", line(false, false))
+        assertEquals("Off", line(false, true))
+        assertEquals("On", line(true, false))
+        assertEquals("Not applied", line(true, true))
+    }
 }

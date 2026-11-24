@@ -137,6 +137,9 @@ interface PlayerMoreHost {
     fun volumeBoost(): Boolean
     fun nightMode(): Boolean
 
+    /** The sound plays as a Dolby or DTS bitstream, which Volume boost and Night mode cannot reach (WP-24). */
+    fun soundBypassed(): Boolean = false
+
     /** Player volume (#33), [PlayerVolume.MIN] to [PlayerVolume.FULL] per cent. */
     fun playerVolume(): Int = PlayerVolume.FULL
     fun setPlayerVolume(percent: Int) = Unit
@@ -478,7 +481,7 @@ class PlayerMorePanel(
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
         LockScreen, PictureInPicture, AirPlay, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
-        PlayerVolume, Brightness, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
+        PlayerVolume, Brightness, VolumeBoost, NightMode, PassthroughOff, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, Decoder, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, AddToList, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
@@ -582,8 +585,9 @@ class PlayerMorePanel(
                 val now = host.brightness()
                 Line(kind, s.playerBrightness, TmIcons.Visibility, if (now < TouchPrefs.BRIGHTNESS_MIN) s.playerBrightnessSystem else Translator.messages.formatter.scalePercent(now))
             }
-            Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, if (host.volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff)
-            Kind.NightMode -> Line(kind, s.playerQuietLoudScenes, TmIcons.VolumeDown, if (host.nightMode()) s.playerQuietLoudScenesOnDetail else s.commonOff)
+            Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, soundDetail(host.volumeBoost(), s.playerVolumeBoostOnDetail, host.soundBypassed(), s.playerBoostNotApplied, s.commonOff))
+            Kind.NightMode -> Line(kind, s.playerQuietLoudScenes, TmIcons.VolumeDown, soundDetail(host.nightMode(), s.playerQuietLoudScenesOnDetail, host.soundBypassed(), s.playerBoostNotApplied, s.commonOff))
+            Kind.PassthroughOff -> Line(kind, s.playerPassthroughOffOnce, volume, null)
             Kind.EvenVolume -> Line(kind, s.playerEvenVolume, volume, if (host.evenVolume()) s.playerEvenVolumeOnDetail else s.commonOff)
             Kind.SleepTimer -> Line(kind, s.playerSleepTimer, TmIcons.Clock, host.sleepDetail() ?: s.commonOff)
             Kind.AbLoop -> {

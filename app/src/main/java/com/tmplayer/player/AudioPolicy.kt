@@ -31,6 +31,12 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary
 @UnstableApi
 object AudioPolicy {
 
+    /** The linear PCM encodings an AudioTrack can be opened with: everything else is a bitstream (WP-24). */
+    private val PCM_ENCODINGS = setOf(
+        C.ENCODING_PCM_8BIT, C.ENCODING_PCM_16BIT, C.ENCODING_PCM_16BIT_BIG_ENDIAN, C.ENCODING_PCM_24BIT,
+        C.ENCODING_PCM_24BIT_BIG_ENDIAN, C.ENCODING_PCM_32BIT, C.ENCODING_PCM_32BIT_BIG_ENDIAN, C.ENCODING_PCM_FLOAT,
+    )
+
     /**
      * The audio renderers' extension mode for a factory built with [extensionRendererMode]: FFmpeg's
      * decoder first when [softwareFirst] (A1), else the device's whatever the picture prefers ("Prefer
@@ -49,6 +55,17 @@ object AudioPolicy {
         val init = generateSequence(error.cause) { it.cause }.take(MAX_CAUSES).filterIsInstance<AudioSink.InitializationException>().firstOrNull()
         return init?.format ?: (error as? ExoPlaybackException)?.rendererFormat
     }
+
+    /**
+     * Whether an AudioTrack opened with [encoding] carries a bitstream (Dolby, DTS) rather than PCM
+     * (WP-24). Volume boost and Night mode shape PCM only: on a bitstream the sound goes to the
+     * speakers or the receiver untouched, so the lines about them say "Not applied" ([boostReaches]).
+     */
+    fun bitstreamEncoding(encoding: Int): Boolean =
+        encoding != C.ENCODING_INVALID && encoding !in PCM_ENCODINGS
+
+    /** Whether Volume boost and Night mode change the sound now: not while it plays as a bitstream. */
+    fun boostReaches(bitstream: Boolean): Boolean = !bitstream
 
     /** Whether [format] went to the output as it is (passthrough): anything but PCM. */
     fun bitstream(format: Format?): Boolean {

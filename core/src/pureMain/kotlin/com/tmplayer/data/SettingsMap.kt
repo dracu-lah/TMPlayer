@@ -241,6 +241,10 @@ object SettingsMap {
         row("learnt_languages", sub, "settings.learnt_languages", PTD, listOf("settings.learnt_languages_empty"))
         row("downmix", sub, "settings.downmix", PTD, onOff("settings.downmix"))
         row("even_volume", sub, "player.even_volume", PTD, onOff("settings.even_volume"))
+        // Volume boost and Night mode (WP-24): the stored values the player's menu also switches, with the
+        // plain line that Dolby and DTS sound sent to the speakers is not touched by either.
+        row("volume_boost", sub, "settings.volume_boost", PT, onOff("settings.volume_boost") + "settings.sound_untouched")
+        row("night_mode", sub, "settings.night_mode", PT, onOff("settings.night_mode") + "settings.sound_untouched")
         row("online_account", sub, "online.sign_in", PTD, need = SettingsNeed.OnlineSubtitles, drawnAs = listOf("online.sign_out", "online.title"))
         row("find_subtitles", sub, "online.suggest_toggle", PT, onOff("online.suggest"), SettingsNeed.OnlineSubtitles)
         row("machine_subtitles", sub, "online.machine_toggle", PTD, onOff("online.machine"), SettingsNeed.OnlineSubtitles)

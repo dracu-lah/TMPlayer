@@ -583,6 +583,26 @@ class RemedyRunner(private val host: Host, private val clock: Clock) {
         return if (dealt && !exhausted) ViewerOutcome.Tried else ViewerOutcome.Recorded
     }
 
+    /**
+     * The viewer pressed "Turn off passthrough for this video" (WP-24): the sound is rebuilt as PCM,
+     * so Volume boost and Night mode reach it. It is the ladder's own passthrough-off step (A2), taken
+     * as a viewer's press (consent without the "Never switch by itself" choice), sharing the hop
+     * count with every other step; nothing is learned for the class from it. [ViewerOutcome.Tried]
+     * when the sound was rebuilt, [ViewerOutcome.Recorded] when nothing could be done (the step is
+     * spent, the budget used, not ExoPlayer's sound), [ViewerOutcome.NoClass] before the ladder exists.
+     */
+    fun viewerPassthroughOff(): ViewerOutcome {
+        val l = ladder ?: return ViewerOutcome.NoClass
+        val k = key ?: return ViewerOutcome.NoClass
+        host.log("Remedy: viewer asked for passthrough off, class $k")
+        if (exhausted || host.engineRunning().engine != PlayerEngine.ExoPlayer) return ViewerOutcome.Recorded
+        val action = l.viewerPress(Remedy.PassthroughOff, RemedyEvidence.UserReport, host.facts(l.path.excluded), clock.now())
+        if (action !is RemedyAction.Hop) return ViewerOutcome.Recorded
+        stopTicking()
+        val dealt = hop(l, k, action, null)
+        return if (dealt && !exhausted) ViewerOutcome.Tried else ViewerOutcome.Recorded
+    }
+
     private fun exhaust(l: RemedyLadder, k: String, evidence: RemedyEvidence, error: PlaybackException?) {
         exhausted = true
         stopTicking()

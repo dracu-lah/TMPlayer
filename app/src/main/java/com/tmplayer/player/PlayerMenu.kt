@@ -45,6 +45,12 @@ enum class PlayerMenuEntry {
     VolumeBoost,
     /** Night mode: the range squeezed, so loud scenes are quieter and dialogue clearer. */
     NightMode,
+    /**
+     * Only while Dolby or DTS sound goes to the speakers as it is, so Volume boost and Night mode
+     * cannot reach it (WP-24): the sound is rebuilt as PCM for this video, the ladder's own
+     * passthrough-off step taken as the viewer's press.
+     */
+    PassthroughOff,
     /** Even out volume: a quiet track lifted to the level of other videos. On or off. */
     EvenVolume,
     /** A page of lengths, and the time left on one that is running. */
@@ -151,6 +157,8 @@ enum class PhoneMenuEntry {
     Brightness,
     VolumeBoost,
     NightMode,
+    /** Only while the sound plays as a Dolby or DTS bitstream, as on the television (WP-24). */
+    PassthroughOff,
     EvenVolume,
     SleepTimer,
     /** A-B repeat, as on the television: one line that says what the next press does. */
@@ -222,6 +230,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.Brightness -> L.playerBrightness
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
     PhoneMenuEntry.NightMode -> L.playerQuietLoudScenes
+    PhoneMenuEntry.PassthroughOff -> L.playerPassthroughOffOnce
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
     PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
     PhoneMenuEntry.AbLoop -> PlayerMenu.loopLabel(loop)
@@ -337,6 +346,7 @@ object PlayerMenu {
         addToList: Boolean = false,
         decoder: Boolean = false,
         loadSubtitleFile: Boolean = false,
+        passthroughOff: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         // WP-20: Lock first, then the frequent lines under no header, then the groups. Every line
         // is added under its own gate, so a group a device leaves empty is never drawn.
@@ -354,6 +364,7 @@ object PlayerMenu {
         if (playerVolume) add(PlayerMenuEntry.PlayerVolume)
         add(PlayerMenuEntry.VolumeBoost)
         add(PlayerMenuEntry.NightMode)
+        if (passthroughOff) add(PlayerMenuEntry.PassthroughOff)
         add(PlayerMenuEntry.EvenVolume)
         // Playback
         add(PlayerMenuEntry.AbLoop)
@@ -399,7 +410,7 @@ object PlayerMenu {
         PlayerMenuEntry.PictureInPicture,
         -> PlayerMenuGroup.Picture
         PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.VolumeBoost, PlayerMenuEntry.NightMode,
-        PlayerMenuEntry.EvenVolume,
+        PlayerMenuEntry.PassthroughOff, PlayerMenuEntry.EvenVolume,
         -> PlayerMenuGroup.Sound
         PlayerMenuEntry.RepeatVideo, PlayerMenuEntry.AbLoop, PlayerMenuEntry.Chapters, PlayerMenuEntry.NextChapter,
         PlayerMenuEntry.PreviousChapter, PlayerMenuEntry.NextFrame, PlayerMenuEntry.PreviousFrame,
@@ -474,6 +485,7 @@ object PlayerMenu {
         addToList: Boolean = false,
         airPlay: Boolean = false,
         decoder: Boolean = false,
+        passthroughOff: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
@@ -487,6 +499,7 @@ object PlayerMenu {
         if (brightness) add(PhoneMenuEntry.Brightness)
         add(PhoneMenuEntry.VolumeBoost)
         add(PhoneMenuEntry.NightMode)
+        if (passthroughOff) add(PhoneMenuEntry.PassthroughOff)
         add(PhoneMenuEntry.EvenVolume)
         add(PhoneMenuEntry.SleepTimer)
         add(PhoneMenuEntry.AbLoop)
@@ -548,3 +561,14 @@ object RemoteKeys {
         L.playerKeyBack to L.playerKeyBackDoes,
     )
 }
+
+/**
+ * The detail line of Volume boost or Night mode (WP-24): off, "Not applied" while the sound goes to
+ * the speakers as a Dolby or DTS bitstream (neither can touch it), else the line saying what it does.
+ */
+internal fun soundDetail(on: Boolean, onText: String, bypassed: Boolean, notApplied: String, off: String): String =
+    when {
+        !on -> off
+        bypassed -> notApplied
+        else -> onText
+    }

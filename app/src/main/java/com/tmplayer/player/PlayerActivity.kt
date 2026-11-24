@@ -443,6 +443,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Volume boost as the viewer left it, read before the player is built. */
     private var volumeBoostOn = false
 
+    /**
+     * The sound now plays as a Dolby or DTS bitstream, read from the output's own AudioTrack on every
+     * audio format change (WP-24): Volume boost and Night mode cannot reach it, and say so.
+     */
+    private var soundBitstream = false
+
+    /** The first frame of this video has said what Volume boost and Night mode are doing (WP-24). */
+    private var soundChipShown = false
+
     /** Night mode for sound, as the viewer left it, read before the player is built. */
     private var nightModeOn = false
 
@@ -4596,6 +4605,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     audioOffset = it
                 }
                 // After the fold, so the compressor hears the two channels that will be played.
+                soundBitstream = false
+                soundChipShown = false
                 val boost = VolumeBoostProcessor().also {
                     it.enabled = volumeBoostOn
                     it.night = nightModeOn
@@ -4915,6 +4926,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // ran dry": a stutter with these lines in the log is an output buffer problem,
                 // one without them is the download.
                 addAnalyticsListener(object : AnalyticsListener {
+                    // Every time the output opens (a new video, another audio track, a rebuilt sound):
+                    // is it a bitstream the boost cannot reach? (WP-24)
+                    override fun onAudioTrackInitialized(
+                        eventTime: AnalyticsListener.EventTime,
+                        audioTrackConfig: androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig,
+                    ) {
+                        soundBitstream = AudioPolicy.bitstreamEncoding(audioTrackConfig.encoding)
+                    }
+
                     override fun onAudioUnderrun(
                         eventTime: AnalyticsListener.EventTime,
                         bufferSize: Int,
@@ -5432,6 +5452,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun onRenderedFirstFrame() {
             logFirstFrame()
             remedies.firstFrame()
+            saySoundOptions()
             // A few seconds in, once the picture and the tracks have settled: subtitles found for the viewer (U5).
             if (OnlineSubtitles.current?.store?.now?.suggest == true) {
                 loopHandler.removeCallbacks(suggestStart)
@@ -8272,6 +8293,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // for a stream while offline (a saved video plays from the phone).
             airPlay = hasAirPlay() && savable == true &&
                 (downloadedVideo != null || NetworkMonitor.status.value != NetworkStatus.Offline),
+            passthroughOff = passthroughOffOffered(),
         )
         override fun zoomDetail(): String? =
             zoom.takeIf { it.zoomed }?.let { L.messages.formatter.scalePercent(it.percent) }
@@ -8297,6 +8319,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             playerVolume = !castUp(),
             addToList = hasMessage(),
             loadSubtitleFile = documentPickerAvailable(this@PlayerActivity),
+            passthroughOff = passthroughOffOffered(),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -8306,6 +8329,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun stereoDetail() = stereo.detailText()
         override fun volumeBoost() = volumeBoostOn
         override fun nightMode() = nightModeOn
+        override fun soundBypassed() = soundBitstream
         override fun evenVolume() = evenVolumeOn
         override fun playerVolume() = playerVolumePercent
         override fun brightness() = currentBrightnessPercent()
@@ -8373,6 +8397,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.AirPlay -> showAirPlay()
             PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
             PhoneMenuEntry.NightMode -> toggleNightMode()
+            PhoneMenuEntry.PassthroughOff -> passthroughOffOnce()
             PhoneMenuEntry.EvenVolume -> toggleEvenVolume()
             PhoneMenuEntry.AbLoop -> pressLoop()
             PhoneMenuEntry.RepeatVideo -> toggleRepeatVideo()
@@ -8417,6 +8442,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.MarkWatched -> toggleWatched()
             PlayerMenuEntry.VolumeBoost -> toggleVolumeBoost()
             PlayerMenuEntry.NightMode -> toggleNightMode()
+            PlayerMenuEntry.PassthroughOff -> passthroughOffOnce()
             PlayerMenuEntry.EvenVolume -> toggleEvenVolume()
             PlayerMenuEntry.AbLoop -> pressLoop()
             PlayerMenuEntry.RepeatVideo -> toggleRepeatVideo()
@@ -8801,7 +8827,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val on = !volumeBoostOn
         volumeBoostOn = on
         volumeBoost?.enabled = on
-        showGestureFeedback(if (on) L.playerVolumeBoostOn else L.playerVolumeBoostOff)
+        showGestureFeedback(if (on) soundOnLine(L.playerVolumeBoostOn) else L.playerVolumeBoostOff)
         lifecycleScope.launch { runCatching { settings.setVolumeBoost(on) } }
     }
 
@@ -8813,8 +8839,45 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val on = !nightModeOn
         nightModeOn = on
         volumeBoost?.night = on
-        showGestureFeedback(if (on) L.playerQuietLoudScenesOn else L.playerQuietLoudScenesOff)
+        showGestureFeedback(if (on) soundOnLine(L.playerQuietLoudScenesOn) else L.playerQuietLoudScenesOff)
         lifecycleScope.launch { runCatching { settings.setNightMode(on) } }
+    }
+
+    /**
+     * What a boost or night mode toast says (WP-24): [line] while the sound can be shaped, and the
+     * plain "Not applied" while it goes to the speakers as a Dolby or DTS bitstream.
+     */
+    private fun soundOnLine(line: String): String = if (AudioPolicy.boostReaches(soundBitstream)) line else L.playerBoostNotApplied
+
+    /**
+     * At the first frame, once per video, a stored Volume boost or Night mode says so (WP-24), or that
+     * it is not applied when the sound is a bitstream. The sound's output opens before the first
+     * picture, so [soundBitstream] is known here; a later track change is read again by the menu's lines.
+     */
+    private fun saySoundOptions() {
+        if (soundChipShown || (!volumeBoostOn && !nightModeOn)) return
+        soundChipShown = true
+        val line = when {
+            !AudioPolicy.boostReaches(soundBitstream) -> L.playerBoostNotApplied
+            volumeBoostOn -> L.playerVolumeBoostOn
+            else -> L.playerNightModeChip
+        }
+        showGestureFeedback(line)
+    }
+
+    /** Whether "Turn off passthrough for this video" is offered: the sound is a bitstream and the sound can still be rebuilt as PCM. */
+    private fun passthroughOffOffered(): Boolean =
+        soundBitstream && builtPolicy?.passthroughOff == false && vlcEngine == null && !castUp()
+
+    /**
+     * "Turn off passthrough for this video" (WP-24): the ladder's own passthrough-off step (A2), taken
+     * as the viewer's press through [RemedyRunner.viewerPassthroughOff], so its hop count is shared and
+     * the video is rebuilt once with the sound as PCM. When it takes the step the runner says so
+     * itself; otherwise the press is answered here.
+     */
+    private fun passthroughOffOnce() {
+        val outcome = runCatching { remedies.viewerPassthroughOff() }.getOrDefault(RemedyRunner.ViewerOutcome.NoClass)
+        if (outcome != RemedyRunner.ViewerOutcome.Tried) showGestureFeedback(L.playerPassthroughOffFailed)
     }
 
     /** 3D video is not offered while a cast plays the video. */

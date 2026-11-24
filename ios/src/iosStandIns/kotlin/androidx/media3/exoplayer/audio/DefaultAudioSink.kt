@@ -5,6 +5,16 @@ package androidx.media3.exoplayer.audio
 
 /** Where decoded sound goes, Media3's; on iOS the engine's, so only its processors matter here. */
 interface AudioSink {
+    /** What an audio track was opened with, Media3's: the encoding says PCM or a bitstream. */
+    class AudioTrackConfig(
+        val encoding: Int,
+        val sampleRate: Int,
+        val channelConfig: Int,
+        val tunneling: Boolean,
+        val offload: Boolean,
+        val bufferSize: Int,
+    )
+
     /** An audio track that could not start, Media3's: the format it was for is kept. */
     class InitializationException(
         val audioTrackState: Int,
