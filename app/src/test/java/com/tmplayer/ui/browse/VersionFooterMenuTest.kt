@@ -49,6 +49,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -184,6 +185,7 @@ class VersionFooterTvMenuTest {
     @get:Rule
     val drain = DrainMainLooperRule()
 
+    private var about = 0
     private val homeFocus = FocusRequester()
     private val asha = Account(name = "Asha Rao", username = "asha", miniThumbnail = null, photoFileId = 0)
 
@@ -210,7 +212,7 @@ class VersionFooterTvMenuTest {
                 account = asha, favoriteCount = 0, downloadCount = 0, updateVersion = null,
                 onHome = {}, onChats = {}, onSearch = {}, onSettings = {},
                 onFavourites = {}, onDownloads = {}, onHistory = {}, onUpdate = {},
-                onSwitchOrAdd = {}, onSignOut = { signOut.request() },
+                onSwitchOrAdd = {}, onSignOut = { signOut.request() }, onAbout = { about++ },
             )
             TMPlayerTheme {
                 Column(Modifier.fillMaxSize().background(Tone.background)) {
@@ -267,43 +269,28 @@ class VersionFooterTvMenuTest {
     private fun settingsRow() = rule.onNode(hasText(L.navSettings) and hasClickAction())
 
     @Test
-    fun `Down from the last row reaches the footer, OK copies it and says so, Up returns`() {
+    fun `Down from the last row reaches the version, the last stop, and OK opens About without copying`() {
+        // The TV's account sheet (WP-02): its version is a row of its own, the last stop, and a press opens
+        // About; the line to copy for support lives on About. TvAccountMenuTest walks the whole column.
         open()
-        val footer = rule.onNodeWithTag(VERSION_MARK_TAG)
+        val footer = rule.onNodeWithTag(VERSION_MARK_TAG, useUnmergedTree = true)
         footer.assertExists()
-        // The remote starts on the header's button; Down walks the list to its last row.
-        // Favourites, History, Watched, Watch later, Settings: five Downs from the header's button.
-        repeat(5) {
-            rule.onNode(hasText(L.profilesAdd) and hasClickAction()).performKeyInput { pressKey(Key.DirectionDown) }
+        // The sheet opens on its first row: Favourites, History, Watch later, Settings, the account row, then the version.
+        for (id in listOf("favourites", "history", "watch-later", "settings", "switch")) {
+            rule.onNodeWithTag("tv-account-row-$id").performKeyInput { pressKey(Key.DirectionDown) }
             rule.waitForIdle()
         }
-        settingsRow().assertIsFocused()
-        settingsRow().performKeyInput { pressKey(Key.DirectionDown) }
+        footer.assertIsFocused()
+        // Down at the last stop stays on it.
+        footer.performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
         footer.assertIsFocused()
-        // OK copies, and the same node now carries the confirmation in a polite live region.
+        assertEquals(0, about)
         footer.performKeyInput { pressKey(Key.Enter) }
         rule.waitForIdle()
-        rule.onNodeWithTag(VERSION_MARK_TAG).assertIsFocused()
-        assertEquals(
-            LiveRegionMode.Polite,
-            rule.onNodeWithTag(VERSION_MARK_TAG).fetchSemanticsNode().config.getOrNull(SemanticsProperties.LiveRegion),
-        )
-        assertTrue(rule.onAllNodes(hasText(L.aboutVersionCopied)).fetchSemanticsNodes().isNotEmpty())
+        assertEquals("OK on the version asks for About", 1, about)
+        assertTrue("nothing said it was copied", rule.onAllNodes(hasText(L.aboutVersionCopied)).fetchSemanticsNodes().isEmpty())
         val clipboard = RuntimeEnvironment.getApplication().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
-        assertNotNull(text)
-        assertTrue(text!!.startsWith("TMPlayer ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) Android "))
-        assertFalse(text.contains("Asha"))
-        // Up goes back to the last row.
-        rule.onNodeWithTag(VERSION_MARK_TAG).performKeyInput { pressKey(Key.DirectionUp) }
-        rule.waitForIdle()
-        settingsRow().assertIsFocused()
-        // Down twice: the footer, then on past it (to Close), never stuck.
-        settingsRow().performKeyInput { pressKey(Key.DirectionDown) }
-        rule.waitForIdle()
-        rule.onNodeWithTag(VERSION_MARK_TAG).performKeyInput { pressKey(Key.DirectionDown) }
-        rule.waitForIdle()
-        rule.onNodeWithTag(VERSION_MARK_TAG).assertIsNotFocused()
+        assertNull("nothing was copied", clipboard.primaryClip)
     }
 }

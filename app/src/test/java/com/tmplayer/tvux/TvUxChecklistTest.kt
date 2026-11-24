@@ -397,7 +397,9 @@ internal val SCREENS: List<Screen> = listOf(
     Screen(
         "accountMenu",
         column = null,
-        actions = listOf(L.profilesAdd, L.settingsSignOutConfirm),
+        // The sheet's rows come in the order Favourites, History, Watch later, Settings, Add account: the first two
+        // are within 3 presses; Add account is the fifth row by design (TvAccountMenuTest walks every row and the version).
+        actions = listOf(L.browseTabFavourites, L.navSettings),
         prepare = { ux ->
             // The way a remote with a Menu key gets there: Up from Home's rows to the bar, then Menu, which the bar
             // takes on its release (the picture itself refuses a programmatic focus in this harness; OK on it is
@@ -406,16 +408,20 @@ internal val SCREENS: List<Screen> = listOf(
             var ups = 0
             while (!onBar() && ups++ < 8) ux.key(android.view.KeyEvent.KEYCODE_DPAD_UP, 300)
             ux.key(android.view.KeyEvent.KEYCODE_MENU, 800)
-            // The menu is a window of its own: it takes a few frames to come up on a slow machine.
+            // The account sheet is a window of its own: it takes a few frames to come up on a slow machine. Sign out is
+            // in Settings, Account now (WP-02), so the sheet is known by its Add account row.
             var waits = 0
-            while (ux.nodes().none { ux.nameOf(it) == L.settingsSignOutConfirm } && waits++ < 10) {
+            while (ux.nodes().none { ux.nameOf(it) == L.profilesAdd } && waits++ < 10) {
                 Thread.sleep(100)
                 ux.settle(300)
             }
-            if (ux.nodes().none { ux.nameOf(it) == L.settingsSignOutConfirm }) {
-                ux.add("render", "screen", "Menu on the bar opened no menu with Sign out")
+            if (ux.nodes().none { ux.nameOf(it) == L.profilesAdd }) {
+                ux.add("render", "screen", "Menu on the bar opened no account sheet")
             } else {
                 ux.topWindowOnly = true
+                // The sheet is a window of its own: out of touch mode, holding focus, and a moment for its first row to take the remote.
+                ux.windowForRemote()
+                repeat(10) { if (ux.focused().isEmpty()) { Thread.sleep(50); ux.settle(300) } }
             }
         },
         content = {

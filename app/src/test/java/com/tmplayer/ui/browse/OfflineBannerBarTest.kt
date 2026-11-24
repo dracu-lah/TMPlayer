@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
@@ -136,9 +137,9 @@ class OfflineBannerBarTest {
         show(2f)
         rule.onNodeWithText(L.stateOffline).assertIsDisplayed()
         val banner = rule.onNodeWithText(L.commonRetry).getUnclippedBoundsInRoot()
-        val chatsButton = rule.onNodeWithText(L.browseTabChats).getUnclippedBoundsInRoot()
+        val chatsButton = rule.onNodeWithContentDescription(L.browseTabChats).getUnclippedBoundsInRoot()
         assertTrue("$banner vs $chatsButton", banner.bottom <= chatsButton.top)
-        rule.onNodeWithText(L.browseTabChats).performClick()
+        rule.onNodeWithContentDescription(L.browseTabChats).performClick()
         assertEquals(1, chats)
     }
 
