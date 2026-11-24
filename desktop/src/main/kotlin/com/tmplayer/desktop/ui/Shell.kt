@@ -532,7 +532,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             NavFrame(state, update, account, Modifier.fillMaxSize(), barShown = state.openChat == null) {
                 val open = state.openChat
                 when {
-                    open != null -> MediaGridPage(state, open)
+                    // One page per chat (WP-94): the scroll, the shelf and the focus of the chat left never show under the next one's header.
+                    open != null -> androidx.compose.runtime.key(open.id) { MediaGridPage(state, open) }
                     else -> pages.SaveableStateProvider(state.pageDestination.name) {
                         shownPage(state.pageDestination)
                     }

@@ -2272,6 +2272,9 @@ private fun Root() {
                     screen = Screen.Chats
                 }
                 BackHandler(onBack = leaveChat)
+                // Another chat is another screen (WP-94): its own remembered state, shelf and scroll,
+                // so nothing of the chat left shows under the new chat's header.
+                androidx.compose.runtime.key(current.chat.id) {
                 MediaGridScreen(
                     onBack = leaveChat,
                     chatId = current.chat.id,
@@ -2297,6 +2300,7 @@ private fun Root() {
                     onOfflineAction = toast,
                     connectionNotice = connectionNotice,
                 )
+                }
             }
 
             is Screen.Downloads -> {

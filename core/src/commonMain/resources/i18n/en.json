@@ -1135,6 +1135,7 @@
     "in_downloads": "In Downloads",
     "in_downloads_detail": "Plays without a connection",
     "loading_more": "Loading more…",
+    "looked_through": "Looked through {count, plural, one {# post} other {# posts}} so far",
     "mark_unwatched": "Mark as unwatched",
     "mark_unwatched_detail": "Takes the tick off and takes it off your Watched list",
     "mark_watched": "Mark as watched",

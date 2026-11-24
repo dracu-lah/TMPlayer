@@ -696,6 +696,10 @@ fun MediaGridScreen(
             val filterNote = (filterLabel != null && !hidesAll && (filterHidden > 0 || filterUnknown > 0)) || (filterPaused && filtersOn && grouping)
             // Self-destructing videos are left out (only Telegram opens them): a quiet line says so.
             val selfDestructing by viewModel.selfDestructing.collectAsStateWithLifecycle()
+            // What the listing does behind the grid on screen (WP-94): Updating while a kept grid is
+            // read again, and the failure, with the time it was fresh, when that did not work.
+            val work by viewModel.status.collectAsStateWithLifecycle()
+            val workAsked by viewModel.statusAsked.collectAsStateWithLifecycle()
             val selfDestructNote = query.isBlank() && selfDestructing > 0
             val courseHeader: @Composable () -> Unit = {
                 if (filterNote) {
@@ -957,6 +961,21 @@ fun MediaGridScreen(
                         first = if (feed.isEmpty()) firstItem else null,
                         onExplain = onOfflineAction,
                     )
+                    // Under the last row, so it never moves a tile: Updating, "Up to date" after a press, or
+                    // the failure with Try again and Send logs; on a television Down from the last row reaches it.
+                    if (work is com.tmplayer.data.WorkStatus.Syncing || work is com.tmplayer.data.WorkStatus.Failed ||
+                        work is com.tmplayer.data.WorkStatus.Updated
+                    ) {
+                        item(key = "work-foot", span = { GridItemSpan(maxLineSpan) }, contentType = "work-foot") {
+                            com.tmplayer.ui.components.WorkStatusLine(
+                                status = work,
+                                asked = workAsked || work is com.tmplayer.data.WorkStatus.Failed,
+                                onRetry = viewModel::load,
+                                sendLogs = { com.tmplayer.ui.settings.SendLogsButton() },
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
                 }
                 ScrollToTop(gridState)
                 // On the television the first Back from deep in the grid goes to its top (WP-12).

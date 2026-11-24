@@ -104,7 +104,7 @@ fun <T> StateBox(
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val labelTop = maxHeight / 3
                 CompositionLocalProvider(LocalSkeletonLabel provides state.label) { skeleton() }
-                if (rememberSkeletonLabelDue(state)) {
+                if (rememberSkeletonLabelDue(UiState.Loading::class)) {
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = Tone.surfaceHigh,
@@ -132,14 +132,14 @@ fun <T> StateBox(
                             Text(it, color = Tone.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp))
                         }
                     }
-                    if (onRetry != null) SlowAnswerLine(state, onRetry, slowAfterMs)
+                    if (onRetry != null) SlowAnswerLine(UiState.Loading::class, onRetry, slowAfterMs)
                 }
             }
         } else Centred {
             CircularProgressIndicator()
             Text(state.label, color = Tone.muted)
             state.tip?.let { Text(it, color = Tone.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center) }
-            if (onRetry != null) SlowAnswerLine(state, onRetry, slowAfterMs)
+            if (onRetry != null) SlowAnswerLine(UiState.Loading::class, onRetry, slowAfterMs)
         }
         is UiState.Empty -> Centred {
             EmptyArt(state.picture, modifier = Modifier.padding(bottom = 4.dp))

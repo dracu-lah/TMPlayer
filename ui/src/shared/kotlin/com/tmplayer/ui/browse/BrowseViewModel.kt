@@ -1002,6 +1002,23 @@ data class TopicBar(val topics: List<ForumTopicSummary>, val selected: Int = 0) 
     fun nameOf(id: Int): String? = if (id == 0) null else topics.firstOrNull { it.id == id }?.name
 }
 
+/** Where a chat grid's pages come from: Telegram's through the signed in session, or a test's own. */
+fun interface GridPages {
+    suspend fun page(cursors: MediaCursors, query: String, topicId: Int): MediaPage
+}
+
+/** The walk back through a chat that the size limits keep empty, and how it counts under the skeleton (WP-94, LS-10). */
+object GridWalk {
+    /** The skeleton's label becomes "Looked through N posts so far" from here. */
+    const val LABEL_AFTER_MS = 3_000L
+
+    /** And is changed at most this often, so a big chat does not redraw the skeleton page by page. */
+    const val LABEL_EVERY_MS = 2_000L
+
+    /** What one page read of the chat: every video, archive and self-destructing one, before the size limits. */
+    fun readIn(page: MediaPage): Int = page.items.size + page.archives.size + page.hiddenSelfDestructing
+}
+
 data class MediaListState(
     val items: List<MediaItem> = emptyList(),
     val sponsored: SponsoredBatch? = null,
@@ -1051,6 +1068,8 @@ class MediaListViewModel(
     private val searchSource: ((chatId: Long, topicId: Int) -> com.tmplayer.data.ChatSearchSource)? = null,
     /** The videos the app has seen anywhere (Home, Continue watching), for a search's first answer. */
     private val knownVideos: () -> List<MediaItem> = { com.tmplayer.online.KnownMedia.all() },
+    /** Where the pages of a listing come from: Telegram's through the signed in session unless a test passes its own. */
+    private val pages: GridPages? = null,
 ) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("MediaList")) {
 
     /** Where [MediaListViewModel] keeps the topic picked in each group. */
@@ -1147,6 +1166,34 @@ class MediaListViewModel(
     private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading(L.browseFindingVideos))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
 
+    // Declared above the init blocks, which start the first load.
+    private val _status = MutableStateFlow<WorkStatus>(WorkStatus.Idle)
+
+    /**
+     * What the listing is doing behind a grid that is on screen (WP-94): Syncing while a kept
+     * listing is revalidated or a Refresh runs, Failed with the time the grid was fresh when that
+     * failed with the previous grid kept, Updated after a Refresh the viewer asked for. Idle
+     * otherwise, and always for a first load, which the skeleton and its label say.
+     */
+    val status: StateFlow<WorkStatus> = _status.asStateFlow()
+
+    private val _statusAsked = MutableStateFlow(false)
+
+    /** [status] is the answer to a press (Refresh, Try again), so its words show at once and "Up to date" follows. */
+    val statusAsked: StateFlow<Boolean> = _statusAsked.asStateFlow()
+
+    /**
+     * Which listing is current. Every start of a listing (a topic, a refresh, a search) counts up,
+     * and every answer is dropped when its number is no longer the current one, so a slow answer
+     * from the topic or the listing left behind never lands over the one now shown.
+     */
+    private var runGen = 0
+
+    /** Messages read by the walk back through a chat since the listing last started over ([watchScan]). */
+    private var scanned = 0
+    private var scanJob: Job? = null
+    private var syncBox: Job? = null
+
     init {
         // Each settled listing is read once for covers that are an uploader's advert
         // ([com.tmplayer.data.PromoCovers]), off the main thread, so the tiles can draw the generated
@@ -1155,6 +1202,62 @@ class MediaListViewModel(
             _state.collect { state ->
                 val items = (state as? UiState.Content)?.value?.items ?: return@collect
                 runCatching { com.tmplayer.ui.components.PromoCoverBook.observe(items) }
+            }
+        }
+    }
+
+    /** What one read of this chat's pages stands on: the session it began under and how it asks. */
+    private class PageRun(val isCurrent: () -> Boolean, val page: suspend (MediaCursors, String, Int) -> MediaPage)
+
+    private suspend fun openRun(): PageRun {
+        pages?.let { source -> return PageRun({ true }) { cursors, text, topic -> source.page(cursors, text, topic) } }
+        val session = Td.awaitAuthorizedSession()
+        val repository = ChatRepository(session.client)
+        return PageRun(session::isCurrent) { cursors, text, topic -> repository.mediaPage(chatId, cursors, text, topicId = topic) }
+    }
+
+    /** [status] says Syncing, for [ChatListStatus.SYNC_BOX_MS] at most, so nothing spins for ever. */
+    private fun working(asked: Boolean) {
+        syncBox?.cancel()
+        _statusAsked.value = asked
+        _status.value = WorkStatus.Syncing()
+        val gen = runGen
+        syncBox = viewModelScope.launch {
+            delay(ChatListStatus.SYNC_BOX_MS)
+            if (gen == runGen && _status.value is WorkStatus.Syncing) _status.value = WorkStatus.Idle
+        }
+    }
+
+    /** [status] after the work ended, the time box with it. */
+    private fun worked(status: WorkStatus) {
+        syncBox?.cancel()
+        syncBox = null
+        _status.value = status
+    }
+
+    /** The work ended well: "Up to date" after a press, nothing after the quiet kind. */
+    private fun finished() = worked(if (_statusAsked.value) WorkStatus.Updated(System.currentTimeMillis()) else WorkStatus.Idle)
+
+    /** When the listing under [key] was last fresh from Telegram, for "Showing what was here at". */
+    private fun keptAt(key: QueryKey.ChatMedia): Long? = cache.entry(key)?.updatedAt?.takeIf { it > 0 }
+
+    /**
+     * While the walk back through a chat holds the skeleton, its label says how far it has read
+     * ("Looked through 1,200 posts so far"): from [GridWalk.LABEL_AFTER_MS] on, changed at most
+     * every [GridWalk.LABEL_EVERY_MS], and it stops by itself once the skeleton is gone.
+     */
+    private fun watchScan(gen: Int) {
+        scanJob?.cancel()
+        scanJob = viewModelScope.launch {
+            delay(GridWalk.LABEL_AFTER_MS)
+            var said = -1
+            while (gen == runGen) {
+                val now = _state.value as? UiState.Loading ?: break
+                if (scanned > 0 && scanned != said) {
+                    said = scanned
+                    _state.value = now.copy(label = L.gridLookedThrough(count = scanned))
+                }
+                delay(GridWalk.LABEL_EVERY_MS)
             }
         }
     }
@@ -1267,6 +1370,9 @@ class MediaListViewModel(
     }
 
     override fun onCleared() {
+        // A chat that is left stops reading at once, not at the end of the page it was waiting for.
+        runGen++
+        listOf(pageJob, availabilityJob, sponsoredJob, recordJob, typeJob, scanJob, syncBox).forEach { it?.cancel() }
         watching?.close()
         watching = null
     }
@@ -1399,9 +1505,10 @@ class MediaListViewModel(
         }
         if (_state.value !is UiState.Empty || pageJob?.isActive == true) return
         _state.value = UiState.Loading(if (query.isNotBlank()) L.browseSearching else L.browseFindingVideos)
+        val gen = runGen
+        watchScan(gen)
         pageJob = viewModelScope.launch {
-            val session = Td.awaitAuthorizedSession()
-            pageMore(session, ChatRepository(session.client), emptyList(), endReached = false)
+            pageMore(openRun(), emptyList(), endReached = false, gen = gen)
         }
     }
 
@@ -1429,10 +1536,16 @@ class MediaListViewModel(
      * pages scrolled through last time are all there.
      */
     private fun load(preserveContent: Boolean, force: Boolean = false, keepOnFailure: Boolean = true) {
+        // Counted first: whatever the listing left behind is still reading, and its answer is the
+        // old topic's or the old listing's, never this one's.
+        val gen = ++runGen
+        scanJob?.cancel()
+        scanned = 0
         _topics.value?.let { bar -> if (bar.selected != topicId) _topics.value = bar.copy(selected = topicId) }
         // A search has its own way through the chat ([ChatSearchRun]); the listing's kept pages are
         // what it answers from first.
         if (query.isNotBlank()) {
+            worked(WorkStatus.Idle)
             startSearch()
             return
         }
@@ -1443,7 +1556,7 @@ class MediaListViewModel(
         if (kept != null) {
             pageJob?.cancel()
             loadSponsored()
-            showKept(key, kept.data, revalidate = kept.stale)
+            showKept(key, kept.data, revalidate = kept.stale, gen = gen, keptAt = kept.updatedAt)
             return
         }
         askedTelegram = true
@@ -1455,17 +1568,24 @@ class MediaListViewModel(
         archives = emptyList()
         val searching = query.isNotBlank()
         if (previous == null) {
+            // The subject changed (another topic, or the chat's first look): the skeleton, with
+            // its words from a second on and a count while the walk goes on.
             _state.value = UiState.Loading(if (searching) L.browseSearching else L.browseFindingVideos)
+            worked(WorkStatus.Idle)
+            watchScan(gen)
+        } else {
+            // A Refresh or Try again over the grid on screen: it stays, and the foot says Updating.
+            working(asked = force)
         }
         pageJob?.cancel()
         loadSponsored()
         pageJob = viewModelScope.launch {
-            val session = Td.awaitAuthorizedSession()
-            val repository = ChatRepository(session.client)
+            val session = openRun()
             serverQuery = query
-            runCatching { firstPage(repository) }
+            runCatching { firstPage(session) }
                 .onSuccess { rawPage ->
-                    if (!session.isCurrent()) return@onSuccess
+                    if (!session.isCurrent() || gen != runGen) return@onSuccess
+                    scanned += GridWalk.readIn(rawPage)
                     _selfDestructing.value += rawPage.hiddenSelfDestructing
                     val seen = rawPage.copy(items = marked(rawPage.items))
                     // Kept before the size limits, which are applied again on every read.
@@ -1485,7 +1605,8 @@ class MediaListViewModel(
                     // be a blank body for the whole walk, with nothing to point the remote at, and
                     // that reads as a chat with no videos rather than one still being searched.
                     if (page.items.isEmpty() && !page.endReached) {
-                        pageMore(session, repository, emptyList(), page.endReached, key)
+                        pageMore(session, emptyList(), page.endReached, key, gen)
+                        if (gen == runGen) finished()
                         return@onSuccess
                     }
                     if (page.items.isNotEmpty()) recordSearch(query)
@@ -1501,15 +1622,19 @@ class MediaListViewModel(
                             ),
                         )
                     }
+                    finished()
                 }
                 .onFailure {
                     if (it is CancellationException) throw it
-                    if (session.isCurrent()) {
+                    if (session.isCurrent() && gen == runGen) {
                         if (previous != null && keepOnFailure) {
                             cursors = previousCursors
                             _state.value = UiState.Content(previous)
+                            // The old grid is back, and the foot says it is the old one, since when, with Try again.
+                            worked(WorkStatus.ofFailure(it, System.currentTimeMillis(), keptAt(key)))
                         } else {
                             _state.value = UiState.Error(Failures.humanise(it))
+                            worked(WorkStatus.Idle)
                         }
                     }
                 }
@@ -1522,43 +1647,63 @@ class MediaListViewModel(
      * answer over the pages kept ([ChatGrid.refreshed]). A kept listing the size limits empty
      * entirely walks on from its cursors, as a first page would.
      */
-    private fun showKept(key: QueryKey.ChatMedia, grid: ChatGrid, revalidate: Boolean) {
+    private fun showKept(key: QueryKey.ChatMedia, grid: ChatGrid, revalidate: Boolean, gen: Int, keptAt: Long?) {
         val walking = show(grid)
         if (walking) {
+            // Every kept page is outside the size limits: the walk goes on under the skeleton, counting.
+            worked(WorkStatus.Idle)
+            watchScan(gen)
             pageJob = viewModelScope.launch {
-                val session = Td.awaitAuthorizedSession()
-                pageMore(session, ChatRepository(session.client), emptyList(), endReached = false, key = key)
+                pageMore(openRun(), emptyList(), endReached = false, key = key, gen = gen)
             }
             return
         }
         if (!revalidate) {
+            worked(WorkStatus.Idle)
             refreshLocalAvailability()
             return
         }
+        // The kept grid is on screen while it is read again: quiet for 3 s, then "Updating…".
+        working(asked = false)
         pageJob = viewModelScope.launch {
-            val fresh = runCatching {
+            val result = runCatching {
                 cache.fetch(key) {
-                    if (key.query.isEmpty()) {
+                    val source = pages
+                    if (source != null) {
+                        val page = source.page(MediaCursors(), key.query, key.topicId)
+                        val old = cache.data<ChatGrid>(key)
+                        if (old == null) ChatGrid.of(page, key.query) else ChatGrid.refreshed(old, page)
+                    } else if (key.query.isEmpty()) {
                         PageQueries.refreshGrid(key)
                     } else {
-                        val session = Td.awaitAuthorizedSession()
+                        val session = openRun()
                         serverQuery = query
-                        val page = firstPage(ChatRepository(session.client)).let { it.copy(items = marked(it.items)) }
+                        val page = firstPage(session).let { it.copy(items = marked(it.items)) }
                         if (!session.isCurrent()) throw CancellationException("signed out")
                         ChatGrid.of(page, serverQuery)
                     }
                 }
-            }.onFailure { if (it is CancellationException && key == gridKey()) throw it }
-                // A refresh that failed keeps the kept listing up: it is still the best answer.
-                .getOrNull() ?: return@launch
-            if (key != gridKey()) return@launch
+            }
+            val failure = result.exceptionOrNull()
+            if (failure != null) {
+                if (failure is CancellationException && key == gridKey()) throw failure
+                // A refresh that failed keeps the kept listing up, still the best answer, and says so.
+                if (failure !is CancellationException && gen == runGen) {
+                    worked(WorkStatus.ofFailure(failure, System.currentTimeMillis(), keptAt))
+                }
+                return@launch
+            }
+            val fresh = result.getOrThrow()
+            if (key != gridKey() || gen != runGen) return@launch
             val seen = fresh.copy(items = marked(fresh.items))
             if (seen.items != fresh.items) cache.update<ChatGrid>(key) { if (it === fresh) seen else it }
             if (show(seen)) {
-                val session = Td.awaitAuthorizedSession()
-                pageMore(session, ChatRepository(session.client), emptyList(), endReached = false, key = key)
+                watchScan(gen)
+                pageMore(openRun(), emptyList(), endReached = false, key = key, gen = gen)
+                if (gen == runGen) finished()
                 return@launch
             }
+            finished()
             refreshLocalAvailability()
         }
     }
@@ -1600,8 +1745,8 @@ class MediaListViewModel(
      * becomes the paging query from then on, so scrolling keeps working with the cursors it has,
      * and every page is ranked locally against what the viewer actually typed.
      */
-    private suspend fun firstPage(repository: ChatRepository): MediaPage =
-        repository.mediaPage(chatId, MediaCursors(), query, topicId = topicId)
+    private suspend fun firstPage(session: PageRun): MediaPage =
+        session.page(MediaCursors(), query, topicId)
 
     /** The search under way, for the words in [query]; null while the chat is listed. */
     private var searchRun: com.tmplayer.data.ChatSearchRun? = null
@@ -1932,10 +2077,9 @@ class MediaListViewModel(
         }
 
         _state.value = UiState.Content(current.value.copy(loadingMore = true, moreFailed = false))
+        val gen = runGen
         pageJob = viewModelScope.launch {
-            val session = Td.awaitAuthorizedSession()
-            val repository = ChatRepository(session.client)
-            pageMore(session, repository, current.value.items, endReached = false)
+            pageMore(openRun(), current.value.items, endReached = false, gen = gen)
         }
     }
 
@@ -1965,12 +2109,13 @@ class MediaListViewModel(
      * both callers want exactly the same published shape.
      */
     private suspend fun pageMore(
-        session: TdSession,
-        repository: ChatRepository,
+        session: PageRun,
         startingFrom: List<MediaItem>,
         endReached: Boolean,
         /** The listing the pages are kept under, appended to as they arrive. */
         key: QueryKey.ChatMedia = gridKey(),
+        /** The listing this walk belongs to ([runGen]): once another has started, nothing it reads lands. */
+        gen: Int = runGen,
     ) {
         var items = startingFrom
         var reachedEnd = endReached
@@ -1984,10 +2129,14 @@ class MediaListViewModel(
             items.size == startingFrom.size &&
             !reachedEnd &&
             !failed &&
+            gen == runGen &&
             attempts++ < MAX_EMPTY_PAGES
         ) {
-            runCatching { repository.mediaPage(chatId, cursors, serverQuery, topicId = topicId) }
+            runCatching { session.page(cursors, serverQuery, topicId) }
                 .onSuccess { rawPage ->
+                    // The chat or topic left behind: its page is nobody's now (and the loop ends).
+                    if (gen != runGen) return@onSuccess
+                    scanned += GridWalk.readIn(rawPage)
                     _selfDestructing.value += rawPage.hiddenSelfDestructing
                     val seen = rawPage.copy(items = marked(rawPage.items))
                     // Appended to the kept listing only while it is still there: a page added to
@@ -2005,7 +2154,7 @@ class MediaListViewModel(
                 }
         }
 
-        if (!session.isCurrent()) return
+        if (!session.isCurrent() || gen != runGen) return
         if (startingFrom.isEmpty() && items.isNotEmpty()) recordSearch(query)
         // An empty listing has to say something, whether the chat ran out or the walk gave up
         // after MAX_EMPTY_PAGES. A Content with no items is a blank screen, and a blank screen

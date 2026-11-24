@@ -84,7 +84,9 @@ fun <T> StateScaffold(
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val labelTop = maxHeight / 3
                 androidx.compose.runtime.CompositionLocalProvider(LocalSkeletonLabel provides state.label) { loading() }
-                if (rememberSkeletonLabelDue(state)) {
+                // Keyed on the kind of wait, not on its label: a label that counts ("Looked through 120 posts
+                // so far", WP-94) must not hide itself again, nor restart the slow answer timer, at each change.
+                if (rememberSkeletonLabelDue(UiState.Loading::class)) {
                     SkeletonLabel(state.label, Modifier.align(Alignment.TopCenter).padding(top = labelTop))
                 }
                 Column(
@@ -95,11 +97,11 @@ fun <T> StateScaffold(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     state.tip?.let { TipCard(it) }
-                    SlowAnswerNotice(key = state, onRetry = onRetry, card = true)
+                    SlowAnswerNotice(key = UiState.Loading::class, onRetry = onRetry, card = true)
                 }
             }
         } else {
-            BigLoader(state.label, tip = state.tip, slowKey = state, onRetry = onRetry)
+            BigLoader(state.label, tip = state.tip, slowKey = UiState.Loading::class, onRetry = onRetry)
         }
         is UiState.Error -> BigError(state.message, onRetry, takeFocus = takeFocus)
         is UiState.Empty -> BigEmpty(

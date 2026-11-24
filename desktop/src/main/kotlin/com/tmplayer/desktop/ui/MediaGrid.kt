@@ -201,6 +201,12 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         val floor = if (showAllThisVisit) com.tmplayer.data.SizeFilter.FLOOR else min
         val model = rememberViewModel(Triple(chat.id, floor, max)) { MediaListViewModel(chat.id, floor, max, onSearched = { state.settings.addRecentSearch(it) }, downloadedIds = { DownloadIndex.presentIds(state.settings) }, topicMemory = state.settings.topicMemory()) }
         val ui by model.state.collectAsState()
+        // What the listing does behind the grid on screen (WP-94): the foot says Updating, or the failure.
+        val work by model.status.collectAsState()
+        val workAsked by model.statusAsked.collectAsState()
+        // Opened with the keyboard (Enter on a chat) or by a click: the first tile takes the focus
+        // only for the keyboard, once content has arrived (LS-22). A click turns the ring off.
+        val openedByKeyboard = remember(chat.id) { com.tmplayer.ui.theme.FocusVisibility.visible }
         var query by remember(chat.id) { mutableStateOf("") }
         var openSeries by remember(chat.id) { mutableStateOf<com.tmplayer.data.Series?>(null) }
         // Where the grid stood when a show was opened over it: the grid is gone while the show is
@@ -213,6 +219,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         }
         // The grid's keyboard focus, once the grid exists; the search field's Down arrow enters it.
         var gridNav by remember(chat.id) { mutableStateOf<KeyboardNav?>(null) }
+        FocusFirstTileOnOpen(openedByKeyboard, gridNav, hasTiles = (ui as? UiState.Content)?.value?.items?.isNotEmpty() == true, key = chat.id)
         // Typing searches the chat once it rests (MediaListViewModel.type); Enter and a recent
         // search go at once.
         LaunchedEffect(model, query) { model.type(query) }
@@ -502,9 +509,19 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 footerSlow = { SlowAnswerLine(content.items.size, onRetry = model::retryMore) },
                 scrollLabel = { key -> entryByKey[key]?.let { com.tmplayer.ui.browse.ScrollLabels.video(it, shownSort, s) } },
                 // Compressed files named like videos follow the videos, greyed with why (U10).
-                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null && shownHidden == 0) null else {
+                footer = if (!content.moreFailed && content.archives.isEmpty() && content.searchNote == null && shownHidden == 0 && !workShown(work)) null else {
                     {
                         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Updating while the kept grid is read again, "Up to date" after F5, or the failure
+                            // with the time the grid was fresh, Try again and Send logs (WP-94).
+                            if (workShown(work)) {
+                                com.tmplayer.ui.components.WorkStatusLine(
+                                    status = work,
+                                    asked = workAsked || work is com.tmplayer.data.WorkStatus.Failed,
+                                    onRetry = { model.load() },
+                                    sendLogs = { SendLogsActions() },
+                                )
+                            }
                             // Small videos left out by "Hide small clips": said where the chat ends, with Show
                             // them. The number only once the whole chat has been read (R1).
                             if (shownHidden > 0) SmallHiddenFooter(shownHidden, exact = content.endReached) { showAllThisVisit = true }
@@ -742,6 +759,26 @@ internal fun VideoGrid(
 @Composable
 internal fun LoadMoreNearEnd(grid: LazyGridState, enabled: Boolean, loadMore: () -> Unit) =
     com.tmplayer.ui.components.LoadMoreAhead(grid, enabled, ahead = LOAD_AHEAD - 1, onLoadMore = loadMore)
+
+/** Whether the grid's foot has a status to say: Updating, "Up to date" after a press, or a failure (WP-94). */
+internal fun workShown(status: com.tmplayer.data.WorkStatus): Boolean =
+    status is com.tmplayer.data.WorkStatus.Syncing || status is com.tmplayer.data.WorkStatus.Failed ||
+        status is com.tmplayer.data.WorkStatus.Updated
+
+/**
+ * A chat opened with the keyboard (Enter on its row) puts focus on the first tile once the grid
+ * has tiles, once per chat (LS-22): Tab no longer starts from the header. Opened with the mouse
+ * ([byKeyboard] false) it leaves focus alone, and so does a grid with no tiles yet.
+ */
+@Composable
+internal fun FocusFirstTileOnOpen(byKeyboard: Boolean, nav: KeyboardNav?, hasTiles: Boolean, key: Any) {
+    var done by remember(key) { mutableStateOf(false) }
+    LaunchedEffect(nav, hasTiles, byKeyboard) {
+        if (done || !byKeyboard || nav == null || !hasTiles) return@LaunchedEffect
+        done = true
+        nav.focus(0)
+    }
+}
 
 /** The toolbar's poster size step: smaller and larger, through [POSTER_STEPS]. */
 @Composable
