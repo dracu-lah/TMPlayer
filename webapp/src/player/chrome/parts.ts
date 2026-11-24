@@ -28,6 +28,8 @@ export const SPEED_MAX = 4
 
 /** PlayerControls' timings: in a touch slower than out, hidden after 3.5 s of playing untouched. */
 export const HIDE_MS = 3500
+/** The TV layout waits longer: a remote's press is slower than a finger (PlayerControls on Android TV hides after 5 s). */
+export const HIDE_TV_MS = 5000
 /** A second press inside this is a double tap or click (VideoGestures' DOUBLE_CLICK_MS). */
 export const DOUBLE_MS = 300
 /** A finger held this long plays fast until it lifts. */

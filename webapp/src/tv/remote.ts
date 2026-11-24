@@ -1,7 +1,7 @@
 // What a remote's key means to the player (plan 8.5, session 21): the arrows, OK, Back and the
 // media keys, by `key` and by the codes the TV makers send (webOS, Tizen, Android TV's browser,
 // HbbTV). Anything else is a key the page may use itself (a digit, a letter on a USB keyboard).
-export type RemoteKey = 'up' | 'down' | 'left' | 'right' | 'ok' | 'back' | 'play' | 'pause' | 'playpause' | 'stop' | 'forward' | 'rewind' | 'next' | 'previous'
+export type RemoteKey = 'up' | 'down' | 'left' | 'right' | 'ok' | 'back' | 'play' | 'pause' | 'playpause' | 'stop' | 'forward' | 'rewind' | 'next' | 'previous' | 'info' | 'captions'
 
 const BY_KEY: Record<string, RemoteKey> = {
     ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Up: 'up', Down: 'down', Left: 'left', Right: 'right',
@@ -11,11 +11,13 @@ const BY_KEY: Record<string, RemoteKey> = {
     MediaFastForward: 'forward', MediaRewind: 'rewind', MediaTrackNext: 'next', MediaTrackPrevious: 'previous',
 }
 
-/** Play 415, Pause 19, Stop 413, Rewind 412, Fast forward 417 and Back 461 (webOS); 10252 play/pause and 10009 Back (Tizen). */
+/** Play 415, Pause 19, Stop 413, Rewind 412, Fast forward 417, Info 457, CC 460 and Back 461 (webOS); 10252 play/pause and 10009 Back (Tizen). */
 const BY_CODE: Record<number, RemoteKey> = {
     38: 'up', 40: 'down', 37: 'left', 39: 'right', 13: 'ok',
     27: 'back', 8: 'back', 461: 'back', 10009: 'back', 166: 'back',
     415: 'play', 19: 'pause', 413: 'stop', 412: 'rewind', 417: 'forward', 10252: 'playpause', 179: 'playpause', 178: 'stop',
+    // webOS: Info 457 and the CC key 460 (Tizen's Info is 457 too).
+    457: 'info', 460: 'captions',
 }
 
 /** The key's meaning, or null for one the remote does not use (a digit, a letter). */

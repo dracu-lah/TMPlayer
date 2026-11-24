@@ -156,13 +156,17 @@ export function actionFor(p: Press, ctx: KeyContext): Action | null {
             return plain ? { do: 'togglePlay' } : null
         case '?':
             return { do: 'sheet' }
+        // The bracket, minus and equal keys with Shift type } { _ and +: the same keys, as core's table reads them by their place.
         case ']':
+        case '}':
         case '=':
         case '+':
         case '>':
             return { do: 'speed', up: true }
         case '[':
+        case '{':
         case '-':
+        case '_':
         case '<':
             return { do: 'speed', up: false }
         case ',':

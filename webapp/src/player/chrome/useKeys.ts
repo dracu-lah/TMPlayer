@@ -7,7 +7,7 @@ import { remoteKey } from '../../tv/remote'
 import { confirmOpen } from '../../ui/Confirm'
 import { onGlobal } from '../../ui/globalInput'
 import { nextTurn } from '../extras'
-import { actionFor, FRAME, playerHearsKeys } from '../playerKeys'
+import { actionFor, playerHearsKeys, SEEK_SHORT } from '../playerKeys'
 import { walk } from '../sheets'
 import type { SkipSegment } from '../chapters'
 import { MAC } from './parts'
@@ -45,6 +45,10 @@ export interface Keys {
     seekTo: (s: number) => void
     peekAt: (s: number) => void
     jumpRemote: (forward: boolean) => void
+    /** A held or tapped seek key through the one stepper (seekStepper.ts): 10 s a step on the TV layout, 5 s on a keyboard. */
+    stepRemote: (forward: boolean, repeat: boolean) => void
+    /** One frame, in seconds, as this video shows it. */
+    frameLength: () => number
     stopCount: () => void
     setNextHidden: (on: boolean) => void
     go: (next: import('../../tg/types').VideoItem | null) => void
@@ -85,15 +89,25 @@ function tvKey(k: Keys, e: KeyboardEvent): boolean | 'native' {
             if (v.paused) (k.togglePlay(), k.flash(t('player.play')))
             return true
         case 'pause':
-        case 'stop':
             if (!v.paused) v.pause()
+            return true
+        // Stop leaves the video, as the Android remote's Stop does (PlayerActivity).
+        case 'stop':
+            c.close()
+            return true
+        // webOS Info opens the playback details, CC the subtitles.
+        case 'info':
+            k.setSheet('details')
+            return true
+        case 'captions':
+            k.cycleSub()
             return true
         case 'playpause':
             if (!e.repeat) k.togglePlay()
             return true
         case 'forward':
         case 'rewind':
-            k.jumpRemote(key === 'forward')
+            k.stepRemote(key === 'forward', e.repeat)
             return true
         case 'next':
         case 'previous': {
@@ -140,7 +154,7 @@ function tvKey(k: Keys, e: KeyboardEvent): boolean | 'native' {
     }
     if (!(k.visible() && !k.locked())) {
         const playNow = card?.querySelector<HTMLElement>('button:last-child')
-        if (key === 'left' || key === 'right') playNow ? k.focusIt(playNow) : k.jumpRemote(key === 'right')
+        if (key === 'left' || key === 'right') playNow ? k.focusIt(playNow) : k.stepRemote(key === 'right', e.repeat)
         else if (key === 'ok' && k.skipNow() && !playNow) k.skipIt()
         else if (key === 'ok') playNow ? k.focusIt(playNow) : k.togglePlay()
         else if (key === 'up' && k.backTo() !== null) k.takeBack()
@@ -162,8 +176,7 @@ function tvKey(k: Keys, e: KeyboardEvent): boolean | 'native' {
         k.togglePlay()
     } else if (key === 'left' || key === 'right') {
         if (at >= 0) k.focusIt(items[at + (key === 'right' ? 1 : -1)])
-        else if (active === bar) (k.seekBy(key === 'right' ? 10 : -10), k.peekAt(v.currentTime))
-        else if (active !== disc) k.jumpRemote(key === 'right')
+        else if (active === bar || active !== disc) k.stepRemote(key === 'right', e.repeat)
     } else if (key === 'up') {
         if (at >= 0) k.focusIt(bar)
         else if (active === bar && disc) k.focusIt(disc)
@@ -226,6 +239,12 @@ export function useKeys(k: Keys) {
         switch (a.do) {
             case 'togglePlay': k.togglePlay(); break
             case 'seek':
+                // The plain arrows are the one stepper's: a held key neither storms nor stands still. A modified arrow is one jump a press.
+                if (Math.abs(a.by) === SEEK_SHORT) {
+                    k.stepRemote(a.by > 0, e.repeat)
+                    break
+                }
+                if (e.repeat) break
                 k.seekBy(a.by)
                 k.flash(`${a.by > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: Math.abs(a.by) })}`, a.by > 0 ? 'right' : 'left')
                 break
@@ -239,7 +258,7 @@ export function useKeys(k: Keys) {
             case 'episode': k.go((a.next ? c.info()?.next : c.info()?.previous) ?? null); break
             case 'speed': k.stepSpeed(a.up); break
             case 'speedReset': k.setSpeed(1); break
-            case 'frame': k.seekBy(a.forward ? FRAME : -FRAME); break
+            case 'frame': k.seekBy(a.forward ? k.frameLength() : -k.frameLength()); break
             case 'subtitles': k.cycleSub(a.back); break
             case 'subtitlesToggle': k.cycleSub(); break
             case 'audio': k.cycleAudio(a.back); break

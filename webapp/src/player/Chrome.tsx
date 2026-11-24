@@ -25,7 +25,7 @@ import {
     type Bookmark, type SubtitleLook,
 } from './keep'
 import type { VideoItem } from '../tg/types'
-import { PlaySolid, PauseSolid, CopiesIcon, SPEEDS, SPEED_MIN, SPEED_MAX, HIDE_MS, SIDE, WIDE_ROW, NOTE_MS, PEEK_MS, UNLOCK_PILL_MS, MAC, shapeIcon, shapeName, clock, speedLabel } from './chrome/parts'
+import { PlaySolid, PauseSolid, CopiesIcon, SPEEDS, SPEED_MIN, SPEED_MAX, HIDE_MS, HIDE_TV_MS, SIDE, WIDE_ROW, NOTE_MS, PEEK_MS, UNLOCK_PILL_MS, MAC, shapeIcon, shapeName, clock, speedLabel } from './chrome/parts'
 import type { Ctl, Sheet } from './chrome/types'
 import { SeekBar } from './chrome/SeekBar'
 import { DetailsSheet, StillSheet } from './chrome/Dialogs'
@@ -40,6 +40,8 @@ import { usePicture } from './chrome/usePicture'
 import { useSleep } from './chrome/useSleep'
 import { useSubtitles } from './chrome/useSubtitles'
 import { timed } from '../ui/timed'
+import { SeekStepper } from './seekStepper'
+import { FrameClock } from './frameStep'
 import { chatDetail, EpisodesPanel, msoneTarget, SpeedSheet, subtitleLine, VolumeControl } from './chrome/menus'
 
 export { variant }
@@ -118,7 +120,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const poke = () => {
         clearTimeout(hideTimer)
         if (v.paused || held() || sheet() || dragTime() !== null || c.blocked()) return
-        hideTimer = window.setTimeout(() => (keyboardOnRow() ? poke() : setVisible(false)), HIDE_MS)
+        hideTimer = window.setTimeout(() => (keyboardOnRow() ? poke() : setVisible(false)), tv() ? HIDE_TV_MS : HIDE_MS)
     }
     /** A keyboard user's ring must not vanish under them: the row stays up while one of its controls has the keyboard. */
     const keyboardOnRow = () => {
@@ -201,7 +203,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     )
 
     // ---- actions -------------------------------------------------------------------------------
-    const [note, showNote] = timed<{ text: string; side: 'left' | 'right' | 'centre' }>(NOTE_MS)
+    const [note, showNote] = timed<{ text: string; side: 'left' | 'right' | 'centre'; quiet?: boolean }>(NOTE_MS)
     const flash = (text: string, side: 'left' | 'right' | 'centre' = 'centre') => showNote({ text, side })
     const link = useCopyLink(c, sheet, setSheet, flash)
 
@@ -214,6 +216,40 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         noteSeek(from, to)
     }
     const seekBy = (s: number) => seekTo(v.currentTime + s)
+    // One stepper for a held seek key (seekStepper.ts): the TV's Left and Right, the arrows over the picture and on the bar.
+    // One write of currentTime per step, the picture shows the running total, and a screen reader is told once in a while.
+    const stepper = new SeekStepper()
+    const [said, setSaid] = createSignal('')
+    const stepRemote = (forward: boolean, repeat: boolean) => {
+        const r = stepper.press({ forward, repeat, now: performance.now(), baseSec: tv() ? 10 : 5, durationSec: duration() })
+        if (!r) return
+        seekBy(r.by)
+        peekAt(v.currentTime)
+        const text = `${r.total > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: Math.round(Math.abs(r.total)) })}`
+        showNote({ text, side: r.by > 0 ? 'right' : 'left', quiet: true })
+        if (r.announce) setSaid(`${text}, ${clock(v.currentTime)}`)
+    }
+    // How long a frame lasts in this video, from the frames the browser shows; 1/30 where it cannot say (Safari before 15.4).
+    const frames = new FrameClock()
+    {
+        const vfc = v as HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number; cancelVideoFrameCallback?: (id: number) => void }
+        if (typeof vfc.requestVideoFrameCallback === 'function') {
+            let id = 0
+            const ask = () => {
+                id = vfc.requestVideoFrameCallback!((_now, meta) => {
+                    frames.frame(meta.mediaTime, 1)
+                    // Enough frames seen: no more callbacks, so nothing runs per frame on a weak TV.
+                    if (!frames.settled) ask()
+                })
+            }
+            const start = () => (frames.reset(), vfc.cancelVideoFrameCallback?.(id), ask())
+            start()
+            listen('loadeddata', start)
+            listen('seeked', () => !frames.settled && frames.reset())
+            onCleanup(() => vfc.cancelVideoFrameCallback?.(id))
+        }
+    }
+    const frameLength = () => frames.duration
     // The speed a video opens at: the one kept for its show (known once the show is read), else for its chat.
     let speedPicked = false
     {
@@ -616,7 +652,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
 
     useKeys({
         c, tv, sheet, setSheet, visible, locked, counting, skipNow, backTo, offer, setOffer, barEl, discEl, noticeClose, rowItems, inLayer, focusIt, show, hide, poke, unlock, showUnlock,
-        flash, togglePlay, seekBy, seekTo, peekAt, jumpRemote, stopCount, setNextHidden, go, skipIt, takeBack, stepChapter, setVol, stepSpeed, setSpeed, cycleSub, cycleAudio, nudgeDelay, stepSize,
+        flash, togglePlay, seekBy, seekTo, peekAt, jumpRemote, stepRemote, frameLength, stopCount, setNextHidden, go, skipIt, takeBack, stepChapter, setVol, stepSpeed, setSpeed, cycleSub, cycleAudio, nudgeDelay, stepSize,
         toggleFullscreen, cycleShape, turn, duration, pickTurn, zoomBy, resetZoom, screenshot, pressRepeat, bookmarkHere, askTime, pipSupported, togglePip,
     })
 
@@ -745,6 +781,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             seekTo(s, dragFrom >= 0 ? dragFrom : undefined)
                             dragFrom = -1
                         }}
+                        onStep={stepRemote}
                         phone={phone()}
                     />
                     <div class="pc-row">
@@ -819,7 +856,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             <Show when={hold()}>
                 <div class="pc-note hold" role="status">{speedLabel(2)}</div>
             </Show>
-            <Show when={note()}>{(n) => <div class={`pc-note ${n().side}`} role="status">{n().text}</div>}</Show>
+            <Show when={note()}>{(n) => <div class={`pc-note ${n().side}`} role={n().quiet ? undefined : 'status'} aria-hidden={n().quiet ? 'true' : undefined}>{n().text}</div>}</Show>
+            {/* Where a held seek key has got to, said to a screen reader at most every 800 ms (seekStepper.ANNOUNCE_MS). */}
+            <div class="visually-hidden" role="status" aria-live="polite">{said()}</div>
             {/* The zoom's figure (PlayerFeedback's zoom chip): up while the picture moves and a moment after; a tap puts it back at 100 per cent. */}
             <Show when={zoomChip() && !locked() && !c.blocked() && !sheet()}>
                 <button type="button" class="pc-zoom-chip" data-shot="zoom" aria-live="polite" aria-label={`${zoomText()}. ${t('player.reset_zoom')}`} onClick={() => resetZoom()}>

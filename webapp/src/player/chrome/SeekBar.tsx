@@ -1,4 +1,5 @@
 // The seek bar and the preview card over it (the apps' SeekBar and StoryboardPreview's SeekPreview).
+import { SEEK_SHORT } from '../playerKeys'
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { t } from '../../i18n'
 import { frameAt, type Frames } from '../storyboard'
@@ -28,6 +29,8 @@ export function SeekBar(props: {
     dragTime: () => number | null
     setDragTime: (s: number | null) => void
     onSeek: (s: number) => void
+    /** A key on the bar: the one stepper (seekStepper.ts) answers, so a held arrow neither storms nor skips the video's pace. */
+    onStep?: (forward: boolean, repeat: boolean) => void
     phone: boolean
     /** The chapter starts, drawn as gaps in the bar. */
     marks: () => number[]
@@ -124,7 +127,8 @@ export function SeekBar(props: {
                 if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
                 e.preventDefault()
                 e.stopPropagation()
-                props.onSeek(props.time() + (e.key === 'ArrowRight' ? 10 : -10))
+                if (props.onStep) props.onStep(e.key === 'ArrowRight', e.repeat)
+                else props.onSeek(props.time() + (e.key === 'ArrowRight' ? SEEK_SHORT : -SEEK_SHORT))
             }}
         >
             <div class="pc-track">
