@@ -136,6 +136,8 @@ enum class PhoneMenuEntry {
     Speed,
     /** Player volume (#33), as on the television: a page with Quieter and Louder. */
     PlayerVolume,
+    /** Brightness (WP-27), a phone's: a page of steps and Follow the system; the television has no window brightness. */
+    Brightness,
     VolumeBoost,
     NightMode,
     EvenVolume,
@@ -204,6 +206,7 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.Speed -> L.playerSpeed
     PhoneMenuEntry.RotatePicture -> L.playerRotatePicture
     PhoneMenuEntry.PlayerVolume -> L.playerVolumeLevel
+    PhoneMenuEntry.Brightness -> L.playerBrightness
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
     PhoneMenuEntry.NightMode -> L.playerQuietLoudScenes
     PhoneMenuEntry.EvenVolume -> L.playerEvenVolume
@@ -441,6 +444,7 @@ object PlayerMenu {
         removeIntroMark: Boolean = false,
         rotatePicture: Boolean = false,
         playerVolume: Boolean = false,
+        brightness: Boolean = false,
         addToList: Boolean = false,
         airPlay: Boolean = false,
     ): List<PhoneMenuEntry> = buildList {
@@ -453,6 +457,7 @@ object PlayerMenu {
         if (stereo) add(PhoneMenuEntry.Stereo)
         add(PhoneMenuEntry.Speed)
         if (playerVolume) add(PhoneMenuEntry.PlayerVolume)
+        if (brightness) add(PhoneMenuEntry.Brightness)
         add(PhoneMenuEntry.VolumeBoost)
         add(PhoneMenuEntry.NightMode)
         add(PhoneMenuEntry.EvenVolume)

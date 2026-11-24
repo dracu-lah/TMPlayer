@@ -62,7 +62,7 @@ object AccountKeys {
         "new_video_alerts", "sponsor_reminders", "notify_downloads", "notify_episodes", "notify_low_storage",
         "notify_pieces", "notify_update", "low_storage_alert", "update_alerted_version", "screen_orientation",
         "player_tap_plays_pauses", "double_tap_ms", "hold_speed", "controls_timeout_ms", "gesture_seek",
-        "gesture_brightness", "gesture_volume", "player_haptics", "show_remaining_time", "subtitle_size",
+        "gesture_brightness", "remember_brightness", "player_brightness", "gesture_volume", "player_haptics", "show_remaining_time", "subtitle_size",
         "subtitle_box", "subtitle_position", "subtitle_box_level", "subtitle_colour", "subtitle_edge",
         "subtitle_face", "subtitle_bold", "video_decoder", "default_player", "external_hint_seen", "player_engine",
         "engine_switch_on_error", "suggest_vlc", "engine_history", "remedy_memory", "frame_rate_matching",

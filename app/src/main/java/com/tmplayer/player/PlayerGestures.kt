@@ -83,6 +83,8 @@ class PlayerGestures(
      * goes away so the gesture's own reading is what the viewer sees (WP-35).
      */
     private val onDragBegin: () -> Unit = {},
+    /** A brightness drag ended at this window level, 0 to 1: kept for the next video when the viewer asked (WP-27). */
+    private val onBrightnessSettled: (Float) -> Unit = {},
 ) {
 
     /** The viewer's settings for all of this; replaced when they are read off disk. */
@@ -114,6 +116,9 @@ class PlayerGestures(
      */
     private var fine: FineScrub.Tracker? = null
     private val density = context.resources.displayMetrics.density
+
+    /** Where the brightness drag under the finger has got to, 0 to 1; negative between drags. */
+    private var finalBrightness = -1f
 
     /** True between a long press and the finger lifting: the hold-to-speed-up gesture. */
     private var holding = false
@@ -338,6 +343,8 @@ class PlayerGestures(
         if (finished) {
             if (dragKind == DRAG_SEEK) onScrubEnd()
             if (dragKind == DRAG_SEEK && seekTarget >= 0) onSeekTo(seekTarget)
+            if (dragKind == DRAG_BRIGHTNESS && finalBrightness >= 0f) onBrightnessSettled(finalBrightness)
+            finalBrightness = -1f
             if (holding) {
                 holding = false
                 onHold(false)
@@ -483,6 +490,7 @@ class PlayerGestures(
         // Never all the way to zero: a black screen with no visible way to undo the gesture that
         // made it black is a phone that looks broken.
         val level = value.coerceIn(MIN_BRIGHTNESS, 1f)
+        finalBrightness = level
         window.attributes = window.attributes.also { it.screenBrightness = level }
         onLevel(true, level, true)
     }

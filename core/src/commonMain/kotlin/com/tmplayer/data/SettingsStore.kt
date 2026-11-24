@@ -308,6 +308,8 @@ private val HOLD_SPEED = floatPreferencesKey("hold_speed")
 private val CONTROLS_TIMEOUT_MS = longPreferencesKey("controls_timeout_ms")
 private val GESTURE_SEEK = booleanPreferencesKey("gesture_seek")
 private val GESTURE_BRIGHTNESS = booleanPreferencesKey("gesture_brightness")
+private val REMEMBER_BRIGHTNESS = booleanPreferencesKey("remember_brightness")
+private val PLAYER_BRIGHTNESS = longPreferencesKey("player_brightness")
 private val GESTURE_VOLUME = booleanPreferencesKey("gesture_volume")
 private val PLAYER_HAPTICS = booleanPreferencesKey("player_haptics")
 private val SHOW_REMAINING = booleanPreferencesKey("show_remaining_time")
@@ -1121,6 +1123,22 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * stored value out of range reads as full, never as silence.
      */
     suspend fun playerVolumeNow(): Int = com.tmplayer.player.PlayerVolume.sanitise(prefs.data.first()[PLAYER_VOLUME])
+
+    /**
+     * The brightness the player was left at, in per cent, or [TouchPrefs.BRIGHTNESS_SYSTEM] to follow the system's.
+     * Only read when "Remember brightness" is on, and only stored while it is (WP-27).
+     */
+    suspend fun playerBrightnessNow(): Int = TouchPrefs.sanitiseBrightness(prefs.data.first()[PLAYER_BRIGHTNESS])
+
+    suspend fun setPlayerBrightness(percent: Int) {
+        prefs.edit { p ->
+            if (p[REMEMBER_BRIGHTNESS] != true || percent < TouchPrefs.BRIGHTNESS_MIN) {
+                p.remove(PLAYER_BRIGHTNESS)
+            } else {
+                p[PLAYER_BRIGHTNESS] = percent.coerceIn(TouchPrefs.BRIGHTNESS_MIN, 100).toLong()
+            }
+        }
+    }
 
     suspend fun setPlayerVolume(percent: Int) {
         val value = percent.coerceIn(com.tmplayer.player.PlayerVolume.MIN, com.tmplayer.player.PlayerVolume.FULL)
@@ -2161,6 +2179,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             prefs[GESTURE_VOLUME] = next.volumeGesture
             prefs[PLAYER_HAPTICS] = next.haptics
             prefs[SHOW_REMAINING] = next.showRemaining
+            prefs[REMEMBER_BRIGHTNESS] = next.rememberBrightness
+            // Switching it off forgets the level: the next time it is on starts from the system's.
+            if (!next.rememberBrightness) prefs.remove(PLAYER_BRIGHTNESS)
         }
     }
 
@@ -2175,6 +2196,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         volumeGesture = prefs[GESTURE_VOLUME] ?: true,
         haptics = prefs[PLAYER_HAPTICS] ?: true,
         showRemaining = prefs[SHOW_REMAINING] ?: false,
+        rememberBrightness = prefs[REMEMBER_BRIGHTNESS] ?: false,
     )
 
     // ---- subtitle look and per file sync ----------------------------------------------------

@@ -29,6 +29,8 @@ data class TouchPrefs(
     val haptics: Boolean = true,
     /** The total on the times line reads as the time left instead. */
     val showRemaining: Boolean = false,
+    /** The next video starts at the brightness the last one was left at, not at the system's (WP-27). Off until chosen. */
+    val rememberBrightness: Boolean = false,
 ) {
     /** How long the controls stay up on this device: a television's own default until the viewer chooses. */
     fun timeoutFor(tv: Boolean): Long =
@@ -43,6 +45,25 @@ data class TouchPrefs(
         val HOLD_CHOICES = listOf(0f, 1.5f, 2f, 3f)
 
         const val TIMEOUT_DEFAULT_MS = 3_500L
+
+        /** Brightness steps of the player's page and the share of the system's own, in per cent (WP-27). */
+        const val BRIGHTNESS_STEP = 10
+        const val BRIGHTNESS_MIN = 2
+
+        /** The stored level meaning "follow the system". */
+        const val BRIGHTNESS_SYSTEM = -1
+
+        /** A stored level off the range reads as the system's: a bad write never leaves the screen black. */
+        fun sanitiseBrightness(percent: Long?): Int =
+            percent?.toInt()?.takeIf { it in BRIGHTNESS_MIN..100 } ?: BRIGHTNESS_SYSTEM
+
+        /** The next page level up or down from [percent] on the 10 per cent steps, held between 10 and 100; from the system's start at 50. */
+        fun stepBrightness(percent: Int, up: Boolean): Int {
+            val from = if (percent < BRIGHTNESS_MIN) 50 else percent
+            // To the next multiple of ten in the direction asked: 37 goes to 40 up and 30 down, 50 to 60 and 40.
+            val steps = if (up) (from / BRIGHTNESS_STEP + 1) * BRIGHTNESS_STEP else ((from - 1) / BRIGHTNESS_STEP) * BRIGHTNESS_STEP
+            return steps.coerceIn(BRIGHTNESS_STEP, 100)
+        }
 
         /** A remote needs longer than a thumb to reach the row and a button on it. */
         const val TIMEOUT_TV_DEFAULT_MS = 5_000L

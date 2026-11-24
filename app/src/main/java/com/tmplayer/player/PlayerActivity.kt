@@ -2173,6 +2173,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The text answers (and the resume offer) on both devices; the touch feedback around them
         // only ever fires from the phone's gestures.
         feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
+        // A tap on the brightness pill goes back to the system's level (WP-27).
+        feedback?.onBrightnessReset = { setBrightness(TouchPrefs.BRIGHTNESS_SYSTEM) }
         morePanel = PlayerMorePanel(this, findViewById(R.id.player_root), moreHost)
         sheets = PlayerSheets(this, findViewById(R.id.player_root)) {
             detailsOpen = false
@@ -2254,6 +2256,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch {
             touchPrefs = runCatching { settings.touchPrefsNow() }.getOrDefault(TouchPrefs())
             applyTouchPrefs()
+            // "Remember brightness" (WP-27): this video starts where the last one was left. Off by default.
+            if (touchPrefs.rememberBrightness && !FormFactor.isTv(this@PlayerActivity)) {
+                val saved = runCatching { settings.playerBrightnessNow() }.getOrDefault(TouchPrefs.BRIGHTNESS_SYSTEM)
+                if (saved >= TouchPrefs.BRIGHTNESS_MIN) {
+                    window.attributes = window.attributes.also { it.screenBrightness = saved / 100f }
+                }
+            }
         }
         renderControlsTitle()
         renderOrientationButton()
@@ -3236,10 +3245,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 onTogglePlay = ::togglePlaybackFromPicture,
                 isOnChrome = { x, y ->
                     controls?.isOnChrome(x, y) == true || isOnNextUpCard(x, y) || isOnSkipPill(x, y) || isOnUndoChip(x, y) ||
-                        feedback?.isOnZoomChip(x, y) == true
+                        feedback?.isOnZoomChip(x, y) == true || feedback?.isOnBrightnessPill(x, y) == true
                 },
                 systemEdges = ::systemGestureEdges,
                 onDragBegin = { controls?.hideAnimated() },
+                onBrightnessSettled = { level -> saveBrightness((level * 100).roundToInt()) },
             ).also { it.prefs = touchPrefs }
         }
 
@@ -3813,7 +3823,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         // A touch that starts on the zoom's figure is the figure's tap (Reset zoom), controls or not.
         if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-            touchOnZoomChip = feedback?.isOnZoomChip(event.rawX, event.rawY) == true
+            touchOnZoomChip = feedback?.isOnZoomChip(event.rawX, event.rawY) == true ||
+                feedback?.isOnBrightnessPill(event.rawX, event.rawY) == true
         }
         gestures?.onTouchEvent(event, surface.width, surface.height)
         if (controlsUp || touchOnZoomChip) return super.dispatchTouchEvent(event)
@@ -8168,6 +8179,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             removeIntroMark = skipCtl.canMark && skipCtl.hasOwnMark,
             rotatePicture = stereoOffered(),
             playerVolume = !castUp(),
+            brightness = !castUp(),
             addToList = hasMessage(),
             // Not where the chat restricts saving (the cast rule), not before that is known, and not
             // for a stream while offline (a saved video plays from the phone).
@@ -8207,6 +8219,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun nightMode() = nightModeOn
         override fun evenVolume() = evenVolumeOn
         override fun playerVolume() = playerVolumePercent
+        override fun brightness() = currentBrightnessPercent()
+        override fun setBrightness(percent: Int) = this@PlayerActivity.setBrightness(percent)
         override fun setPlayerVolume(percent: Int) = this@PlayerActivity.setPlayerVolume(percent)
         override fun pictureRotation() = this@PlayerActivity.pictureRotation
         override fun setPictureRotation(degrees: Int) = applyRotation(degrees) to this@PlayerActivity.pictureRotation
@@ -8290,7 +8304,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
             PhoneMenuEntry.PictureShape, PhoneMenuEntry.Stereo, PhoneMenuEntry.Speed, PhoneMenuEntry.SleepTimer,
-            PhoneMenuEntry.RotatePicture, PhoneMenuEntry.PlayerVolume,
+            PhoneMenuEntry.RotatePicture, PhoneMenuEntry.PlayerVolume, PhoneMenuEntry.Brightness,
             PhoneMenuEntry.AddBookmark, PhoneMenuEntry.Bookmarks, PhoneMenuEntry.PlaybackDetails,
             PhoneMenuEntry.AddToList, PhoneMenuEntry.Chapters,
             -> Unit
@@ -8888,6 +8902,30 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             kotlinx.coroutines.delay(VOLUME_SAVE_DELAY_MS)
             runCatching { settings.setPlayerVolume(next) }
         }
+    }
+
+    /** The window's brightness in per cent, or [TouchPrefs.BRIGHTNESS_SYSTEM] while it follows the system's (WP-27). */
+    private fun currentBrightnessPercent(): Int {
+        val level = window.attributes.screenBrightness
+        return if (level < 0f) TouchPrefs.BRIGHTNESS_SYSTEM else (level * 100).roundToInt().coerceIn(TouchPrefs.BRIGHTNESS_MIN, 100)
+    }
+
+    /**
+     * Brightness from its page (WP-27): [percent] on this window, or the system's own when it is under
+     * [TouchPrefs.BRIGHTNESS_MIN] (the override released), said over the picture and kept when asked to.
+     */
+    private fun setBrightness(percent: Int) {
+        val system = percent < TouchPrefs.BRIGHTNESS_MIN
+        window.attributes = window.attributes.also {
+            it.screenBrightness = if (system) android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else percent.coerceIn(TouchPrefs.BRIGHTNESS_MIN, 100) / 100f
+        }
+        showGestureFeedback(if (system) L.playerBrightnessSystem else L.playerBrightnessNow(L.messages.formatter.scalePercent(percent)))
+        saveBrightness(if (system) TouchPrefs.BRIGHTNESS_SYSTEM else percent)
+    }
+
+    /** Written only while "Remember brightness" is on (the store checks); the system level forgets it. */
+    private fun saveBrightness(percent: Int) {
+        lifecycleScope.launch { runCatching { settings.setPlayerBrightness(percent) } }
     }
 
     /**

@@ -223,6 +223,7 @@ object SettingsMap {
         row("hold_speed", m, "settings.hold_speed", P, listOf("settings.hold_speed_detail"))
         row("seek_gesture", m, "settings.seek_gesture", P, listOf("settings.seek_gesture_detail"))
         row("brightness_gesture", m, "settings.brightness_gesture", P, listOf("settings.brightness_gesture_detail"))
+        row("remember_brightness", m, "settings.remember_brightness", P, listOf("settings.remember_brightness_detail"))
         row("volume_gesture", m, "settings.volume_gesture", P, listOf("settings.volume_gesture_detail"))
 
         val mouse = g

@@ -282,8 +282,27 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
     // ---- brightness and volume ---------------------------------------------------------------
 
+    /** What a tap on the brightness pill does: back to the system's own level (WP-27). */
+    var onBrightnessReset: (() -> Unit)? = null
+
+    /** True while the pill on screen is the brightness one. */
+    private var levelIsBrightness = false
+
+    init {
+        level.setOnClickListener { if (levelIsBrightness) onBrightnessReset?.invoke() }
+    }
+
+    /** Whether a touch at these window coordinates lands on the brightness pill, which takes it. */
+    fun isOnBrightnessPill(rawX: Float, rawY: Float): Boolean {
+        if (!levelIsBrightness || level.visibility != View.VISIBLE || level.alpha < 0.5f) return false
+        val at = IntArray(2)
+        level.getLocationInWindow(at)
+        return rawX >= at[0] && rawX < at[0] + level.width && rawY >= at[1] && rawY < at[1] + level.height
+    }
+
     /** [fraction] 0 to 1; the pill sits on [left]'s side, the side the finger is dragging. */
     fun level(left: Boolean, fraction: Float, brightness: Boolean) {
+        levelIsBrightness = brightness
         (level.layoutParams as FrameLayout.LayoutParams).let { params ->
             val gravity = Gravity.CENTER_VERTICAL or if (left) Gravity.START else Gravity.END
             if (params.gravity != gravity) {

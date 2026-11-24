@@ -141,6 +141,10 @@ interface PlayerMoreHost {
     fun playerVolume(): Int = PlayerVolume.FULL
     fun setPlayerVolume(percent: Int) = Unit
 
+    /** Brightness (WP-27), in per cent, or [TouchPrefs.BRIGHTNESS_SYSTEM] while it follows the system's. */
+    fun brightness(): Int = TouchPrefs.BRIGHTNESS_SYSTEM
+    fun setBrightness(percent: Int) = Unit
+
     /** Rotate picture (#34), in clockwise degrees ([PictureRotation]). */
     fun pictureRotation(): Int = PictureRotation.NONE
 
@@ -228,6 +232,9 @@ class PlayerMorePanel(
         data object KeyboardKeys : Page
         data object Rotation : Page
         data object Volume : Page
+
+        /** Brightness (WP-27). */
+        data object Brightness : Page
         data object Chapters : Page
         class Details(val title: String, val lines: List<String>) : Page
         class Bookmarks(val actions: BookmarkSheetActions) : Page
@@ -465,7 +472,7 @@ class PlayerMorePanel(
     /** Every line the panel can carry: the phone's and the television's entries share these names. */
     private enum class Kind {
         LockScreen, PictureInPicture, AirPlay, PlaybackDetails, StartOver, PictureShape, ResetZoom, RotatePicture, Stereo, Speed,
-        PlayerVolume, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
+        PlayerVolume, Brightness, VolumeBoost, NightMode, EvenVolume, SleepTimer, AbLoop, RepeatVideo, Chapters, NextChapter, PreviousChapter,
         NextFrame, PreviousFrame, SaveFrame, AddBookmark, Bookmarks, MarkIntro, RemoveIntroMark, OtherEngine, OpenInAnotherApp,
         CopyLinkAtTime, LoadSubtitleFile, SaveToDownloads, MarkWatched, AddToList, ReportStutter, ReportWrongPicture, RemoteKeys,
     }
@@ -565,6 +572,10 @@ class PlayerMorePanel(
                 val percent = Translator.messages.formatter.scalePercent(host.playerVolume())
                 Line(kind, s.playerVolumeLevel, TmIcons.VolumeUp, if (host.tv) s.playerVolumeLevelTvDetail(percent) else percent)
             }
+            Kind.Brightness -> {
+                val now = host.brightness()
+                Line(kind, s.playerBrightness, TmIcons.Visibility, if (now < TouchPrefs.BRIGHTNESS_MIN) s.playerBrightnessSystem else Translator.messages.formatter.scalePercent(now))
+            }
             Kind.VolumeBoost -> Line(kind, s.playerVolumeBoost, volume, if (host.volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff)
             Kind.NightMode -> Line(kind, s.playerQuietLoudScenes, TmIcons.VolumeDown, if (host.nightMode()) s.playerQuietLoudScenesOnDetail else s.commonOff)
             Kind.EvenVolume -> Line(kind, s.playerEvenVolume, volume, if (host.evenVolume()) s.playerEvenVolumeOnDetail else s.commonOff)
@@ -625,6 +636,7 @@ class PlayerMorePanel(
             Kind.RemoteKeys -> Page.Keys
             Kind.RotatePicture -> Page.Rotation
             Kind.PlayerVolume -> Page.Volume
+            Kind.Brightness -> Page.Brightness
             Kind.Chapters -> Page.Chapters
             Kind.Bookmarks -> host.bookmarks()?.let { Page.Bookmarks(it) }
             Kind.AddToList -> host.addToList()?.let { Page.Lists(it) }
@@ -733,6 +745,18 @@ class PlayerMorePanel(
                     onChange = { next ->
                         volume = next
                         host.setPlayerVolume(next)
+                    },
+                    onDismiss = ::back,
+                    onClose = ::close,
+                )
+            }
+            Page.Brightness -> {
+                var level by remember { mutableStateOf(host.brightness()) }
+                BrightnessSheet(
+                    current = level,
+                    onChange = { next ->
+                        level = next
+                        host.setBrightness(next)
                     },
                     onDismiss = ::back,
                     onClose = ::close,

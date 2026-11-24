@@ -201,6 +201,7 @@ object Backups {
         "pure_black" to Kind.BOOL,
         "quality_habit" to Kind.TEXT,
         "reduce_motion" to Kind.BOOL,
+        "remember_brightness" to Kind.BOOL,
         "remember_searches" to Kind.BOOL,
         "remove_after_watching" to Kind.BOOL,
         "resume_sync" to Kind.BOOL,

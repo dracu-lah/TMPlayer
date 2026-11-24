@@ -1007,6 +1007,16 @@ fun SettingsScreen(
                             onToggle = { update { it.copy(brightnessGesture = !it.brightnessGesture) } },
                         )
                     }
+                    // The next video starts at the brightness this one was left at (WP-27); off until chosen.
+                    item {
+                        ToggleRow(
+                            title = s.settingsRememberBrightness,
+                            subtitle = s.settingsRememberBrightnessDetail,
+                            icon = ImageVector.vectorResource(R.drawable.ic_brightness),
+                            checked = touchPrefs.rememberBrightness,
+                            onToggle = { update { it.copy(rememberBrightness = !it.rememberBrightness) } },
+                        )
+                    }
                     item {
                         ToggleRow(
                             title = s.settingsVolumeGesture,

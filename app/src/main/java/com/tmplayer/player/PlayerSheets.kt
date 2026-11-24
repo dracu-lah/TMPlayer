@@ -784,6 +784,49 @@ internal fun VolumeSheet(
 }
 
 /**
+ * Brightness (WP-27), a phone's page: Dimmer and Brighter in steps of 10 per cent, and Follow the system,
+ * which releases the window's level. TalkBack hears the level through the buttons' own names.
+ */
+@Composable
+internal fun BrightnessSheet(
+    current: Int,
+    onChange: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val tick = com.tmplayer.ui.components.rememberStepTick()
+    val system = current < TouchPrefs.BRIGHTNESS_MIN
+    val format = Translator.messages.formatter::scalePercent
+    val step = { up: Boolean ->
+        tick()
+        onChange(TouchPrefs.stepBrightness(current, up))
+    }
+    ChoiceSheet(title = s.playerBrightness, onDismiss = onDismiss, onClose = onClose, ignoreRelease = false, fullScreen = true) {
+        ChoiceList {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                FineButton(TmIcons.Remove, s.playerBrightnessDimmer, enabled = system || current > TouchPrefs.BRIGHTNESS_STEP) { step(false) }
+                Text(
+                    if (system) s.playerBrightnessSystem else format(current),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Tone.text,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.width(128.dp),
+                )
+                FineButton(TmIcons.Add, s.playerBrightnessBrighter, enabled = system || current < 100) { step(true) }
+            }
+            ChoiceLine(title = s.playerBrightnessSystem, selected = system) {
+                if (!system) onChange(TouchPrefs.BRIGHTNESS_SYSTEM)
+            }
+        }
+    }
+}
+
+/**
  * 3D video's page: how the file keeps its two pictures (Off first), the glasses, and the eye swap.
  * Each line acts at once and the page stays up. With nothing chosen yet, the layout the file's
  * name declares ([tagged]) is the one focus lands on and is marked as found. A glasses colour
