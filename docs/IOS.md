@@ -136,6 +136,12 @@ service worker stream, and relaying bytes is ruled out by Telegram's terms).
   (`AppleStreamLoader`): the receiver cannot open that address, so iOS may mirror instead of
   handing the stream over. A saved video (a file path) has no such limit. Check on an iPhone with
   an Apple TV, and picture in picture with the screen locked and from the Home screen.
+- Mac checks from the second playback review: with a chat that restricts saving open, Control
+  Center's AirPlay must not show the video on the Apple TV (PB2-04, the engine's
+  `allowsExternalPlayback`); and the AirPlay line must open the route list, since it presses a
+  button inside `AVRoutePickerView` that a new iOS may move: where none is found the line should
+  say so rather than do nothing (PB2-21, `showAirPlayPicker` returning false reaches
+  `playerAirplayNotForThisFile`).
 
 Fingerprint or face on the app lock (Android has it, WP-41) is not on iOS yet: `BiometricPrompter` there is a no-op
 (`ios/src/iosMain/.../ui/lock/BiometricPrompter.kt`), LocalAuthentication later.
