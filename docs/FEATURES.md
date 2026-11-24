@@ -152,7 +152,7 @@ fullscreen, the wheel sets the volume. The whole table is in
 
 **Behaves like a desktop app.** Keeps the screen awake while a video plays, answers the media keys
 (and the desktop's own media controls: MPRIS on Linux, the media flyout by the volume control on
-Windows), remembers its window size and
+Windows, Now Playing on a Mac; each shows the video's length and position and follows its speed), remembers its window size and
 place, and opening it a second time brings the first window forward. Downloads stay on the
 computer until you remove them, on their own page.
 

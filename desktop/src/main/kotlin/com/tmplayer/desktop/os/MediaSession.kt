@@ -38,8 +38,9 @@ interface MediaSessionCallbacks {
  * playing (the player closed but the app stays open), [release] removes the entry for good.
  *
  * Linux has MPRIS 2 ([MprisMediaSession]), Windows has SMTC ([SmtcMediaSession]). [rate] is the
- * playback speed, which the position's extrapolation and the OS's timeline follow. macOS (Now
- * Playing) is not built, and [create] returns [NoMediaSession] there.
+ * playback speed, which the position's extrapolation and the OS's timeline follow. macOS has Now
+ * Playing ([MacNowPlayingSession], through JNA), and [create] returns [NoMediaSession] where an OS
+ * cannot be reached.
  */
 interface MediaSession {
 
@@ -71,12 +72,15 @@ interface MediaSession {
             OsInfo.isWindows && window != null -> runCatching { SmtcMediaSession.start(window, callbacks) }
                 .onFailure { Logger.w("MediaSession", "SMTC unavailable: ${it.message}") }
                 .getOrNull() ?: NoMediaSession
+            OsInfo.isMac -> runCatching { MacNowPlayingSession.start(callbacks) }
+                .onFailure { Logger.w("MediaSession", "macOS Now Playing unavailable: ${it.message}") }
+                .getOrDefault(NoMediaSession)
             else -> NoMediaSession
         }
     }
 }
 
-/** macOS, Linux without a session bus, and Windows when SMTC cannot be reached. */
+/** Linux without a session bus, Windows when SMTC cannot be reached, a Mac where Now Playing cannot, and any other OS. */
 object NoMediaSession : MediaSession {
     override fun update(
         title: String,
