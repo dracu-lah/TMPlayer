@@ -709,7 +709,12 @@ private fun ProfilesRoot(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val flow = remember { com.tmplayer.ui.profiles.AndroidProfiles.flow(context) }
     val auth by Td.auth.collectAsStateWithLifecycle()
-    com.tmplayer.ui.lock.ProfilesGate(flow, signInStep = Setup.isSignInStep(auth), content = content)
+    com.tmplayer.ui.lock.ProfilesGate(
+        flow,
+        signInStep = Setup.isSignInStep(auth),
+        sendLogs = { com.tmplayer.ui.settings.SendLogsButton() },
+        content = content,
+    )
 }
 
 @Composable

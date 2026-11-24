@@ -298,7 +298,7 @@ fun DesktopProfilesGate(
     val overShell = flow != null && flow.stage != ProfileFlow.Stage.Picker
     val arrows = !shellShown || overShell
     Box(Modifier.fillMaxSize().onKeyEvent { event -> arrows && arrowMove(event)?.let { focus.moveFocus(it) } == true }) {
-        com.tmplayer.ui.lock.ProfilesGate(flow, signInStep, content)
+        com.tmplayer.ui.lock.ProfilesGate(flow, signInStep, sendLogs = { com.tmplayer.desktop.ui.SendLogsActions() }, content = content)
     }
 }
 

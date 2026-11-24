@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -85,6 +86,7 @@ import com.tmplayer.ui.components.DrawnLetter
 import com.tmplayer.ui.components.NameArt
 import com.tmplayer.ui.components.NameArtTile
 import com.tmplayer.ui.components.deviceForm
+import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.nav.BackHandler
@@ -223,13 +225,15 @@ fun WhoIsWatching(
             Box(Modifier.heightIn(min = 56.dp).padding(top = 20.dp), contentAlignment = Alignment.Center) {
                 if (status != null) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(Modifier.size(24.dp), color = Tone.accent, strokeWidth = 2.dp)
+                        // Only a picture of the wait: the words are what is spoken, and a change of
+                        // them ("Opening Asha", then "Finishing first: ...") is heard as it comes.
+                        CircularProgressIndicator(Modifier.size(24.dp).clearAndSetSemantics { }, color = Tone.accent, strokeWidth = 2.dp)
                         Text(
                             status,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Tone.muted,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 8.dp).widthIn(max = 520.dp),
+                            modifier = Modifier.padding(top = 8.dp).widthIn(max = 520.dp).liveMessage(),
                         )
                         if (onCancelStatus != null) {
                             // The remote is put on it: the tiles wait, Cancel is the one thing to press.

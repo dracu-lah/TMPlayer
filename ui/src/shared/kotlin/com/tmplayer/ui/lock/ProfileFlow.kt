@@ -143,8 +143,11 @@ class ProfileFlow(
     /** What a profile's PIN is asked for. */
     enum class PinWhy { Open, Rename, ChangePin, RemovePin, SignOut, Remove, RemoveAll }
 
-    /** A message with one way out, over whatever is on screen. */
-    data class Notice(val title: String, val body: String)
+    /**
+     * A message over whatever is on screen. With a [retry] it is a failure that can be asked for
+     * again: Try again runs it, Send logs sits beside it, OK leaves it.
+     */
+    data class Notice(val title: String, val body: String, val retry: (() -> Unit)? = null)
 
     var stage: Stage by mutableStateOf(Stage.Picker)
         private set
@@ -319,6 +322,13 @@ class ProfileFlow(
         if (switcher.profiles.value.profiles.isNotEmpty()) entered = true
     }
 
+    /** Try again on a failure notice: it closes, and what failed is asked for again the way it was first. */
+    fun retryNotice() {
+        val again = notice?.retry
+        notice = null
+        again?.invoke()
+    }
+
     fun dismissNotice() {
         notice = null
         // The remote goes back to the tile it came from, never into the void the panel left.
@@ -469,7 +479,7 @@ class ProfileFlow(
             }
             PinWhy.Rename -> stage = Stage.Rename(id)
             PinWhy.ChangePin -> stage = Stage.ChoosePin(id)
-            PinWhy.RemovePin -> launch {
+            PinWhy.RemovePin -> launch(id) {
                 if (switcher.setPin(id, null)) platform.say(L.lockPinRemovedToast)
                 back(id)
             }
@@ -477,7 +487,7 @@ class ProfileFlow(
     }
 
     fun pinChosen(id: String, pin: String) {
-        launch {
+        launch(id) {
             if (switcher.setPin(id, pin)) {
                 // Whoever chose it knows it: the open profile does not lock them out at once.
                 if (switcher.profiles.value.activeId == id) ProfileUnlock.unlock(id)
@@ -488,7 +498,7 @@ class ProfileFlow(
     }
 
     fun saveName(id: String, name: String) {
-        launch {
+        launch(id) {
             switcher.rename(id, name)
             back(id)
         }
@@ -496,7 +506,7 @@ class ProfileFlow(
 
     // ---- the work, on the app's scope ------------------------------------------------------
 
-    private fun launch(block: suspend () -> Unit) {
+    private fun launch(id: String? = null, block: suspend () -> Unit) {
         scope.launch {
             try {
                 block()
@@ -505,13 +515,13 @@ class ProfileFlow(
             } catch (e: Exception) {
                 Logger.w(TAG, "a profile action failed", e)
                 status = null
-                notice = Notice(L.profilesSwitchFailed(name = ""), e.message.orEmpty().take(200))
+                notice = Notice(L.profilesSwitchFailed(name = nameOf(id)), e.message.orEmpty().take(200))
             }
         }
     }
 
     /** One switch at a time from here too; the switcher itself keeps only the newest asked. */
-    private fun work(line: String, onFailed: (() -> Unit)? = null, block: suspend () -> Unit) {
+    private fun work(line: String, failure: () -> Notice, onFailed: (() -> Unit)? = null, block: suspend () -> Unit) {
         val before = running
         running = scope.launch {
             before?.join()
@@ -529,7 +539,8 @@ class ProfileFlow(
                 throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "a profile switch failed", e)
-                notice = Notice(L.profilesSwitchFailed(name = ""), "")
+                // Whom it was for is named: " could not be opened" with no name was no answer.
+                notice = failure()
                 // Nothing happened as asked: the open profile's paused work goes on again.
                 resumePaused()
                 onFailed?.invoke()
@@ -540,11 +551,30 @@ class ProfileFlow(
         }
     }
 
+    /** A switch that did not open [name]: Try again asks for the same switch, behind the same PIN rules. */
+    private fun switchFailed(id: String, name: String, signInAgain: Boolean) =
+        Notice(L.profilesSwitchFailed(name = name), "", retry = { retrySwitch(id, signInAgain) })
+
+    private fun signOutFailed(name: String, title: String = L.profilesSignOut) = Notice(title, L.profilesSignOutFailed(name = name))
+
+    /**
+     * Try again on a failed switch. The PIN given for that very switch still counts; a locked
+     * profile it was not given for asks again, as a press on its tile does.
+     */
+    private fun retrySwitch(id: String, signInAgain: Boolean) {
+        if (signInAgain) {
+            switchNow(id, signInAgain = true)
+            return
+        }
+        val tile = tile(id)
+        if (tile != null && ProfilePicker.needsPin(tile) && pinGiven != id) open(tile) else switchNow(id, signInAgain = false)
+    }
+
     private fun switchNow(id: String, signInAgain: Boolean) {
         val name = nameOf(id)
         stage = Stage.Picker
         focusOn = id
-        work(L.profilesSwitching(name = name)) {
+        work(L.profilesSwitching(name = name), failure = { switchFailed(id, name, signInAgain) }) {
             val left = switcher.profiles.value.active
             stopFirst()
             // Whatever opens next is locked until its own PIN is given (also heard from the switch itself).
@@ -566,7 +596,7 @@ class ProfileFlow(
                     resumePaused()
                 }
                 else -> {
-                    notice = Notice(L.profilesSwitchFailed(name = name), "")
+                    notice = switchFailed(id, name, signInAgain)
                     // Nothing switched: what the wait paused goes on again.
                     resumePaused()
                 }
@@ -576,7 +606,7 @@ class ProfileFlow(
 
     private fun addNow() {
         stage = Stage.Picker
-        work(L.profilesSwitching(name = L.profilesAdd)) {
+        work(L.profilesSwitching(name = L.profilesAdd), failure = { Notice(L.profilesAdd, L.profilesAddFailed) }) {
             stopFirst()
             ProfileUnlock.lock()
             val result = switcher.add()
@@ -604,7 +634,7 @@ class ProfileFlow(
         signOutCleared = null
         val name = nameOf(id)
         stage = Stage.Picker
-        work(L.profilesSwitching(name = name)) {
+        work(L.profilesSwitching(name = name), failure = { signOutFailed(name) }) {
             // Always: the open profile's own long jobs stop and are waited for before its data goes.
             stopFirst()
             ProfileUnlock.lock()
@@ -646,7 +676,7 @@ class ProfileFlow(
 
     private fun confirmSignOutWith(id: String, deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
         val name = nameOf(id)
-        work(L.profilesSwitching(name = name), onFailed = { done(SignOutResult.Unknown) }) {
+        work(L.profilesSwitching(name = name), failure = { signOutFailed(name) }, onFailed = { done(SignOutResult.Unknown) }) {
             try {
                 // Settings' sign out too: the profile's long jobs stop and are waited for first.
                 stopFirst()
@@ -708,7 +738,7 @@ class ProfileFlow(
     }
 
     private fun removeAllNow(deleteDownloads: Boolean, done: (SignOutResult) -> Unit) {
-        work(L.profilesRemoveAll, onFailed = { done(SignOutResult.Unknown) }) {
+        work(L.profilesRemoveAll, failure = { signOutFailed("", L.profilesRemoveAll) }, onFailed = { done(SignOutResult.Unknown) }) {
             stopFirst()
             ProfileUnlock.lock()
             val result = switcher.removeAll { profile, last -> platform.wipe(profile, last, deleteDownloads) }
@@ -750,7 +780,7 @@ class ProfileFlow(
     private fun removeNow(id: String) {
         // As every change of the list does ([ProfileUnlock]): the open profile asks its PIN again.
         ProfileUnlock.lock()
-        launch {
+        launch(id) {
             when (switcher.remove(id)) {
                 RemoveResult.Removed -> back()
                 // The open one is signed out rather than removed.
@@ -777,7 +807,12 @@ class ProfileFlow(
  * added, is never a dead end.
  */
 @Composable
-fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable () -> Unit) {
+fun ProfilesGate(
+    flow: ProfileFlow?,
+    signInStep: Boolean,
+    sendLogs: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
     if (flow == null) {
         content()
         return
@@ -836,8 +871,14 @@ fun ProfilesGate(flow: ProfileFlow?, signInStep: Boolean, content: @Composable (
             ProfilePanel(
                 title = notice.title,
                 body = notice.body.ifBlank { null },
-                actions = listOf(PanelAction(L.commonOk, flow::dismissNotice, primary = true)),
+                // A failure that can be asked again leads with Try again (the remote starts there).
+                actions = if (notice.retry != null) {
+                    listOf(PanelAction(L.commonTryAgain, flow::retryNotice, primary = true), PanelAction(L.commonOk, flow::dismissNotice))
+                } else {
+                    listOf(PanelAction(L.commonOk, flow::dismissNotice, primary = true))
+                },
                 onDismiss = flow::dismissNotice,
+                extra = if (notice.retry != null && sendLogs != null) ({ Box(Modifier.padding(top = 12.dp)) { sendLogs() } }) else null,
             )
         }
     }
