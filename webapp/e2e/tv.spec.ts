@@ -142,6 +142,48 @@ for (const size of [
             await expect.poll(() => focused(page)).toBe(row)
         })
 
+        test('A card on a TV: a long OK opens its menu, and the Options button in the header names the card the remote left and opens the same menu', async ({ page, context }) => {
+            await fakeCase(context, 'mid')
+            await page.goto('/chat/-1001')
+            await expect.poll(() => focused(page)).toContain('card|/video/-1001/')
+            // No card had the remote before this page: the button appears once one has it.
+            const options = page.locator('.options-button')
+            await expect(options).toHaveCount(1)
+            const name = await page.evaluate(() => (document.activeElement as HTMLElement).querySelector('.card-name')?.textContent ?? '')
+            expect(name.length).toBeGreaterThan(0)
+            // A held OK is the long press: the card's own menu (it opened nothing on a TV before).
+            await page.keyboard.down('Enter')
+            await page.waitForTimeout(800)
+            await page.keyboard.up('Enter')
+            await expect(page.locator('dialog.card-menu[open]')).toHaveCount(1)
+            await expect(page).toHaveURL(/\/chat\/-1001$/)
+            // The context key opens it the same way, and Back closes it onto the card.
+            await press(page, 'Backspace')
+            await expect(page.locator('dialog.card-menu[open]')).toHaveCount(0)
+            await expect.poll(() => focused(page)).toContain('card|/video/-1001/')
+            await page.keyboard.press('ContextMenu')
+            await expect(page.locator('dialog.card-menu[open]')).toHaveCount(1)
+            await press(page, 'Backspace')
+            await expect.poll(() => focused(page)).toContain('card|/video/-1001/')
+            // Up from the first card is Back; Right along Star, Sort reaches Options, which names the video.
+            await press(page, 'ArrowUp')
+            expect(await focused(page)).toBe('round-button|Back')
+            await press(page, 'ArrowRight', 3)
+            const label = await options.getAttribute('aria-label')
+            expect(label).toMatch(/^Options for /)
+            expect(label!.length).toBeLessThanOrEqual('Options for '.length + 24)
+            expect(await focused(page)).toBe(`round-button|${label}`)
+            // Its name is drawn in a tip while the remote is on it, and OK opens the card's menu.
+            expect(await options.evaluate((el) => getComputedStyle(el, '::after').opacity)).toBe('1')
+            await press(page, 'Enter')
+            await expect(page.locator('dialog.card-menu[open]')).toHaveCount(1)
+            await expect(page.locator('dialog.card-menu h2')).not.toBeEmpty()
+            // Back from it lands on the card, not on the button it was opened from.
+            await press(page, 'Backspace')
+            await expect(page.locator('dialog.card-menu[open]')).toHaveCount(0)
+            await expect.poll(() => focused(page)).toContain('card|/video/-1001/')
+        })
+
         test('The bar on Chats with the longest name: picture, 120 dp name, tabs, Choose chats, fullscreen and the brand all fit, none over another', async ({ page, context }) => {
             await fakeCase(context, 'mid')
             await page.goto('/chats')

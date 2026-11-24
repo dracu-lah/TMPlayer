@@ -8,6 +8,7 @@ import { chatPref, progress as readProgress, setChatPref, settings, setSetting, 
 import { copiesTick } from '../copies'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
+import { OptionsButton } from '../ui/CardMenu'
 import { PageBar } from '../ui/PageBar'
 import { notePool } from '../ui/PosterPicker'
 import { showToast } from '../ui/Toast'
@@ -350,6 +351,8 @@ export function Chat() {
                             <>
                                 <StarButton chatId={chatId()} round />
                                 {sortMenu()}
+                                {/* The options of the card the remote was on last, for a remote with no Menu key (WP-14). */}
+                                <OptionsButton />
                                 <button
                                     class="round-button"
                                     type="button"

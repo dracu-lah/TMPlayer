@@ -14,7 +14,7 @@ import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { stableCards } from './stableCards'
 export { stableCards }
-import { cardMenu } from '../ui/CardMenu'
+import { cardMenu, rememberCard } from '../ui/CardMenu'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
@@ -204,14 +204,19 @@ const intent = (v: VideoItem) => {
 /** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
 function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean, versions?: number, shown?: string | null) {
     return {
-        // The right click and long press menu on every card; a TV remote has no pointer, and its hold of OK opens the card's own page.
-        ...(form() !== 'tv' ? cardMenu(item, !!history, versions ?? 1, shown) : {}),
+        // The right click and long press menu on every card. A TV remote has no pointer, but its hold of OK and its
+        // context key dispatch the same contextmenu event (tv/focus.ts), so the menu opens there too (WP-14).
+        ...cardMenu(item, !!history, versions ?? 1, shown),
         href: cardPath(item, direct),
         state: { video: item },
         replace,
         onPointerEnter: () => intent(item),
         onPointerLeave: () => clearTimeout(hoverTimer),
-        onFocus: () => intent(item),
+        onFocus: (e: FocusEvent) => {
+            intent(item)
+            // The card the grid header's Options button acts on (a TV only).
+            if (form() === 'tv') rememberCard(item, !!history, versions ?? 1, shown === undefined ? item.name : shown, e.currentTarget as HTMLElement)
+        },
         // A touch may be the start of a scroll: the watch page warms the file once it opens.
         onPointerDown: (e: PointerEvent) => e.pointerType === 'mouse' && warmFile(item),
     }

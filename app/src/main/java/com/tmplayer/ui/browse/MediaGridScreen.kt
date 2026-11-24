@@ -77,6 +77,7 @@ import com.tmplayer.ui.components.TouchPullRefresh
 import com.tmplayer.ui.components.secondaryPress
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
@@ -534,6 +535,10 @@ fun MediaGridScreen(
     }
     // Whichever video a long press is asking about: the quick menu, which leads to the page.
     var heldMenuOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
+    // The tile the remote was on last, for the header's Options pill; read only by the pill (WP-14).
+    val lastTile = remember(chatId) { mutableStateOf<OptionsTarget?>(null) }
+    val tileScroller = remember(chatId) { TileScroller() }
+    val tileReturn = rememberTileReturn()
     // A show card held: its menu (HX20).
     var heldSeries by remember(chatId) { mutableStateOf<com.tmplayer.data.Series?>(null) }
 
@@ -544,6 +549,9 @@ fun MediaGridScreen(
     var selecting by remember(chatId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val settings = remember(context) { SettingsStore(context) }
+    // The remote's hint on a tile, and the one slot a hint of this grid's visit shares (WP-14).
+    val tileHint = rememberTileOptionsHint(settings)
+    val hintSlot = remember(chatId) { com.tmplayer.ui.components.HintSlot() }
     val detailFirst by settings.detailFirst.collectAsState(initial = true)
     val watch = remember(watchProgress, watchedVideos, touchTimes) {
         SeriesWatch(
@@ -600,7 +608,11 @@ fun MediaGridScreen(
     val typingNow = typing && !selecting
 
     val listing: @Composable () -> Unit = {
-      CompositionLocalProvider(com.tmplayer.ui.components.LocalTileShared provides tileShared) {
+      CompositionLocalProvider(
+          com.tmplayer.ui.components.LocalTileShared provides tileShared,
+          com.tmplayer.ui.components.LocalTileOptionsHint provides tileHint,
+          com.tmplayer.ui.components.LocalHintSlot provides hintSlot,
+      ) {
         StateScaffold(
             state,
             onRetry = viewModel::load,
@@ -739,7 +751,6 @@ fun MediaGridScreen(
             val firstItem = remember { FocusRequester() }
             // The tile a video's page (or a show's, or the hold menu) was opened from, which the
             // remote goes back to when it closes rather than to the first tile.
-            val tileReturn = rememberTileReturn()
             // The tiles a Page or Channel key, or the first Back from deep in the grid, can land on.
             val pageTiles = com.tmplayer.ui.components.rememberPageTiles(settings)
             val firstKey = shelf.firstOrNull()?.key
@@ -870,7 +881,10 @@ fun MediaGridScreen(
                                             },
                                             dense = dense,
                                             poster = true,
-                                            onFocused = { standingOn = shelved.series.cover },
+                                            onFocused = {
+                                                standingOn = shelved.series.cover
+                                                if (lastTile.value?.key != shelved.key) lastTile.value = OptionsTarget(shelved.key, shelved.series.title, null, shelved.series)
+                                            },
                                             // The show's menu (HX20); not while picking videos to download.
                                             onLongClick = if (selecting) null else ({
                                                 tileReturn.open(shelved.key)
@@ -901,7 +915,10 @@ fun MediaGridScreen(
                                                 heldMenuOf = item
                                             }
                                         },
-                                        onFocused = { standingOn = item },
+                                        onFocused = {
+                                            standingOn = item
+                                            if (lastTile.value?.key != shelved.key) lastTile.value = OptionsTarget(shelved.key, SeriesShelf.tileTitle(item), item, null)
+                                        },
                                         modifier = focusOf(shelved)
                                                 .pageTile(pageTiles, shelved.key)
                                                 .returnTile(tileReturn, shelved.key),
@@ -1108,9 +1125,9 @@ fun MediaGridScreen(
             }
             // Back from a video's page the remote lands on the tile it was opened from: a page
             // of messages arriving meanwhile asked for the first tile above (Mi TV, 2026-10-23).
-            ReturnToTile(tileReturn, pageOpen = details.top != null || heldMenuOf != null || openSeries.series != null) { key ->
-                val at = feed.indexOfFirst { (it as? MediaFeedEntry.Media)?.item?.key == key }
-                if (at < 0) return@ReturnToTile false
+            val scrollToTile: suspend (Any) -> Boolean = scroll@{ key ->
+                val at = feedIndexOfTile(feed, key)
+                if (at < 0) return@scroll false
                 // The notes the listing may start with are items of their own.
                 val lead = (if (metaNotice) 1 else 0) +
                     (if (course != null || loadedOnly || filterNote || selfDestructNote) 1 else 0) +
@@ -1118,6 +1135,18 @@ fun MediaGridScreen(
                 gridState.scrollToItem(lead + at)
                 true
             }
+            // The header's Options pill brings a tile that has scrolled away back first (WP-14).
+            val latestScroll = androidx.compose.runtime.rememberUpdatedState(scrollToTile)
+            DisposableEffect(tileScroller) {
+                tileScroller.run = { key -> latestScroll.value(key) }
+                onDispose { tileScroller.run = null }
+            }
+            // A search or a filter that leaves the remembered tile out takes the Options pill away with it.
+            LaunchedEffect(feed) {
+                val target = lastTile.value
+                if (target != null && feedIndexOfTile(feed, target.key) < 0) lastTile.value = null
+            }
+            ReturnToTile(tileReturn, pageOpen = details.top != null || heldMenuOf != null || openSeries.series != null, scrollTo = scrollToTile)
 
             // Fetch the next page well before the user reaches the bottom row: two rows ahead.
             val nearEnd by remember(list.items.size, columns, feed) {
@@ -1239,6 +1268,24 @@ fun MediaGridScreen(
                     filtered = filtersOn,
                     onChatInfo = { chatInfoOpen = true },
                     onTyping = { typing = it },
+                    optionsTarget = lastTile,
+                    onOptions = {
+                        // The tile first, so Back from its menu finds it in view; then the same menu a long OK opens.
+                        val target = lastTile.value
+                        if (target != null && !selecting) {
+                            scope.launch {
+                                val found = runCatching { tileScroller.run?.invoke(target.key) }.getOrNull() == true
+                                // A search or a filter took the tile out of the listing (or the listing is not drawn): its
+                                // menu must not open from a stale remembered video, and the pill goes.
+                                if (!found) {
+                                    lastTile.value = null
+                                    return@launch
+                                }
+                                tileReturn.open(target.key)
+                                if (target.item != null) heldMenuOf = target.item else heldSeries = target.series
+                            }
+                        }
+                    },
                 )
             }
             // Under the heading and over the grid, so Up from the first row of tiles reaches it.
@@ -1622,6 +1669,10 @@ internal fun Header(
     onChatInfo: (() -> Unit)? = null,
     /** Told whether the search field is being typed into (its text field holds the focus). */
     onTyping: (Boolean) -> Unit = {},
+    /** The tile the remote was on last, which the Options pill names and acts on; null leaves the pill out (WP-14). */
+    optionsTarget: State<OptionsTarget?>? = null,
+    /** Opens that tile's menu, the one a long OK opens. */
+    onOptions: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val s = LocalStrings.current
@@ -1716,6 +1767,8 @@ internal fun Header(
                 onClick = onToggleFavorite,
             )
             onSort?.let { Pill(if (filtered) s.gridFilterOn else s.gridSort, TmIcons.Sort, tintWhenIdle = if (filtered) Tone.accent else Tone.text, showLabel = false, onClick = it) }
+            // The options of the tile the remote left, a button for a remote with no Menu key (WP-14).
+            optionsTarget?.let { OptionsPill(it, onOptions) }
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
             // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
@@ -2060,6 +2113,19 @@ private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit
 }
 
 /**
+ * "Options for {name}" in the header, beside Sort, once the remote has stood on a tile of this grid
+ * (WP-14): an icon that says the tile it means under it while the remote is on it, and reads the
+ * same to a screen reader. It reads the tile here, so the header is not drawn again as the remote
+ * moves down in the grid.
+ */
+@Composable
+internal fun OptionsPill(target: State<OptionsTarget?>, onClick: () -> Unit) {
+    val named = target.value ?: return
+    val s = LocalStrings.current
+    Pill(s.browseTileOptionsNamed(optionsNameClipped(named.name)), TmIcons.MoreVert, showLabel = false, onClick = onClick)
+}
+
+/**
  * [label] is always given, even where [showLabel] hides it: it is what a screen reader announces,
  * and an icon with no name is a button nobody can identify.
  */
@@ -2164,6 +2230,47 @@ private fun FullName(name: String, modifier: Modifier = Modifier) {
             ),
         )
     }
+}
+
+/**
+ * The tile the remote was last on in a chat's grid, which the header's Options pill acts on (WP-14).
+ * It holds the video or show itself and the tile's list [key], not a position, so two tiles of the
+ * same name never mix and a grid that reloaded still opens the right menu.
+ */
+@androidx.compose.runtime.Immutable
+internal class OptionsTarget(val key: String, val name: String, val item: MediaItem?, val series: com.tmplayer.data.Series?)
+
+/** Where the grid hands the header a way to bring a tile into view by its list key (set by the listing, read by the pill). */
+internal class TileScroller {
+    var run: (suspend (Any) -> Boolean)? = null
+}
+
+/**
+ * Where the tile with list [key] stands among the listing's [feed] entries (a video or a show, by
+ * [ShelfEntry.key]; a sponsored card has no tile key), or -1 when a search or a filter left it out.
+ */
+internal fun feedIndexOfTile(feed: List<MediaFeedEntry<ShelfEntry>>, key: Any): Int =
+    feed.indexOfFirst { (it as? MediaFeedEntry.Media)?.item?.key == key }
+
+/** The longest name the Options pill says: the rest is cut with an ellipsis. */
+internal const val OPTIONS_NAME_MAX = 24
+
+internal fun optionsNameClipped(name: String): String =
+    if (name.length <= OPTIONS_NAME_MAX) name else name.take(OPTIONS_NAME_MAX - 1).trimEnd() + "\u2026"
+
+/**
+ * What the tiles of one screen need for the options hint of a remote (WP-14), or null on a phone and
+ * the desktop, where a long press and the context menu are known. Remembered by the screen's root
+ * and handed to [com.tmplayer.ui.components.LocalTileOptionsHint] with a [com.tmplayer.ui.components.HintSlot]
+ * of the screen's own, so the one hint per visit applies.
+ */
+@Composable
+internal fun rememberTileOptionsHint(settings: SettingsStore? = null): com.tmplayer.ui.components.TileOptionsHint? {
+    if (isTouch()) return null
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = settings ?: remember(context) { SettingsStore(context) }
+    val label = LocalStrings.current.browseHoldOrMenuHint
+    return remember(store, label) { com.tmplayer.ui.components.TileOptionsHint(store, label) }
 }
 
 /**
@@ -2363,6 +2470,8 @@ internal fun VideoTile(
             content = {
                 art()
                 if (needsInternet) NeedsInternetCover()
+                // On a remote, the tile's second line says how to reach its options (WP-14).
+                if (!touch && onLongClick != null) com.tmplayer.ui.components.TileOptionsTip(focusedState)
             },
         )
         Spacer(Modifier.height(if (touch) 8.dp else 10.dp))
@@ -2512,7 +2621,8 @@ private fun ListRow(
     text: @Composable ColumnScope.() -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
+    val focusedState = interactions.collectIsFocusedAsState()
+    val focused by focusedState
     LaunchedEffect(focused) { if (focused) onFocused() }
 
     val touch = isTouch()
@@ -2536,12 +2646,19 @@ private fun ListRow(
             horizontalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            art(
-                Modifier
-                    .width(if (touch) TOUCH_ROW_POSTER_WIDTH else ROW_POSTER_WIDTH)
-                    .aspectRatio(2f / 3f)
-                    .clip(RoundedCornerShape(Corner.Small)),
-            )
+            val posterFrame = Modifier
+                .width(if (touch) TOUCH_ROW_POSTER_WIDTH else ROW_POSTER_WIDTH)
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(Corner.Small))
+            if (!touch && onLongClick != null) {
+                // The tip is a popup of the poster's box, so the row's own spacing is left as it was (WP-14).
+                Box(posterFrame) {
+                    art(Modifier.fillMaxSize())
+                    com.tmplayer.ui.components.TileOptionsTip(focusedState)
+                }
+            } else {
+                art(posterFrame)
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = text)
         }
     }

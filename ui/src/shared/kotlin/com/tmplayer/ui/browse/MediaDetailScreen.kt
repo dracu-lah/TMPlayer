@@ -575,7 +575,7 @@ private fun Actions(
     val trailer = page.extras?.trailer
     val primary = page.rows.firstOrNull()
     val others = buildList {
-        addAll(page.rows.drop(1).filter { !headlineOnly || it.action in HEADLINE_ACTIONS })
+        addAll(page.rows.drop(1).filter { !headlineOnly || it.action in headlineActions(tv) })
         // Beside the main button, as a streaming app's "Episodes" sits by Play; at the end when the
         // match only said it is a show after the first frame, so nothing already drawn moves.
         if (onEpisodes != null) {
@@ -670,6 +670,14 @@ internal val HEADLINE_ACTIONS = setOf(
 )
 
 /**
+ * The headline buttons of a page: a phone's [HEADLINE_ACTIONS], and on a television Add to list as
+ * well (WP-14), so Mark as watched, Add to list and Download are one Right from Play and not a
+ * scroll past the facts and the cast. The phone keeps its row as it was.
+ */
+internal fun headlineActions(tv: Boolean): Set<DetailAction> =
+    if (tv) HEADLINE_ACTIONS + DetailAction.AddToList else HEADLINE_ACTIONS
+
+/**
  * The rest of a phone page's buttons, at its foot and centred: Start over, Remove download, Share,
  * Open elsewhere, the chat, the corrections (Not the same video, Wrong match, Rename) and the
  * switch for posters while they are off. Things done now and then, out of the way of Play.
@@ -678,9 +686,9 @@ internal val HEADLINE_ACTIONS = setOf(
 @Composable
 private fun MoreActions(page: DetailPage) {
     val s = LocalStrings.current
-    val rest = page.rows.drop(1).filter { it.action !in HEADLINE_ACTIONS }
-    if (rest.isEmpty()) return
     val tv = !isTouch()
+    val rest = page.rows.drop(1).filter { it.action !in headlineActions(tv) }
+    if (rest.isEmpty()) return
     FlowRow(
         Modifier.fillMaxWidth().padding(top = 8.dp),
         // On a television these start where the title, Play and the facts start: centred, they

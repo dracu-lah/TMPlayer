@@ -1651,6 +1651,13 @@ private fun <T : Any> ContinueSection(
     )
 
     val listState = com.tmplayer.ui.components.rememberAheadListState(column = true)
+    // The remote's hint on a row (WP-14): the tip names Menu and a held OK, at most once a visit.
+    val tileHint = rememberTileOptionsHint()
+    val hintSlot = remember { com.tmplayer.ui.components.HintSlot() }
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.tmplayer.ui.components.LocalTileOptionsHint provides tileHint,
+        com.tmplayer.ui.components.LocalHintSlot provides hintSlot,
+    ) {
     Box(Modifier.fillMaxSize()) {
             // The rows of a chat's list, poster, type and spacing alike: History's list is the same
             // kind of list, and a card around each row here made it the one list that was boxed.
@@ -1696,6 +1703,7 @@ private fun <T : Any> ContinueSection(
         }
         val scrollLabel: (Any) -> String? = { labels[it] }
         FastScroller(listState, label = scrollLabel)
+    }
     }
 
     // This is the landing tab for anyone with a video on the go, and the remote has nowhere to go

@@ -8,7 +8,9 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.tmplayer.data.HintIds
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.VideoCorrection
 import com.tmplayer.data.VideoCorrections
 import com.tmplayer.i18n.Messages
@@ -92,3 +94,34 @@ fun rememberLanguage(): State<Messages> {
 @Composable
 fun rememberDownloadQueue(): State<Map<Int, OfflineDownloads.Progress>> =
     LocalTileShared.current?.downloads ?: OfflineDownloads.active.collectAsState()
+
+/**
+ * What a video tile or History row needs to tell a remote about its options (WP-14): the words, and
+ * the settings the one-time hint registry counts in. Provided by the screens of tiles that open an
+ * options menu on a long OK or Menu; null where a screen provides none, and then no tile hints.
+ */
+@Stable
+class TileOptionsHint(val settings: SettingsStore, val label: String)
+
+val LocalTileOptionsHint = staticCompositionLocalOf<TileOptionsHint?> { null }
+
+/** How many focuses show the tile hint before it stops for good. */
+const val TILE_OPTIONS_HINT_SHOWS = 5
+
+/**
+ * The tile's second line on a television: "Hold OK or press Menu for options", through the hint
+ * registry (WP-68), for the first [TILE_OPTIONS_HINT_SHOWS] focuses and at most one hint per screen
+ * visit. Place it inside the box of the tile's art. It composes nothing while the tile is not
+ * focused (the read of [focused] is here, so only this scope redraws as the remote moves).
+ */
+@Composable
+fun TileOptionsTip(focused: State<Boolean>) {
+    val hint = LocalTileOptionsHint.current ?: return
+    if (!focused.value) return
+    OneTimeHint(
+        settings = hint.settings,
+        id = HintIds.TILE_OPTIONS,
+        label = hint.label,
+        maxShows = TILE_OPTIONS_HINT_SHOWS,
+    )
+}

@@ -24,7 +24,7 @@ the same change.
 
 | Key | Bar | Tile, chat row, picker tile | Long list, nothing focused | Settings rail and pane | Player, row down | Player, row up | Player panels (More, pickers) | Arrows-and-OK fallback |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Menu | account menu, on release (today) | item options (today) | account menu where the bar is shown, else the profile picker with two profiles or more (today) | the profile picker with two profiles or more, as no bar is shown there (today) | player menu where the quirk says so (today) | player menu (today) | closes the panel (today, check) | OK on the picture; long OK on a tile; More button |
+| Menu | account menu, on release (today) | item options (today) | account menu where the bar is shown, else the profile picker with two profiles or more (today) | the profile picker with two profiles or more, as no bar is shown there (today) | player menu where the quirk says so (today) | player menu (today) | closes the panel (today, check) | OK on the picture; long OK on a tile; the video grid header's "Options for {name}" button (WP-14); the details page's buttons; More button |
 | Info | nothing | item options (today) | nothing | nothing | details on a short Info, report stutter on a held one (today; hint WP-21) | same | nothing | long OK; More, Help (WP-89) |
 | Long OK | picture: account menu (today, plain OK does the same) | item options (today) | nothing | nothing | chooser after 1.5 s (WP-19) | plain OK (WP-19) | nothing | n/a |
 | Back | leaves to Home or exits (today) | to the bar, or to the top first in the chat list and the video grid once more than 2 screens down (today, WP-12) | top first, then leave (today, WP-12) | pane to rail, rail out (WP-07) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
@@ -65,6 +65,20 @@ Found while pinning the table (WP-69):
   beside the total, to one decimal. On a TV's focused bar `FineTimeBar.onKeyDown` takes the same
   steps, drops stale
   repeats, and Media3 commits one seek a second after the last key (`FineTimeBarKeysTest`).
+
+- **Options without a Menu key (WP-14).** A video tile and a History row keep Menu, Info and a held OK
+  for their options (`Holdable.kt`) and OK plays at once. A remote with none of those (Google TV)
+  has the "Options for {name}" button in the video grid's header (beside Sort, hidden until a tile
+  has had the remote; it brings the tile into view first and opens the same menu), the details
+  page's own row (Play, Mark as watched, Watch later, Add to list, Download, one Right apart), and
+  the tile's focus tip "Hold OK or press Menu for options" for its first five focuses
+  (`HintIds.TILE_OPTIONS`, through the hint registry). Watch later is no tab in the TV bar: it is
+  in the account menu and in History. Web TV: a held OK or the context key opens the card menu,
+  and the chat page's header has the same Options button (`ui/CardMenu.tsx`); Back from a menu it
+  opened lands on the card, as on Android. The Options button is the video grid's only
+  (`MediaGridScreen`): it does not scroll a web grid first, since the card menu carries its video.
+  Home, search results and list tiles have no tip and no pill: they rely on Menu or a held OK (and
+  the details page's row), so a Google TV remote reaches their options from the video's page.
 
 ## Who may claim a key today
 

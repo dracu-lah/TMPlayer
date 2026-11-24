@@ -305,6 +305,14 @@ html[data-form=tv] .round-button { width: calc(var(--dp) * 44); height: calc(var
 html[data-form=tv] .title-pill { height: calc(var(--dp) * 48); font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); padding: 0 calc(var(--dp) * 18) 0 calc(var(--dp) * 4); gap: calc(var(--dp) * 10); box-shadow: none; }
 html[data-form=tv] .avatar.compact { width: calc(var(--dp) * 38); height: calc(var(--dp) * 38); font-size: calc(var(--dp) * 16); }
 html[data-form=tv] .bar-actions { gap: calc(var(--dp) * 8); }
+/* The Options button's name, under it while the remote is on it (WP-14): it says which video it means. */
+html[data-form=tv] .round-button[data-tip] { position: relative; }
+html[data-form=tv] .round-button[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + var(--dp) * 10); right: 0; z-index: 5; max-width: calc(var(--dp) * 360);
+  padding: calc(var(--dp) * 8) calc(var(--dp) * 16); border-radius: 999px; background: var(--surface-high); color: var(--fg);
+  font-size: calc(var(--dp) * 15); line-height: calc(var(--dp) * 20); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0;
+}
+html[data-form=tv][data-tv-keys] .round-button[data-tip]:focus::after { opacity: 1; }
 html[data-form=tv] .pop-menu { min-width: calc(var(--dp) * 240); padding: calc(var(--dp) * 6); top: calc(100% + var(--dp) * 8); border-radius: calc(var(--dp) * 16); }
 html[data-form=tv] .pop-title { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); padding: calc(var(--dp) * 8) calc(var(--dp) * 12) calc(var(--dp) * 4); }
 html[data-form=tv] .pop-menu button { min-height: calc(var(--dp) * 40); padding: 0 calc(var(--dp) * 12); font-size: calc(var(--dp) * 14); border-radius: calc(var(--dp) * 8); }

@@ -91,6 +91,7 @@ export const PAGE_STRINGS = [
     'browse.tab_watch_later_blurb',
     'browse.tab_watched',
     'browse.tab_watched_blurb',
+    'browse.tile_options_named',
     'browse.time_left',
     'browse.undo',
     'browse.watch_later_cleared',

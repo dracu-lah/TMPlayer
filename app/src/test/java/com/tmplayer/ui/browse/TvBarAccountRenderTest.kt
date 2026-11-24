@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -304,9 +306,9 @@ class TvBarAccountRenderTest {
             assertTrue("$name is after the chip", b.left >= chip.right)
             assertTrue("$name is before the mark", b.right <= mark.left)
         }
-        val later = rule.onNodeWithContentDescription(L.browseTabWatchLater).fetchSemanticsNode().boundsInRoot
+        // Watch later left the bar (WP-14): the account menu and History keep it.
+        rule.onAllNodesWithContentDescription(L.browseTabWatchLater).assertCountEquals(0)
         val choose = rule.onNodeWithContentDescription(L.pickerChooseChats).fetchSemanticsNode().boundsInRoot
-        assertTrue("Watch later is on the bar", later.right <= mark.left)
         assertTrue("Choose chats is on the bar", choose.right <= mark.left && choose.right <= width)
         assertTrue("the mark is on the screen", mark.right <= width)
     }

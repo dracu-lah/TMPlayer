@@ -3,13 +3,14 @@
 // from history, which the toast's Undo takes back; on a card of a video posted more than once, Not
 // the same video (and Group with its copies again on a file kept apart, HX38). One menu for the whole page. The browser's own
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
-import { createEffect, createSignal, on, Show } from 'solid-js'
+import { createEffect, createSignal, on, onCleanup, onMount, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Copy01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, PlayIcon, Search01Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Copy01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, MoreVerticalIcon, PlayIcon, Search01Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { laterIds, settings, setLater, setWatched, watchedIds, watchedTick } from '../store'
 import { Icon } from './Icon'
+import { clipName } from './optionsName'
 import { openPosterPicker } from './PosterPicker'
 import { canReportTitle, openRename, reportTitle } from './renameTarget'
 import { RenameSheet } from './RenameSheet'
@@ -28,9 +29,54 @@ interface Target {
     versions: number
     /** The title the card shows, where Rename starts from; null for a card with no Rename (a show's). */
     shown: string | null
+    /** The card the remote was on (a TV): the Options button opens this menu from elsewhere, and Back from it lands here. */
+    from?: HTMLElement
 }
 
 const [target, setTarget] = createSignal<Target | null>(null)
+
+/**
+ * The card the remote was on last in this grid (a TV, WP-14): the grid header's Options button names it
+ * and opens its menu, for a remote that has no Menu key and a long OK that is hard to hold.
+ */
+const [lastCard, setLastCard] = createSignal<Target | null>(null)
+
+/** A card took the remote: it is the one the Options button acts on. The same card again changes nothing. */
+export function rememberCard(item: VideoItem, history = false, versions = 1, shown: string | null = item.name, from?: HTMLElement) {
+    const now = lastCard()
+    if (now && now.item.chatId === item.chatId && now.item.messageId === item.messageId && now.from === from) return
+    setLastCard({ item, history, versions, shown, from })
+}
+
+/** Opens the menu of the card remembered (what a long OK on it opens); false while none was focused. */
+export function openLastCardMenu(): boolean {
+    const now = lastCard()
+    if (!now) return false
+    setTarget(now)
+    return true
+}
+
+/**
+ * The grid header's Options button on a TV (WP-14): hidden until a card has had the remote, then it
+ * says which video it means ("Options for {name}", in a tip while it is focused and to a screen
+ * reader) and opens the same menu a long OK opens. A new page starts with none.
+ */
+export function OptionsButton() {
+    onMount(() => setLastCard(null))
+    onCleanup(() => setLastCard(null))
+    return (
+        <Show when={lastCard()}>
+            {(card) => {
+                const label = () => t('browse.tile_options_named', { name: clipName(card().shown ?? card().item.name) })
+                return (
+                    <button class="round-button options-button" type="button" aria-label={label()} data-tip={label()} onClick={openLastCardMenu}>
+                        <Icon icon={MoreVerticalIcon} size={22} />
+                    </button>
+                )
+            }}
+        </Show>
+    )
+}
 
 const HOLD_MS = 500
 const SLOP = 10
@@ -108,7 +154,12 @@ export function CardMenu() {
             if (target() === now) setWatchedNow(ids.includes(historyId(now.item)))
         })
     })
-    const close = () => setTarget(null)
+    // Closed from the Options button, the remote goes back to the card it was on, not to the button.
+    const close = () => {
+        const back = target()?.from
+        setTarget(null)
+        if (back) queueMicrotask(() => back.isConnected && back.focus())
+    }
     // The video's Telegram link, asked as the menu opens so the tap that copies it has it already (a browser lets a page copy only in the tap).
     // undefined: not here yet; null: none to give. `manual` is the link shown for copying by hand when the browser refused the clipboard.
     const [link, setLink] = createSignal<string | null | undefined>(undefined)

@@ -12,6 +12,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.isFocusable
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
@@ -41,9 +43,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The television's top bar: Downloads is a place of its own after Chats, its name written, with the
- * number running (R2, PL-16), and Watch later the one quick entry left (an icon that names itself
- * under the remote). Both are focus targets in the bar's order, after Chats, and OK opens their page
- * from the bar's own beforeProfile. The arrows themselves (Right from Chats onto Downloads, then the
+ * number running (R2, PL-16). Watch later left the bar (WP-14): the account menu and History keep it.
+ * Downloads is a focus target in the bar's order, after Chats, and OK opens its page from the bar's
+ * own beforeProfile. The arrows themselves (Right from Chats onto Downloads, then the
  * Choose chats button) are the desktop's big-screen bar tests, ChooseChatsButtonTest and
  * BigScreenKeysTest, where key traversal runs: a bar's items take no focus in this harness. Down into
  * the page and Back from the player are the device leftovers.
@@ -118,42 +120,51 @@ class TvTopBarQuickEntriesTest {
     }
 
     private fun downloads() = rule.onNodeWithText(L.navDownloads)
-    private fun later() = rule.onNodeWithContentDescription(L.browseTabWatchLater)
 
     @Test
-    fun `Downloads has its name written after Chats, and Watch later is an icon after it`() {
+    fun `Downloads has its name written after Chats, and nothing follows it but the bar's own buttons`() {
         open()
         val chats = rule.onNodeWithText(L.browseTabChats).fetchSemanticsNode().boundsInRoot
         val downloads = downloads().fetchSemanticsNode().boundsInRoot
-        val later = later().fetchSemanticsNode().boundsInRoot
         assertTrue("Downloads after Chats", downloads.left >= chats.right)
-        assertTrue("Watch later after Downloads", later.left >= downloads.right)
         // The same row, so Left and Right move across and Down is the bar's own (into the page).
         assertEquals(chats.top, downloads.top, 1f)
-        assertEquals(chats.top, later.top, 1f)
         // Downloads is a tab like Home and Chats: named, not an icon waiting for the remote.
         rule.onNodeWithText(L.navDownloads).assertExists()
     }
 
     @Test
-    fun `both take the remote like a tab and are pressable`() {
+    fun `Downloads takes the remote like a tab and is pressable`() {
         open()
         val focusable = rule.onAllNodes(isFocusable()).fetchSemanticsNodes()
-        for (entry in listOf(downloads(), later())) {
-            val node = entry.fetchSemanticsNode()
-            assertTrue("a focus target", focusable.any { it.id == node.id })
-            assertTrue("pressable", node.config.getOrNull(SemanticsActions.OnClick) != null)
-        }
+        val node = downloads().fetchSemanticsNode()
+        assertTrue("a focus target", focusable.any { it.id == node.id })
+        assertTrue("pressable", node.config.getOrNull(SemanticsActions.OnClick) != null)
     }
 
     @Test
-    fun `OK on each goes to its page, after the bar's own beforeProfile`() {
+    fun `OK on Downloads goes to its page, after the bar's own beforeProfile`() {
         open()
         downloads().performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(listOf("before", "downloads"), calls)
-        calls.clear()
-        later().performSemanticsAction(SemanticsActions.OnClick)
-        assertEquals(listOf("before", "history:${HistoryTab.WatchLater}"), calls)
+    }
+
+    @Test
+    fun `Watch later is no tab in the bar any more (WP-14), the account menu keeps it`() {
+        // The bar holds Search, Home, Chats and Downloads, then the picture's own button: no tab
+        // is named Watch later, with its icon, its word or its description.
+        open()
+        rule.onAllNodesWithText(L.browseTabWatchLater).assertCountEquals(0)
+        rule.onAllNodesWithContentDescription(L.browseTabWatchLater).assertCountEquals(0)
+    }
+
+    @Test
+    fun `the account menu still lists Watch later, one OK on the picture away`() {
+        open(account = asha)
+        picture().performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithText(L.browseTabWatchLater).assertExists()
+        rule.onNodeWithText(L.browseTabWatchLater).performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf("before", "history:${HistoryTab.WatchLater}"), calls.takeLast(2))
     }
 
     @Test
@@ -169,16 +180,6 @@ class TvTopBarQuickEntriesTest {
         open(running = 0, downloadsShown = true)
         rule.onAllNodesWithTag("tv-bar-badge", useUnmergedTree = true).assertCountEquals(0)
         downloads().assertIsSelected()
-    }
-
-    @Test
-    fun `Watch later is only an icon until the remote is on it, and says its name to a screen reader`() {
-        open()
-        rule.onNodeWithText(L.browseTabWatchLater).assertDoesNotExist()
-        assertEquals(
-            listOf(L.browseTabWatchLater),
-            later().fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription),
-        )
     }
 
     // WP-01: the account's button --------------------------------------------------------------

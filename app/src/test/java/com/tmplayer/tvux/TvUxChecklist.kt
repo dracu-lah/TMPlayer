@@ -355,7 +355,10 @@ class TvUxChecklist(
 
     /** A key to the window on top, as the system sends it to the focused window: a dialog's keys go to the dialog. */
     private fun send(event: KeyEvent) {
-        val top = windows().last()
+        // A tip (FocusTip, a one-time hint) is a popup that cannot take the focus: the system sends the key
+        // past it to the window under, so the top window here is the topmost one that can.
+        val all = windows()
+        val top = all.lastOrNull { ((it.layoutParams as? android.view.WindowManager.LayoutParams)?.flags ?: 0) and android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE == 0 } ?: all.last()
         if (top === activity.window.decorView) activity.dispatchKeyEvent(event) else top.dispatchKeyEvent(event)
     }
 

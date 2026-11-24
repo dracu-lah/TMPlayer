@@ -11,6 +11,7 @@ import com.tmplayer.ui.theme.Danger
 import androidx.tv.material3.Text as TvText
 import androidx.tv.material3.MaterialTheme as TvTheme
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.focusRestorer
@@ -2566,7 +2567,7 @@ private const val ROW_GONE_WAIT_MS = 3_000L
  * ring in daylight where that fill alone is too pale. [danger] fills red under the remote.
  */
 @Composable
-private fun TvPill(
+internal fun TvPill(
     label: String,
     icon: ImageVector?,
     modifier: Modifier = Modifier,
@@ -2596,32 +2597,48 @@ private fun TvPill(
         selected -> Tone.accent
         else -> Tone.text
     }
-    Row(
-        modifier
-            .height(48.dp)
-            .clip(CircleShape)
-            .background(background)
-            .focusRing(focused && !danger, CircleShape)
-            .semantics { if (selected) this.selected = true }
-            .clickable(interactionSource = interactions, indication = null, role = Role.Button) { if (enabled) onClick() }
-            .alpha(if (enabled) 1f else 0.5f)
-            // An icon on its own gets even padding, so the pill comes out round rather than wide.
-            .padding(horizontal = if (showLabel) 18.dp else 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-    ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = if (showLabel) null else label, tint = foreground, modifier = Modifier.size(22.dp))
+    // A wordless pill says its name in a tip under it while the remote is on it (WP-14), as the
+    // browse headers' icons do; the row below carries the name for a screen reader.
+    val pill: @Composable (Modifier) -> Unit = { own ->
+        Row(
+            own
+                .height(48.dp)
+                .clip(CircleShape)
+                .background(background)
+                .focusRing(focused && !danger, CircleShape)
+                .semantics {
+                    if (selected) this.selected = true
+                    // A pill with no word on it is still named, for a screen reader and for the tip.
+                    if (!showLabel) contentDescription = label
+                }
+                .clickable(interactionSource = interactions, indication = null, role = Role.Button) { if (enabled) onClick() }
+                .alpha(if (enabled) 1f else 0.5f)
+                // An icon on its own gets even padding, so the pill comes out round rather than wide.
+                .padding(horizontal = if (showLabel) 18.dp else 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(22.dp))
+            }
+            if (showLabel) {
+                TvText(
+                    label,
+                    style = TvTheme.typography.bodyLarge,
+                    fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Normal,
+                    color = foreground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        if (showLabel) {
-            TvText(
-                label,
-                style = TvTheme.typography.bodyLarge,
-                fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Normal,
-                color = foreground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+    }
+    if (showLabel) {
+        pill(modifier)
+    } else {
+        Box(modifier) {
+            com.tmplayer.ui.components.FocusTip(focused, label)
+            pill(Modifier)
         }
     }
 }

@@ -289,11 +289,7 @@ internal fun TvTopBar(
                     badge = nav.downloadCount,
                     modifier = Modifier.focusRequester(downloadsFocus).tvReturnPoint(downloadsFocus),
                 )
-                // The other place a viewer returns to: an icon that names itself under the remote.
-                BarTab(
-                    s.browseTabWatchLater, TmIcons.Clock, selected = false, onClick = { beforeProfile(); nav.onHistory(HistoryTab.WatchLater) },
-                    compact = true,
-                )
+                // Watch later is no tab here (WP-14): it stays in the account menu and in History.
                 // Add or remove chats, after the quick entries: an action, not a page, so it is
                 // only an icon (named under the remote's focus) after the places.
                 if (onChooseChats != null) {
