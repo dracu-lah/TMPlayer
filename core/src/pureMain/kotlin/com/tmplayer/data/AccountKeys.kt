@@ -20,7 +20,7 @@ object AccountKeys {
         "sync_channel", "sync_channel_title", "sync_channel_account", "sync_channel_block",
         "sync_file_chat", "sync_sent_chat", "sync_old_copy",
         "keep_place_card_seen", "keep_place_wrote_at",
-        "last_chat", "kids_chats", "chat_snapshot", "account_snapshot", "recent_searches",
+        "last_chat", "kids_chats", "chat_snapshot", "account_snapshot", "recent_searches", "keep_next_shows",
         "new_video_seen", "new_video_offered", "episode_alert_seen", "episode_alert_told", "piece_gaps",
         "cached_video_ids", "cached_video", "download_queue", "download_queue_db", "downloads_migrated", "signed_in",
     )

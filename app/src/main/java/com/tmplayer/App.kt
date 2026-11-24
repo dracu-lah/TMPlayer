@@ -303,6 +303,10 @@ class App : Application() {
                 delete = { LocalDownloads.deleteAnyKind(settings, it) },
             ).run()
         }
+        // Smart downloads (WP-83): the next episodes of the shows that asked, on a mark, a network
+        // change or a switch; nothing by itself, and not in safe mode. Phone and tablet only for
+        // now: a TV has no switch for it, so a phone's list restored there keeps nothing.
+        if (!safe && !com.tmplayer.data.FormFactor.isTv(this)) runCatching { com.tmplayer.ui.browse.KeepNextDownloads.start(this) }
         // The checks a phone makes while the app is closed (new videos in starred chats, the
         // sponsor reminder), scheduled or cancelled to match the settings.
         if (!safe) backgroundScope.launch { runCatching { com.tmplayer.data.BackgroundChecks.schedule(this@App) } }

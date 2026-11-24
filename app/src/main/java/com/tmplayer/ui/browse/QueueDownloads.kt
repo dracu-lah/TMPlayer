@@ -7,6 +7,18 @@ import android.util.Log
 import android.widget.Toast
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.DiskSpace
+import com.tmplayer.data.KeepNextPlanner
+import com.tmplayer.data.KeepNextRunner
+import com.tmplayer.data.KeepNextShow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.LowStorageOffers
 import com.tmplayer.data.MediaItem
@@ -364,3 +376,139 @@ internal suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean
 }
 
 private const val SHARE_TAG = "ShareVideo"
+
+/**
+ * Smart downloads on the phone and tablet (WP-83): [KeepNextRunner] wired to this app. A pass runs
+ * when a video is marked watched, when the connection changes, and when a show's switch changes,
+ * a few seconds after the last of a burst; never by itself otherwise, so an idle phone or a TV
+ * stick pays nothing. Each pass runs on [com.tmplayer.data.Accounts.profileScope] for the open
+ * profile, which a switch cancels: the triggers are listened to again for the next profile, and
+ * what the last one's shows said is forgotten.
+ *
+ * What it reads costs no Telegram listing: a show's episodes are the chat's kept listing
+ * ([com.tmplayer.data.PageQueries]), so a show whose chat this device has not listed is skipped
+ * until it is opened. Queueing goes through [queueDownloads] like a press, so the disk is asked
+ * again, the watch cache gives way first and a chat that restricts saving is dropped there too.
+ * Offline or on mobile data nothing is queued: smart downloads are Wi-Fi only.
+ */
+internal object KeepNextDownloads {
+
+    @Volatile
+    private var runner: KeepNextRunner? = null
+
+    private val empty = MutableStateFlow<Map<String, KeepNextRunner.Report>>(emptyMap())
+
+    /** What each show's last pass said, for the Downloads row (WP-84); empty before the first pass. */
+    val reports: StateFlow<Map<String, KeepNextRunner.Report>> get() = runner?.reports ?: empty
+
+    /** Asks for a pass now (a show's switch turned on), folded into one already running. */
+    private val asked = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    fun ask() {
+        asked.tryEmit(Unit)
+    }
+
+    /** Once, from the application: the runner, and its triggers on the open profile's scope. */
+    fun start(context: Context) {
+        if (runner != null) return
+        val app = context.applicationContext
+        val settings = SettingsStore(app)
+        val watched = com.tmplayer.data.WatchedStore(app)
+        val made = KeepNextRunner(host(app, settings, watched))
+        runner = made
+        listen(made, settings, watched)
+        com.tmplayer.data.Accounts.onSwitch {
+            made.forget()
+            listen(made, settings, watched)
+        }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun listen(made: KeepNextRunner, settings: SettingsStore, watched: com.tmplayer.data.WatchedStore) {
+        com.tmplayer.data.Accounts.profileScope.launch {
+            try {
+                merge(
+                    watched.watched.map { it.size }.distinctUntilChanged().drop(1).map { },
+                    com.tmplayer.data.NetworkMonitor.status.drop(1).map { },
+                    com.tmplayer.data.NetworkMonitor.metered.drop(1).map { },
+                    settings.keepNextShows.drop(1).map { },
+                    asked,
+                )
+                    .debounce(TRIGGER_SETTLE_MS)
+                    .collect {
+                        try {
+                            made.pass()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w(KEEP_NEXT_TAG, "Keep next pass failed", e)
+                        }
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(KEEP_NEXT_TAG, "Keep next stopped listening", e)
+            }
+        }
+    }
+
+    private fun host(app: Context, settings: SettingsStore, watched: com.tmplayer.data.WatchedStore) = object : KeepNextRunner.Host {
+        override val stamp get() = com.tmplayer.data.Accounts.stamp
+
+        override suspend fun shows() = settings.keepNextShowsNow()
+
+        override suspend fun episodes(show: KeepNextShow): KeepNextRunner.Listed? = withContext(Dispatchers.Default) {
+            val series = keptSeries(show) ?: return@withContext null
+            val finished = runCatching { watched.watched.first() }.getOrDefault(emptyMap())
+            val inDownloads = LocalDownloads.presentIds(settings)
+            val coming = OfflineDownloads.active.value
+            val episodes = KeepNextPlanner.episodesOf(
+                series,
+                finished = { com.tmplayer.data.ProgressKeys.of(it.chatId, it.messageId) in finished },
+                copyOf = {
+                    when {
+                        it.id in inDownloads -> KeepNextPlanner.Copy.Here
+                        coming.containsKey(it.fileId) -> KeepNextPlanner.Copy.Queued
+                        else -> KeepNextPlanner.Copy.None
+                    }
+                },
+                keptForYou = { false },
+            )
+            KeepNextRunner.Listed(series.title, episodes)
+        }
+
+        override suspend fun conditions(): KeepNextRunner.Conditions {
+            val offline = com.tmplayer.data.NetworkMonitor.status.value == com.tmplayer.data.NetworkStatus.Offline
+            val free = withContext(Dispatchers.IO) { runCatching { DiskSpace.read(app).freeBytes }.getOrDefault(0L) }
+            // Offline counts as "not on Wi-Fi": the queue would only wait, so nothing is added.
+            return KeepNextRunner.Conditions(freeBytes = free, metered = offline || com.tmplayer.data.NetworkMonitor.metered.value)
+        }
+
+        override suspend fun queue(show: KeepNextShow, title: String, items: List<MediaItem>): Int {
+            queueDownloads(app, settings, items) { title }
+            return items.size
+        }
+
+        override suspend fun sleep(ms: Long) = delay(ms)
+
+        override fun log(line: String) {
+            Log.i(KEEP_NEXT_TAG, line)
+        }
+    }
+
+    /** [show] as the chat's kept listing groups it, or null when the chat is not listed here or the show is gone. */
+    fun keptSeries(show: KeepNextShow): com.tmplayer.data.Series? {
+        val cache = com.tmplayer.data.PageQueries.cache
+        val grid = cache.data<com.tmplayer.data.ChatGrid>(com.tmplayer.data.QueryKey.ChatMedia(show.chatId, 0))
+            ?: com.tmplayer.data.PageQueries.lastTopic(show.chatId)?.let {
+                cache.data<com.tmplayer.data.ChatGrid>(com.tmplayer.data.QueryKey.ChatMedia(show.chatId, it))
+            }
+            ?: return null
+        return com.tmplayer.data.SeriesShelf.arrange(grid.items)
+            .firstNotNullOfOrNull { (it as? com.tmplayer.data.ShelfEntry.Show)?.series?.takeIf { s -> s.key == show.showKey } }
+    }
+
+    /** A burst of triggers (several marks, a network flapping) settles into one pass. */
+    private const val TRIGGER_SETTLE_MS = 5_000L
+    private const val KEEP_NEXT_TAG = "KeepNext"
+}

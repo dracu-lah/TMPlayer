@@ -98,6 +98,8 @@ private val SAVE_MOBILE_DATA = booleanPreferencesKey("save_mobile_data")
 // anyone who has chosen; before that [MobileData.resolve] reads the two booleans.
 private val MOBILE_DATA = stringPreferencesKey("mobile_data")
 private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
+// Smart downloads (WP-83): the shows that keep their next episodes, `chatId|showKey` a line.
+private val KEEP_NEXT_SHOWS = stringPreferencesKey("keep_next_shows")
 private val LOW_STORAGE_MODE = booleanPreferencesKey("low_storage_mode")
 // Android's chosen place for downloads (HX26): an absolute path to a volume's app-specific
 // folder, or blank for the default, internal storage. Left out of backups; see
@@ -1658,6 +1660,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setRemoveAfterWatching(value: Boolean) {
         prefs.edit { it[REMOVE_AFTER_WATCHING] = value }
+    }
+
+    /** The shows with "Keep the next episodes" on (WP-83), this account's. See [KeepNextShows]. */
+    val keepNextShows: Flow<Set<KeepNextShow>> = read { KeepNextShows.decode(it[KEEP_NEXT_SHOWS]) }
+
+    suspend fun keepNextShowsNow(): Set<KeepNextShow> = KeepNextShows.decode(prefs.data.first()[KEEP_NEXT_SHOWS])
+
+    /** Turns smart downloads on or off for [show]; read and written in one edit, so two quick presses both land. */
+    suspend fun setKeepNext(show: KeepNextShow, on: Boolean) {
+        prefs.edit { it[KEEP_NEXT_SHOWS] = KeepNextShows.encode(KeepNextShows.with(KeepNextShows.decode(it[KEEP_NEXT_SHOWS]), show, on)) }
     }
 
     // ---- trickplay and Watch Next ------------------------------------------------------------
