@@ -203,6 +203,22 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
+    /** The player's stored brightness (WP-27): a garbage number is the system's level, never a level of its own (PB2-18). */
+    @Test
+    fun storedBrightnessNeverBecomesALevel() {
+        val sys = com.tmplayer.player.TouchPrefs.BRIGHTNESS_SYSTEM
+        for (stored in listOf(4_294_967_346L, Long.MAX_VALUE, Long.MIN_VALUE, -50L, 1L, 101L, Int.MAX_VALUE.toLong() + 51)) {
+            check(com.tmplayer.player.TouchPrefs.sanitiseBrightness(stored) == sys) { "$stored read as a level" }
+        }
+        for (text in texts) {
+            survive("TouchPrefs.sanitiseBrightness", text) {
+                val level = com.tmplayer.player.TouchPrefs.sanitiseBrightness(text.toLongOrNull())
+                check(level == sys || level in com.tmplayer.player.TouchPrefs.BRIGHTNESS_MIN..100)
+            }
+        }
+        assertNoFailures()
+    }
+
     /** The sign in failure's sentence reads TDLib's and the native loader's error text (StartFailures). */
     @Test
     fun startFailuresNeverThrow() {

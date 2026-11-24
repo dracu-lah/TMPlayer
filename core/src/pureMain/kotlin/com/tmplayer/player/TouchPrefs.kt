@@ -55,7 +55,8 @@ data class TouchPrefs(
 
         /** A stored level off the range reads as the system's: a bad write never leaves the screen black. */
         fun sanitiseBrightness(percent: Long?): Int =
-            percent?.toInt()?.takeIf { it in BRIGHTNESS_MIN..100 } ?: BRIGHTNESS_SYSTEM
+            // Checked as stored, before narrowing: 4294967346 would wrap to 50 (PB2-18).
+            percent?.takeIf { it in BRIGHTNESS_MIN.toLong()..100L }?.toInt() ?: BRIGHTNESS_SYSTEM
 
         /** The next page level up or down from [percent] on the 10 per cent steps, held between 10 and 100; from the system's start at 50. */
         fun stepBrightness(percent: Int, up: Boolean): Int {
