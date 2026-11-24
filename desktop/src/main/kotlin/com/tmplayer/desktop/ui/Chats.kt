@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.size
+import com.tmplayer.ui.components.edgeFade
 import com.tmplayer.ui.browse.ChatFilter
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.VerticalScrollbar
@@ -302,8 +303,11 @@ internal class Choice(
  */
 @Composable
 internal fun ChoiceChips(choices: List<Choice>, inset: androidx.compose.ui.unit.Dp = pageMargin()) {
+    val row = androidx.compose.foundation.lazy.rememberLazyListState()
     LazyRow(
-        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        // The chips that do not fit fade out over the margin, so a cut chip reads as "more this way".
+        Modifier.fillMaxWidth().padding(bottom = 4.dp).edgeFade(row, inset, inset),
+        state = row,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = inset),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -560,13 +564,15 @@ internal fun ChatRow(
         ChatAvatar(chat.miniThumbnail, chat.photoFileId, chat.title, Avatar.Compact + 8.dp)
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (chat.isPinned) Icon(TmIcons.Pin, contentDescription = s.chatsPinnedLabel, tint = Tone.muted, modifier = Modifier.width(14.dp))
                 Text(
                     chat.title,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                // After the name, so a pinned chat's name starts on the same edge as every other's.
+                if (chat.isPinned) Icon(TmIcons.Pin, contentDescription = s.chatsPinnedLabel, tint = Tone.muted, modifier = Modifier.size(14.dp))
             }
             Text(chat.kind.label, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         }
