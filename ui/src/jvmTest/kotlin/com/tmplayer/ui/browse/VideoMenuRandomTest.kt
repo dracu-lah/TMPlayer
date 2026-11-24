@@ -42,6 +42,24 @@ class VideoMenuRandomTest {
     }
 
     @Test
+    fun `Play all and Shuffle lead the Play group before Play random, and each is left out when it has nothing to start`() {
+        var all = 0
+        var shuffled = 0
+        val full = VideoMenuState(VideoSort.Newest, VideoFilter.All, onSort = {}, onFilter = {}, onPlayRandom = {}, onPlayAll = { all++ }, onShuffle = { shuffled++ })
+        val first = videoMenuGroups(full, Translator.messages).first()
+        assertEquals(Translator.messages.commonPlay, first.title)
+        assertEquals(listOf("Play all", "Shuffle", "Play random"), first.choices.map { it.label })
+        first.choices[0].onPick()
+        first.choices[1].onPick()
+        assertEquals(1, all)
+        assertEquals(1, shuffled)
+        // A chat of one video: Play all, no Shuffle. An empty list: no Play group at all.
+        val one = VideoMenuState(VideoSort.Newest, VideoFilter.All, onSort = {}, onFilter = {}, onPlayAll = {})
+        assertEquals(listOf("Play all"), videoMenuGroups(one, Translator.messages).first().choices.map { it.label })
+        assertEquals(Translator.messages.gridSortLabel, videoMenuGroups(state(null), Translator.messages).first().title)
+    }
+
+    @Test
     fun `the order and the filter keep their place after it`() {
         val groups = videoMenuGroups(state {}, Translator.messages)
         assertEquals(Translator.messages.gridSortLabel, groups[1].title)

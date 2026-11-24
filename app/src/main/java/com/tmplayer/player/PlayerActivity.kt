@@ -1722,6 +1722,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * transport row watches this and grows its two extra buttons when they arrive; the title reads
      * the playing episode's code and name off it. See [EpisodeNeighbours].
      */
+    /**
+     * Play all or Shuffle (WP-32, WP-87): how this player goes on after a video, [com.tmplayer.data.PlayAll.Mode.Off] for
+     * every video that was not started from the press. Carried from one video to the next ([carryPlayAll]) and, as
+     * extras of the intent, through a rebuild of the process; a list's own queue stays with the process only.
+     */
+    private var playAllMode = com.tmplayer.data.PlayAll.Mode.Off
+    private var playAllSeed = 0L
+    private var playAllQueue: List<MediaItem> = emptyList()
+    private var shufflePool: com.tmplayer.data.PlayAll.ShufflePool? = null
+
     private val _episodes = MutableStateFlow(EpisodeSteps())
     val episodes: StateFlow<EpisodeSteps> = _episodes.asStateFlow()
 
@@ -2415,6 +2425,44 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
 
+    /**
+     * The press that opened this video, if there was one (Play all or Shuffle, taken once by the video it started),
+     * else what the intent carries from the video before it. A list's queue is the process's own: after a rebuild of
+     * the process a list goes on as any video does, and a chat's order is rebuilt from the chat, the video and the seed.
+     */
+    private fun readPlayAll(from: Intent) {
+        val pressed = com.tmplayer.data.PlayAll.take(chatId, messageId)
+        if (pressed != null) {
+            playAllMode = pressed.mode
+            playAllSeed = pressed.seed
+            playAllQueue = pressed.queue
+            shufflePool = pressed.pool
+            return
+        }
+        val mode = com.tmplayer.data.PlayAll.Mode.of(from.getIntExtra(EXTRA_PLAY_ALL, 0))
+        if (mode == com.tmplayer.data.PlayAll.Mode.Off || (mode.ofList && playAllQueue.isEmpty())) {
+            playAllMode = com.tmplayer.data.PlayAll.Mode.Off
+            playAllSeed = 0L
+            playAllQueue = emptyList()
+            shufflePool = null
+            return
+        }
+        playAllMode = mode
+        playAllSeed = from.getLongExtra(EXTRA_PLAY_SEED, 0L)
+    }
+
+    /**
+     * [next] to be opened as part of this run: the press is armed for the video that takes it ([com.tmplayer.data.PlayAll.take])
+     * and the mode and seed go in the intent, so a player rebuilt later knows it too.
+     */
+    private fun carryPlayAll(intent: Intent, next: MediaItem): Intent {
+        if (playAllMode == com.tmplayer.data.PlayAll.Mode.Off) return intent
+        com.tmplayer.data.PlayAll.arm(
+            com.tmplayer.data.PlayAll.Request(next.chatId, next.messageId, playAllMode, playAllSeed, playAllQueue, shufflePool),
+        )
+        return intent.putExtra(EXTRA_PLAY_ALL, playAllMode.ordinal).putExtra(EXTRA_PLAY_SEED, playAllSeed)
+    }
+
     /** The video's own fields, from the intent that opened it or the one [continueUnseen] set. */
     private fun readItem(from: Intent) {
         fileId = from.getIntExtra(EXTRA_FILE_ID, 0)
@@ -2432,6 +2480,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         from.removeExtra(EXTRA_PRESSED_AT)
         chatId = from.getLongExtra(EXTRA_CHAT_ID, 0)
         messageId = from.getLongExtra(EXTRA_MESSAGE_ID, 0)
+        readPlayAll(from)
         mediaTitle = from.getStringExtra(EXTRA_TITLE).orEmpty()
         mediaSubtitle = from.getStringExtra(EXTRA_SUBTITLE).orEmpty()
         mediaFileName = from.getStringExtra(EXTRA_FILE_NAME).orEmpty()
@@ -5255,7 +5304,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         letGoOfStreamBounds()
         trimCache()
         val outside = intent.getBooleanExtra(EXTRA_OUTSIDE_APP_TASK, false)
-        intent = intent(this, next, chatTitle).putExtra(EXTRA_OUTSIDE_APP_TASK, outside)
+        intent = carryPlayAll(intent(this, next, chatTitle).putExtra(EXTRA_OUTSIDE_APP_TASK, outside), next)
         readItem(intent)
         forgetTheLastVideo()
         openItem()
@@ -6047,6 +6096,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun findEpisodes() {
         val here = currentItem()
+        // Play all or Shuffle (WP-32, WP-87): the press decides what follows, whatever the video's name says
+        // and whatever the setting says, and no episode logic is asked.
+        if (playAllMode != com.tmplayer.data.PlayAll.Mode.Off) {
+            findPlayAll(here)
+            return
+        }
         val show = EpisodeNeighbours.showOf(here)
         if (show == null) {
             // A video that is not an episode: the chat's own next one, where the setting asks.
@@ -6093,6 +6148,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private suspend fun playsChatOrder(): Boolean = runCatching { settings.playChatOrderNow() }.getOrDefault(false)
 
     /**
+     * What follows [here] for Play all or Shuffle: a list's queue is read from memory, a chat's order
+     * is [findChatOrder] forced on, and a chat's Shuffle steps through [com.tmplayer.data.PlayAll.ShufflePool].
+     * Stop or Back ends the run, as they end any video.
+     */
+    private fun findPlayAll(here: MediaItem) {
+        val mode = playAllMode
+        if (mode.ofList) {
+            _episodes.value = com.tmplayer.data.PlayAll.listSteps(playAllQueue, here, if (mode.shuffled) playAllSeed else 0L)
+            refreshSessionMetadata()
+            return
+        }
+        findChatOrder(here, force = true)
+    }
+
+    /**
      * After a video that is not an episode (EG-F30): with the setting on, the chat's next video
      * in the order its grid is sorted in is what autoplay goes on to ([com.tmplayer.data.ChatOrder]),
      * through the same next-up card, countdown and "Still watching?" as an episode. Off the critical
@@ -6101,10 +6171,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * it was: the video ends and stays on its last frame. The size limits the grid applies skip a
      * video above them, and another copy of the same file is not played again.
      */
-    private fun findChatOrder(here: MediaItem) {
+    private fun findChatOrder(here: MediaItem, force: Boolean = false) {
         if (chatId == 0L) return
         itemScope.launch {
-            if (!playsChatOrder()) return@launch
+            if (!force && !playsChatOrder()) return@launch
             afterOpening()
             val session = Td.awaitAuthorizedSession()
             val repository = ChatRepository(session.client)
@@ -6113,12 +6183,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val max = runCatching { settings.maxSizeBytes.first() }.getOrDefault(com.tmplayer.data.SizeFilter.DEFAULT_MAX)
             val topic = here.topicId.takeIf { it != 0 }
                 ?: com.tmplayer.data.runCatchingCancellable { repository.topicOf(chatId, messageId) }.getOrDefault(0)
-            val steps = com.tmplayer.data.ChatOrder.steps(
-                current = here,
-                sort = sort,
-                fits = { com.tmplayer.data.SizeFilter.matches(it.sizeBytes, min, max) },
-            ) { anchor, newer ->
+            val fits = { item: MediaItem -> com.tmplayer.data.SizeFilter.matches(item.sizeBytes, min, max) }
+            val fetch: suspend (Long, Boolean) -> com.tmplayer.data.ChatOrder.Window? = { anchor, newer ->
                 com.tmplayer.data.runCatchingCancellable { repository.videoWindow(chatId, anchor, newer, topic) }.getOrNull()
+            }
+            val steps = if (playAllMode == com.tmplayer.data.PlayAll.Mode.ChatShuffle) {
+                // One pool for the whole run: the pages read for one video are still there for the next.
+                val pool = shufflePool ?: com.tmplayer.data.PlayAll.ShufflePool(playAllSeed, fits, fetch).also { shufflePool = it }
+                pool.steps(here)
+            } else {
+                com.tmplayer.data.ChatOrder.steps(current = here, sort = sort, fits = fits, fetch = fetch)
             }
             if (steps.previous == null && steps.next == null) return@launch
             _episodes.value = steps
@@ -6624,9 +6698,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         handingOver = true
         val started = runCatching {
             startActivity(
-                intent(this, item, inChat).putExtra(
-                    EXTRA_OUTSIDE_APP_TASK,
-                    inPictureInPicture || intent.getBooleanExtra(EXTRA_OUTSIDE_APP_TASK, false),
+                carryPlayAll(
+                    intent(this, item, inChat).putExtra(
+                        EXTRA_OUTSIDE_APP_TASK,
+                        inPictureInPicture || intent.getBooleanExtra(EXTRA_OUTSIDE_APP_TASK, false),
+                    ),
+                    item,
                 ),
             )
         }
@@ -8219,6 +8296,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             rotatePicture = stereoOffered(),
             playerVolume = !castUp(),
             addToList = hasMessage(),
+            loadSubtitleFile = documentPickerAvailable(this@PlayerActivity),
         )
         override fun shape() = videoScale
         override fun speed() = playbackSpeed
@@ -8297,7 +8375,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.NightMode -> toggleNightMode()
             PhoneMenuEntry.EvenVolume -> toggleEvenVolume()
             PhoneMenuEntry.AbLoop -> pressLoop()
-            loadSubtitleFile = documentPickerAvailable(this@PlayerActivity),
             PhoneMenuEntry.RepeatVideo -> toggleRepeatVideo()
             PhoneMenuEntry.NextChapter -> stepChapter(forward = true)
             PhoneMenuEntry.PreviousChapter -> stepChapter(forward = false)
@@ -8352,6 +8429,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.ReportStutter -> reportStutter()
             PlayerMenuEntry.ReportWrongPicture -> reportWrongPicture()
             PlayerMenuEntry.CopyLinkAtTime -> copyLinkAtTime()
+            PlayerMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
             PlayerMenuEntry.MarkIntro -> markIntroTap()
             PlayerMenuEntry.RemoveIntroMark -> removeIntroMark()
             // Pages of the panel itself, opened there.
@@ -8429,7 +8507,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /** Paused by the viewer, not stalled for bytes: when the frame steps are offered. */
-            PlayerMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
     private fun isPaused(): Boolean = playing?.playWhenReady == false
 
     /**
@@ -11433,6 +11510,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** `SystemClock.elapsedRealtime()` when Play was pressed, for the start timing log. */
         private const val EXTRA_PRESSED_AT = "pressed_at"
+
+        /** Play all or Shuffle (WP-32, WP-87): the [com.tmplayer.data.PlayAll.Mode] and the seed, carried to the next video of the run. */
+        private const val EXTRA_PLAY_ALL = "play_all"
+        private const val EXTRA_PLAY_SEED = "play_seed"
 
         /** The log tag of the start and seek timings. */
         private const val START_TAG = "PlayerStart"

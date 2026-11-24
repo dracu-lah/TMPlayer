@@ -392,6 +392,23 @@ fun MediaGridScreen(
             filterPaused = false
             if (picked != filter) recentScope.launch { recentStore.setVideoFilter(chatId, picked) }
         },
+        // Play all (WP-32): the first listed video, then the chat's order a page at a time (PlayAll, ChatOrder).
+        onPlayAll = listedItems.firstOrNull()?.let { first ->
+            {
+                sorting = false
+                com.tmplayer.data.PlayAll.arm(com.tmplayer.data.PlayAll.Request(first.chatId, first.messageId, com.tmplayer.data.PlayAll.Mode.Chat))
+                onPlay(first)
+            }
+        },
+        // Shuffle (WP-87): one of the loaded videos in a seeded order, the rest drawn by pages. Not for a chat of one video.
+        onShuffle = if (listedItems.size < 2) null else ({
+            sorting = false
+            val seed = com.tmplayer.data.PlayAll.newSeed(System.nanoTime())
+            com.tmplayer.data.PlayAll.shuffleFirst(seed, listedItems)?.let { first ->
+                com.tmplayer.data.PlayAll.arm(com.tmplayer.data.PlayAll.Request(first.chatId, first.messageId, com.tmplayer.data.PlayAll.Mode.ChatShuffle, seed))
+                onPlay(first)
+            }
+        }),
         // One of the videos loaded so far, never a whole chat fetched for it (PlayRandom).
         onPlayRandom = if (listedItems.isEmpty()) null else ({
             sorting = false

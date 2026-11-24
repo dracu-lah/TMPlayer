@@ -142,6 +142,16 @@ class VideoMenuState(
      */
     val customLimits: String? = null,
     val onResetLimits: (() -> Unit)? = null,
+    /**
+     * Play all (WP-32): the chat's videos from the first listed on, in the order the grid is sorted
+     * in. Null leaves the line out: an empty list has nothing to start with.
+     */
+    val onPlayAll: (() -> Unit)? = null,
+    /**
+     * Shuffle (WP-87): the loaded videos in a seeded order, extended by pages. Null leaves the line
+     * out, and so does a chat of one video.
+     */
+    val onShuffle: (() -> Unit)? = null,
 )
 
 /**
@@ -153,9 +163,12 @@ class VideoMenuState(
  */
 fun videoMenuGroups(state: VideoMenuState, s: Messages): List<ChoiceGroup> = buildList {
     // First, where the thumb and the remote land: one press away from the Sort button.
-    state.onPlayRandom?.let { play ->
-        add(ChoiceGroup(s.commonPlay, listOf(GroupedChoice(s.gridPlayRandom, TmIcons.Shuffle, false, play))))
-    }
+    val plays = listOfNotNull(
+        state.onPlayAll?.let { play -> GroupedChoice(s.browsePlayAll, TmIcons.Play, false, play) },
+        state.onShuffle?.let { play -> GroupedChoice(s.browseShuffle, TmIcons.Shuffle, false, play) },
+        state.onPlayRandom?.let { play -> GroupedChoice(s.gridPlayRandom, TmIcons.Shuffle, false, play) },
+    )
+    if (plays.isNotEmpty()) add(ChoiceGroup(s.commonPlay, plays))
     val facets = state.facets
     val pick: (VideoFacets) -> Unit = state.onFacets
     add(ChoiceGroup(s.gridSortLabel, VideoSort.entries.map { sort -> GroupedChoice(videoSortLabel(sort, s), videoSortIcon(sort), sort == state.sort) { state.onSort(sort) } }))
