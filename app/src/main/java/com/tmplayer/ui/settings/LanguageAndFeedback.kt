@@ -44,6 +44,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.tv.material3.Icon
@@ -57,6 +60,7 @@ import com.tmplayer.data.FeedbackReports
 import com.tmplayer.data.FeedbackSender
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.ReleaseHighlights
 import com.tmplayer.data.WhatsNew
 import com.tmplayer.i18n.LanguageNotice
 import com.tmplayer.i18n.Translator
@@ -71,6 +75,7 @@ import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.tvHoldsFocus
 import com.tmplayer.ui.i18n.LocalStrings
@@ -185,44 +190,82 @@ fun TourOfferFrame(
 
 /**
  * "What's new": the bundled highlights of [WhatsNew.VERSION], on the first run of that version and
- * from Settings. "Full changelog" opens the site's changelog, or its QR code on a TV.
+ * from Settings, grouped under headings and limited to the lines for this device's form (a TV is
+ * told about its remote, a phone about touch). "Full changelog" opens the site's changelog, or its
+ * QR code on a TV. It is a window of its own: Back closes it, and the shell draws it only once the
+ * app lock is open and no video is playing, so it never holds either.
+ */
+@Composable
+fun WhatsNewDialog(onClose: () -> Unit, onChangelog: () -> Unit) {
+    val touch = isTouch()
+    val form = deviceForm()
+    val sections = remember(form) { WhatsNew.sections(form) }
+    FloatingWindow(onDismiss = onClose) {
+        val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 520.dp else 720.dp)
+        WhatsNewPanel(
+            sections = sections,
+            touch = touch,
+            onClose = onClose,
+            onChangelog = onChangelog,
+            modifier = Modifier.width(panel).heightIn(max = maxHeight - 48.dp),
+        )
+    }
+}
+
+/**
+ * The sheet's content: a title, the sections and the two buttons. On a TV Close holds the remote
+ * from the start (OK dismisses, Left reaches "Full changelog"); on touch nothing takes focus.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun WhatsNewDialog(onClose: () -> Unit, onChangelog: () -> Unit) {
+internal fun WhatsNewPanel(
+    sections: List<ReleaseHighlights.Section>,
+    touch: Boolean,
+    onClose: () -> Unit,
+    onChangelog: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val s = LocalStrings.current
-    val touch = isTouch()
     val close = remember { FocusRequester() }
-    FloatingWindow(onDismiss = onClose) {
-        val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 520.dp else 720.dp)
-        Column(
-            Modifier
-                .width(panel)
-                .heightIn(max = maxHeight - 48.dp)
-                .floatingSurface()
-                .verticalScroll(rememberScrollState())
-                .padding(if (touch) 20.dp else 28.dp),
-            verticalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 14.dp),
-        ) {
-            Text(s.whatsnewTitle(WhatsNew.VERSION), style = MaterialTheme.typography.headlineSmall, color = Tone.text)
-            Text(s.whatsnewSubtitle, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-            for (line in WhatsNew.highlights) {
+    Column(
+        modifier
+            .floatingSurface()
+            .verticalScroll(rememberScrollState())
+            .padding(if (touch) 20.dp else 28.dp),
+        verticalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 14.dp),
+    ) {
+        Text(
+            s.whatsnewTitle(WhatsNew.VERSION),
+            style = MaterialTheme.typography.headlineSmall,
+            color = Tone.text,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(s.whatsnewSubtitle, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        for (section in sections) {
+            Text(
+                section.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Tone.text,
+                modifier = Modifier.padding(top = 4.dp).semantics { heading() },
+            )
+            for (line in section.lines) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                     Icon(TmIcons.CheckCircle, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(22.dp))
                     Text(line, style = MaterialTheme.typography.bodyLarge, color = Tone.text)
                 }
             }
-            CompositionLocalProvider(LocalOnFloating provides true) {
-                // Wraps rather than squeezes: "Vollständiges Änderungsprotokoll" left "Schließen"
-                // a column of single letters on a phone.
-                FlowRow(
-                    Modifier.fillMaxWidth().padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    TmSecondaryButton(onClick = onChangelog) { Label(s.whatsnewFullChangelog) }
-                    TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label(s.commonClose) }
-                }
+        }
+        CompositionLocalProvider(LocalOnFloating provides true) {
+            // Wraps rather than squeezes: "Vollständiges Änderungsprotokoll" left "Schließen"
+            // a column of single letters on a phone.
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TmSecondaryButton(onClick = onChangelog) { Label(s.whatsnewFullChangelog) }
+                TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label(s.commonClose) }
             }
         }
     }

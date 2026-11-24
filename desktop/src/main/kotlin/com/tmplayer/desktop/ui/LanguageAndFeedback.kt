@@ -35,7 +35,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.Feedback
 import com.tmplayer.data.FeedbackReport
 import com.tmplayer.data.FeedbackReports
@@ -96,12 +100,24 @@ fun WhatsNewPopup(onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { Text(s.whatsnewTitle(WhatsNew.VERSION)) },
         text = {
-            Column(Modifier.widthIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Scrolls: the sheet has grown to four groups, and a small window must still reach Close.
+            Column(
+                Modifier.widthIn(max = 520.dp).heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text(s.whatsnewSubtitle, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                for (line in WhatsNew.highlights) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(TmIcons.CheckCircle, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(20.dp))
-                        Text(line, style = MaterialTheme.typography.bodyLarge)
+                for (section in WhatsNew.sections(DeviceForm.Desktop)) {
+                    Text(
+                        section.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 4.dp).semantics { heading() },
+                    )
+                    for (line in section.lines) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(TmIcons.CheckCircle, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(20.dp))
+                            Text(line, style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                 }
             }
