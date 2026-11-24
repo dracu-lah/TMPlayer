@@ -41,6 +41,8 @@ export class User {
         return typeof id === 'number' ? id : 1
     }
     get displayName() {
+        // `noname`: an account Telegram gives no name (the bar's picture falls back to the person glyph).
+        if (flags.has('noname')) return ''
         return NAMES[this.id] ?? `User ${this.id}`
     }
     get username() {

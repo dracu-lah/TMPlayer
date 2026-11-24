@@ -76,8 +76,16 @@ internal class DesktopKitPlatform : ProfilePlatform {
     override fun say(text: String) {
         said += text
     }
-    override val appLock: Flow<AppLockSettings?> get() = flowOf(AppLockSettings())
-    override fun appLockNow(): AppLockSettings = AppLockSettings()
+    /** The app lock's PIN for this test, or null for none (the default). */
+    @Volatile var appPin: String? = null
+    override val appLock: Flow<AppLockSettings?> get() = flowOf(AppLockSettings(pinSet = appPin != null))
+    override fun appLockNow(): AppLockSettings = AppLockSettings(pinSet = appPin != null)
+    override fun appLockChecker(): com.tmplayer.ui.lock.PinChecker? = object : com.tmplayer.ui.lock.PinChecker {
+        override suspend fun waitUntil(): Long = 0L
+        override suspend fun check(pin: String): com.tmplayer.data.PinCheck =
+            if (pin == appPin) com.tmplayer.data.PinCheck.Right else com.tmplayer.data.PinCheck.Wrong(com.tmplayer.data.PinAttempts(1))
+        override fun freeLeft(attempts: com.tmplayer.data.PinAttempts): Int = 3
+    }
 }
 
 /**

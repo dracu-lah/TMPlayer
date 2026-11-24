@@ -251,7 +251,7 @@ fun SignOutHost(
                 PinPad(
                     settings = settings,
                     purpose = PinPurpose.Check,
-                    title = s.lockEnterForSettings,
+                    title = s.lockEnterForSignOut,
                     onDone = { state.pinOk = true },
                     onCancel = { state.reset() },
                     modifier = Modifier.fillMaxSize(),

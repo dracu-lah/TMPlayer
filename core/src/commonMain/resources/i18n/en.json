@@ -1496,6 +1496,7 @@
     "enter_current": "Enter the current PIN",
     "enter_for_app": "Enter the PIN to open TMPlayer",
     "enter_for_settings": "Enter the PIN to open Settings",
+    "enter_for_sign_out": "Enter the PIN to sign out",
     "enter_pin": "Enter the PIN",
     "forgot": "Forgot the PIN? End this device's session in Telegram on your phone (Settings, Devices), then sign in again. Signing out is the only reset.",
     "kids": "Allowed chats only",
@@ -1818,6 +1819,8 @@
   "nav": {
     "account": "Account",
     "account_menu": "open the account menu",
+    "account_moved_hint": "Settings, your lists and your account are behind your picture now",
+    "account_named": "Account, {name}",
     "chats": "Chats",
     "downloads": "Downloads",
     "favourites": "Favourites",

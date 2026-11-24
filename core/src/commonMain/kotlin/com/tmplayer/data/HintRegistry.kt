@@ -50,6 +50,12 @@ object HintIds {
 
     /** The tile's second line on the television: Hold OK or press Menu for options (WP-14). */
     const val TILE_OPTIONS = "tile_options"
+
+    /**
+     * The phone's "Settings, your lists and your account are behind your picture now" (WP-103): once,
+     * for an install that had the gear; a fresh install has it marked seen by its first sign in screen.
+     */
+    const val NAV_ACCOUNT_MOVED = "nav_account_moved"
 }
 
 object HintRegistry {

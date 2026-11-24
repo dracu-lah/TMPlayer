@@ -115,22 +115,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit, name: Strin
     val gate = com.tmplayer.data.SignOutGate.of(lock, state.settingsUnlocked, pinGiven)
     if (gate == com.tmplayer.data.SignOutGate.Wait) return
     if (gate == com.tmplayer.data.SignOutGate.Pin) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-            androidx.compose.foundation.layout.Box(
-                androidx.compose.ui.Modifier
-                    .width(380.dp)
-                    .height(600.dp)
-                    .background(com.tmplayer.ui.theme.Tone.background),
-            ) {
-                com.tmplayer.ui.lock.PinPad(
-                    settings = settings,
-                    purpose = com.tmplayer.ui.lock.PinPurpose.Check,
-                    title = s.lockEnterForSettings,
-                    onDone = { pinGiven = true },
-                    onCancel = onDismiss,
-                )
-            }
-        }
+        AccountPinDialog(state, onDone = { pinGiven = true }, onCancel = onDismiss)
         return
     }
     when (val shown = phase) {
@@ -211,3 +196,24 @@ internal suspend fun signOut(
 
 /** How long signing out waits for the video cache to be cleared before logging out regardless. */
 private const val CLEAR_CACHE_MS = 5_000L
+
+/** The app lock's PIN in a window of its own, before a sign out asked from outside Settings. */
+@Composable
+private fun AccountPinDialog(state: ShellState, onDone: () -> Unit, onCancel: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onCancel) {
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier
+                .width(380.dp)
+                .height(600.dp)
+                .background(com.tmplayer.ui.theme.Tone.background),
+        ) {
+            com.tmplayer.ui.lock.PinPad(
+                settings = state.settings,
+                purpose = com.tmplayer.ui.lock.PinPurpose.Check,
+                title = LocalStrings.current.lockEnterForSignOut,
+                onDone = { onDone() },
+                onCancel = onCancel,
+            )
+        }
+    }
+}

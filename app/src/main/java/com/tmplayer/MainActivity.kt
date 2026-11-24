@@ -2055,11 +2055,15 @@ private fun Root() {
             },
             onUpdate = { showUpdate = true },
             onSwitchProfile = profileFlow?.takeIf { severalProfiles }?.let { flow -> { flow.ask() } },
-            // The picker shows the one tile and Add account with one profile (WP-02).
-            onSwitchOrAdd = profileFlow?.let { flow -> { flow.ask() } },
+            // Add account with one profile, the picker with more (WP-02, WP-103). Add asks the app
+            // lock's PIN itself (ProfileFlow.add, closed while the lock is unread): one PIN, once.
+            onSwitchOrAdd = profileFlow?.let { flow -> { com.tmplayer.ui.browse.switchOrAdd(flow, severalProfiles) } },
             onSignOut = { signOutState.request() },
             signOutPhase = signOutState.phase,
             profile = profileList?.active,
+            // A profile panel or PIN pad, a notice, or the app lock over the pages: no hint over them.
+            promptUp = (profileFlow != null && (profileFlow.stage != com.tmplayer.ui.lock.ProfileFlow.Stage.Picker || profileFlow.notice != null)) ||
+                (appLock?.onOpen == true && !appUnlocked),
         )
 
         // The television's top bar over Downloads, as it is over the browser's pages. Settings has

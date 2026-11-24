@@ -103,7 +103,7 @@ class DownloadsTabBarTest {
                             CompositionLocalProvider(LocalTouchPageKey provides "page") {
                                 TouchPage(TouchPageSpec(current = current))
                                 Box(Modifier.fillMaxSize()) {
-                                    if (gear) YouGearButton(Modifier.align(Alignment.TopEnd))
+                                    if (gear) AccountButton(Modifier.align(Alignment.TopEnd))
                                 }
                             }
                         }
@@ -196,7 +196,7 @@ class DownloadsTabBarTest {
     fun `the gear opens the card of your lists and Settings, with no Downloads row`() {
         val chrome = show(running = 3, current = TouchDestination.Home)
         assertEquals(false, chrome.youOpen)
-        rule.onNodeWithContentDescription(L.navYou).assertIsDisplayed().performClick()
+        rule.onNodeWithContentDescription(L.navAccount).assertIsDisplayed().performClick()
         rule.waitForIdle()
         assertEquals(true, chrome.youOpen)
         rule.onNodeWithText(L.browseTabFavourites).assertIsDisplayed()
@@ -217,7 +217,7 @@ class DownloadsTabBarTest {
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
     fun `Back closes the card before it leaves the page`() {
         val chrome = show(running = 0, current = TouchDestination.Home)
-        rule.onNodeWithContentDescription(L.navYou).performClick()
+        rule.onNodeWithContentDescription(L.navAccount).performClick()
         rule.waitForIdle()
         assertTrue(chrome.youOpen)
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }

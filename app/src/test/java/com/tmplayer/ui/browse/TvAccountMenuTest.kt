@@ -319,7 +319,7 @@ class TvAccountMenuTest {
                     TouchNavHost(nav, chrome, "page") {
                         androidx.compose.runtime.CompositionLocalProvider(LocalTouchPageKey provides "page") {
                             TouchPage(TouchPageSpec(current = TouchDestination.Home))
-                            Box(Modifier.fillMaxSize()) { YouGearButton(Modifier.align(androidx.compose.ui.Alignment.TopEnd)) }
+                            Box(Modifier.fillMaxSize()) { AccountButton(Modifier.align(androidx.compose.ui.Alignment.TopEnd)) }
                         }
                     }
                 }
@@ -331,7 +331,7 @@ class TvAccountMenuTest {
             }
         }
         rule.waitForIdle()
-        rule.onNodeWithContentDescription(L.navYou).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        rule.onNodeWithContentDescription(L.navAccountNamed("Asha Rao")).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         rule.waitForIdle()
         return chrome
     }
@@ -379,16 +379,16 @@ class TvAccountMenuTest {
         rule.waitForIdle()
         button(L.settingsSignOutConfirm).press()
         rule.waitForIdle()
-        rule.onNodeWithTextExists(L.lockEnterForSettings)
+        rule.onNodeWithTextExists(L.lockEnterForSignOut)
         assertTrue("no question before the PIN", rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
         // A wrong PIN: still the pad, still no question.
         typePin("0000")
-        rule.onNodeWithTextExists(L.lockEnterForSettings)
+        rule.onNodeWithTextExists(L.lockEnterForSignOut)
         assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
         // Cancel: the pad goes, nothing is asked, nothing is signed out.
         rule.onNode(hasText(L.commonCancel) and hasClickAction()).press()
         rule.waitForIdle()
-        assertTrue(rule.onAllNodesWithText(L.lockEnterForSettings).fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithText(L.lockEnterForSignOut).fetchSemanticsNodes().isEmpty())
         assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
         assertFalse(calls.contains("signedOut"))
         // Again, with the right PIN: now the question.
@@ -412,14 +412,14 @@ class TvAccountMenuTest {
         rule.runOnUiThread { appLocked.value = true }
         rule.waitForIdle()
         assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
-        assertTrue(rule.onAllNodesWithText(L.lockEnterForSettings).fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithText(L.lockEnterForSignOut).fetchSemanticsNodes().isEmpty())
         // Unlocked again: no question is waiting and the PIN given before is not remembered.
         rule.runOnUiThread { appLocked.value = false }
         rule.waitForIdle()
         assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
         button(L.settingsSignOutConfirm).press()
         rule.waitForIdle()
-        rule.onNodeWithTextExists(L.lockEnterForSettings)
+        rule.onNodeWithTextExists(L.lockEnterForSignOut)
         assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
     }
 
@@ -430,7 +430,7 @@ class TvAccountMenuTest {
         phone(several = false, pin = true)
         rule.onNode(hasText(L.settingsSignOutConfirm) and hasClickAction()).press()
         rule.waitForIdle()
-        rule.onNodeWithTextExists(L.lockEnterForSettings)
+        rule.onNodeWithTextExists(L.lockEnterForSignOut)
         assertTrue(rule.onAllNodesWithText(L.settingsSignOutTitleNamed("Asha Rao")).fetchSemanticsNodes().isEmpty())
     }
 

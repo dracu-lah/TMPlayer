@@ -303,6 +303,8 @@ internal fun PhoneBrowse(
         },
         actions = actions,
         barPosition = barPosition,
+        // The account menu's Refresh row: what pulling this page down does (Home, the chat list).
+        refresh = refreshOf(tab),
     ) {
         val order = remember(sections) { navGroups(sections).flatMap { it.entries }.filterIsInstance<NavEntry.Section>().map { it.section } }
         AnimatedContent(

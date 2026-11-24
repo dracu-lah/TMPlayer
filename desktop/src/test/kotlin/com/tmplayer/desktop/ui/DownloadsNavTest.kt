@@ -154,11 +154,11 @@ class DownloadsNavTest {
         onNode(button(L.commonSearch)).assertExists()
         val search = onNode(button(L.commonSearch)).fetchSemanticsNode().boundsInRoot
         val downloads = onNode(button(L.navDownloads)).fetchSemanticsNode().boundsInRoot
-        val you = onNode(button(L.navProfile)).fetchSemanticsNode().boundsInRoot
+        val you = onNode(button(L.navAccount)).fetchSemanticsNode().boundsInRoot
         assertTrue("Downloads after Search", downloads.left >= search.right)
         assertTrue("Downloads before the picture", you.left >= downloads.right)
         // The picture's menu no longer lists it.
-        onNode(button(L.navProfile)).performClick()
+        onNode(button(L.navAccount)).performClick()
         assertEquals("the card has no Downloads row, only the bar's button", 1, onAllDownloads())
         shell.profileOpen = false
         onNode(button(L.navDownloads)).performClick()

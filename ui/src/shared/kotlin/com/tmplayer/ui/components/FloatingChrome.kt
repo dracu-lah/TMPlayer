@@ -207,6 +207,49 @@ fun FloatingEndButton(
 }
 
 /**
+ * [FloatingEndButton] that draws [content] in place of an icon (WP-103): the account's picture at
+ * the top end of the phone's Home and Downloads, where the gear was. The same insets and a full
+ * [FloatingChrome.PageButton] target, with nothing drawn round [content] at rest: the picture keeps
+ * its own outline. [content] is told when the keyboard's focus is on it (a tablet, a Chromebook or
+ * an iPad keyboard), to draw its focus look; a screen reader hears [label], then [onClickLabel].
+ */
+@Composable
+fun FloatingEndButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onClickLabel: String? = null,
+    content: @Composable (focused: Boolean) -> Unit,
+) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusVisibleAsState()
+    Box(
+        modifier
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            // The icon button's centre: its 44 dp circle at 12 dp and 10 dp from the corner.
+            .padding(end = FloatingChrome.Inset - 2.dp, top = 8.dp),
+    ) {
+        IconTip(label, side = TipSide.Below) {
+            Box(
+                Modifier
+                    .size(FloatingChrome.PageButton)
+                    .pressScale(interactions)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = interactions,
+                        indication = ripple(),
+                        role = Role.Button,
+                        onClickLabel = onClickLabel,
+                        onClick = onClick,
+                    )
+                    .semantics { contentDescription = label },
+                contentAlignment = Alignment.Center,
+            ) { content(focused) }
+        }
+    }
+}
+
+/**
  * The title along the top of a page that has a [FloatingBackButton]: the page's name beside the
  * button, with nothing to press, scrolling away with the list ([scrollBehavior]) and back on the
  * first pull down. The button stays where it is.

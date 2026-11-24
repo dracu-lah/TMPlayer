@@ -2826,13 +2826,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     /**
      * A sign in screen is up: the setup comes once the account is in. The first sign in screen of
      * a fresh install (nothing about setup, signing in or Low storage mode stored yet) also turns
-     * [lowStorageMode] on, so a new install starts with it on; an install that is updated never
-     * reaches this, and a stored answer either way is left alone.
+     * [lowStorageMode] on, so a new install starts with it on, and marks the phone's "your account
+     * moved" hint seen (it never had the gear); an install that is updated never reaches this, and a
+     * stored answer either way is left alone.
      */
     suspend fun armSetup() {
         prefs.edit {
             val fresh = it[SETUP] == null && it[SIGNED_IN] != true && it[LOW_STORAGE_MODE] == null
             if (fresh) it[LOW_STORAGE_MODE] = true
+            // A fresh install never had the gear: the hint that says where it went is not for it (WP-103).
+            if (fresh) it[HINTS_SEEN] = HintRegistry.encode(HintRegistry.raise(hintStateOf(it), HintIds.NAV_ACCOUNT_MOVED))
             if (it[SETUP] != SETUP_PENDING) it[SETUP] = SETUP_PENDING
         }
     }

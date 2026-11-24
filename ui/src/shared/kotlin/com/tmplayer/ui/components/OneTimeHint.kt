@@ -63,6 +63,8 @@ fun hintAllowed(state: HintState?, id: String, maxShows: Int = 1, inPlayback: Bo
  * A one-time hint named [id]. While [visible] is true (a tile has focus, a screen has opened) and the
  * registry allows it, it claims the screen's slot, counts itself and shows [label] as a [FocusTip]
  * (place it inside the box of the control it names) or, with [HintStyle.Bubble], a [TipBubble].
+ * [draw], when given, draws [label] in place of either (a sentence too long for a one line tip, the
+ * phone's "your account moved" card, WP-103); the registry's rules are the same.
  */
 @Composable
 fun OneTimeHint(
@@ -74,6 +76,7 @@ fun OneTimeHint(
     inPlayback: Boolean = false,
     style: HintStyle = HintStyle.Focus,
     side: TipSide = TipSide.Below,
+    draw: (@Composable (label: String) -> Unit)? = null,
 ) {
     val state by settings.hintState.collectAsState(initial = null)
     val own = remember { HintSlot() }
@@ -95,6 +98,7 @@ fun OneTimeHint(
         }
     }
     if (active) {
+        if (draw != null) return draw(label)
         when (style) {
             HintStyle.Focus -> FocusTip(visible = true, label = label, side = side)
             HintStyle.Bubble -> TipBubble(label)

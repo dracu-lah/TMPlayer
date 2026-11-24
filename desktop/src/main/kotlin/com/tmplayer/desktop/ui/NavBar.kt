@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -131,6 +132,13 @@ fun NavFrame(
     // page stays at the same place in the tree either way, so a change of layout keeps its state.
     val tv = BigScreen.on
     var pictureX by remember { mutableFloatStateOf(Float.NaN) }
+    // The profile open now (WP-103): its saved photo or letter stands in for Telegram's picture, and
+    // its name for Telegram's, until Telegram has answered (or offline). Null before the profiles open.
+    val profileFlow = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
+    val profileList by remember(profileFlow) {
+        profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+    }.collectAsState()
+    val accountFocus = remember { FocusRequester() }
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // The TV's bar is drawn over the page (in the overlay below), as the Android TV app
@@ -158,6 +166,8 @@ fun NavFrame(
                         account,
                         Modifier.align(Alignment.BottomCenter),
                         onPicturePlaced = { pictureX = it },
+                        profile = profileList?.active,
+                        accountFocus = accountFocus,
                     )
                 }
                 ProfilePopover(
@@ -166,6 +176,10 @@ fun NavFrame(
                     anchorX = with(LocalDensity.current) { (pictureX - frameX).toDp() },
                     below = if (tv) TV_BAR_HEIGHT else null,
                     name = account?.name,
+                    account = account,
+                    profileFlow = profileFlow,
+                    profileList = profileList,
+                    focusBack = accountFocus,
                 )
             }
         } else {
@@ -216,6 +230,8 @@ private fun NavBar(
     account: Account?,
     modifier: Modifier = Modifier,
     onPicturePlaced: (Float) -> Unit,
+    profile: com.tmplayer.data.Profile? = null,
+    accountFocus: FocusRequester? = null,
 ) {
     val s = LocalStrings.current
     val current = navPlaceOf(state)
@@ -279,6 +295,8 @@ private fun NavBar(
                     NavButton(TmIcons.Download, s.navDownloads, DOWNLOADS_SHORTCUT, current == NavPlace.Downloads, badge = inFlight) { state.toggleDownloads() }
                     ProfileButton(
                         account = account,
+                        profile = profile,
+                        focus = accountFocus,
                         ringed = inProfile(state),
                         badged = update != null,
                         open = state.profileOpen,
@@ -392,10 +410,17 @@ private fun NavCell(
     }
 }
 
-/** The viewer's picture, ringed while one of its lists is open, with a dot for news behind it. */
+/**
+ * The account's picture and first name (WP-103), ringed while one of its lists is open, with a dot
+ * for news behind it. The phone's chain: Telegram's picture once it is there, else the profile's
+ * saved photo, else the letter on the profile's colour, and the person glyph only when no name is
+ * known. A screen reader hears "Account, Asha" (with ", an update is ready" while one waits).
+ */
 @Composable
 private fun ProfileButton(
     account: Account?,
+    profile: com.tmplayer.data.Profile?,
+    focus: FocusRequester?,
     ringed: Boolean,
     badged: Boolean,
     open: Boolean,
@@ -403,26 +428,22 @@ private fun ProfileButton(
     onClick: () -> Unit,
 ) {
     val s = LocalStrings.current
-    // "You", as the phone's bar says: short like the other names, and never blank.
-    val name = s.navYou
-    BarTooltip(s.navProfile, null) {
+    val name = desktopAccountName(account, profile)
+    val named = name?.let { s.navAccountNamed(it) } ?: s.navAccount
+    // The first name, short like the other places' names, and "Account" while none is known.
+    val caption = name?.let(::firstName) ?: s.navAccount
+    BarTooltip(named, null) {
         NavCell(
-            label = name,
+            label = caption,
             chosen = ringed || open,
             onClick = onClick,
             role = Role.Button,
-            description = s.navProfile,
-            modifier = Modifier.onGloballyPositioned { onPlaced(it.boundsInRoot().center.x) },
+            description = if (badged) "$named, ${s.navUpdateWaiting}" else named,
+            modifier = Modifier.onGloballyPositioned { onPlaced(it.boundsInRoot().center.x) }.then(if (focus != null) Modifier.focusRequester(focus) else Modifier).testTag(NAV_ACCOUNT_TAG),
         ) { _ ->
             val ring by animateColorAsState(if (ringed || open) Tone.accent else Color.Transparent, Motion.standard(Motion.Fast), label = "profileRing")
             Box(Modifier.size(PICTURE + 6.dp).border(2.dp, ring, CircleShape), contentAlignment = Alignment.Center) {
-                if (account != null) {
-                    ChatAvatar(account.miniThumbnail, account.photoFileId, account.name, PICTURE)
-                } else {
-                    Box(Modifier.size(PICTURE).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
-                        Icon(TmIcons.Account, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(PICTURE * 0.7f))
-                    }
-                }
+                androidx.compose.runtime.key(profile?.id) { AccountPictureDesktop(account, profile, name, PICTURE) }
                 if (badged) {
                     Box(
                         Modifier
@@ -433,6 +454,41 @@ private fun ProfileButton(
                             .border(1.5.dp, FloatingTone.menu, CircleShape),
                     )
                 }
+            }
+        }
+    }
+}
+
+/** Who the picture is: Telegram's name once it is known, else the profile's own, else nobody yet. */
+internal fun desktopAccountName(account: Account?, profile: com.tmplayer.data.Profile?): String? =
+    account?.name?.trim()?.takeIf { it.isNotEmpty() } ?: profile?.shownName?.trim()?.takeIf { it.isNotEmpty() }
+
+/** The first word of [name], for the bar's short caption; the whole name when it has no space. */
+internal fun firstName(name: String): String =
+    name.trim().split(' ', '\t', '\n').firstOrNull { it.isNotEmpty() } ?: name
+
+/** The tag of the account's cell on the bar. */
+internal const val NAV_ACCOUNT_TAG = "nav-account"
+
+/** The tag of the account's round picture, on the bar and in the menu's head. */
+internal const val NAV_PICTURE_TAG = "nav-account-picture"
+
+/** The tag of the account menu's head (picture, name, @username). */
+internal const val NAV_MENU_HEAD_TAG = "nav-account-head"
+
+/**
+ * The account's round picture at [size]: Telegram's (its letter while it loads), else the profile's
+ * saved photo or letter, else the person glyph, never an empty disc.
+ */
+@Composable
+private fun AccountPictureDesktop(account: Account?, profile: com.tmplayer.data.Profile?, name: String?, size: Dp) {
+    Box(Modifier.size(size).clip(CircleShape).testTag(NAV_PICTURE_TAG), contentAlignment = Alignment.Center) {
+        val telegram = account != null && (account.photoFileId > 0 || account.miniThumbnail?.isNotEmpty() == true)
+        when {
+            telegram && account != null -> ChatAvatar(account.miniThumbnail, account.photoFileId, name ?: account.name, size)
+            name != null -> com.tmplayer.ui.lock.ProfileAvatar(name, profile?.photo, size)
+            else -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
+                Icon(TmIcons.Account, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(size * 0.7f))
             }
         }
     }
@@ -474,12 +530,27 @@ internal fun TipIconButton(
 }
 
 /**
- * The viewer's own lists, behind their picture: a small card that grows out of the bar over the
- * picture, as on the phone. A click outside, Esc or picking a row closes it; Up and Down walk the
- * rows, and focus starts on the first.
+ * The account menu behind the picture: a small card that grows out of the bar over the picture, as
+ * on the phone. In the window (WP-103) it is the phone's account menu: whose account it is (the
+ * picture, the name, the @username), Switch profile (two or more) or Add account (one), Settings
+ * with its key, Refresh where the page has one, the viewing summary and the lists, Update, and Sign
+ * out last. A click outside, Esc or picking a row closes it, and Esc puts the keyboard back on the
+ * picture; Up and Down walk the rows, and focus starts on the first. The big screen's keeps its
+ * own order (WP-02).
  */
 @Composable
-private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, anchorX: Dp, below: Dp? = null, name: String? = null) {
+private fun BoxScope.ProfilePopover(
+    state: ShellState,
+    update: NavUpdate?,
+    anchorX: Dp,
+    below: Dp? = null,
+    name: String? = null,
+    account: Account? = null,
+    profileFlow: com.tmplayer.ui.lock.ProfileFlow? = null,
+    profileList: com.tmplayer.data.AccountList? = null,
+    /** The picture on the bar, which has the keyboard again when Esc closes the menu. */
+    focusBack: FocusRequester? = null,
+) {
     val s = LocalStrings.current
     val open = state.profileOpen
     val reduced = rememberReducedMotion() || Motion.reduced
@@ -496,16 +567,16 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
     val watching by state.settings.continueWatching.collectAsState(initial = emptyList())
     val watchedVideos by state.watched.watched.collectAsState(initial = emptyMap())
     val inFlight = rememberDownloadsInFlight()
-    // The big screen's menu also acts on the account (WP-02): Switch profile with two profiles or more
-    // and Add account with one, then Sign out. The question is composed here, outside the popover's
-    // own content, so closing the popover never cuts a backup started from it.
-    val profileFlow = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
-    val profileList by remember(profileFlow) {
-        profileFlow?.switcher?.profiles ?: kotlinx.coroutines.flow.MutableStateFlow(com.tmplayer.data.AccountRules.adopted(0L))
-    }.collectAsState()
-    val severalProfiles = com.tmplayer.data.ProfilePicker.atLaunch(profileList)
+    // The menu also acts on the account (WP-02 on the big screen, WP-103 in the window): Switch
+    // profile with two profiles or more and Add account with one, then Sign out. The questions are
+    // composed here, outside the popover's own content, so closing the popover never cuts a backup
+    // started from it. Sign out asks the app lock's PIN first when Settings is shut; Add account's PIN
+    // is the profile flow's own (ProfileFlow.add), asked once.
+    val severalProfiles = profileList?.let { com.tmplayer.data.ProfilePicker.atLaunch(it) } == true
     var signOutAsked by remember { mutableStateOf(false) }
     if (signOutAsked) SignOutDialog(state, onDismiss = { signOutAsked = false }, name = name)
+    val window = below == null
+    val shownName = desktopAccountName(account, profileList?.active)
     val half = POPOVER_WIDTH / 2
     // Over the floating bar at the foot, or hanging under the TV's bar at the top (plan 8.7).
     val origin = TransformOrigin(0.5f, if (below != null) 0f else 1f)
@@ -539,13 +610,58 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
                             Key.DirectionUp -> focus.moveFocus(FocusDirection.Previous)
                             Key.Escape -> {
                                 state.profileOpen = false
+                                // The keyboard goes back to the picture that opened the menu.
+                                if (window) runCatching { focusBack?.requestFocus() }
                                 true
                             }
                             else -> false
                         }
                     }
+                    .semantics { paneTitle = shownName?.let { s.navAccountNamed(it) } ?: s.navAccount }
                     .padding(vertical = 6.dp),
             ) {
+                if (window) {
+                    AccountMenuHead(account, profileList?.active, shownName ?: s.navAccount)
+                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+                    if (profileFlow != null) {
+                        PopoverRow(
+                            TmIcons.Person,
+                            if (severalProfiles) s.profilesSwitchProfile else s.profilesAdd,
+                            null,
+                            Modifier.focusRequester(first),
+                            // Two or more: the picker; one: Add account, as Settings' own rows (SettingsPages).
+                            onClick = close { if (severalProfiles) profileFlow.ask() else profileFlow.add() },
+                        )
+                    }
+                    PopoverRow(
+                        TmIcons.Settings,
+                        s.navSettings,
+                        null,
+                        if (profileFlow == null) Modifier.focusRequester(first) else Modifier,
+                        shortcut = "$COMMAND,",
+                        onClick = close { state.go(Destination.Settings) },
+                    )
+                    // The page's own refresh (F5), where it has one.
+                    state.refreshAction?.let { refresh -> PopoverRow(TmIcons.Refresh, s.commonRefresh, null, shortcut = "F5", onClick = close(refresh)) }
+                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+                    com.tmplayer.ui.components.ViewingSummary(
+                        watching = watching.size,
+                        watched = watchedVideos.size,
+                        starred = favourites.size,
+                        onWatching = close { state.showHistory(HistoryTab.Continue) },
+                        onWatched = close { state.showHistory(HistoryTab.Watched) },
+                        onStarred = close { state.go(Destination.Favourites) },
+                    )
+                    PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favourites.size.takeIf { it > 0 }?.toString(), onClick = close { state.go(Destination.Favourites) })
+                    PopoverRow(TmIcons.History, s.browseTabHistory, null, onClick = close { state.showHistory(HistoryTab.Continue) })
+                    PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, onClick = close { state.showHistory(HistoryTab.WatchLater) })
+                    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+                    if (update != null) {
+                        PopoverRow(TmIcons.Refresh, update.label, update.version, ink = Tone.caution, onClick = close { state.updatePopup = true })
+                    }
+                    PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = close { signOutAsked = true })
+                    return@Column
+                }
                 com.tmplayer.ui.components.ViewingSummary(
                     watching = watching.size,
                     watched = watchedVideos.size,
@@ -578,6 +694,33 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
                 }
             }
             LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+        }
+    }
+}
+
+/**
+ * The window's account menu head (WP-103): the picture at 48 dp, the name in two lines at most and
+ * the @username under it when Telegram has one, so two profiles of the same name read apart. One
+ * node for a screen reader.
+ */
+@Composable
+private fun AccountMenuHead(account: Account?, profile: com.tmplayer.data.Profile?, name: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .semantics(mergeDescendants = true) {}
+            .testTag(NAV_MENU_HEAD_TAG),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.runtime.key(profile?.id) { AccountPictureDesktop(account, profile, desktopAccountName(account, profile), 48.dp) }
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleMedium, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val username = account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() }
+            if (username != null) {
+                Text("@$username", style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

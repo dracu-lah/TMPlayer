@@ -2379,8 +2379,8 @@ private fun PhoneDownloads(
             }
         }
 
-        // Your lists and Settings, the gear that left the bar with the picture (R2); not while a selection is up.
-        if (!picking) com.tmplayer.ui.browse.YouGearButton(Modifier.align(Alignment.TopEnd))
+        // The account's picture and its menu (WP-103): the account, Settings and your lists; not while a selection is up.
+        if (!picking) com.tmplayer.ui.browse.AccountButton(Modifier.align(Alignment.TopEnd))
         FloatingBackButton(
             icon = if (picking) TmIcons.Close else TmIcons.ArrowBack,
             // While picking, the button leaves the selection rather than the screen: that is what

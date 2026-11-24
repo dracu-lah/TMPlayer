@@ -69,7 +69,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -131,6 +138,7 @@ import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Motion
+import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.theme.rememberReducedMotion
@@ -139,8 +147,8 @@ import com.tmplayer.ui.theme.rememberReducedMotion
  * Where the phone's floating bar can take the viewer, with the slot each button stands in: Home,
  * Chats, Search (a button the search field grows out of rather than a page of its own, so no
  * destination), then Downloads (R2: a place of its own, no longer behind the profile picture).
- * Your lists and Settings are behind the gear at the top end of Home and of the Downloads page
- * ([YouGearButton]).
+ * The account, your lists and Settings are behind the account's picture at the top end of Home
+ * and of the Downloads page ([AccountButton]).
  */
 internal enum class TouchDestination(val slot: Int) { Home(0), Chats(1), Downloads(3) }
 
@@ -164,7 +172,7 @@ internal class TouchNav(
     val onHome: () -> Unit,
     val onChats: () -> Unit,
     val onSearch: () -> Unit,
-    /** Settings, from the gear's card (the phone), the picture's menu (the television, the desktop). */
+    /** Settings, from the picture's menu (the phone, the television, the desktop). */
     val onSettings: () -> Unit,
     val onFavourites: () -> Unit,
     val onDownloads: () -> Unit,
@@ -187,6 +195,11 @@ internal class TouchNav(
      */
     val signOutPhase: com.tmplayer.ui.settings.SignOutPhase = com.tmplayer.ui.settings.SignOutPhase.Idle,
     /**
+     * Something of the shell's own is over the pages now (WP-103): a profile panel or its PIN pad, or
+     * the app lock. The one-time hint, a popup of its own, waits until it has gone.
+     */
+    val promptUp: Boolean = false,
+    /**
      * The profile open now (WP-01): its saved photo and name stand in for the account's picture and
      * name while Telegram has not answered yet, or never will (offline), so the bar says who is
      * signed in from the first frame. Null where there is no profile list (a preview).
@@ -197,7 +210,7 @@ internal class TouchNav(
 /**
  * What one page asks of the floating bar while it is the page on screen.
  *
- * @param current the bar button lit for this page, or null for a page behind the gear (Favourites,
+ * @param current the bar button lit for this page, or null for a page behind the picture (Favourites,
  *   History, Watch later).
  * @param hidden the bar steps out of the way for now (a search open, a selection under way)
  *   while the page still keeps its room at the foot.
@@ -213,6 +226,11 @@ internal class TouchPageSpec(
      * highlight without recomposing the bar. Null leaves the highlight on [current].
      */
     val position: (() -> Float)? = null,
+    /**
+     * The page's refresh (WP-103), the same that pulling it down runs: Home and the chat list set
+     * it, and the account menu shows its Refresh row only while it is set.
+     */
+    val refresh: (() -> Unit)? = null,
 )
 
 /**
@@ -230,11 +248,14 @@ internal class TouchChrome {
     /** Set by the bar's magnifier on a page without a search; the browser opens its search and clears it. */
     var searchAsked by mutableStateOf(false)
 
-    /** The gear's card (Favourites, History, Watch later, Settings, Update) is open. */
+    /** The account menu behind the picture ([AccountButton]) is open. */
     var youOpen by mutableStateOf(false)
 
-    /** An update is waiting: the gear wears a dot, as the picture did. */
+    /** An update is waiting: the picture wears a dot. */
     var youBadge by mutableStateOf(false)
+
+    /** The picture, for the keyboard's focus to come back to when the account menu closes. */
+    internal val accountFocus = androidx.compose.ui.focus.FocusRequester()
 
     /** A bar button pressed again on its own page, for that page to go back to its top ([ScrollToTopOnReselect]). */
     internal val reselected = MutableSharedFlow<TouchDestination>(extraBufferCapacity = 1)
@@ -243,6 +264,12 @@ internal class TouchChrome {
 }
 
 internal val LocalTouchChrome = staticCompositionLocalOf<TouchChrome?> { null }
+
+/**
+ * The host's [TouchNav], for the account's picture on a page ([AccountButton]) to say who is signed
+ * in. Not static: a new [TouchNav] each time the shell recomposes redraws only the pictures.
+ */
+internal val LocalTouchNav = compositionLocalOf<TouchNav?> { null }
 
 /** The key a page reports its [TouchPageSpec] under: the screen it belongs to. */
 internal val LocalTouchPageKey = staticCompositionLocalOf<Any> { DEFAULT_PAGE }
@@ -268,7 +295,7 @@ internal fun TouchPage(spec: TouchPageSpec?) {
 /**
  * The phone's floating bar, hosted once over every page: Home, Chats, Search and Downloads (badged
  * with how many are running), with the card of Favourites, History, Watch later, Settings and
- * Update behind the gear ([YouGearButton]).
+ * Update behind the account's picture ([AccountButton]).
  *
  * The bar floats, so it takes no room from the listing: it slides away as the list is pushed up
  * and comes back on the first pull down, on a change of page and on the way back from the player.
@@ -364,6 +391,7 @@ internal fun TouchNavHost(
                     LocalBottomChrome provides room + bannerRoom,
                     com.tmplayer.ui.components.LocalBannerRoom provides bannerRoom,
                     LocalTouchChrome provides chrome,
+                    LocalTouchNav provides nav,
                     LocalTouchShared provides this@SharedTransitionLayout,
                     LocalTouchRail provides rail,
                 ) {
@@ -468,6 +496,10 @@ internal fun TouchNavHost(
                 YouPopover(
                     open = chrome.youOpen,
                     reduced = reduced,
+                    account = nav.account,
+                    profile = nav.profile,
+                    focusBack = chrome.accountFocus,
+                    onRefresh = spec?.refresh?.let { refresh -> { chrome.youOpen = false; refresh() } },
                     favoriteCount = nav.favoriteCount,
                     watchingCount = nav.watchingCount,
                     watchedCount = nav.watchedCount,
@@ -568,13 +600,15 @@ internal fun TouchBrowseShell(
     actions: (@Composable RowScope.() -> Unit)? = null,
     /** The highlight's place while Home and Chats are swiped between ([TouchPageSpec.position]). */
     barPosition: (() -> Float)? = null,
+    /** The page's refresh, for the account menu's Refresh row ([TouchPageSpec.refresh]); null hides it. */
+    refresh: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val host = LocalTouchChrome.current
     if (host == null) {
         val own = remember { TouchChrome() }
         TouchNavHost(nav, own, DEFAULT_PAGE) {
-            TouchBrowseShell(nav, selected, searchOpen, onOpenSearch, searchScreen, actions, barPosition, content)
+            TouchBrowseShell(nav, selected, searchOpen, onOpenSearch, searchScreen, actions, barPosition, refresh, content)
         }
         return
     }
@@ -590,6 +624,7 @@ internal fun TouchBrowseShell(
             hidden = searchOpen,
             actions = actions,
             position = barPosition,
+            refresh = refresh,
         ),
     )
     // The bar's magnifier, pressed on a page (Downloads) that has no search of its own.
@@ -604,9 +639,9 @@ internal fun TouchBrowseShell(
         // Each page draws its own title ([PhonePageFrame]), so a title swiped in moves with its page.
         content()
 
-        // Home has no title bar to hold the gear: it floats over the carousel's top end, as the
-        // detail page's Cast does over its picture.
-        if (selected.isHome && !searchOpen) YouGearButton(Modifier.align(Alignment.TopEnd))
+        // Home has no title bar to hold the picture: it floats over the carousel's top end, as the
+        // detail page's Cast does over its picture. Only Home says once where the gear went.
+        if (selected.isHome && !searchOpen) AccountButton(Modifier.align(Alignment.TopEnd), movedHint = true)
 
         val shared = LocalTouchShared.current
         AnimatedVisibility(
@@ -736,7 +771,7 @@ internal fun rememberTouchExploration(): Boolean {
  * soft shadow and the floating hairline. Each button is its icon with its name in small type under
  * it, as a tab bar has. The current page's button sits on a rounded pill in the accent, which
  * slides from button to button (and follows a swipe between Home and Chats as it goes). On a page
- * behind the gear (Favourites, History, Watch later) no button is lit. Search is the button the
+ * behind the picture (Favourites, History, Watch later) no button is lit. Search is the button the
  * search field grows out of ([searchShared]); Downloads wears the number running ([downloading]).
  * Every press and the highlight are pills, round like the bar they sit in.
  *
@@ -862,33 +897,179 @@ private fun FloatingBar(
 }
 
 /**
- * The gear at the top end of Home and of the Downloads page: it opens the card of the viewer's own
- * lists (Favourites, History, Watch later) and Settings, which used to hide behind the picture on
- * the bar. Nothing outside a [TouchNavHost] (no card to open). It wears a dot when an update waits.
+ * The signed in profile's picture at the top end of Home and of the Downloads page (WP-103, where the
+ * gear was): it opens the account menu ([YouPopover]) with the account, Settings, the viewer's own
+ * lists and Sign out. It draws the TV bar's chain ([AccountPicture]) at [Avatar.Compact] inside a
+ * 48 dp target: Telegram's picture, else the profile's saved photo, else the letter on the profile's
+ * colour, and the person glyph only when no name is known, so it is never an empty disc. A 1.5 dp
+ * ring in the bar's own colour keeps it apart from the carousel's art; it wears a dot when an update
+ * waits, and the keyboard's focus draws the avatar's ring ([FocusRole.Avatar]). Nothing outside a
+ * [TouchNavHost] (no menu to open).
+ *
+ * [movedHint] (Home only): an install that had the gear is told once where it went (WP-68 registry,
+ * [HintIds.NAV_ACCOUNT_MOVED]); a fresh install never is ([SettingsStore.armSetup] marks it seen).
  */
 @Composable
-internal fun YouGearButton(modifier: Modifier = Modifier) {
+internal fun AccountButton(modifier: Modifier = Modifier, movedHint: Boolean = false) {
     val chrome = LocalTouchChrome.current ?: return
+    val nav = LocalTouchNav.current
     val s = LocalStrings.current
+    val name = accountName(nav?.account, nav?.profile)
+    val label = accountLabel(
+        named = name?.let { s.navAccountNamed(it) },
+        fallback = s.navAccount,
+        updateWaiting = if (chrome.youBadge) s.navUpdateWaiting else null,
+    )
     Box(modifier) {
         com.tmplayer.ui.components.FloatingEndButton(
-            icon = TmIcons.Settings,
-            label = s.navYou,
-            onClick = { chrome.youOpen = true },
-        )
-        if (chrome.youBadge) {
-            // Over the button's top end corner, clear of the status bar and the page's own inset.
+            label = label,
+            onClickLabel = s.navAccountMenu,
+            onClick = { chrome.youOpen = !chrome.youOpen },
+            modifier = Modifier.focusRequester(chrome.accountFocus).testTag(ACCOUNT_BUTTON_TAG),
+        ) { focused ->
+            AccountButtonPicture(nav?.account, nav?.profile, focused, badge = chrome.youBadge)
+        }
+        if (movedHint) {
+            // Never over a question, a PIN pad or the app lock: the hint is a window of its own.
+            val blocked = nav == null || nav.promptUp || nav.signOutPhase != com.tmplayer.ui.settings.SignOutPhase.Idle
+            AccountMovedHint(open = chrome.youOpen, blocked = blocked)
+        }
+    }
+}
+
+/** Who the picture is: Telegram's name once it is known, else the profile's own, else nobody yet. */
+internal fun accountName(account: Account?, profile: com.tmplayer.data.Profile?): String? =
+    account?.name?.trim()?.takeIf { it.isNotEmpty() } ?: profile?.shownName?.trim()?.takeIf { it.isNotEmpty() }
+
+/**
+ * What a screen reader says for the picture: "Account, Asha", or "Account" while no name is known,
+ * with ", an update is ready" while one waits. The click label adds "open the account menu".
+ */
+internal fun accountLabel(named: String?, fallback: String, updateWaiting: String?): String =
+    (named ?: fallback) + (updateWaiting?.let { ", $it" } ?: "")
+
+/**
+ * The picture itself: 40 dp in its 48 dp target, the outline and the dot, and the keyboard's ring
+ * and halo inside the target. Keyed on the profile, so a switch never shows the old photo under the
+ * new name for a frame.
+ */
+@Composable
+private fun AccountButtonPicture(account: Account?, profile: com.tmplayer.data.Profile?, focused: Boolean, badge: Boolean) {
+    val accent = Tone.accent
+    val outline = FloatingTone.menu
+    val ring = com.tmplayer.ui.theme.LocalFocusStyle.current.ring
+    val still = rememberReducedMotion() || Motion.reduced
+    val lit by androidx.compose.animation.core.animateFloatAsState(
+        if (focused) 1f else 0f,
+        Motion.standard(if (still) 0 else Motion.Fast),
+        label = "accountRing",
+    )
+    Box(
+        Modifier
+            .size(com.tmplayer.ui.components.FloatingChrome.PageButton)
+            .drawBehind {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val inner = ACCOUNT_PICTURE.toPx() / 2f
+                // The outline round the picture, always: the carousel's art runs right up to it.
+                drawCircle(outline, radius = inner + OUTLINE.toPx() / 2f, center = center, style = Stroke(OUTLINE.toPx()))
+                if (lit > 0f) {
+                    // FocusRole.Avatar: the ring in the accent, then a soft halo, both inside the 48 dp rect.
+                    val width = ring.toPx()
+                    val room = size.minDimension / 2f - inner - width
+                    val halo = minOf(com.tmplayer.ui.theme.FocusRecipe.HaloWidth.toPx(), room).coerceAtLeast(0f)
+                    if (halo > 0f) {
+                        drawCircle(
+                            accent.copy(alpha = com.tmplayer.ui.theme.FocusRecipe.HaloAlpha * lit),
+                            radius = inner + width + halo / 2f,
+                            center = center,
+                            style = Stroke(halo),
+                        )
+                    }
+                    drawCircle(accent.copy(alpha = lit), radius = inner + width / 2f, center = center, style = Stroke(width))
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.runtime.key(profile?.id) {
+            Box(Modifier.size(ACCOUNT_PICTURE).clip(CircleShape).testTag(ACCOUNT_PICTURE_TAG)) {
+                AccountPicture(account, profile, size = ACCOUNT_PICTURE)
+            }
+        }
+        if (badge) {
             Box(
                 Modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                    .padding(end = com.tmplayer.ui.components.FloatingChrome.Inset + 2.dp, top = 12.dp)
-                    .size(10.dp)
                     .align(Alignment.TopEnd)
+                    .padding(top = 3.dp, end = 3.dp)
+                    .size(10.dp)
                     .clip(CircleShape)
                     .background(Tone.caution)
-                    .border(1.5.dp, FloatingTone.menu, CircleShape),
+                    .border(1.5.dp, FloatingTone.menu, CircleShape)
+                    .testTag(ACCOUNT_DOT_TAG),
             )
         }
+    }
+}
+
+/**
+ * "Settings, your lists and your account are behind your picture now", once, under the picture on
+ * Home for an install that had the gear (WP-68). It waits for the tour (a tour still to come says
+ * it all), goes when the menu opens, when it is tapped, or after [MOVED_HINT_MS], and is hidden
+ * while [blocked] (a question, a PIN pad or the app lock is up), since a popup would sit over it.
+ */
+@Composable
+private fun AccountMovedHint(open: Boolean, blocked: Boolean) {
+    val context = LocalContext.current
+    val settings = remember(context) { com.tmplayer.data.SettingsStore(context) }
+    val s = LocalStrings.current
+    val tour by settings.tourState.collectAsStateWithLifecycle(initialValue = null)
+    var gone by remember { mutableStateOf(false) }
+    LaunchedEffect(open) { if (open) gone = true }
+    if (tour != com.tmplayer.data.SettingsStore.TourState.Done) return
+    LaunchedEffect(Unit) {
+        delay(MOVED_HINT_MS)
+        gone = true
+    }
+    com.tmplayer.ui.components.OneTimeHint(
+        settings = settings,
+        id = com.tmplayer.data.HintIds.NAV_ACCOUNT_MOVED,
+        label = s.navAccountMovedHint,
+        visible = !gone && !blocked,
+        draw = { text ->
+            androidx.compose.ui.window.Popup(
+                popupPositionProvider = remember { HintBelowEnd() },
+                onDismissRequest = { gone = true },
+            ) {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Tone.text,
+                    modifier = Modifier
+                        .widthIn(max = MOVED_HINT_WIDTH)
+                        .padding(horizontal = 16.dp)
+                        .shadow(BAR_SHADOW, RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(FloatingTone.dialog)
+                        .border(floatingBorder(), RoundedCornerShape(14.dp))
+                        .clickable { gone = true }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .testTag(ACCOUNT_HINT_TAG),
+                )
+            }
+        },
+    )
+}
+
+/** Under the picture, its end edge on the picture's, kept inside the window. */
+private class HintBelowEnd : androidx.compose.ui.window.PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: androidx.compose.ui.unit.IntRect,
+        windowSize: androidx.compose.ui.unit.IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: androidx.compose.ui.unit.IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val x = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.right - popupContentSize.width else anchorBounds.left
+        return IntOffset(x.coerceIn(0, maxX), anchorBounds.bottom)
     }
 }
 
@@ -966,15 +1147,25 @@ private fun BarButton(
 }
 
 /**
- * The viewer's own lists, behind the gear: a small card that grows out of the top end corner over a
- * dimmed screen, with Favourites, History and Watch later, then Settings (which carries the
- * account, Sign out and About) and Update when there is one. Downloads is on the bar now, so it is
- * not here. A tap outside, Back, or picking a row closes it.
+ * The account menu behind the picture (WP-103), the phone's and tablet's copy of the television's
+ * (WP-02): a small card that grows out of the top end corner over a dimmed screen. First whose
+ * account it is (the picture at 48 dp, the name, the @username), then Add account (one profile) or
+ * Switch profile (two or more), Settings (one tap from the open menu, as it was from the gear's),
+ * Refresh where the page has one, the viewing summary, Favourites, History and Watch later, Update
+ * when there is one, and Sign out last in the danger colour, through the shell's host. A tap
+ * outside, Back, Escape or picking a row closes it; with a keyboard the first row has the focus on
+ * open and the picture has it again on close.
  */
 @Composable
 private fun YouPopover(
     open: Boolean,
     reduced: Boolean,
+    account: Account?,
+    profile: com.tmplayer.data.Profile?,
+    /** The picture, which has the keyboard's focus again once the menu closes. */
+    focusBack: androidx.compose.ui.focus.FocusRequester,
+    /** The page's refresh; null hides the row. */
+    onRefresh: (() -> Unit)?,
     favoriteCount: Int,
     watchingCount: Int,
     watchedCount: Int,
@@ -993,6 +1184,19 @@ private fun YouPopover(
     onSignOut: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
+    val name = accountName(account, profile)
+    // Read when it is used, not when the menu is drawn: a keyboard pressed while it is open counts.
+    val inputMode = androidx.compose.ui.platform.LocalInputModeManager.current
+    val keyboard = { inputMode.inputMode == androidx.compose.ui.input.InputMode.Keyboard }
+    // Back to the picture once the menu has closed, the way it was opened with a keyboard.
+    var wasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(open) {
+        if (!open && wasOpen && keyboard()) {
+            androidx.compose.runtime.withFrameNanos { }
+            runCatching { focusBack.requestFocus() }
+        }
+        wasOpen = open
+    }
     AnimatedVisibility(
         visible = open,
         enter = fadeIn(Motion.standard(if (reduced) 0 else Motion.Fast)),
@@ -1006,14 +1210,14 @@ private fun YouPopover(
         )
     }
     val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
-    // The corner the card grows from, in screen terms: the top end one, under the gear.
+    // The corner the card grows from, in screen terms: the top end one, under the picture.
     val origin = TransformOrigin(if (ltr) 1f else 0f, 0f)
     Box(
         Modifier
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(top = FloatingChrome.Button + 16.dp, end = 16.dp, start = 16.dp),
+            .padding(top = com.tmplayer.ui.components.FloatingChrome.PageButton + 16.dp, end = 16.dp, start = 16.dp, bottom = 16.dp),
     ) {
         AnimatedVisibility(
             visible = open,
@@ -1029,19 +1233,53 @@ private fun YouPopover(
                 fadeOut(Motion.standard(Motion.Fast)) + scaleOut(Motion.standard(Motion.Fast), targetScale = 0.9f, transformOrigin = origin)
             },
         ) {
+            val first = remember { androidx.compose.ui.focus.FocusRequester() }
+            // A larger font widens the card as far as the window lets it, so "Favourites" is not broken in two.
+            val widest = POPOVER_WIDTH * LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
             Column(
                 Modifier
-                    .widthIn(max = POPOVER_WIDTH)
+                    .widthIn(max = widest)
                     .shadow(BAR_SHADOW, POPOVER_SHAPE)
                     .clip(POPOVER_SHAPE)
                     .background(FloatingTone.dialog)
                     .border(floatingBorder(), POPOVER_SHAPE)
+                    .semantics { paneTitle = name?.let { s.navAccountNamed(it) } ?: s.navAccount }
+                    .onPreviewKeyEvent { event ->
+                        if (event.key == androidx.compose.ui.input.key.Key.Escape) {
+                            if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) onDismiss()
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     // Taps inside the card stay inside it rather than reaching the scrim.
                     .swallowClicks()
                     .verticalScroll(rememberScrollState())
                     // The rows' own 6 dp at the sides, so the last row's fill keeps it below too.
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .testTag(ACCOUNT_MENU_TAG),
             ) {
+                AccountMenuHead(account, profile, name ?: s.navAccount)
+                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
+                val switchOrAdd = onSwitchProfile ?: onAddAccount
+                if (switchOrAdd != null) {
+                    PopoverRow(
+                        TmIcons.Person,
+                        if (onSwitchProfile != null) s.profilesSwitchProfile else s.profilesAdd,
+                        null,
+                        modifier = Modifier.focusRequester(first),
+                        onClick = switchOrAdd,
+                    )
+                }
+                PopoverRow(
+                    TmIcons.Settings,
+                    s.navSettings,
+                    null,
+                    modifier = if (switchOrAdd == null) Modifier.focusRequester(first) else Modifier,
+                    onClick = onSettings,
+                )
+                if (onRefresh != null) PopoverRow(TmIcons.Refresh, s.commonRefresh, null, onClick = onRefresh)
+                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
                 com.tmplayer.ui.components.ViewingSummary(
                     watching = watchingCount,
                     watched = watchedCount,
@@ -1050,24 +1288,49 @@ private fun YouPopover(
                     onWatched = onWatched,
                     onStarred = onFavourites,
                 )
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
-                val rows = buildList<@Composable (Modifier) -> Unit> {
-                    add { m -> PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favoriteCount.takeIf { it > 0 }?.toString(), modifier = m, onClick = onFavourites) }
-                    add { m -> PopoverRow(TmIcons.History, s.browseTabHistory, null, modifier = m, onClick = onHistory) }
-                    add { m -> PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, modifier = m, onClick = onWatchLater) }
-                    add { m -> PopoverRow(TmIcons.Settings, s.navSettings, null, modifier = m, onClick = onSettings) }
-                    if (onSwitchProfile != null) add { m -> PopoverRow(TmIcons.Person, s.profilesSwitchProfile, null, modifier = m, onClick = onSwitchProfile) }
-                    if (onAddAccount != null) add { m -> PopoverRow(TmIcons.Person, s.profilesAdd, null, modifier = m, onClick = onAddAccount) }
-                    if (updateVersion != null) {
-                        // Amber, as on the television's rail and the desktop's side bar: the one row that is news.
-                        add { m -> PopoverRow(TmIcons.Refresh, s.navUpdate, updateVersion, ink = Tone.caution, modifier = m, onClick = onUpdate) }
-                    }
-                    // Last, in the danger colour: the press that ends the session, asked first.
-                    if (onSignOut != null) add { m -> PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, modifier = m, onClick = onSignOut) }
+                PopoverRow(TmIcons.StarOutline, s.browseTabFavourites, favoriteCount.takeIf { it > 0 }?.toString(), onClick = onFavourites)
+                PopoverRow(TmIcons.History, s.browseTabHistory, null, onClick = onHistory)
+                PopoverRow(TmIcons.Clock, s.browseTabWatchLater, null, onClick = onWatchLater)
+                if (updateVersion != null || onSignOut != null) HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
+                if (updateVersion != null) {
+                    // Amber, as on the television's bar and the desktop's: the one row that is news.
+                    PopoverRow(TmIcons.Refresh, s.navUpdate, updateVersion, ink = Tone.caution, onClick = onUpdate)
                 }
-                rows.take(POPOVER_LISTS).forEach { it(Modifier) }
-                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
-                rows.drop(POPOVER_LISTS).forEach { it(Modifier) }
+                // Last, in the danger colour: the press that ends the session, asked first.
+                if (onSignOut != null) PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = onSignOut)
+            }
+            LaunchedEffect(Unit) {
+                if (keyboard()) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    runCatching { first.requestFocus() }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The account menu's head: the picture at 48 dp, the name in two lines at most, and the @username
+ * under it when Telegram has one, so two profiles of the same name read apart. One node for a
+ * screen reader.
+ */
+@Composable
+private fun AccountMenuHead(account: Account?, profile: com.tmplayer.data.Profile?, name: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .semantics(mergeDescendants = true) {}
+            .testTag(ACCOUNT_HEAD_TAG),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.runtime.key(profile?.id) { AccountPicture(account, profile, size = ACCOUNT_HEAD_PICTURE) }
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleMedium, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val username = account?.username?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() }
+            if (username != null) {
+                Text("@$username", style = MaterialTheme.typography.bodyMedium, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -1124,6 +1387,25 @@ internal fun PopoverRow(
 
 /** The test tag of the count over the Downloads button. */
 internal const val BAR_BADGE_TAG = "bar-badge"
+
+/** Test tags of the account's picture (its 48 dp target, the 40 dp picture, the update dot), its menu and the menu's head. */
+internal const val ACCOUNT_BUTTON_TAG = "account-button"
+internal const val ACCOUNT_PICTURE_TAG = "account-picture"
+internal const val ACCOUNT_DOT_TAG = "account-dot"
+internal const val ACCOUNT_MENU_TAG = "account-menu"
+internal const val ACCOUNT_HEAD_TAG = "account-menu-head"
+internal const val ACCOUNT_HINT_TAG = "account-moved-hint"
+
+/** The account's picture at the top end, inside its 48 dp target, and its outline. */
+internal val ACCOUNT_PICTURE = Avatar.Compact
+private val OUTLINE = 1.5.dp
+
+/** The picture in the account menu's head. */
+private val ACCOUNT_HEAD_PICTURE = 48.dp
+
+/** How long the "your account moved" card stays before it goes by itself, and its widest. */
+private const val MOVED_HINT_MS = 8_000L
+private val MOVED_HINT_WIDTH = 300.dp
 
 /** The key the bar's magnifier and the search field share, for the one to grow into the other. */
 private const val SEARCH_KEY = "search-field"
@@ -1189,3 +1471,12 @@ private const val STRETCH_MAX = 0.14f
 
 /** How far a list has to be pushed up before the bar gets out of the way, so a nudge does not. */
 private const val HIDE_AFTER_PX = 48f
+
+/**
+ * Add account or Switch profile from an account menu (WP-02, WP-103): the picker with two profiles or
+ * more; with one, Add account itself. Add asks the app lock's PIN on its own
+ * ([com.tmplayer.ui.lock.ProfileFlow.add], closed while the lock is unread), so the PIN is asked once.
+ */
+internal fun switchOrAdd(flow: com.tmplayer.ui.lock.ProfileFlow, several: Boolean) {
+    if (several) flow.ask() else flow.add()
+}
