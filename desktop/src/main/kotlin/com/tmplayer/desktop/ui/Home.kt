@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -114,6 +116,22 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 
 /**
+ * The Home layout last read for a profile's settings, so Home's first frame after a visit elsewhere
+ * is built from it rather than from nothing while the setting is read again.
+ */
+internal object HomeLayoutMemory {
+    private var owner: Any? = null
+    private var last: HomeLayout? = null
+
+    fun of(settings: Any): HomeLayout? = if (owner === settings) last else null
+
+    fun remember(settings: Any, layout: HomeLayout) {
+        owner = settings
+        last = layout
+    }
+}
+
+/**
  * Home on the desktop: the same rows as the phone and the television (see
  * [com.tmplayer.data.HomeRows]), each row a horizontal strip that loads when it scrolls into view.
  */
@@ -141,7 +159,11 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     // Recently added fills the carousel, so one starred chat is enough for it, as on the phone and
     // the television; with fewer than two it is not drawn as a row as well (see HomeRowsView).
     // Which rows Settings has on; null until read, so a row that is off is never fetched.
-    val layout by remember { state.settings.homeLayout }.collectAsState(initial = null)
+    // Started from the layout last read (HomeLayoutMemory), not from null: with nothing known the page
+    // built no rows and drew its empty frame for a moment at every return to Home, so the sections
+    // under the carousel cut away and came back (user, 2026-11-25).
+    val layout by remember { state.settings.homeLayout }.collectAsState(initial = HomeLayoutMemory.of(state.settings))
+    LaunchedEffect(layout) { layout?.let { HomeLayoutMemory.remember(state.settings, it) } }
     // Recently added's search is asked for as soon as the setting is read (rememberHomeRows), not
     // once the chat list has loaded and the row is drawn: the loader waits on the carousel, and
     // the carousel on this row. Only while the row or the carousel is on.
@@ -264,7 +286,13 @@ internal fun HomeRowsView(
     LaunchedEffect(titles) { state.noteChatTitles(chats) }
     // Held above the show and "See all" pages, so coming back from either finds the rows where
     // they were rather than at the top.
-    val list = com.tmplayer.ui.components.rememberAheadListState()
+    val list = com.tmplayer.ui.components.rememberAheadListState(state.homeScrollIndex, state.homeScrollOffset)
+    androidx.compose.runtime.DisposableEffect(list) {
+        onDispose {
+            state.homeScrollIndex = list.firstVisibleItemIndex
+            state.homeScrollOffset = list.firstVisibleItemScrollOffset
+        }
+    }
     val shown = openSeries
     if (shown != null) {
         SeriesPage(state, shown, rememberSeriesWatch(state), onClose = { openSeries = null })
@@ -680,7 +708,9 @@ private fun RowHeading(title: String, count: String?, side: Dp, onSeeAll: (() ->
             modifier = Modifier.weight(1f).semantics { heading() },
         )
         // The words alone, no count (user, 2026-10-22: "just a see all button").
-        if (onSeeAll != null) SeeAllLink(s.homeSeeAll, onSeeAll)
+        // Named for its row ("See all Continue watching"), for a screen reader and the tooltip, and set
+        // out by its own padding so its text ends on the page's gutter, as the carousel's dots do.
+        if (onSeeAll != null) SeeAllLink(s.homeSeeAll, s.homeSeeAllRow(title), onSeeAll)
     }
 }
 
@@ -1068,7 +1098,7 @@ private val STRIP_ARROW = 44.dp
  * underlined as well.
  */
 @Composable
-private fun SeeAllLink(label: String, onClick: () -> Unit) {
+private fun SeeAllLink(label: String, description: String, onClick: () -> Unit) {
     val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val hovered by interactions.collectIsHoveredAsState()
     val focused by interactions.collectIsFocusedAsState()
@@ -1091,6 +1121,7 @@ private fun SeeAllLink(label: String, onClick: () -> Unit) {
         label = "seeAllInk",
     )
     val underline = focused && com.tmplayer.ui.theme.FocusVisibility.visible
+    com.tmplayer.ui.components.IconTip(description, Modifier.offset(x = SEE_ALL_BLEED)) {
     Row(
         Modifier
             .graphicsLayer {
@@ -1099,6 +1130,7 @@ private fun SeeAllLink(label: String, onClick: () -> Unit) {
             }
             .hoverable(interactions)
             .clickable(interactionSource = interactions, indication = null, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = description }
             .pointerHoverIcon(androidx.compose.ui.input.pointer.PointerIcon.Hand)
             .padding(horizontal = 4.dp, vertical = 8.dp)
             .drawBehind {
@@ -1111,7 +1143,11 @@ private fun SeeAllLink(label: String, onClick: () -> Unit) {
         Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1)
         Icon(TmIcons.ChevronRight, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
     }
+    }
 }
+
+/** The link's own side padding, which it hangs out past the gutter so its text ends on it. */
+private val SEE_ALL_BLEED = 4.dp
 
 /**
  * Telegram has been slow for a few seconds ([HomeViewModel.stalled]): Home shows what it has, and

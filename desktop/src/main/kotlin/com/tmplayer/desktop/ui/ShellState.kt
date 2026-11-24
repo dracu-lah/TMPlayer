@@ -609,6 +609,14 @@ class ShellState(
     var refreshAction: (() -> Unit)? = null
 
     /** Whether the profile popover over the floating bar is open. */
+    /**
+     * Where Home's rows were scrolled to when the viewer left Home (first visible item, then its
+     * offset), so coming back from Downloads, Chats or Settings finds the rows where they were
+     * rather than at the top, laid out as before. Plain fields: nothing reads them while drawing.
+     */
+    var homeScrollIndex: Int = 0
+    var homeScrollOffset: Int = 0
+
     var profileOpen by mutableStateOf(false)
 
     /**

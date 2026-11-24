@@ -1353,6 +1353,7 @@
     "see_all": "See all",
     "see_all_count": "{count, plural, one {# video} other {# videos}}",
     "see_all_count_at_least": "{count, plural, one {#+ video} other {#+ videos}}",
+    "see_all_row": "See all {row}",
     "small_left_out": "Videos under {size} are not on Home. Open a chat to see them."
   },
   "install": {

@@ -45,6 +45,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -331,6 +334,10 @@ internal fun FeaturedCarousel(
             ) { shown ->
                 if (shown != null) FeaturedBackdrop(shown, chatTitle, topFade ?: TOP_FADE)
             }
+            // The picture keeps its right side; its left side and its foot go into the page's colour
+            // under the words, as Netflix's, Plex's and Disney+'s heroes do, so the words read on
+            // the faded part and the picture shows on the right even in a small window.
+            HeroScrim(Modifier.fillMaxSize())
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
@@ -418,8 +425,47 @@ private fun FeaturedBackdrop(pick: FeaturedPick, chatTitle: (Long) -> String, to
     val meta = rememberMeta(item, showOnly = pick.isShow)
     val cover = rememberCover(item, chatTitle(item.chatId))
     val source = remember(item, meta?.wideUrl, meta?.posterUrl, cover) { BackdropSource(item.miniThumbnail, item.thumbnailFileId, cover, meta?.wideUrl, meta?.posterUrl) }
-    EdgeBackdrop(source, Modifier.fillMaxSize(), topFade = topFade, overhang = com.tmplayer.ui.components.EDGE_OVERHANG, onPictured = com.tmplayer.ui.browse.HomeFirstPaint::markReady)
+    EdgeBackdrop(source, Modifier.fillMaxSize(), topFade = topFade, overhang = if (BigScreen.on) com.tmplayer.ui.components.EDGE_OVERHANG else 0f, onPictured = com.tmplayer.ui.browse.HomeFirstPaint::markReady)
 }
+
+/**
+ * The hero's scrim: the page's colour solid at the start edge over the words' column, clear by
+ * [SCRIM_REACH] of the width, and a short fade into the page at the foot ([SCRIM_FOOT]), so the
+ * picture ends in the page rather than in an edge above the first row.
+ */
+@Composable
+private fun HeroScrim(modifier: Modifier = Modifier) {
+    val ground = Tone.background
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    Box(
+        modifier.drawWithCache {
+            val across = Brush.horizontalGradient(
+                0f to ground,
+                0.22f to ground.copy(alpha = 0.86f),
+                0.40f to ground.copy(alpha = 0.45f),
+                SCRIM_REACH to Color.Transparent,
+                startX = if (rtl) size.width else 0f,
+                endX = if (rtl) 0f else size.width,
+            )
+            val foot = Brush.verticalGradient(
+                0f to Color.Transparent,
+                1f to ground,
+                startY = (size.height - SCRIM_FOOT.toPx()).coerceAtLeast(0f),
+                endY = size.height,
+            )
+            onDrawBehind {
+                drawRect(across)
+                drawRect(foot)
+            }
+        },
+    )
+}
+
+/** How far across the hero the start scrim reaches before it is clear: a little over half the width. */
+internal const val SCRIM_REACH = 0.55f
+
+/** How tall the fade into the page at the hero's foot is. */
+private val SCRIM_FOOT = 96.dp
 
 /**
  * One page's words over the carousel's picture: the name (or its logo), the facts and the
@@ -466,7 +512,7 @@ private fun FeaturedPage(
                 .align(Alignment.BottomStart)
                 // Only the page up takes the keyboard: Tab never lands on a button off screen.
                 .focusProperties { canFocus = current }
-                .padding(start = side + HERO_START_EXTRA, end = side, bottom = PAGE_FOOT)
+                .padding(start = side, end = side, bottom = PAGE_FOOT)
                 .widthIn(max = WORDS_WIDTH),
             verticalArrangement = Arrangement.spacedBy(WORDS_GAP),
         ) {
@@ -535,7 +581,7 @@ private fun FeaturedSkeleton(side: Dp) {
     Box(Modifier.fillMaxSize()) {
         SkeletonBox(shimmer, Modifier.fillMaxSize(), RectangleShape)
         Column(
-            Modifier.align(Alignment.BottomStart).padding(start = side + HERO_START_EXTRA, bottom = 12.dp).widthIn(max = WORDS_WIDTH).fillMaxWidth(),
+            Modifier.align(Alignment.BottomStart).padding(start = side, bottom = 12.dp).widthIn(max = WORDS_WIDTH).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SkeletonBox(shimmer, Modifier.fillMaxWidth(0.7f).height(40.dp), RoundedCornerShape(8.dp))
@@ -597,16 +643,19 @@ internal fun rememberFeatured(recent: HomeRow.Recent?, resume: HomeRow.Continue?
 }
 
 /**
- * How tall the carousel is in a page [width] by [height]: [FEATURED_WIDTH_SHARE] of the width, never
- * more than [FEATURED_HEIGHT_SHARE] of the window (it was 0.34 and 0.5, which read as a strip on a
- * big window; user, 2026-11-07). The first row of Recently added still peeks in above the fold of
- * a 1080p window. The same figure sizes the skeleton, so nothing on Home moves when pages load.
+ * How tall the carousel is in a page [width] by [height]: [FEATURED_HEIGHT_SHARE] of the window's
+ * height, never under [MIN_HEIGHT] nor over [MAX_HEIGHT]. It was the width's 0.42 up to 0.62 of
+ * the height, which on a 1080p window stood 636 dp tall and pushed Continue watching under the
+ * fold with its heading half over the picture (user, 2026-11-25: "a bit shorter carousel").
+ * The figure comes from the window alone, computed the same on every visit to Home and for the
+ * skeleton, so nothing on Home moves when pages load or when the page is come back to. [width] is
+ * kept for the callers' sake and no longer matters: the picture is as wide as the window anyway.
  */
+@Suppress("UNUSED_PARAMETER")
 internal fun featuredHeight(width: Dp, height: Dp): Dp =
-    (width * FEATURED_WIDTH_SHARE).coerceAtMost(height * FEATURED_HEIGHT_SHARE).coerceAtLeast(MIN_HEIGHT)
+    (height * FEATURED_HEIGHT_SHARE).coerceIn(MIN_HEIGHT, MAX_HEIGHT)
 
-internal const val FEATURED_WIDTH_SHARE = 0.42f
-internal const val FEATURED_HEIGHT_SHARE = 0.62f
+internal const val FEATURED_HEIGHT_SHARE = 0.58f
 
 private const val ADVANCE_MS = 6_000
 
@@ -621,7 +670,10 @@ private const val SWIPE_THRESHOLD = 0.5f
 
 /** A gap this long in the scroll events ends a gesture, its momentum included. */
 private const val SWIPE_QUIET_MS = 280L
-private val MIN_HEIGHT = 300.dp
+internal val MIN_HEIGHT = 360.dp
+
+/** The tallest the carousel gets, on a big monitor. */
+internal val MAX_HEIGHT = 560.dp
 /**
  * How far down the picture fades into the page from the top, where a window's buttons stand: a
  * band across the whole width rather than the glow in the corner it replaced, which showed as a
@@ -636,12 +688,10 @@ private val INFO_WIDTH = 560.dp
 private val DOTS_ROW = 44.dp
 private val WORDS_WIDTH = 640.dp
 
-/**
- * A little more room than the dots and arrows keep ([side]), only for the hero's own words and
- * buttons: now that the picture reads full width behind them, the same inset felt crowded against
- * it (user, 2026-11-01).
+/*
+ * The hero's words and buttons start on the page's gutter ([side]), the same left edge as the row
+ * headings and the cards under it (they had 10 dp more, which read as a misplaced block).
  */
-private val HERO_START_EXTRA: Dp = 10.dp
 
 /** Below Play, the foot of a page's words and buttons. */
 private val PAGE_FOOT = 12.dp

@@ -108,21 +108,22 @@ class HomeCarouselRenderTest {
     }
 
     @Test
-    fun `the carousel is wide and tall without being most of the window`() {
-        // (page width, page height) -> expected height: the width's 0.42 until 0.62 of the window stops it.
+    fun `the carousel is 58 percent of the window height, between 360 and 560 dp`() {
         fun h(w: Int, h: Int) = featuredHeight(w.dp, h.dp).value
-        // The page is the window's width: the desktop's bar floats over it.
-        assertEquals(300f, h(700, 660), 0f)
-        assertEquals(0.42f * 1060, h(1060, 760), 0.5f)
-        assertEquals(0.62f * 1000, h(1700, 1000), 0.5f)
-        assertEquals(0.62f * 1380, h(2340, 1380), 0.5f)
-        // Never under its floor, never over its two shares.
-        assertEquals(300f, h(400, 400), 0f)
+        // A 1280 x 720 window (about 690 dp of page under the title bar): 0.58 of it.
+        assertEquals(0.58f * 690, h(1280, 690), 0.5f)
+        assertEquals(400f, h(1280, 690), 1f)
+        // A 1920 x 1080 window: the cap, so Continue watching and its heading stay above the fold.
+        assertEquals(560f, h(1920, 1050), 0f)
+        assertEquals(560f, h(2560, 1400), 0f)
+        // Never under its floor, whatever the width.
+        assertEquals(360f, h(400, 400), 0f)
+        assertEquals(360f, h(2000, 500), 0f)
+        // The width does not matter any more: the same window height, the same hero.
+        assertEquals(h(900, 800), h(2400, 800), 0f)
         for ((w, hh) in listOf(900 to 700, 1280 to 800, 1920 to 1080, 2560 to 1440)) {
-            val page = w
-            val tall = featuredHeight(page.dp, (hh - 40).dp)
-            assertTrue("$w x $hh: $tall", tall.value <= 0.62f * (hh - 40) + 0.5f && tall.value <= maxOf(300f, 0.42f * page) + 0.5f)
-            assertTrue("$w x $hh is taller than the old 0.34 / 0.5: $tall", tall.value >= minOf(0.34f * page, 0.5f * (hh - 40)))
+            val tall = featuredHeight(w.dp, (hh - 30).dp).value
+            assertTrue("$w x $hh: $tall", tall in 360f..560f)
         }
     }
 
@@ -261,5 +262,50 @@ class HomeCarouselRenderTest {
         surface.canvas.drawRect(Rect.makeWH(40f, 24f), Paint().apply { color = argb })
         surface.canvas.drawRect(Rect.makeXYWH(0f, 14f, 40f, 10f), Paint().apply { color = Color.makeRGB(16, 20, 24) })
         return surface.makeImageSnapshot().encodeToData(EncodedImageFormat.JPEG, 80)!!.bytes
+    }
+
+    /**
+     * Home, left for another place and come back to (Downloads, Chats, Settings), is laid out as it
+     * was: the first row's heading stands on the same pixels, so no section cuts away and pops back in.
+     */
+    @Test
+    fun `Home is laid out the same after going away and coming back`() = runComposeUiTest {
+        val online = MetaFixture.install("on")
+        val (chats, rows) = library(online)
+        shell.go(Destination.Home)
+        var visible by mutableStateOf(true)
+        setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                TmMaterialTheme(dark = true) {
+                    Surface(Modifier.size(1280.dp, 720.dp), color = Tone.background) {
+                        Box(Modifier.size(1280.dp, 720.dp)) {
+                            NavFrame(shell, null, null) {
+                                if (visible) HomeRowsView(shell, rows, chats, emptyMap(), onRowShown = {}, onArtWanted = {}, onRefresh = {})
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        fun heading() = onAllNodesWithText("Recently added", substring = true).fetchSemanticsNodes().first().boundsInRoot
+        val before = heading()
+        visible = false
+        waitForIdle()
+        visible = true
+        waitForIdle()
+        val after = heading()
+        assertEquals("the first row's heading moved after coming back", before.top, after.top, 1f)
+        assertEquals(before.left, after.left, 1f)
+    }
+
+    @Test
+    fun `the layout read last is the first frame's, not nothing`() {
+        val owner = Any()
+        assertTrue(HomeLayoutMemory.of(owner) == null)
+        val layout = com.tmplayer.data.HomeLayout(carousel = false)
+        HomeLayoutMemory.remember(owner, layout)
+        assertEquals(layout, HomeLayoutMemory.of(owner))
+        assertTrue("another profile's settings never read it", HomeLayoutMemory.of(Any()) == null)
     }
 }
