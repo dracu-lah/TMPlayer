@@ -352,6 +352,8 @@ html[data-form=tv] button.link, html[data-form=tv] a.link {
   padding: calc(var(--dp) * 6) calc(var(--dp) * 12); margin-inline-start: calc(var(--dp) * -12); border-radius: 999px; align-self: start;
   font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20);
 }
+/* The overview's More sits 8 dp inside the column, so its pill stays inside the safe area (tv-checklist safeArea). */
+html[data-form=tv] button.link.detail-more { margin-inline-start: calc(var(--dp) * -8); }
 html[data-form=tv][data-tv-keys] button.link:focus, html[data-form=tv][data-tv-keys] a.link:focus, html[data-form=tv][data-tv-keys] .inline-link:focus {
   outline: none; background: var(--focus-fill); color: var(--on-focus-fill); text-decoration: none;
 }
