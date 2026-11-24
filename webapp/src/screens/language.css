@@ -9,7 +9,7 @@
   transition: background var(--fast), border-color var(--fast);
 }
 .lang-option > span { min-width: 0; overflow-wrap: anywhere; }
-.lang-option .lang-sub { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+.lang-option .lang-sub { display: block; font-size: 0.75rem; line-height: 1rem; color: var(--muted); }
 .lang-option[aria-pressed=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--surface-high)); }
 .lang-option[aria-pressed=true]::before {
   content: ''; width: 18px; height: 18px; background: currentColor; flex: none;

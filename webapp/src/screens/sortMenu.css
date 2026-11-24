@@ -3,7 +3,7 @@
 .sort-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 8px 8px; }
 .pop-menu .sort-chips .sort-chip {
   min-height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px;
-  justify-content: center; font-size: 14px; line-height: 20px; white-space: nowrap;
+  justify-content: center; font-size: 0.875rem; line-height: 1.25rem; white-space: nowrap;
 }
 .pop-menu .sort-chips .sort-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); font-weight: 500; }
 .pop-menu .sort-chips .sort-chip.on:hover, .pop-menu .sort-chips .sort-chip.on:focus-visible { background: var(--accent); }

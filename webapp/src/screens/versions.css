@@ -2,7 +2,7 @@
    More for a long list, and Not the same video under them. The list itself is styles.css's. */
 .detail-copy-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .detail-copy-best {
-  font-size: 12px; line-height: 16px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.75rem; line-height: 1rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
   color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   white-space: nowrap;
 }

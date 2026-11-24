@@ -7,11 +7,11 @@
 .fb-main p { margin: 0; overflow-wrap: anywhere; }
 .fb-kind { grid-template-columns: repeat(2, 1fr); }
 .fb-field { display: flex; flex-direction: column; gap: 6px; }
-.fb-field > label { font-size: 14px; line-height: 20px; font-weight: 500; }
+.fb-field > label { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; }
 .fb-field p { margin: 0; }
 /* The message field takes the page's text field look (styles.css styles inputs only); 16 px keeps iOS from zooming in. */
 .feedback textarea {
-  font: inherit; font-size: 16px; line-height: 24px; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  font: inherit; font-size: 1rem; line-height: 1.5rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-m); padding: 11px 14px; width: 100%; min-height: 144px; max-height: 40dvh; resize: vertical; outline: none;
 }
 .feedback textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -22,7 +22,7 @@
 /* What goes, word for word: a list of label and value. */
 .fb-review { margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .fb-line { display: flex; flex-direction: column; gap: 2px; }
-.fb-line dt { font-size: 12px; line-height: 16px; color: var(--muted); }
+.fb-line dt { font-size: 0.75rem; line-height: 1rem; color: var(--muted); }
 .fb-line dd { margin: 0; overflow-wrap: anywhere; }
 .fb-long { white-space: pre-wrap; max-height: 30dvh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-m); padding: 8px 12px; }
 .fb-busy { display: flex; align-items: center; gap: 12px; }
@@ -30,9 +30,9 @@
 @keyframes fb-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .fb-spinner { animation-duration: 3s; } }
 /* FB-7K3Q-M4XP: large and monospace, so it can be read out across the room. */
-.fb-code { font: 700 32px/40px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 2px; text-align: center; color: var(--accent); user-select: all; overflow-wrap: anywhere; }
+.fb-code { font: 700 2rem/2.5rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 2px; text-align: center; color: var(--accent); user-select: all; overflow-wrap: anywhere; }
 .fb-ways { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
-.fb-ways-title { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); margin: 0; }
+.fb-ways-title { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--muted); margin: 0; }
 .fb-ways-row { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 .fb-ways-row .link { min-height: 44px; display: inline-flex; align-items: center; padding-block: 0; }
 .fb-qr { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 200px; }

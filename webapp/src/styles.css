@@ -87,9 +87,15 @@
 }
 
 * { box-sizing: border-box; }
+/* Text sizes are rem (WP-55): they follow the browser's and the phone's text size. 100%, never a px value, so the choice is kept. */
+html { font-size: 100%; }
+/* iPhone and iPad only (the touch-callout test is true nowhere else; on a Mac this keyword is 13px): the root takes Dynamic Type, Display Text Size and Larger Text, and so does everything in rem. */
+@supports (-webkit-touch-callout: none) {
+  html { font: -apple-system-body; font-family: var(--font); }
+}
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 body {
-  font: 400 14px/20px var(--font);
+  font: 400 0.875rem/1.25rem var(--font);
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
@@ -99,7 +105,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 h1, h2, h3, p { margin: 0; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .muted { color: var(--muted); }
-.small { font-size: 12px; line-height: 16px; }
+.small { font-size: 0.75rem; line-height: 1rem; }
 .error { color: var(--error); }
 .boot { display: grid; place-items: center; align-content: center; gap: 16px; min-height: 100dvh; color: var(--muted); padding: 16px; text-align: center; }
 .boot .loader { color: var(--fg); }
@@ -115,13 +121,13 @@ dialog { overscroll-behavior: contain; }
 .crash-card > div { display: flex; gap: 16px; align-items: center; }
 
 /* Type: TmTouchTypography */
-.page-title { font-size: 28px; line-height: 36px; font-weight: 400; margin: 8px 0 16px; }
-.row-title { font-size: 22px; line-height: 28px; font-weight: 400; margin: 8px 0 12px; }
+.page-title { font-size: 1.75rem; line-height: 2.25rem; font-weight: 400; margin: 8px 0 16px; }
+.row-title { font-size: 1.375rem; line-height: 1.75rem; font-weight: 400; margin: 8px 0 12px; }
 
 /* Controls */
 button.primary, a.button.primary {
   background: var(--accent); color: var(--on-accent); border: 0; border-radius: 999px;
-  min-height: 44px; padding: 10px 24px; font-size: 14px; line-height: 20px; font-weight: 500;
+  min-height: 44px; padding: 10px 24px; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500;
   transition: transform var(--fast) var(--ease), opacity var(--fast);
 }
 a.button.primary { display: inline-flex; align-items: center; text-decoration: none; }
@@ -138,7 +144,7 @@ a.link { color: var(--accent); text-decoration: none; display: inline-block; pad
 .danger-button:hover { background: var(--surface-high); }
 /* Text fields; a tick box keeps its own size (the Add chats picker's rows drew it full width). */
 input:not([type=range]):not([type=radio]):not([type=checkbox]) {
-  font: inherit; font-size: 16px; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  font: inherit; font-size: 1rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-m); padding: 11px 14px; width: 100%; outline: none;
 }
 /* The ring is the border in the accent plus a 1 px line outside it: two pixels, clear on every surface. */
@@ -172,7 +178,7 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
 }
 .nav-highlight {
   position: absolute; left: 6px; top: 6px; width: var(--cell-w); height: var(--cell-h);
-  /* 12%, not 16%: the current place's 10 px label in the light accent keeps 4.5:1 over it (4.39 at 16%). */
+  /* 12%, not 16%: the current place's label in the light accent keeps 4.5:1 over it (4.39 at 16%). */
   border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent);
   transform: translateX(calc((var(--cell-w) + var(--gap)) * var(--i)));
   opacity: 0; transition: transform 320ms cubic-bezier(.3, 1.3, .5, 1), opacity var(--fast);
@@ -187,13 +193,13 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
 .nav-cell:active { transform: scale(.92); }
 .nav-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .nav-glyph { width: 28px; height: 28px; display: grid; place-items: center; }
-.nav-label { font-size: 10px; line-height: 12px; font-weight: 500; letter-spacing: .1px; color: var(--muted); max-width: 100%; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-label { font-size: max(12px, min(0.75rem, 15px)); line-height: 1.15; font-weight: 500; letter-spacing: .1px; color: var(--muted); max-width: 100%; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-cell[aria-current] { color: var(--accent); }
 .nav-cell[aria-current] .nav-label { color: var(--accent); font-weight: 600; }
 .nav-picture {
   width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
   border: 2px solid transparent; transition: border-color var(--fast);
-  font-size: 12px; font-weight: 600; color: var(--fg); background: var(--surface-high);
+  font-size: 0.75rem; font-weight: 600; color: var(--fg); background: var(--surface-high);
 }
 .nav-picture.ringed { border-color: var(--accent); }
 /* The account's picture (WP-103): the saved photo, the letter on its colour, or the person glyph; never a blank disc. */
@@ -218,7 +224,7 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
   display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 16px;
   background: var(--menu); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow);
 }
-.update-notice p { flex: 1; font-size: 14px; line-height: 20px; }
+.update-notice p { flex: 1; font-size: 0.875rem; line-height: 1.25rem; }
 @media (max-height: 500px) and (orientation: landscape) {
   .update-notice, .offline-line { bottom: calc(66px + env(safe-area-inset-bottom)); }
 }
@@ -229,7 +235,7 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
   display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 16px;
   background: var(--menu); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow);
 }
-.toast p { flex: 1; font-size: 14px; line-height: 20px; }
+.toast p { flex: 1; font-size: 0.875rem; line-height: 1.25rem; }
 /* It comes up a few pixels while it fades in; the viewer who asked for less motion gets the fade alone (LS-32). */
 .toast { animation: toast-in 160ms ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
@@ -237,7 +243,7 @@ input:not([type=range]):not([type=radio]):not([type=checkbox]):focus { border-co
   .toast { animation: none; }
 }
 /* The status line (ui/WorkStatus.tsx, WP-98): a quiet line in the page, or a pill in the offline line's place. */
-.work-status-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-height: 28px; margin: 0 0 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+.work-status-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-height: 28px; margin: 0 0 8px; color: var(--muted); font-size: 0.875rem; line-height: 1.25rem; }
 .work-status-line p { margin: 0; }
 .work-status-line button.link { padding: 4px 0; }
 .work-status-line progress { flex: 1 1 120px; max-width: 240px; accent-color: var(--accent); }
@@ -264,7 +270,7 @@ html[data-status-pill] .toast { bottom: calc(86px + 44px + env(safe-area-inset-b
 /* No connection: a line over the bar on every page but the player, which says it itself. */
 .offline-line {
   position: fixed; z-index: 6; bottom: calc(86px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
-  width: max-content; max-width: calc(100vw - 32px); padding: 6px 14px; font-size: 14px; line-height: 20px;
+  width: max-content; max-width: calc(100vw - 32px); padding: 6px 14px; font-size: 0.875rem; line-height: 1.25rem;
   background: var(--menu); color: var(--fg); border: 1px solid var(--line); border-radius: 999px;
 }
 /* Another tab holds the session: covers the page, which stops. */
@@ -277,7 +283,7 @@ dialog.lock-cover::backdrop { background: var(--bg); }
   padding: 16px max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left));
   background: var(--bg); text-align: center;
 }
-.other-tab h1 { font-size: 22px; line-height: 28px; }
+.other-tab h1 { font-size: 1.375rem; line-height: 1.75rem; }
 .other-tab p { max-width: 420px; }
 .signin-install { text-align: start; display: flex; flex-direction: column; gap: 8px; }
 .signin-install summary { color: var(--accent); cursor: pointer; padding: 8px 0; }
@@ -300,7 +306,7 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 .title-pill {
   display: flex; align-items: center; gap: 10px; min-width: 0; height: 48px; padding: 0 18px 0 4px; border-radius: 999px;
   background: var(--menu); border: 1px solid var(--line); box-shadow: var(--shadow);
-  font-size: 16px; line-height: 24px; font-weight: 500;
+  font-size: 1rem; line-height: 1.5rem; font-weight: 500;
 }
 .title-pill[hidden] { display: none; }
 .title-pill > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -308,8 +314,8 @@ dialog.lock-cover::backdrop { background: var(--bg); }
   flex: none; display: grid; place-items: center; border-radius: 50%;
   background: var(--accent-container); color: var(--on-accent-container); font-weight: 500;
 }
-.avatar { width: 56px; height: 56px; font-size: 22px; }
-.avatar.compact { width: 38px; height: 38px; font-size: 16px; }
+.avatar { width: 56px; height: 56px; font-size: 1.375rem; }
+.avatar.compact { width: 38px; height: 38px; font-size: 1rem; }
 
 /*
  * Portrait cards (all chat cards portrait since 2026-10-15): 2:3 art in Corner.Medium, the frame
@@ -352,8 +358,8 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 @media (hover: hover) and (pointer: fine) {
   :root[data-form="desktop"] .card:hover .card-hover, :root[data-form="desktop"] .card:focus-visible .card-hover { display: grid; }
 }
-.card-name { margin-top: 6px; min-height: 36px; font-size: 14px; line-height: 18px; color: var(--fg); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.card-facts { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color var(--fast); }
+.card-name { margin-top: 6px; min-height: 36px; font-size: 0.875rem; line-height: 1.125rem; color: var(--fg); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.card-facts { margin-top: 4px; font-size: 0.75rem; line-height: 1rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color var(--fast); }
 .card:active .card-art { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) {
   .card:hover .card-art, .card:focus-visible .card-art { transform: scale(1.04); }
@@ -371,7 +377,7 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 }
 .chat-row:hover { background: var(--surface); }
 .chat-row:active { background: var(--surface-high); }
-.chat-name { font-size: 16px; line-height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-name { font-size: 1rem; line-height: 1.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (min-width: 840px) { .chats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); column-gap: 24px; } }
 
 /* Search */
@@ -408,24 +414,24 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 .continue-scrim { position: absolute; inset: 40% 0 0; background: linear-gradient(transparent, rgba(0, 0, 0, .55) 45%, rgba(0, 0, 0, .85)); }
 .tile-badge {
   position: absolute; top: 6px; right: 6px; height: 20px; padding: 0 8px; border-radius: 999px;
-  background: rgba(0, 0, 0, .64); color: #fff; font-size: 11px; line-height: 20px; font-weight: 500; white-space: nowrap;
+  background: rgba(0, 0, 0, .64); color: #fff; font-size: 0.6875rem; line-height: 1.25rem; font-weight: 500; white-space: nowrap;
 }
 .pill-progress { position: absolute; left: 12px; right: 12px; bottom: 10px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .3); overflow: hidden; }
 .pill-progress > div { height: 100%; border-radius: 2px; background: var(--accent); }
-.continue-name { margin-top: 8px; font-size: 14px; line-height: 20px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.continue-name { margin-top: 8px; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .continue-card:active .continue-art { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) { .continue-card:hover .continue-art, .continue-card:focus-visible .continue-art { transform: scale(1.03); } }
 .strip.waiting .continue-art { background: var(--surface-high); animation: waiting 1.2s ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) { .strip.waiting .continue-art { animation: none; } .continue-art { transition: none; } }
 
 /* A chat's info page (ChatInfoSheet): the picture, the name, the kind and members, @username, the description and the t.me link, in one centred column. */
-.avatar.huge { width: 96px; height: 96px; font-size: 38px; }
-:root[data-form="desktop"] .avatar.huge { width: 104px; height: 104px; font-size: 40px; }
+.avatar.huge { width: 96px; height: 96px; font-size: 2.375rem; }
+:root[data-form="desktop"] .avatar.huge { width: 104px; height: 104px; font-size: 2.5rem; }
 .chat-info { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 480px; margin: 8px auto 0; padding: 12px 8px; text-align: center; }
-.chat-info-name { font-size: 24px; line-height: 32px; font-weight: 400; overflow-wrap: anywhere; }
-.chat-info-username { border: 0; background: none; color: var(--accent); font-size: 16px; line-height: 24px; font-weight: 500; padding: 6px 10px; border-radius: var(--r-m); }
+.chat-info-name { font-size: 1.5rem; line-height: 2rem; font-weight: 400; overflow-wrap: anywhere; }
+.chat-info-username { border: 0; background: none; color: var(--accent); font-size: 1rem; line-height: 1.5rem; font-weight: 500; padding: 6px 10px; border-radius: var(--r-m); }
 .chat-info-username:hover { background: var(--surface); }
-.chat-info-about { font-size: 16px; line-height: 24px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.chat-info-about { font-size: 1rem; line-height: 1.5rem; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .chat-info-links { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .chat-info-links .outline-button { gap: 8px; height: 40px; cursor: pointer; background: none; font: inherit; font-weight: 500; }
 .chat-info .outline-button { cursor: pointer; background: none; font: inherit; font-weight: 500; height: 40px; }
@@ -438,9 +444,9 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 
 /* The TV keeps its one page of panels (session 20): the blocks inside them take the panel's own padding and its title's size. */
 .panel .set-block { padding: 0; }
-.panel .set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+.panel .set-block-title { font-size: 1rem; line-height: 1.5rem; font-weight: 500; }
 /* A card's own heading over its rows (Settings > Home's Rows on Home). */
-.set-card-title { margin: 0; padding: 12px 16px 4px; color: var(--muted); font-size: 14px; line-height: 20px; }
+.set-card-title { margin: 0; padding: 12px 16px 4px; color: var(--muted); font-size: 0.875rem; line-height: 1.25rem; }
 /* Home's line where Recently added would be, when none of its chosen chats is there. */
 .home-none-chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .home-none-chosen p { margin: 0; flex: 1 1 280px; }
@@ -449,7 +455,7 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 /* Settings: panels in Corner.Large, the theme as one segmented choice. */
 .settings { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.panel-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+.panel-title { font-size: 1rem; line-height: 1.5rem; font-weight: 500; }
 .segmented { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface-high); border-radius: 999px; padding: 4px; gap: 4px; }
 .segmented label {
   position: relative; display: grid; place-items: center; min-height: 40px; border-radius: 999px;
@@ -468,13 +474,13 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .set { display: flex; flex-direction: column; gap: 12px; max-width: 720px; margin: 0 auto; }
 .set.wide { max-width: 1180px; }
 .set-bar { display: flex; align-items: center; gap: 16px; margin: 2px 0 8px; min-height: 48px; }
-.set-bar h1 { font-size: 28px; line-height: 36px; font-weight: 400; min-width: 0; overflow-wrap: anywhere; }
+.set-bar h1 { font-size: 1.75rem; line-height: 2.25rem; font-weight: 400; min-width: 0; overflow-wrap: anywhere; }
 .set-head { margin-bottom: 4px; }
 .set-head .page-title { margin-bottom: 4px; }
 .set-panes { display: grid; grid-template-columns: 324px minmax(0, 1fr); gap: 32px; align-items: start; }
 .set-list { display: flex; flex-direction: column; gap: 12px; }
 .set-page { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
-.set-page-title { font-size: 24px; line-height: 32px; font-weight: 400; padding: 0 4px; }
+.set-page-title { font-size: 1.5rem; line-height: 2rem; font-weight: 400; padding: 0 4px; }
 .set-card { background: var(--surface); border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; }
 .set-card > * { position: relative; }
 .set-card > * + *::before { content: ''; position: absolute; top: 0; left: 68px; right: 0; border-top: 1px solid var(--line); }
@@ -494,8 +500,8 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 /* Google Pay's mark is its own artwork on white, so its tile is white in either theme. */
 .set-icon-plain { background: #fff; border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent); }
 .set-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.set-title { font-size: 16px; line-height: 24px; }
-.set-sub { font-size: 14px; line-height: 20px; color: var(--muted); }
+.set-title { font-size: 1rem; line-height: 1.5rem; }
+.set-sub { font-size: 0.875rem; line-height: 1.25rem; color: var(--muted); }
 .set-chevron { flex: none; color: var(--muted); }
 .set-block { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 /* Settings > Home, Order of rows: a row's name, then Move up and Move down. */
@@ -510,16 +516,16 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .order-move:disabled { opacity: 0.35; cursor: default; }
 .order-hint { margin: 0; padding: 8px 16px 4px; }
 .order-reset { align-self: start; margin: 4px 16px 12px; }
-.set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+.set-block-title { font-size: 1rem; line-height: 1.5rem; font-weight: 500; }
 .set-credit { gap: 8px; }
 .set-account { display: flex; align-items: center; gap: 14px; padding: 4px 16px; }
-.set-account .initial { width: 56px; height: 56px; font-size: 22px; flex: none; }
+.set-account .initial { width: 56px; height: 56px; font-size: 1.375rem; flex: none; }
 .set-account .set-title { font-weight: 500; }
 .set-foot { padding: 4px 16px; }
 /* The most destructive action is the quietest control (Raju 10.3): an outlined row at the foot, the colour only in its words; it asks first. */
 .set .danger-button.set-signout {
   align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 24px;
-  background: none; color: var(--error); border: 1px solid var(--line); font-size: 14px;
+  background: none; color: var(--error); border: 1px solid var(--line); font-size: 0.875rem;
 }
 .set .danger-button.set-signout:hover { background: var(--surface-high); }
 /* The app's switch: a 52 by 32 track, a small grey thumb that grows and takes the accent when on. */
@@ -555,7 +561,7 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
   padding: max(32px, env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
 }
 .signin-mark { width: 56px; height: 56px; border-radius: var(--r-l); }
-.signin h1 { font-size: 24px; line-height: 32px; font-weight: 400; margin: 0; }
+.signin h1 { font-size: 1.5rem; line-height: 2rem; font-weight: 400; margin: 0; }
 .signin p { margin: 0; }
 .signin form { display: flex; flex-direction: column; gap: 12px; }
 .signin button.link { align-self: start; }
@@ -587,7 +593,7 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
   padding: 16px; text-align: center; color: #111; background: rgba(255,255,255,.9); opacity: 0; pointer-events: none; transition: opacity .22s;
 }
 .qr-veil.on { opacity: 1; pointer-events: auto; }
-.qr-veil b { font-size: 20px; line-height: 28px; font-weight: 600; }
+.qr-veil b { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; }
 .qr-tick { width: 56px; height: 56px; border-radius: 50%; background: #1e9e5a; color: #fff; display: grid; place-items: center; animation: you-in .22s ease-out; }
 .qr-refresh { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: var(--surface-high); color: var(--fg); font: inherit; font-weight: 500; cursor: pointer; }
 .qr-refresh:disabled { cursor: default; }
@@ -602,19 +608,19 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
  */
 .signin-brand { display: flex; align-items: center; gap: 14px; }
 .signin-brand .signin-mark { width: 42px; height: 42px; border-radius: 10px; }
-.signin-word { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.2px; }
+.signin-word { font-size: 1.75rem; line-height: 2.25rem; font-weight: 600; letter-spacing: -.2px; }
 /* Telegram ended the session (HX23): the apps' SessionEndedNote, one line on the surface. */
 .signin-ended { margin: 0; padding: 12px 16px; border-radius: 20px; background: var(--surface-high); }
 :root[data-form="phone"] .signin { gap: 16px; padding-top: max(16px, env(safe-area-inset-top)); }
-:root[data-form="phone"] .signin h1 { font-size: 32px; line-height: 40px; margin-top: 12px; }
-:root[data-form="phone"] .signin p.muted { font-size: 16px; line-height: 24px; color: var(--fg); }
+:root[data-form="phone"] .signin h1 { font-size: 2rem; line-height: 2.5rem; margin-top: 12px; }
+:root[data-form="phone"] .signin p.muted { font-size: 1rem; line-height: 1.5rem; color: var(--fg); }
 :root[data-form="phone"] .signin button.link.alt {
   align-self: stretch; min-height: 44px; border-radius: 999px; padding: 10px 24px; text-align: center; font-weight: 500;
   color: var(--fg); background: color-mix(in srgb, var(--accent) 24%, var(--surface-high));
 }
 :root[data-form="desktop"] .signin { max-width: 396px; justify-content: center; align-items: stretch; text-align: center; padding-top: 32px; padding-bottom: 32px; gap: 16px; }
 :root[data-form="desktop"] .signin-brand { justify-content: center; margin-bottom: 4px; }
-:root[data-form="desktop"] .signin h1 { font-size: 24px; line-height: 32px; }
+:root[data-form="desktop"] .signin h1 { font-size: 1.5rem; line-height: 2rem; }
 :root[data-form="desktop"] .signin button.link, :root[data-form="desktop"] .signin .signin-links { align-self: center; }
 :root[data-form="desktop"] .signin .signin-links { justify-content: center; }
 :root[data-form="desktop"] .signin .steps { align-self: center; text-align: start; }
@@ -640,9 +646,9 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .resend-none { margin: 0; text-align: center; }
 .phone-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
 .dial { position: relative; display: block; }
-.dial span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--muted); pointer-events: none; }
+.dial span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: var(--muted); pointer-events: none; }
 .dial input:not([type=range]):not([type=radio]) { padding-left: 28px; }
-.code-input.digits { font-size: 24px; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
+.code-input.digits { font-size: 1.5rem; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
 .password-field { position: relative; }
 .password-field input:not([type=range]):not([type=radio]) { padding-right: 48px; }
 .password-field .icon-button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
@@ -664,7 +670,7 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
   display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 16px; border: 0; background: none; text-align: left;
 }
 .countries li button:hover, .countries li button:focus-visible { background: var(--surface-high); }
-.countries .flag { font-size: 20px; width: 24px; }
+.countries .flag { font-size: 1.25rem; width: 24px; }
 .countries .name { flex: 1; }
 .countries-none { padding: 16px; }
 @media (max-width: 599px) {
@@ -699,21 +705,21 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .detail-close:active { transform: scale(.92); }
 .detail-body { position: relative; margin-top: -88px; padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
 .detail-head { display: flex; flex-direction: column; gap: 8px; }
-.detail-code { margin: 0; color: var(--accent); font-size: 16px; line-height: 22px; font-weight: 600; }
-.detail-title { margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; overflow-wrap: anywhere; }
-.detail-facts { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; font-size: 16px; line-height: 22px; font-weight: 600; }
+.detail-code { margin: 0; color: var(--accent); font-size: 1rem; line-height: 1.375rem; font-weight: 600; }
+.detail-title { margin: 0; font-size: 2rem; line-height: 2.375rem; font-weight: 700; overflow-wrap: anywhere; }
+.detail-facts { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; font-size: 1rem; line-height: 1.375rem; font-weight: 600; }
 .detail-sep { margin: 0 8px; font-weight: 400; color: var(--muted); }
-.detail-badge { padding: 0 5px; border: 1.5px solid currentColor; border-radius: 5px; line-height: 20px; }
+.detail-badge { padding: 0 5px; border: 1.5px solid currentColor; border-radius: 5px; line-height: 1.25rem; }
 .detail-chat { color: inherit; text-decoration: none; }
 .detail-chat:hover { text-decoration: underline; }
-.detail-watched { margin: 0; color: var(--accent); font-size: 14px; line-height: 20px; font-weight: 500; }
-.detail-progress { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 16px; }
+.detail-watched { margin: 0; color: var(--accent); font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; }
+.detail-progress { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 1rem; }
 .detail-progress-bar { width: 160px; height: 4px; border-radius: 2px; background: var(--surface-high); overflow: hidden; }
 .detail-progress-bar span { display: block; height: 100%; background: var(--accent); }
 .detail-actions { display: flex; flex-direction: column; gap: 16px; }
 .detail-play {
   display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; padding: 0 28px; border: 0; border-radius: 999px;
-  background: var(--fg); color: var(--bg); font-size: 16px; line-height: 20px; font-weight: 600; cursor: pointer;
+  background: var(--fg); color: var(--bg); font-size: 1rem; line-height: 1.25rem; font-weight: 600; cursor: pointer;
 }
 .detail-play:active { transform: scale(.97); }
 .detail-rounds { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
@@ -722,10 +728,10 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .detail-round:hover .detail-round-disc { background: color-mix(in srgb, var(--fg) 16%, var(--surface-high)); }
 .detail-round:active .detail-round-disc { transform: scale(.92); }
 .detail-round[aria-pressed="true"] .detail-round-disc { background: var(--accent-container); color: var(--on-accent-container); }
-.detail-round-label { font-size: 12px; line-height: 16px; font-weight: 500; text-align: center; }
-.detail-section { margin: 8px 0 8px; font-size: 18px; line-height: 24px; font-weight: 600; }
+.detail-round-label { font-size: 0.75rem; line-height: 1rem; font-weight: 500; text-align: center; }
+.detail-section { margin: 8px 0 8px; font-size: 1.125rem; line-height: 1.5rem; font-weight: 600; }
 .detail-section.with-icon { display: flex; align-items: center; gap: 8px; }
-.detail-about dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 14px; line-height: 20px; }
+.detail-about dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 0.875rem; line-height: 1.25rem; }
 .detail-about dt { color: var(--muted); }
 .detail-about dd { margin: 0; overflow-wrap: anywhere; }
 .detail-chat-line { display: flex; align-items: center; gap: 4px; margin-top: -10px !important; margin-bottom: -10px !important; }
@@ -776,7 +782,7 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 }
 :root[data-form="desktop"] .detail-round-disc { border: 1px solid var(--line); }
 :root[data-form="desktop"] .detail-round[aria-pressed="true"] .detail-round-disc { border-color: transparent; }
-:root[data-form="desktop"] .detail-title { font-size: 40px; line-height: 48px; }
+:root[data-form="desktop"] .detail-title { font-size: 2.5rem; line-height: 3rem; }
 :root[data-form="desktop"] .detail-actions { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
 :root[data-form="desktop"] .detail-play { min-width: 176px; height: 56px; }
 :root[data-form="desktop"] .detail-rounds { justify-content: flex-start; gap: 8px; }
@@ -785,12 +791,12 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 /* A video's page: what TMDB adds (the title's wide picture, genres and age rating, its score, the overview, the cast), and the copies line. */
 .detail-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 25%; animation: fade 200ms ease-out; }
 .detail-meta { display: flex; flex-direction: column; gap: 6px; }
-.detail-genres { margin: 0; color: var(--muted); font-size: 16px; line-height: 22px; }
+.detail-genres { margin: 0; color: var(--muted); font-size: 1rem; line-height: 1.375rem; }
 .detail-scores { margin: 0; display: flex; align-items: center; gap: 16px; }
-.detail-score { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; line-height: 22px; font-weight: 500; }
+.detail-score { display: inline-flex; align-items: center; gap: 8px; font-size: 1rem; line-height: 1.375rem; font-weight: 500; }
 a.detail-round { text-decoration: none; }
 .detail-overview { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 760px; }
-.detail-synopsis { margin: 0; font-size: 16px; line-height: 24px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.detail-synopsis { margin: 0; font-size: 1rem; line-height: 1.5rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .detail-synopsis.open { display: block; }
 .detail-more { padding: 4px 0; font-weight: 600; }
 .detail-credit { margin: 0 0 10px; color: var(--muted); }
@@ -801,7 +807,7 @@ a.detail-round { text-decoration: none; }
 }
 .detail-copy-summary:hover { background: var(--surface); }
 .detail-copy-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.detail-copy-line { font-size: 14px; line-height: 20px; font-weight: 600; }
+.detail-copy-line { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; }
 .detail-copy-change { color: var(--accent); font-weight: 500; flex: none; }
 .detail-copy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .detail-copy { display: flex; align-items: center; gap: 12px; width: 100%; text-align: start; background: none; border: 0; border-radius: var(--r-m); padding: 10px 12px; color: inherit; }
@@ -814,13 +820,13 @@ a.detail-round { text-decoration: none; }
 .cast-face { width: 72px; height: 72px; border-radius: 50%; overflow: hidden; display: grid; background: var(--surface-high); margin-bottom: 4px; }
 .cast-face > * { grid-area: 1 / 1; width: 100%; height: 100%; }
 .cast-face img { object-fit: cover; animation: fade 200ms ease-out; }
-.cast-face .initial { font-size: 24px; }
-.cast-name { font-size: 13px; line-height: 16px; font-weight: 600; overflow-wrap: anywhere; }
-.cast-role { font-size: 12px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+.cast-face .initial { font-size: 1.5rem; }
+.cast-name { font-size: 0.8125rem; line-height: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+.cast-role { font-size: 0.75rem; line-height: 1rem; color: var(--muted); overflow-wrap: anywhere; }
 
 .season-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
-.season-chip { flex: none; display: flex; flex-direction: column; align-items: flex-start; background: var(--surface-high); border: 1px solid transparent; border-radius: var(--r-s); padding: 6px 14px; font-size: 14px; line-height: 20px; color: var(--fg); }
-.season-chip small { font-size: 11px; line-height: 14px; color: var(--muted); }
+.season-chip { flex: none; display: flex; flex-direction: column; align-items: flex-start; background: var(--surface-high); border: 1px solid transparent; border-radius: var(--r-s); padding: 6px 14px; font-size: 0.875rem; line-height: 1.25rem; color: var(--fg); }
+.season-chip small { font-size: 0.6875rem; line-height: 0.875rem; color: var(--muted); }
 .season-chip.on { background: var(--accent-container); border-color: var(--accent); color: var(--on-accent-container); }
 .season-chip.on small { color: var(--on-accent-container); }
 /* T9: a season the chats hold none of is quiet; the dot marks the ones they hold. */
@@ -843,7 +849,7 @@ a.detail-round { text-decoration: none; }
 .episode:active { transform: scale(.98); }
 .episode.playing { box-shadow: inset 0 0 0 2px var(--accent); }
 .episode-code { font-variant-numeric: tabular-nums; font-weight: 500; flex: none; }
-.episode-name { flex: 1; min-width: 0; color: inherit; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.episode-name { flex: 1; min-width: 0; color: inherit; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; }
 .episode-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(127,127,127,.3); }
 .episode-progress span { display: block; height: 100%; background: var(--accent); }
 /* A watched episode's tick, and the show's own actions over the list (HX20). */
@@ -887,7 +893,7 @@ a.detail-round { text-decoration: none; }
 /* As specific as the page's input rule above (which made it as wide as the row, the name pushed out of sight), and later. */
 input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 0; padding: 0; border: 0; background: none; accent-color: var(--accent); cursor: pointer; }
 .chat-text { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.chat-count { font-size: 13px; line-height: 16px; min-height: 16px; }
+.chat-count { font-size: 0.8125rem; line-height: 1rem; min-height: 16px; }
 .picker-all { display: flex; align-items: center; gap: 16px; width: 100%; margin: 0 0 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .picker-all-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .picker-all-title { font-weight: 500; }
@@ -897,14 +903,14 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 .picker-actions > .link { margin-left: auto; flex: none; }
 /* The picker's filters (All, Archived, Channels, Groups, People), History's chips as buttons. */
 .picker-scopes { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; min-width: 0; padding: 2px; }
-.picker-scopes .history-tab { flex: none; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; }
+.picker-scopes .history-tab { flex: none; background: none; cursor: pointer; font: inherit; font-size: 0.8125rem; font-weight: 500; }
 .picker-scopes .history-tab[aria-pressed="true"] { background: var(--accent-container); border-color: transparent; color: var(--on-accent-container); }
-.picker-band { margin: 16px 0 4px; padding: 0 8px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--muted); }
+.picker-band { margin: 16px 0 4px; padding: 0 8px; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--muted); }
 .picker-blurb { margin: 0 0 16px; }
 .picker-note { margin: 0 0 8px; padding: 0 8px; }
 .picker-count-more { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; padding: 0 8px; }
 .picker-count-more > .link { flex: none; }
-.picker-gone-head { margin: 24px 0 8px; font-size: 14px; color: var(--muted); }
+.picker-gone-head { margin: 24px 0 8px; font-size: 0.875rem; color: var(--muted); }
 .picker-gone-row { display: flex; align-items: center; gap: 16px; padding: 8px; }
 .picker-gone-row .chat-name { flex: 1; }
 
@@ -928,7 +934,7 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
   display: flex; flex-direction: column; animation: pop 150ms var(--ease);
 }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
-.pop-title { padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: var(--muted); font-weight: 500; }
+.pop-title { padding: 8px 12px 4px; font-size: 0.75rem; line-height: 1rem; color: var(--muted); font-weight: 500; }
 .pop-menu button {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px;
   background: none; border: 0; border-radius: var(--r-s); text-align: start; transition: background var(--fast);
@@ -957,9 +963,9 @@ input.chat-tick[type=checkbox] { flex: none; width: 22px; height: 22px; margin: 
 }
 .confirm[open] { display: flex; flex-direction: column; gap: 16px; }
 .confirm::backdrop { background: rgb(0 0 0 / .5); }
-.confirm h2 { font-size: 24px; line-height: 32px; font-weight: 400; }
+.confirm h2 { font-size: 1.5rem; line-height: 2rem; font-weight: 400; }
 .upi-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
-.upi-id { text-align: center; font-size: 16px; overflow-wrap: anywhere; user-select: all; }
+.upi-id { text-align: center; font-size: 1rem; overflow-wrap: anywhere; user-select: all; }
 .confirm-buttons { display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
 button.primary.danger { background: var(--error); color: var(--bg); }
 @media (prefers-reduced-motion: reduce) { .round-button.spinning .icon { animation-duration: 2s; } .pop-menu { animation: none; } }
@@ -995,7 +1001,7 @@ button.primary.danger { background: var(--error); color: var(--bg); }
 
 /* The first run: nothing anywhere yet. */
 .first-run { padding: 24px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--surface); display: flex; flex-direction: column; gap: 8px; align-items: start; max-width: 560px; }
-.first-run h2 { font-size: 22px; line-height: 28px; font-weight: 400; }
+.first-run h2 { font-size: 1.375rem; line-height: 1.75rem; font-weight: 400; }
 /* Home's one question about keeping the place on every device (the apps' KeepPlaceCard): once, at the end of Home. */
 .keep-place {
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; align-items: start; max-width: 720px;
@@ -1004,10 +1010,10 @@ button.primary.danger { background: var(--error); color: var(--bg); }
 }
 .keep-place-icon { color: var(--accent); margin-top: 2px; }
 .keep-place-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.keep-place-text h2 { font-size: 20px; line-height: 26px; font-weight: 500; overflow-wrap: anywhere; }
-.keep-place-text p { font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.keep-place-text h2 { font-size: 1.25rem; line-height: 1.625rem; font-weight: 500; overflow-wrap: anywhere; }
+.keep-place-text p { font-size: 0.875rem; line-height: 1.25rem; overflow-wrap: anywhere; }
 .keep-place-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; }
-.keep-place-buttons button { min-height: 44px; min-width: 44px; padding-inline: 20px; font-size: 16px; }
+.keep-place-buttons button { min-height: 44px; min-width: 44px; padding-inline: 20px; font-size: 1rem; }
 @media (max-width: 479px) {
   .keep-place { grid-template-columns: minmax(0, 1fr); padding: 16px; }
   .keep-place-icon { display: none; }
@@ -1015,11 +1021,11 @@ button.primary.danger { background: var(--error); color: var(--bg); }
 }
 a.primary-link {
   margin-top: 8px; background: var(--accent); color: var(--on-accent); border-radius: 999px; min-height: 44px; padding: 12px 24px;
-  font-size: 14px; line-height: 20px; font-weight: 500; text-decoration: none;
+  font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; text-decoration: none;
 }
 button.tonal {
   background: var(--accent-container); color: var(--on-accent-container); border: 0; border-radius: 999px;
-  min-height: 40px; padding: 10px 20px; font-size: 14px; line-height: 20px; font-weight: 500; white-space: nowrap;
+  min-height: 40px; padding: 10px 20px; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; white-space: nowrap;
 }
 button.tonal:active { transform: scale(.96); }
 
@@ -1036,9 +1042,9 @@ button.tonal:active { transform: scale(.96); }
 .sponsored-art { padding: 0; border: 0; aspect-ratio: 16 / 9; border-radius: var(--r-s); overflow: hidden; background: var(--surface-high); cursor: pointer; }
 .sponsored-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sponsored-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.sponsored-label { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; text-transform: uppercase; color: var(--caution); }
-.sponsored-title { font-size: 18px; line-height: 24px; font-weight: 500; }
-.sponsored-body { font-size: 14px; line-height: 20px; white-space: pre-line; overflow-wrap: anywhere; }
+.sponsored-label { font-size: 0.75rem; line-height: 1rem; font-weight: 500; letter-spacing: .5px; text-transform: uppercase; color: var(--caution); }
+.sponsored-title { font-size: 1.125rem; line-height: 1.5rem; font-weight: 500; }
+.sponsored-body { font-size: 0.875rem; line-height: 1.25rem; white-space: pre-line; overflow-wrap: anywhere; }
 .sponsored-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
 @media (min-width: 840px) {
   .sponsored { grid-template-columns: 220px minmax(0, 1fr) auto; }
@@ -1046,7 +1052,7 @@ button.tonal:active { transform: scale(.96); }
   .sponsored-buttons { grid-column: auto; flex-direction: column; align-items: end; gap: 8px; }
 }
 .report-options { display: flex; flex-direction: column; }
-.report-options button { text-align: start; background: none; border: 0; border-top: 1px solid var(--line); color: var(--fg); padding: 14px 4px; font-size: 16px; line-height: 24px; }
+.report-options button { text-align: start; background: none; border: 0; border-top: 1px solid var(--line); color: var(--fg); padding: 14px 4px; font-size: 1rem; line-height: 1.5rem; }
 .report-options button:hover { background: var(--surface-high); }
 
 /* The "You" menu (ProfilePopover): a 232 px card over the bar, 20 px corners, 40 px lines. */
@@ -1058,33 +1064,33 @@ button.tonal:active { transform: scale(.96); }
 @keyframes you-in { from { opacity: 0; transform: scale(.85); } }
 .you-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 14px; }
 .you-summary { padding: 6px 14px; }
-.you-heading { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.you-heading { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--muted); }
 .you-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; }
 .you-count { display: flex; flex-direction: column; align-items: center; padding: 6px 0; border: 0; border-radius: 12px; background: none; color: var(--fg); cursor: pointer; transition: background var(--fast); }
 .you-count:hover, .you-count:focus-visible { background: var(--surface-high); outline: none; }
-.you-count strong { font-size: 16px; line-height: 24px; font-weight: 600; }
-.you-count span { font-size: 11px; line-height: 16px; color: var(--muted); }
+.you-count strong { font-size: 1rem; line-height: 1.5rem; font-weight: 600; }
+.you-count span { font-size: 0.6875rem; line-height: 1rem; color: var(--muted); }
 .you-row {
   display: flex; align-items: center; gap: 12px; width: calc(100% - 12px); height: 40px; margin: 0 6px; padding: 0 12px;
-  border: 0; border-radius: 14px; background: none; color: var(--fg); font-size: 14px; line-height: 20px; text-align: start; cursor: pointer;
+  border: 0; border-radius: 14px; background: none; color: var(--fg); font-size: 0.875rem; line-height: 1.25rem; text-align: start; cursor: pointer;
 }
 .you-row:hover, .you-row:focus-visible { background: var(--surface-high); outline: none; }
 .you-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.you-shortcut { font-size: 11px; line-height: 16px; color: var(--muted); }
-.you-badge { padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; line-height: 16px; font-weight: 500; }
+.you-shortcut { font-size: 0.6875rem; line-height: 1rem; color: var(--muted); }
+.you-badge { padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 0.75rem; line-height: 1rem; font-weight: 500; }
 /* The menu's head: whose account it is, the name in two lines at most, the @username muted. */
 .you-head { display: flex; align-items: center; gap: 12px; padding: 8px 14px 10px; }
-.you-picture { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-weight: 600; background: var(--surface-high); }
+.you-picture { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 1.25rem; font-weight: 600; background: var(--surface-high); }
 .you-who { display: flex; flex-direction: column; min-width: 0; }
-.you-who strong { font-size: 16px; line-height: 22px; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.you-who span { font-size: 14px; line-height: 20px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.you-who strong { font-size: 1rem; line-height: 1.375rem; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.you-who span { font-size: 0.875rem; line-height: 1.25rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .you-row.you-danger { color: var(--error); }
 /* The version line (WP-104): the menu's last line, quiet, wrapping at a large font, 44 px to press; "Update available" is a button under it. */
-.you-row.you-version { height: auto; min-height: 44px; padding-block: 6px; color: var(--muted); font-size: 13px; line-height: 18px; }
-.you-row.you-update { height: auto; min-height: 44px; padding-block: 6px; color: var(--caution, var(--accent)); font-size: 13px; line-height: 18px; }
+.you-row.you-version { height: auto; min-height: 44px; padding-block: 6px; color: var(--muted); font-size: 0.8125rem; line-height: 1.125rem; }
+.you-row.you-update { height: auto; min-height: 44px; padding-block: 6px; color: var(--caution, var(--accent)); font-size: 0.8125rem; line-height: 1.125rem; }
 .you-version .version-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.version-line { margin: 0; font-size: 13px; line-height: 18px; color: var(--muted); overflow-wrap: anywhere; }
-button.version-copy { display: block; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-radius: 12px; background: none; font: inherit; font-size: 13px; line-height: 18px; color: var(--muted); text-align: start; cursor: pointer; }
+.version-line { margin: 0; font-size: 0.8125rem; line-height: 1.125rem; color: var(--muted); overflow-wrap: anywhere; }
+button.version-copy { display: block; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-radius: 12px; background: none; font: inherit; font-size: 0.8125rem; line-height: 1.125rem; color: var(--muted); text-align: start; cursor: pointer; }
 button.version-copy:hover, button.version-copy:focus-visible { background: var(--surface-high); outline: none; }
 .set-version { padding: 0 16px; }
 button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
@@ -1111,22 +1117,22 @@ html[data-pull] { overscroll-behavior-y: contain; }
 .history-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px; }
 .history-tab {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-s);
-  color: var(--fg); text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 500;
+  color: var(--fg); text-decoration: none; font-size: 0.8125rem; line-height: 1.125rem; font-weight: 500;
 }
 .history-tab .icon { color: var(--accent); }
 .history-tab:hover { background: var(--surface); }
 .history-tab[aria-current="page"] { background: var(--accent-container); border-color: transparent; color: var(--on-accent-container); }
 .history-tab[aria-current="page"] .icon { color: inherit; }
 .history-day { margin: 0 0 24px; }
-.history-day-title { margin: 0 0 12px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--muted); }
+.history-day-title { margin: 0 0 12px; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--muted); }
 .history-day-title:empty { display: none; }
 .favourites-list { list-style: none; padding: 0; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 64px 16px; text-align: center; color: var(--muted); }
-.empty-state p { max-width: 420px; font-size: 14px; line-height: 20px; }
-.downloads-card-title { font-size: 20px; line-height: 28px; font-weight: 500; color: var(--fg); }
+.empty-state p { max-width: 420px; font-size: 0.875rem; line-height: 1.25rem; }
+.downloads-card-title { font-size: 1.25rem; line-height: 1.75rem; font-weight: 500; color: var(--fg); }
 .empty-disc { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-high); color: var(--accent); }
 /* A link or a button alike: as a <button> it would keep the browser's grey fill and system font. */
-.outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
 .outline-button:hover { background: var(--surface); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -1142,7 +1148,7 @@ html[data-pull] { overscroll-behavior-y: contain; }
 .home-mark { width: var(--brand-mark); height: var(--brand-mark); border-radius: var(--brand-mark-radius); flex: none; }
 .page:has(> .hero) > .home-head > .home-title { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 /* The row headings: the app's title medium, semibold. */
-.row-title { font-size: 20px; line-height: 28px; font-weight: 600; }
+.row-title { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; }
 
 /*
  * EdgeBackdrop's fades as masks (2026-11-01): the picture runs the whole width, and its start fades
@@ -1194,14 +1200,14 @@ html[data-pull] { overscroll-behavior-y: contain; }
 .hero-text.leaving { animation: hero-out 200ms ease-in forwards; pointer-events: none; }
 .hero-text.swapping { animation: fade 300ms ease-out 180ms backwards; }
 @keyframes hero-out { to { opacity: 0; } }
-.hero-title { margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.hero-facts { margin: 0; max-width: 100%; font-size: 14px; line-height: 20px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hero-score { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 500; }
-.hero-overview { margin: 0; max-width: 560px; font-size: 14px; line-height: 20px; color: color-mix(in srgb, var(--fg) 80%, transparent); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-title { margin: 0; font-size: 1.75rem; line-height: 2.125rem; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.hero-facts { margin: 0; max-width: 100%; font-size: 0.875rem; line-height: 1.25rem; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-score { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; }
+.hero-overview { margin: 0; max-width: 560px; font-size: 0.875rem; line-height: 1.25rem; color: color-mix(in srgb, var(--fg) 80%, transparent); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .hero-actions { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 6px; }
 .hero-play {
   flex: 1; height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 999px;
-  background: var(--fg); color: var(--bg); text-decoration: none; font-size: 16px; line-height: 20px; font-weight: 600;
+  background: var(--fg); color: var(--bg); text-decoration: none; font-size: 1rem; line-height: 1.25rem; font-weight: 600;
 }
 .hero-play:hover { background: color-mix(in srgb, var(--fg) 88%, transparent); }
 .hero-play:active { transform: scale(.97); }
@@ -1231,7 +1237,7 @@ html[data-pull] { overscroll-behavior-y: contain; }
 :root[data-form="desktop"] .hero-art { background: var(--bg); }
 :root[data-form="desktop"] .hero-text { inset-inline: calc(var(--gutter) + 10px + env(safe-area-inset-left)) auto; width: min(640px, 55%); align-items: flex-start; text-align: start; bottom: 12px; gap: 8px; }
 :root[data-form="desktop"] .hero-text .hero-facts, :root[data-form="desktop"] .hero-text .hero-overview { max-width: 560px; }
-:root[data-form="desktop"] .hero-title { font-size: 36px; line-height: 44px; font-weight: 600; }
+:root[data-form="desktop"] .hero-title { font-size: 2.25rem; line-height: 2.75rem; font-weight: 600; }
 :root[data-form="desktop"] .hero-actions { width: auto; }
 :root[data-form="desktop"] .hero-play { flex: none; padding: 0 28px; }
 :root[data-form="desktop"] .hero-nav { inset-inline: auto calc(var(--gutter) + env(safe-area-inset-right)); bottom: 16px; gap: 0; }
@@ -1268,7 +1274,7 @@ html[data-pull] { overscroll-behavior-y: contain; }
 :root[data-form="desktop"] .hero-title .title-logo-skeleton { margin-inline: 0; }
 /* The full words (a 130 px logo, 3 lines of overview) need a frame about 400 px tall under the brand. The frame is min(42vw, 62dvh) with a 340 px floor, so it is that tall only from a window 645 px tall and 950 px wide (a laptop's 1366x650 browser area, a browser zoomed to 150 or 200 percent is 400 to 540 px tall, a narrow window): below that the words are set a size down, a logo 80 px tall and two lines of overview, to stay under the brand and inside the frame. */
 @media (max-height: 645px), (max-width: 950px) {
-  :root[data-form="desktop"] .hero-title { --logo-h: 80px; --logo-w: 320px; font-size: 28px; line-height: 34px; }
+  :root[data-form="desktop"] .hero-title { --logo-h: 80px; --logo-w: 320px; font-size: 1.75rem; line-height: 2.125rem; }
   :root[data-form="desktop"] .hero-overview { -webkit-line-clamp: 2; }
   :root[data-form="desktop"] .hero-text { gap: 6px; }
 }
@@ -1281,13 +1287,13 @@ html[data-pull] { overscroll-behavior-y: contain; }
 /* A card's one score (the apps' CardScore): TMDB's mark and number in a dark pill at the art's bottom end. */
 .card-score {
   position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px;
-  border-radius: 999px; background: rgb(0 0 0 / .64); color: #fff; font-size: 12px; line-height: 16px; font-weight: 600; pointer-events: none;
+  border-radius: 999px; background: rgb(0 0 0 / .64); color: #fff; font-size: 0.75rem; line-height: 1rem; font-weight: 600; pointer-events: none;
 }
 .card-score.lifted { bottom: 14px; }
 /* A poster tile's one resolution pill (the apps' FormatBadge on art): plain text in the dark plate, top end, not a control. */
 .card-format {
   position: absolute; top: 8px; right: 8px; max-width: calc(100% - 16px); padding: 2px 8px; border-radius: 999px;
-  background: rgb(0 0 0 / .64); color: #fff; font-size: 12px; line-height: 16px; font-weight: 600; white-space: nowrap;
+  background: rgb(0 0 0 / .64); color: #fff; font-size: 0.75rem; line-height: 1rem; font-weight: 600; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
 
@@ -1323,16 +1329,16 @@ html[data-pull] { overscroll-behavior-y: contain; }
   display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 16px;
   background: var(--menu); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow);
 }
-.select-count { flex: 1; font-size: 14px; }
+.select-count { flex: 1; font-size: 0.875rem; }
 .select-bar button.primary { padding: 8px 16px; }
 button.primary.danger:disabled { opacity: .4; }
 /* The long press menu of a history card. */
 .card { -webkit-touch-callout: none; }
-.card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 16px; width: 100%; }
-.card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 13px; }
+.card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 1rem; width: 100%; }
+.card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 0.8125rem; }
 .card-menu a.menu-row { text-decoration: none; box-sizing: border-box; }
 /* The link to copy by hand (ui/tgLinks.ts), when the browser refused the clipboard: one line, selected, scrolls sideways. */
-.link-field { box-sizing: border-box; width: 100%; margin: 4px 0 8px; padding: 10px 12px; font: inherit; font-size: 14px; color: inherit; background: var(--surface-high); border: 1px solid var(--line); border-radius: var(--r-md, 12px); text-overflow: ellipsis; }
+.link-field { box-sizing: border-box; width: 100%; margin: 4px 0 8px; padding: 10px 12px; font: inherit; font-size: 0.875rem; color: inherit; background: var(--surface-high); border: 1px solid var(--line); border-radius: var(--r-md, 12px); text-overflow: ellipsis; }
 .link-sheet .link-field { width: calc(100% - 32px); margin: 16px; }
 .link-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 
@@ -1347,11 +1353,11 @@ button.primary.danger:disabled { opacity: .4; }
 .choice-thumb { flex: none; width: 56px; aspect-ratio: 2 / 3; border-radius: 6px; background: var(--surface-high); overflow: hidden; }
 .choice-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .choice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.choice-text strong { font-weight: 500; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.choice-text small { color: var(--muted, inherit); font-size: 13px; }
+.choice-text strong { font-weight: 500; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-text small { color: var(--muted, inherit); font-size: 0.8125rem; }
 .choice-row[aria-current='true'] .choice-text small:first-of-type { color: var(--accent); }
 .choice-story { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.choice-others { display: flex; gap: 12px; align-items: center; min-height: 44px; font-size: 14px; }
+.choice-others { display: flex; gap: 12px; align-items: center; min-height: 44px; font-size: 0.875rem; }
 @media (prefers-reduced-motion: reduce) { .choice-row { transition: none; } }
 
 /* A trailer in YouTube's own player over the video's page (ui/TrailerSheet.tsx): the player 16:9, never wider than the screen or taller than most of it. */
@@ -1361,7 +1367,7 @@ button.primary.danger:disabled { opacity: .4; }
 .trailer-frame { position: relative; aspect-ratio: 16 / 9; max-height: 60dvh; margin-inline: auto; width: min(100%, calc(60dvh * 16 / 9)); background: #000; border-radius: var(--r-md, 12px); overflow: hidden; }
 .trailer-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .trailer-loading { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 8px; text-align: center; color: #fff; pointer-events: none; }
-.trailer-note { margin: 0; font-size: 14px; line-height: 20px; }
+.trailer-note { margin: 0; font-size: 0.875rem; line-height: 1.25rem; }
 .trailer-fallback { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
 .trailer-fallback p { margin: 0; }
 button.trailer-close, .trailer-fallback a.button { min-height: 48px; min-width: 48px; }
@@ -1384,11 +1390,11 @@ button.trailer-close, .trailer-fallback a.button { min-height: 48px; min-width: 
 
 /* The named lists (HX43): the page's buttons, a card with Remove under it, the name field. */
 .list-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 20px; }
-.list-actions .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.list-actions .switch-row { display: inline-flex; align-items: center; gap: 8px; font-size: 0.875rem; }
 .list-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .list-card > .link { align-self: flex-start; }
-.list-name { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; font-size: 13px; color: var(--muted); }
-.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 16px; }
+.list-name { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; font-size: 0.8125rem; color: var(--muted); }
+.list-name input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 1rem; }
 .list-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Last, so it beats every rule above it: pictures and the sign-in tick arrive at once instead of fading or popping in. */

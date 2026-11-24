@@ -1,5 +1,5 @@
 /* The "?" sheet's note and the Go to a time prompt (sheets.tsx), in the player's dark tokens (player.css). */
-.pc-key-note { margin: 2px 0 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+.pc-key-note { margin: 2px 0 0; font-size: 0.75rem; line-height: 1rem; color: var(--muted); }
 /*
  * The player is dark in every theme: the dark theme's error colour and field surface
  * (styles.css's dark values), whatever the page's theme. The text field itself is styles.css's
@@ -7,9 +7,9 @@
  */
 .pc-time-prompt { --error: #ffb4ab; --surface: #15181b; text-align: start; }
 .pc-time-prompt h2 { text-align: center; }
-.pc-time-field { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; font-size: 13px; line-height: 16px; color: var(--muted); }
+.pc-time-field { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; font-size: 0.8125rem; line-height: 1rem; color: var(--muted); }
 .pc-time-field input { min-height: 48px; font-variant-numeric: tabular-nums; }
-.pc-time-field small { font-size: 12px; line-height: 16px; }
+.pc-time-field small { font-size: 0.75rem; line-height: 1rem; }
 /* As specific as the shared field's own rule, so the refusal's colour wins over its border. */
 .pc-time-field.refused input:not([type=range]):not([type=radio]):not([type=checkbox]) { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
 .pc-time-field.refused small { color: var(--error); }

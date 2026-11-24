@@ -1,6 +1,6 @@
 /* Topics (WB21): the "Chat > Topic" rows over a search's videos, and the chip a chat holds when it is opened on one. */
 .topic-hits { margin: 12px 0 16px; max-width: 720px; }
-.topic-hits-title { font-size: 22px; line-height: 28px; font-weight: 400; margin: 8px 0 8px; }
+.topic-hits-title { font-size: 1.375rem; line-height: 1.75rem; font-weight: 400; margin: 8px 0 8px; }
 .topic-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .topic-row {
   display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 48px; padding: 8px 12px; margin: 0 -12px;
@@ -9,8 +9,8 @@
 .topic-row:hover { background: var(--surface); }
 .topic-row:active { background: var(--surface-high); }
 .topic-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.topic-label { font-size: 16px; line-height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topic-facts { font-size: 12px; line-height: 16px; color: var(--muted); }
+.topic-label { font-size: 1rem; line-height: 1.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-facts { font-size: 0.75rem; line-height: 1rem; color: var(--muted); }
 /* A topic that holds no videos stays listed, quieter, and answers hover and focus at full strength. */
 .topic-row.dim .topic-label { color: var(--muted); }
 .topic-row.dim:hover .topic-label, .topic-row.dim:focus-visible .topic-label { color: var(--fg); }
@@ -18,7 +18,7 @@
 /* The chat opened on one topic: its name and the way back to every topic. */
 .topic-chip-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 12px; }
 .topic-chip {
-  font-size: 14px; line-height: 20px; padding: 4px 12px; border-radius: 999px; max-width: 100%;
+  font-size: 0.875rem; line-height: 1.25rem; padding: 4px 12px; border-radius: 999px; max-width: 100%;
   background: var(--accent-container); color: var(--on-accent-container); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
