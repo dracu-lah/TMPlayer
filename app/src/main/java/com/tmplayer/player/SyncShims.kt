@@ -23,9 +23,27 @@ import java.nio.ByteBuffer
 class DelayedTextRenderer(
     renderer: Renderer,
     private val delayUs: () -> Long,
+    /** Whether the picture and the sound of the item have ended, read on the playback thread. */
+    private val othersEnded: () -> Boolean = { false },
 ) : ForwardingRenderer(renderer) {
     override fun render(positionUs: Long, elapsedRealtimeUs: Long) {
         super.render((positionUs - delayUs()).coerceAtLeast(0L), elapsedRealtimeUs)
+    }
+
+    /**
+     * Running behind, the text track still has its last lines to show when the picture and sound
+     * end, and Media3 waits for every renderer: the video ended up to the delay later, over a black
+     * picture, before it was marked watched or the next one started (PB2-11). Once they have ended
+     * the text has too; the lines left are cut, as the film is over.
+     */
+    override fun isEnded(): Boolean = super.isEnded() || (delayUs() > 0 && othersEnded())
+
+    companion object {
+        /** Whether [renderers] (the picture's and the sound's) have ended: at least one of them enabled, and every enabled one ended. */
+        fun ended(renderers: List<Renderer>): Boolean {
+            val enabled = renderers.filter { it.getState() != Renderer.STATE_DISABLED }
+            return enabled.isNotEmpty() && enabled.all { it.isEnded() }
+        }
     }
 }
 

@@ -115,4 +115,13 @@ class SubtitleFineStyleTest {
         assertEquals(10_000L, SyncDelays.stepAudio(9_500, 1, long = true))
         assertEquals(-10_000L, SyncDelays.stepAudio(-10_000, -1))
     }
+
+    @Test
+    fun `a track inside the file goes no earlier than its buffer reaches, a subtitle file the full minute (PB2-11)`() {
+        assertEquals(-SyncDelays.EMBEDDED_LEAD_MS, SyncDelays.subtitleApplied(-60_000, sideLoaded = false))
+        assertEquals(-60_000L, SyncDelays.subtitleApplied(-60_000, sideLoaded = true))
+        // Later is fine either way: the lines already read wait for their time.
+        assertEquals(60_000L, SyncDelays.subtitleApplied(60_000, sideLoaded = false))
+        assertEquals(-3_000L, SyncDelays.subtitleApplied(-3_000, sideLoaded = false))
+    }
 }

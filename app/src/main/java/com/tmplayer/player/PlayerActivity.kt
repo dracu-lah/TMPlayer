@@ -441,6 +441,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     @Volatile
     private var subtitleDelayUs = 0L
 
+    /** The subtitle track chosen is a file loaded beside the video, read whole: it may go the full minute early (PB2-11). */
+    private var textSideLoaded = false
+
+    /** [subtitleDelayUs] from [syncDelays], a track inside the file held to [SyncDelays.EMBEDDED_LEAD_MS] early. */
+    private fun applySubtitleDelay() {
+        subtitleDelayUs = SyncDelays.subtitleApplied(syncDelays.subtitleMs, textSideLoaded) * 1000
+    }
+
     /** The audio half's processor, owned by the current player's sink. */
     private var audioOffset: AudioOffsetProcessor? = null
 
@@ -2787,7 +2795,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             subtitleStyle = styleRead.await()
             applySubtitleStyle()
             delaysRead.await()?.let { syncDelays = it }
-            subtitleDelayUs = syncDelays.subtitleMs * 1000
+            applySubtitleDelay()
             // The saved position, given a moment more if it is still being read: set before
             // prepare(), the first request goes to where the video resumes, not to byte 0 and
             // then a seek away from it.
@@ -4639,6 +4647,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         videoSwitchedToSoftware = false
         // One per player: the side of each track type "Try the other decoder" turned off (PB2-01).
         val decoderGate = DecoderGate()
+        // The picture's and the sound's renderers, so a subtitle track running behind ends with them (PB2-11).
+        val pictureAndSound = ArrayList<Renderer>()
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock codec adapters, except on the Fire TV sticks with the MediaTek MT8696
@@ -4776,7 +4786,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     context, audioMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, built,
                 )
                 // Each behind the player's decoder gate, so a switch moves the track ([DecoderSwitch]).
-                built.mapTo(out) { GatedRenderer(it, decoderGate) }
+                built.mapTo(out) { GatedRenderer(it, decoderGate).also(pictureAndSound::add) }
             }
 
             /**
@@ -4813,7 +4823,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                             )
                         else -> it
                     }
-                    GatedRenderer(renderer, decoderGate)
+                    GatedRenderer(renderer, decoderGate).also(pictureAndSound::add)
                 }
             }
 
@@ -4827,7 +4837,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             ) {
                 val built = ArrayList<Renderer>()
                 super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, built)
-                built.mapTo(out) { DelayedTextRenderer(it) { subtitleDelayUs } }
+                built.mapTo(out) { DelayedTextRenderer(it, { subtitleDelayUs }) { DelayedTextRenderer.ended(pictureAndSound) } }
             }
         }
             // Prefer software video puts the app's FFmpeg video decoder ahead of the device's;
@@ -5527,6 +5537,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // After a switch of engine: the languages, the speed and the volume of the one before.
             pendingCarry?.let { carry -> if (currentEngine()?.restore(carry) == true) pendingCarry = null }
             logSubtitleTracks(tracks)
+            // A subtitle file beside the video may run the full minute early, a track inside it not (PB2-11).
+            textSideLoaded = tracks.groups.any { group ->
+                group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) && group.getTrackFormat(it).id?.contains("external-") == true }
+            }
+            applySubtitleDelay()
             // The class is known now: its remedy plan, and a re-open on its path when it starts elsewhere (RL6).
             if (!tracks.isEmpty && vlcEngine == null) remedies.tracksKnown()
             if (pictureUnplayable(tracks)) return
@@ -7036,7 +7051,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /** The offsets now in force, for the track picker's timing lines. */
-    override fun syncDelaysNow(): SyncDelays = syncDelays
+    override fun syncDelaysNow(): SyncDelays =
+        // What is in force: a track inside the file no earlier than its buffer reaches (PB2-11). VLC keeps its own.
+        if (vlcEngine != null) syncDelays else syncDelays.copy(subtitleMs = SyncDelays.subtitleApplied(syncDelays.subtitleMs, textSideLoaded))
 
     /**
      * Moves subtitles ([C.TRACK_TYPE_TEXT]) or sound one step later ([direction] 1) or earlier
@@ -7050,14 +7067,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             syncDelays.copy(
                 subtitleMs = when {
                     way == 0 -> 0
-                    long -> SyncDelays.stepLong(syncDelays.subtitleMs, way)
-                    else -> SyncDelays.step(syncDelays.subtitleMs, way)
-                },
+                    long -> SyncDelays.stepLong(syncDelaysNow().subtitleMs, way)
+                    else -> SyncDelays.step(syncDelaysNow().subtitleMs, way)
+                }.let { if (vlcEngine != null) it else SyncDelays.subtitleApplied(it, textSideLoaded) },
             )
         } else {
             syncDelays.copy(audioMs = if (way == 0) 0 else SyncDelays.stepAudio(syncDelays.audioMs, way, long))
         }
-        subtitleDelayUs = syncDelays.subtitleMs * 1000
+        applySubtitleDelay()
         audioOffset?.offsetUs = syncDelays.audioMs * 1000
         // VLC keeps its own offsets (a Bluetooth delay, subtitles late or early).
         vlcEngine?.setDelays(syncDelays.audioMs, syncDelays.subtitleMs)

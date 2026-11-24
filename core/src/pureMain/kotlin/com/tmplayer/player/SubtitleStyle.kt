@@ -385,6 +385,17 @@ data class SyncDelays(val subtitleMs: Long = 0, val audioMs: Long = 0) {
          */
         const val MAX_MS = 60_000L
 
+        /**
+         * How far ahead of the picture a subtitle track inside the video file may be shown (PB2-11):
+         * an earlier line needs the file read that far ahead, and a TV stick's buffer holds 15 to 30
+         * seconds, so further than this the lines go missing. A subtitle file loaded beside the video
+         * is read whole and keeps the full [MAX_MS].
+         */
+        const val EMBEDDED_LEAD_MS = 10_000L
+
+        /** The subtitle delay put in force for a track inside the file (not [sideLoaded]): no earlier than [EMBEDDED_LEAD_MS]. */
+        fun subtitleApplied(ms: Long, sideLoaded: Boolean): Long = if (sideLoaded) ms else ms.coerceAtLeast(-EMBEDDED_LEAD_MS)
+
         /** The sound stays at ten seconds: its delay is a buffer of audio held in memory, which a minute would make large. */
         const val AUDIO_MAX_MS = 10_000L
 
