@@ -963,7 +963,7 @@ private fun Root() {
     // registry takes it at composition, ahead of anything that can ask.
     val askNotifications = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { com.tmplayer.data.NotificationAsk.answered(context) }
+    ) { granted -> com.tmplayer.data.NotificationAsk.answered(context, granted) }
     androidx.compose.runtime.DisposableEffect(askNotifications) {
         com.tmplayer.data.NotificationAsk.launcher = {
             askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -980,7 +980,12 @@ private fun Root() {
             ) {
                 // Once, and only where the system will still show its question: a refusal that
                 // Android treats as final is answered by the card in Settings, not by a silent launch.
-                if (!com.tmplayer.data.NotificationAsk.asked(context)) com.tmplayer.data.NotificationAsk.request(context)
+                // A Skip on the first run's notifications step is a no: nothing asks by itself after it.
+                val skippedInSetup = runCatching {
+                    settings.onboardingSteps.first().outcomes[com.tmplayer.data.OnboardingSteps.Step.Notifications] ==
+                        com.tmplayer.data.OnboardingSteps.Outcome.Skipped
+                }.getOrDefault(false)
+                if (!skippedInSetup && !com.tmplayer.data.NotificationAsk.asked(context)) com.tmplayer.data.NotificationAsk.request(context)
             }
         }
     }
@@ -2043,6 +2048,12 @@ private fun Root() {
             )
             return@Box
         }
+
+        // The first run's optional steps, after the chats question and before Home: notifications
+        // (Android 13 or later, a phone or tablet) and supporting TMPlayer. Each has a Skip, each is
+        // shown once, and none is armed for an install that was only updated. After the app lock,
+        // so nothing is drawn while the app is locked.
+        if (com.tmplayer.ui.onboarding.OnboardingStepsHost(settings)) return@Box
 
         // Anywhere but Settings and its own pages (About, Add chats) locks Settings again: Downloads
         // too, so its bar's Sign out asks the PIN, as a new visit does (SEC-03).

@@ -10,6 +10,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Android 13's question about notifications, and the way back after a no (WP-38).
@@ -36,10 +38,26 @@ object NotificationAsk {
     fun asked(context: Context): Boolean =
         context.getSharedPreferences(ONCE_PREFS, Context.MODE_PRIVATE).getBoolean(ASKED, false)
 
-    /** The answer came (either way): it is not asked about again by itself. */
-    fun answered(context: Context) {
+    private val answerTally = MutableStateFlow(0)
+
+    /**
+     * How many answers have come in this process: a screen that shows the question's result (the
+     * first run's notifications step) reads it as a value, so an answer that arrives before the
+     * screen is composed is not lost.
+     */
+    val answers: StateFlow<Int> get() = answerTally
+
+    /** The last answer was yes, or null before one came in this process. */
+    @Volatile
+    var lastGranted: Boolean? = null
+        private set
+
+    /** The answer came (either way): it is not asked about again by itself. [granted] is what was chosen, when known. */
+    fun answered(context: Context, granted: Boolean? = null) {
         pending = false
         context.getSharedPreferences(ONCE_PREFS, Context.MODE_PRIVATE).edit().putBoolean(ASKED, true).apply()
+        lastGranted = granted
+        answerTally.value += 1
     }
 
     /**
