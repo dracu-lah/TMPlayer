@@ -5,26 +5,35 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.Density
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.UiScale
 import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
+import com.tmplayer.ui.theme.UiScaled
 import com.tmplayer.ui.theme.Tone
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -75,20 +84,26 @@ class SettingsPaneTvFocusTest {
         Motion.reduced = false
     }
 
-    private fun show(page: SettingsPage? = null) {
+    private fun show(page: SettingsPage? = null, scale: UiScale = UiScale.Default, font: Float = 1f) {
         FormFactor.override(true)
         rule.setContent {
-            TMPlayerTheme {
-                // The caller's own Back, composed first as MainActivity's is: it leaves Settings.
-                BackHandler { leaves++ }
-                Box(Modifier.fillMaxSize().background(Tone.background)) {
-                    SettingsScreen(
-                        chats = emptyList(),
-                        onLoggedOut = {},
-                        initialPage = page,
-                        onPageChange = { pagesShown += it },
-                        accountFolders = emptyList(),
-                    )
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, font)) {
+                // The interface size multiplies the density as the app does (UiScaled).
+                UiScaled(scale, keepTextSize = true) {
+                    TMPlayerTheme {
+                        // The caller's own Back, composed first as MainActivity's is: it leaves Settings.
+                        BackHandler { leaves++ }
+                        Box(Modifier.fillMaxSize().background(Tone.background)) {
+                            SettingsScreen(
+                                chats = emptyList(),
+                                onLoggedOut = {},
+                                initialPage = page,
+                                onPageChange = { pagesShown += it },
+                                accountFolders = emptyList(),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -286,5 +301,66 @@ class SettingsPaneTvFocusTest {
         back()
         row("Troubleshooting").assertIsFocused()
         assertEquals(0, leaves)
+    }
+
+    /** Down from Playback to the last category: every item is reached, shown, and the end holds. */
+    private fun walkRailToTheEnd() {
+        val order = SettingsRail.pages()
+        rail(SettingsPage.Playback).assertIsFocused()
+        repeat(order.size) { rule.onNode(isFocused()).press(Key.DirectionDown) }
+        settle()
+        rail(SettingsPage.About).assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the rail reaches About at Default (F-04)`() {
+        show()
+        walkRailToTheEnd()
+    }
+
+    @Test
+    fun `the rail reaches About at Larger (F-04)`() {
+        show(scale = UiScale.Larger, font = 1.3f)
+        walkRailToTheEnd()
+    }
+
+    @Test
+    fun `the rail scrolls to About at Largest with the font at 1_3 (F-04)`() {
+        show(scale = UiScale.Largest, font = 1.3f)
+        rail(SettingsPage.Playback).assertIsFocused()
+        // Down 7 times over the nine items, the rail scrolling to keep the remote's item in view.
+        repeat(8) { rule.onNode(isFocused()).press(Key.DirectionDown) }
+        settle()
+        rail(SettingsPage.About).assertIsFocused().assertIsDisplayed()
+        // And back up: the first item is shown again.
+        repeat(9) { rule.onNode(isFocused()).press(Key.DirectionUp) }
+        settle()
+        rail(SettingsPage.Accounts).assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-television-night-mdpi")
+    fun `the rail reaches About at 1920 by 1080 dp at Largest (F-04)`() {
+        show(scale = UiScale.Largest, font = 1.3f)
+        walkRailToTheEnd()
+    }
+
+    @Test
+    fun `Right on the open page's rail item lands on a row after the pane was scrolled (F-05)`() {
+        show()
+        rail(SettingsPage.Playback).press(Key.DirectionRight)
+        settle()
+        val inPane = hasAnyAncestor(hasTestTag(SETTINGS_PANE_TAG)) and isFocused()
+        rule.onNode(inPane).assertExists()
+        // Far down the page: the first row is gone from the lazy list.
+        repeat(15) { rule.onNode(isFocused()).press(Key.DirectionDown) }
+        settle()
+        rule.onNode(isFocused()).press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Playback).assertIsFocused()
+        rail(SettingsPage.Playback).press(Key.DirectionRight)
+        settle()
+        rule.onNode(inPane).assertExists()
+        rule.onNode(inPane).assertIsDisplayed()
     }
 }

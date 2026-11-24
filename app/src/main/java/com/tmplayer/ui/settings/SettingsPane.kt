@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -78,9 +80,11 @@ import com.tmplayer.ui.theme.focusRingOnTv
  * shape every TV user knows from the system's own settings, YouTube and Plex.
  *
  * At 960 x 540 dp, inside the safe area ([Tv.SafeH] 48, [Tv.SafeV] 27): a 48 dp header, a 232 dp
- * rail, a 24 dp gap, the pane (about 608 dp) and at the pane's foot a [STRIP_HEIGHT] space kept for
- * the focused row's long sentence (WP-74), so nothing moves when it arrives. The rail holds 9
- * categories of [RAIL_ITEM] each (432 dp inside about 438), so it never scrolls.
+ * rail, a 24 dp gap and the pane (about 608 dp), which reaches the foot of the area: the detail
+ * strip for the focused row's long sentence (WP-74) gets its room when it is built, not before.
+ * The rail holds 9 categories of [RAIL_ITEM] each (432 dp inside about 438), which fits at Default
+ * only: Larger and Largest multiply the density, so the rail scrolls (focus brings the item into
+ * view) and never leaves an item with no height that the remote can still reach (F-04).
  *
  * The pane follows the rail: a move on the rail shows that category after [SETTLE_MS], so a held
  * Down composes one page when it stops, not every page it passed. The header sits outside every
@@ -175,6 +179,7 @@ internal fun TvSettingsPane(
                 Modifier
                     .width(RAIL_WIDTH)
                     .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
                     .testTag(SETTINGS_RAIL_TAG)
                     .onFocusChanged { railHasFocus = it.hasFocus }
                     .focusProperties {
@@ -232,8 +237,6 @@ internal fun TvSettingsPane(
                     .focusGroup(),
             ) {
                 PaneFade(paneKey, Modifier.fillMaxWidth().weight(1f)) { pane() }
-                // Kept for the detail strip (WP-74): the pane's height never changes when it comes.
-                Spacer(Modifier.fillMaxWidth().height(STRIP_HEIGHT).testTag(SETTINGS_STRIP_TAG))
             }
         }
     }
@@ -424,7 +427,6 @@ internal const val SETTINGS_RAIL_TAG = "settings-rail"
 internal const val SETTINGS_PANE_TAG = "settings-pane"
 internal const val SETTINGS_HEADER_TAG = "settings-header"
 internal const val SETTINGS_CRUMB_TAG = "settings-crumb"
-internal const val SETTINGS_STRIP_TAG = "settings-strip"
 
 /** How long the rail rests on an item before the pane follows it. */
 internal const val SETTLE_MS = 150L
@@ -436,7 +438,6 @@ internal val HEADER_HEIGHT = 48.dp
 internal val RAIL_WIDTH = 232.dp
 internal val RAIL_ITEM = 48.dp
 private val RAIL_GAP = 24.dp
-internal val STRIP_HEIGHT = 68.dp
 private val HEADER_END_WIDTH = 320.dp
 
 private val ARROWS = setOf(FocusDirection.Up, FocusDirection.Down, FocusDirection.Left, FocusDirection.Right)

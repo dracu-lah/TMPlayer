@@ -125,6 +125,7 @@ internal fun <T> SegmentedChoiceRow(
                 tag = tag,
                 onPick = onPick,
                 modifier = Modifier.testTag(switchTag),
+                label = title,
             )
         }
         Spacer(Modifier.height(8.dp))

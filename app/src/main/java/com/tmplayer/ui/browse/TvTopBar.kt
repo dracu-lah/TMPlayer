@@ -604,7 +604,11 @@ private fun ProfileButton(
         modifier
             .height(PROFILE_RECT)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
-            .semantics { contentDescription = description },
+            .semantics {
+                contentDescription = description
+                // The page shown (Favourites, History), as the tabs say it.
+                selected = chosen
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

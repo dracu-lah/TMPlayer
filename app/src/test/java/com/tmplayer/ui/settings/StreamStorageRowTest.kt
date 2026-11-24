@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -167,6 +169,21 @@ class StreamStorageRowTest {
         rule.waitForIdle()
         assertTrue(saveSpace)
         assertEquals(listOf(true, false, true), picks)
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `the television's switch is one named button that says which side is chosen (F-08)`() {
+        show(tv = true)
+        val config = rule.onNodeWithTag(STREAM_SWITCH_TAG).fetchSemanticsNode().config
+        assertEquals(L.settingsStreamTitle, config[SemanticsProperties.ContentDescription].single())
+        assertEquals(Role.Button, config[SemanticsProperties.Role])
+        assertEquals(L.settingsStreamKeep, config[SemanticsProperties.StateDescription])
+        rule.onNodeWithTag(STREAM_SWITCH_TAG).requestFocus()
+        rule.waitForIdle()
+        rule.onNodeWithTag(STREAM_SWITCH_TAG).performKeyInput { pressKey(Key.DirectionRight) }
+        rule.waitForIdle()
+        assertEquals(L.settingsStreamSave, rule.onNodeWithTag(STREAM_SWITCH_TAG).fetchSemanticsNode().config[SemanticsProperties.StateDescription])
     }
 
     @Test

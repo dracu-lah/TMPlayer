@@ -35,10 +35,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -55,7 +57,9 @@ import com.tmplayer.ui.theme.focusRing
  * answer on that side (and stop at the ends) and OK goes on to the next, round to the first.
  *
  * [choices] is two or three, in reading order (flipped under right to left). [title] is each one's
- * words and [tag] its test tag.
+ * words and [tag] its test tag. [label] names the control for a screen reader ("While streaming"); without
+ * one the answers' words are read. The focused control is one node: a button that says which answer
+ * is chosen, never an unnamed stop (F-08).
  */
 @Composable
 fun <T> TabSwitch(
@@ -65,6 +69,7 @@ fun <T> TabSwitch(
     tag: (T) -> String,
     onPick: (T) -> Unit,
     modifier: Modifier = Modifier,
+    label: String? = null,
 ) {
     // A new side taken is one tick, as a choice in a list is.
     val stepTick = rememberStepTick()
@@ -79,8 +84,13 @@ fun <T> TabSwitch(
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
             .clip(outer)
-            .background(if (focused) Tone.focusFill.copy(alpha = 0.35f) else Tone.background)
+            .background(Tone.background)
             .focusRing(focused, outer)
+            .semantics {
+                contentDescription = label ?: choices.joinToString(", ") { title(it) }
+                selected?.let { stateDescription = title(it) }
+                role = Role.Button
+            }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Left and Right walk the choices (two or three) and stop at the ends; OK goes on to the
@@ -109,7 +119,9 @@ fun <T> TabSwitch(
                     .weight(1f)
                     .fillMaxHeight()
                     .clip(inner)
-                    .background(if (on) Tone.accent else Color.Transparent)
+                    // The chosen answer keeps the accent; under the remote the others take the row's own
+                    // focus fill, at full strength (a 35 % wash was 2.6:1 at the edge).
+                    .background(if (on) Tone.accent else if (focused) Tone.focusFill else Color.Transparent)
                     .semantics {
                         role = Role.RadioButton
                         this.selected = on
@@ -131,7 +143,7 @@ fun <T> TabSwitch(
                     Text(
                         words,
                         style = MaterialTheme.typography.labelLarge,
-                        color = if (on) Tone.onAccent else Tone.text,
+                        color = if (on) Tone.onAccent else if (focused) Tone.onFocusFill else Tone.text,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                     )

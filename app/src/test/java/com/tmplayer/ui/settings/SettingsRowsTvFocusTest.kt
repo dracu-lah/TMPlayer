@@ -17,7 +17,6 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -26,7 +25,6 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.graphics.Color
@@ -119,12 +117,22 @@ class SettingsRowsTvFocusTest {
     /** The row titled [title] as a node the remote can be on. */
     private fun row(title: String) = hasText(title) and androidx.compose.ui.test.isFocusable()
 
-    /** Scrolls whichever list holds [matcher] to it: a lazy list has no node for a row it has not drawn. */
+    /**
+     * Brings the row [matcher] finds into the lazy list the way a remote does: Down (then Up) from the
+     * focused row until it is composed. `performScrollToNode` never returned on the Appearance page (the
+     * idle check kept spinning once the list had scrolled), and a remote is what the tests are about.
+     */
     private fun reveal(matcher: SemanticsMatcher) {
-        val lists = rule.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes().size
-        for (i in 0 until lists) {
-            if (rule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()) return
-            runCatching { rule.onAllNodes(hasScrollToNodeAction())[i].performScrollToNode(matcher) }
+        fun there() = rule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        if (there()) return
+        for (key in listOf(Key.DirectionDown, Key.DirectionUp)) {
+            repeat(60) {
+                if (there()) return
+                val focusedNow = rule.onAllNodes(isFocused()).fetchSemanticsNodes()
+                if (focusedNow.isEmpty()) return
+                rule.onAllNodes(isFocused()).onFirst().performKeyInput { pressKey(key) }
+                rule.waitForIdle()
+            }
         }
     }
 
@@ -299,6 +307,8 @@ class SettingsRowsTvFocusTest {
     fun `Right on Theme moves no row, and Pure black stays under Light, faded and skipped`() {
         runBlocking { settings.setThemeChoice(ThemeChoice.Dark) }
         show(SettingsPage.Appearance)
+        // Typeface first: the remote walks down to it, so Pure black above it is composed as well.
+        reveal(row("Typeface"))
         reveal(row("Pure black"))
         val tops = listOf("Pure black", "Typeface", "Interface size").filter { rule.onAllNodes(hasText(it)).fetchSemanticsNodes().isNotEmpty() }.associateWith { top(it) }
         assertTrue("the rows under Theme are in view: $tops", tops.size >= 2)
@@ -336,12 +346,11 @@ class SettingsRowsTvFocusTest {
     private fun ringIn(theme: ThemeChoice, high: Boolean) {
         runBlocking { settings.setThemeChoice(theme); settings.setHighContrastFocus(high) }
         show(SettingsPage.Appearance)
-        reveal(row("Language"))
-        reveal(row("Reduce motion"))
+        // Language and the row under it are both on screen at the top of the page: the remote is on the first.
         focus("Language")
         rule.waitForIdle()
         assertTrue("the focused row draws the ring ($theme, high contrast $high)", ringOnTopEdge("Language"))
-        assertTrue("a row the remote is not on does not ($theme, high contrast $high)", !ringOnTopEdge("Reduce motion"))
+        assertTrue("a row the remote is not on does not ($theme, high contrast $high)", !ringOnTopEdge("Theme"))
     }
 
     @Test

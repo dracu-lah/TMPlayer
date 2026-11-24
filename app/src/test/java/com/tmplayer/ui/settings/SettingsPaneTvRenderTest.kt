@@ -198,8 +198,11 @@ class SettingsPaneTvRenderTest {
             rule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).performKeyInput { pressKey(Key.DirectionDown) }
             rule.waitForIdle()
         }
-        val strip = bounds(SETTINGS_STRIP_TAG)
-        assertTrue("the strip's space is kept at the pane's foot", strip.height >= 68f * density - 1f)
+        // No empty band under the pane until the detail strip (WP-74) is built (F-27).
+        val pane = bounds(SETTINGS_PANE_TAG)
+        val list = rule.onNode(hasAnyAncestor(hasTestTag(SETTINGS_PANE_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex))
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("the page's list reaches the pane's foot: list ${list.bottom}, pane ${pane.bottom}", list.bottom >= pane.bottom - 1f)
     }
 
     /** No text in the header or the rail below 14 sp; the rail's words on one line. */

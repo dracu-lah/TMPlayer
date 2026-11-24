@@ -2707,7 +2707,14 @@ fun SettingsScreen(
                     returnTo = null
                     showPage(target)
                 } else {
-                    scope.launch { if (!landing.settle()) railFocus.getValue(target).settle() }
+                    // A pane scrolled down before Left has disposed its first row: bring the page back to
+                    // the top and land there, and only then give up to the rail (F-05, never a dead end).
+                    scope.launch {
+                        if (!landing.settle()) {
+                            (if (page == null) listState else pageState).scrollToItem(0)
+                            if (!landing.settle()) railFocus.getValue(target).settle()
+                        }
+                    }
                 }
             },
             onBackInPane = {

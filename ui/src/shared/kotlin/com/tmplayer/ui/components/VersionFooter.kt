@@ -197,7 +197,7 @@ fun VersionFooter(
                 color = Tone.caution,
                 modifier = Modifier
                     .heightIn(min = 48.dp)
-                    .clickable(role = Role.Button, onClick = onUpdate!!)
+                    .then(if (onUpdate != null) Modifier.clickable(role = Role.Button, onClick = onUpdate) else Modifier)
                     .padding(horizontal = 14.dp, vertical = 14.dp),
             )
         }
