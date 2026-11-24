@@ -1978,7 +1978,17 @@
   "onboarding": {
     "help_translate": "Help translate TMPlayer",
     "help_translate_body": "Most translations start out machine made. Corrections are welcome at tmplayer.org/translate.",
-    "language_system": "System default"
+    "language_system": "System default",
+    "notifications_allow": "Turn on notifications",
+    "notifications_body": "TMPlayer can tell you when a download finishes and when a new episode of a show you are watching is posted. You choose which ones in Settings, and you can turn them off any time.",
+    "notifications_off_body": "Android will not show its question again. You can turn notifications on in the system settings, or leave them off: downloads still run, and you can follow them in Downloads.",
+    "notifications_off_title": "Notifications are off",
+    "notifications_settings": "Turn on in system settings",
+    "notifications_title": "Know when your downloads finish",
+    "support_body": "TMPlayer is free and open source, with no ads of our own and no paid tier. If it is useful to you, a voluntary gift helps keep it going and improve it. It unlocks nothing: everything works the same either way.",
+    "support_open": "See how to help",
+    "support_scan": "Point your phone's camera at the code to open the support page.",
+    "support_title": "Help TMPlayer grow"
   },
   "online": {
     "about_detail": "Subtitles found online come from OpenSubtitles.com",

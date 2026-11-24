@@ -500,7 +500,7 @@ private fun UpiPage(
 
 /** A code on its white plate with the quiet margin a scanner needs, at the size a camera across a room reads. */
 @Composable
-private fun QrPlate(link: String, description: String, plate: Dp) {
+internal fun QrPlate(link: String, description: String, plate: Dp) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = link) {
         value = withContext(Dispatchers.Default) { QrCode.render(link, QR_PIXELS) }
     }
