@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { exempt, FLAG, ModalHistory, type DialogHost } from './modalHistory.ts'
+import { exempt, FLAG, LEAVING_MS, leavingPage, ModalHistory, type DialogHost } from './modalHistory.ts'
 
 /** A session history the way a browser keeps it: entries, an index, and traversals that end in popstate. */
 function browser() {
@@ -324,6 +324,24 @@ test('a dialog closing while the page is leaving takes no step back over that na
     assert.equal(b.pending(), 0)
     // The unload did not come: the next close steps back as before.
     mh.setLeaving(false)
+    const e = dialog()
+    mh.opened(e, null)
+    e.shut()
+    await tick()
+    assert.equal(b.pending(), 1)
+})
+
+test('a question closed after leavingPage() takes no step back, where beforeunload comes too late (Safari)', async () => {
+    const { b, mh } = setup()
+    const d = dialog()
+    mh.opened(d, null)
+    // Sign out's work ends with location.replace; its question closes after, with no beforeunload yet.
+    leavingPage()
+    d.shut()
+    await tick()
+    assert.equal(b.pending(), 0)
+    // A page change that never came: a later close steps back as before.
+    leavingPage(Date.now() - LEAVING_MS - 1)
     const e = dialog()
     mh.opened(e, null)
     e.shut()

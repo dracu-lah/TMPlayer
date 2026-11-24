@@ -58,6 +58,22 @@ const withoutFlag = (state: unknown) => {
     return rest
 }
 
+/** When the page last said it is going (leavingPage); -Infinity when it has not. */
+let leavingAt = -Infinity
+/** How long a leavingPage() holds: a page change that has not come by then was not going to. */
+export const LEAVING_MS = 3000
+const pageLeaving = () => Date.now() - leavingAt < LEAVING_MS
+
+/**
+ * Says the page is about to go (call it right before `location.replace` or `reload`): a dialog that
+ * closes now takes no step back. `beforeunload` cannot say it in time in Safari: there it comes after
+ * the close event of a question its button closed, so the step back ran first and cancelled the page
+ * change, and Sign out and Remove all did their work but stayed on Settings (WebKit e2e, 2026-11-25).
+ */
+export function leavingPage(now = Date.now()) {
+    leavingAt = now
+}
+
 export class ModalHistory {
     private entries: Entry[] = []
     private nextId = 1
@@ -119,7 +135,7 @@ export class ModalHistory {
         const i = this.entries.indexOf(entry)
         if (i < 0) return
         this.entries.splice(i, 1)
-        if (entry.id !== null && this.currentId() === entry.id && !this.leaving) {
+        if (entry.id !== null && this.currentId() === entry.id && !this.leaving && !pageLeaving()) {
             entry.id = null
             this.ownBacks++
             this.real.back()

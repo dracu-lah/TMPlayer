@@ -50,9 +50,19 @@ import { clearLogs, sizeText } from './logs'
 import { forgetLinks } from './ui/tgLinks'
 import { forgetSubmaker } from './submakerBase'
 import { askConfirm } from './ui/Confirm'
+import { leavingPage } from './ui/modalHistory'
 import { showToast } from './ui/Toast'
 import { t } from './i18n'
 import type { Me } from './tg/types'
+
+/**
+ * The page starts again at its root. The modal history is told first, so the question whose button
+ * did this closes without a step back, which in Safari would cancel the page change (leavingPage).
+ */
+function goHome() {
+    leavingPage()
+    location.replace('/')
+}
 
 /**
  * The page starts again on the profile `id` (null: the picker, or the only one), at Home: an address
@@ -64,7 +74,7 @@ const reloadInto = (id: string | null) => {
     if (unlockedId() !== id) relock()
     closeTopLayer(null, false)
     chooseInTab(id)
-    location.replace('/')
+    goHome()
 }
 
 /** Back to the picker, which asks every PIN again: where pending work could not finish (and says why). */
@@ -73,7 +83,7 @@ function toPicker() {
     relock()
     leaveIntent({ kind: 'notice', text: 'failed' })
     chooseInTab(null)
-    location.replace('/')
+    goHome()
 }
 
 /** The page lets go of its profile: the player keeps its place, the writes in flight land, nothing after does. */
@@ -293,7 +303,7 @@ async function pendingSignOut(id: string): Promise<boolean> {
     await leave()
     setPending({ kind: 'signout', id })
     relock()
-    location.replace('/')
+    goHome()
     return true
 }
 
@@ -419,7 +429,7 @@ async function continueRemoveAll() {
     saveBook(B.setActive(B.removeProfile(freshBook(), activeId), rest[0].id))
     setPending({ kind: 'removeAll', id: rest[0].id })
     relock()
-    location.replace('/')
+    goHome()
 }
 
 // ---- What the page does once it runs its profile ----
