@@ -115,24 +115,24 @@ tvSearch | targets | x | WP-03 nothing on TV grows past its bounds
 tvSearch | targets | y | WP-03 nothing on TV grows past its bounds
 tvSearch | targets | z | WP-03 nothing on TV grows past its bounds
 web:chat | focusRingInside | Open | WP-03 nothing on TV grows past its bounds
-web:chat | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:chat | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:chats | focusRingInside | Search chats | WP-03 nothing on TV grows past its bounds
-web:chats | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:chats | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:downloads | focusRingInside | Get the app | WP-03 nothing on TV grows past its bounds
-web:downloads | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:downloads | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Continue | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Go to Chats | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Recent | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Watch later | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Watched | WP-03 nothing on TV grows past its bounds
-web:history | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:history | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Your lists | WP-03 nothing on TV grows past its bounds
 web:home | focusRingInside | Yes, keep it | WP-03 nothing on TV grows past its bounds
-web:home | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:home | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:search | focusRingInside | Search videos and chats | WP-03 nothing on TV grows past its bounds
-web:search | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:search | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:settings | focusRingInside | Choose chats | WP-03 nothing on TV grows past its bounds
-web:settings | focusRingInside | You | WP-03 nothing on TV grows past its bounds
+web:settings | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:video | focusRingInside | 1080p · H.264 · Blu-ray · 100 MB · from Test Copies 3 versio | WP-03 nothing on TV grows past its bounds
 web:video | focusRingInside | Not the same video Keep this file apart from the copies it w | WP-03 nothing on TV grows past its bounds
 web:video | focusRingInside | Test Copies | WP-03 nothing on TV grows past its bounds

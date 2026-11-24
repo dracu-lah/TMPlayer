@@ -146,7 +146,7 @@ test('Clear cache says how much goes and that the account stays; Cancel keeps it
 test('Sign out: focus on Cancel, Escape keeps the session', async ({ page }) => {
     await page.goto('/settings')
     await page.getByRole('button', { name: 'Sign out of Telegram' }).click()
-    await expect(page.getByRole('dialog', { name: 'Sign out of Telegram?' })).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'Sign out of Telegram as Dana Test?' })).toBeVisible()
     expect(await focusedText(page)).toBe('Cancel')
     await page.keyboard.press('Escape')
     await expect(dialog(page)).toHaveCount(0)
@@ -287,7 +287,7 @@ test.describe('TV remote', () => {
         const out = page.locator('.danger-button')
         await out.focus()
         await page.keyboard.press('Enter')
-        await expect(page.getByRole('dialog', { name: 'Sign out of Telegram?' })).toBeVisible()
+        await expect(page.getByRole('dialog', { name: 'Sign out of Telegram as Dana Test?' })).toBeVisible()
         expect(await focusedText(page)).toBe('Cancel')
         await page.keyboard.press('Enter')
         await expect(dialog(page)).toHaveCount(0)

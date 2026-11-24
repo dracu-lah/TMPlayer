@@ -181,7 +181,7 @@ test('Sign out is a quiet row that asks first', async ({ page }) => {
     expect(look.border, 'an outline instead').not.toBe('0px')
     await button.click()
     const ask = page.getByRole('dialog')
-    await expect(ask.getByRole('heading', { name: 'Sign out of Telegram?' })).toBeVisible()
+    await expect(ask.getByRole('heading', { name: 'Sign out of Telegram as Dana Test?' })).toBeVisible()
     await expect(ask).toContainText('favourites')
     await ask.getByRole('button', { name: 'Cancel' }).click()
     await expect(ask).toBeHidden()

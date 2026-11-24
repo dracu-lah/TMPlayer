@@ -40,7 +40,10 @@ class TdSessionPolicyTest {
         "app/src/main/java/com/tmplayer/player/PlayerActivity.kt" to (26 to "the player's reads and its own downloads' cancels; it closes before a switch (BeforeSwitch) and its writes carry its owner"),
         "app/src/main/java/com/tmplayer/ui/browse/QueueDownloads.kt" to (5 to "a press on the screen of the open profile"),
         "app/src/main/java/com/tmplayer/ui/downloads/DownloadsScreen.kt" to (10 to "presses on the Downloads screen of the open profile"),
-        "app/src/main/java/com/tmplayer/ui/settings/SettingsScreen.kt" to (1 to "the account row's id, on the page on screen"),
+        // The sign out moved from SettingsScreen to the shell host (WP-02); its one Td.logOut is the same
+        // branch as before: no accounts file opened, so there is no other profile to mix up. With profiles
+        // it goes through ProfileFlow.signOutOpen (AccountSwitcher.signOutProfile).
+        "app/src/main/java/com/tmplayer/ui/settings/SignOutHost.kt" to (1 to "the sign out without profiles (no accounts file opened); with them it goes through ProfileFlow.signOutOpen"),
         "core/src/commonMain/kotlin/com/tmplayer/data/AccountSessions.kt" to (2 to "the Devices page's read, and its sign outs' wait, kept as before and then checked against the profile (ownSession)"),
         "core/src/commonMain/kotlin/com/tmplayer/data/AccountSwitcher.kt" to (3 to "who signed in, checked against the client generation it came from; the log out of the profile being signed out, under the switcher's lock"),
         "core/src/commonMain/kotlin/com/tmplayer/data/ChatRepository.kt" to (7 to "the chat list's reads and this account's own id, for the screen on screen"),

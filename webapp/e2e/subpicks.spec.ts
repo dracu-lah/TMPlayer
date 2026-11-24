@@ -176,7 +176,7 @@ test('signing out wipes the picks and their copies', async ({ page }) => {
     await expect.poll(() => kept(page)).toBeGreaterThanOrEqual(2)
     await page.goto('/settings')
     await page.getByRole('button', { name: 'Sign out of Telegram' }).click()
-    await page.getByRole('dialog', { name: 'Sign out of Telegram?' }).getByRole('button', { name: 'Sign out' }).click()
+    await page.getByRole('dialog', { name: 'Sign out of Telegram as Dana Test?' }).getByRole('button', { name: 'Sign out' }).click()
     await expect.poll(() => kept(page)).toBe(0)
 })
 
