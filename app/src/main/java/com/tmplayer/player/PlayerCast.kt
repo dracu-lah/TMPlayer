@@ -702,7 +702,7 @@ class PlayerCast(
             muted = remote.muted,
             volumeFixed = remote.volumeFixed,
             hasAudioChoice = audioChoices.value.size > 1,
-            hasSubtitles = CAST_SUBTITLES,
+            hasSubtitles = com.tmplayer.cast.CastSubtitleNote.buttonStays(CAST_SUBTITLES, hasTextTracks(), hasLoadedSubtitleFiles()),
             subtitlesOn = if (pub?.hls == true) hlsText != null else activeSub != null,
             speed = if (remote.supportsRate) rate else null,
             converting = transcodes.progress.value?.takeIf { route is CastRoute.Transcode || loading },
@@ -908,9 +908,17 @@ class PlayerCast(
 
     fun playEpisode(item: MediaItem) = hooks.playEpisode(item)
 
-    /** Said over the subtitle picker when the file has text subtitles of its own that stay behind. */
+    private fun hasTextTracks() = probe?.text?.any { it.isText } == true
+
+    private fun hasLoadedSubtitleFiles() = runCatching { hooks.subtitleFiles().isNotEmpty() }.getOrDefault(false)
+
+    /**
+     * Said over the subtitle picker: that the file's own text subtitles stay behind, or, while
+     * casting goes without subtitles ([CAST_SUBTITLES] off), that none are sent, and then the
+     * picker offers no tracks (WP-82). See [com.tmplayer.cast.CastSubtitleNote].
+     */
     fun subtitlesInsideNote(): String? =
-        if (CAST_SUBTITLES && published?.hls != true && probe?.text?.any { it.isText } == true) L.castSubtitlesInside else null
+        com.tmplayer.cast.CastSubtitleNote.note(CAST_SUBTITLES, hasTextTracks(), hasLoadedSubtitleFiles(), published?.hls == true)
 
     val episodes: StateFlow<EpisodeSteps> get() = hooks.episodes
 

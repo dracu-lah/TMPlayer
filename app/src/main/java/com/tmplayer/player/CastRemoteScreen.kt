@@ -82,8 +82,11 @@ internal fun CastRemoteScreen(cast: PlayerCast) {
             onClose = { cast.subtitlePickerOpen.value = false },
             note = cast.subtitlesInsideNote(),
         ) {
-            ChoiceLine(s.commonOff, selected = choices.none { it.selected }) { cast.pickSubtitle(null) }
-            choices.forEach { t -> ChoiceLine(t.label, selected = t.selected) { cast.pickSubtitle(t.id) } }
+            // While casting goes without subtitles the picker is the note alone: no tracks that do nothing.
+            if (com.tmplayer.cast.CAST_SUBTITLES) {
+                ChoiceLine(s.commonOff, selected = choices.none { it.selected }) { cast.pickSubtitle(null) }
+                choices.forEach { t -> ChoiceLine(t.label, selected = t.selected) { cast.pickSubtitle(t.id) } }
+            }
         }
     }
     if (cast.speedPickerOpen.value) {

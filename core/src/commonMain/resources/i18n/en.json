@@ -402,6 +402,7 @@
     "transcode_cancel": "Stop converting",
     "transcode_cancelled": "Converting stopped. Try again to carry on from here, or play it here.",
     "transcode_failed": "Converting this video for the TV failed. Try again, or play it here.",
+    "subtitles_not_sent": "Subtitles are not sent to the TV yet",
     "transcode_needs_ffmpeg": "Your TV can't play this video's format. Install ffmpeg on this computer and TMPlayer converts it for the TV, or play it here.",
     "transcode_no_encoder_phone": "Your TV can't play this video's format, and this phone has no video encoder to convert it. Play it here instead.",
     "transcode_progress": "Converted up to {position} of {duration} ({speed}x)",
