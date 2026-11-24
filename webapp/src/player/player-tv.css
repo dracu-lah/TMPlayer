@@ -126,13 +126,15 @@
 .pc[data-variant="tv"] .pc-entry:focus .pc-entry-trail { color: rgba(14, 15, 19, .65); }
 .pc[data-variant="tv"] .pc-menu-note { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); }
 
-.pc[data-variant="tv"] .pc-sheet.pc-episodes { width: min(calc(var(--u) * 820), calc(100% - var(--u) * 96)); height: min(calc(var(--u) * 440), calc(100% - var(--u) * 54)); border-radius: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-sheet.pc-episodes { width: max(32%, calc(var(--u) * 360)); height: 100%; border-radius: calc(var(--u) * 24) 0 0 calc(var(--u) * 24); padding: calc(var(--u) * 27) 0; box-sizing: border-box; }
 .pc[data-variant="tv"] .pc-sheet-head { min-height: calc(var(--u) * 64); padding: 0 calc(var(--u) * 8) 0 calc(var(--u) * 24); }
 .pc[data-variant="tv"] .pc-sheet-head h2 { font-size: calc(var(--u) * 24); line-height: calc(var(--u) * 32); }
 .pc[data-variant="tv"] .pc-sheet-head p { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); }
 .pc[data-variant="tv"] .pc-sheet-close { width: calc(var(--u) * 48); height: calc(var(--u) * 48); }
 .pc[data-variant="tv"] .pc-episodes-body { padding: calc(var(--u) * 16) calc(var(--u) * 24) calc(var(--u) * 24); gap: calc(var(--u) * 16); }
-.pc[data-variant="tv"] .pc-episodes-side { width: calc(var(--u) * 220); }
+.pc[data-variant="tv"] .pc-episodes-side { gap: calc(var(--u) * 8); }
+.pc[data-variant="tv"] .pc-episode .episode-still { min-width: calc(var(--u) * 120); }
+.pc[data-variant="tv"] .pc-episode .episode-badge { font-size: calc(var(--u) * 12); }
 .pc[data-variant="tv"] .pc-step-line { min-height: calc(var(--u) * 44); font-size: calc(var(--u) * 15); }
 .pc[data-variant="tv"] .pc-season { font-size: calc(var(--u) * 15); }
 .pc[data-variant="tv"] .pc-season small { font-size: calc(var(--u) * 14); }

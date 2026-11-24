@@ -140,7 +140,13 @@ test('a split show lists TMDB\'s seasons with names, days and lengths: a missing
     // A held episode: TMDB's name, then its length, day and the file's size last.
     const held = page.locator('.episode:not(.gap)').first()
     await expect(held.locator('.episode-name')).toHaveText('The 1th Tide')
-    await expect(held.locator('.episode-facts')).toHaveText(/^24m {2}·.*2024.* {2}·.* MB$/)
+    await expect(held.locator('.episode-facts')).toHaveText(/^24m {2}·.*2024.*$/)
+    // The picture first, 16:9, with the code on it (or the number where there is no picture); no file size on the row.
+    const heldStill = held.locator('.episode-still')
+    const box = await heldStill.boundingBox()
+    expect(Math.abs(box!.width * 9 / 16 - box!.height)).toBeLessThan(2)
+    await expect(heldStill.locator('.episode-badge, .episode-still-number')).toHaveCount(1)
+    await expect(held).not.toContainText(/\d (MB|GB)/)
     // A missing one is dimmed but a control, with its still, name, length and words; Find in other chats stays.
     const missing = page.locator('button.episode.gap').first()
     await expect(missing).toHaveAccessibleName('Episode 4, not in this chat')

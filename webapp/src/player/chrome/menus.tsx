@@ -1,6 +1,6 @@
 // The smaller pieces of the player's controls: the desktop's volume, the phone's speed sheet, the episodes panel
 // and the sentences the top bar and the sheets show.
-import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
+import { createMemo, createResource, createSignal, For, onMount, Show } from 'solid-js'
 import { Add01Icon, Cancel01Icon, MinusSignIcon, NextIcon, PreviousIcon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../../ui/Icon'
 import { t } from '../../i18n'
@@ -10,6 +10,9 @@ import { episodeOf } from '../msone'
 import type { ChatSubtitle, VideoItem, WatchInfo } from '../../tg/types'
 import { FINE_STEP, SPEEDS, SPEED_MAX, SPEED_MIN, speedLabel } from './parts'
 import { dot } from '../../ui/dot'
+import { HeldStill } from '../../screens/detail/HeldStill'
+import { useProgress } from '../../screens/VideoList'
+import { watchedList, watchedTick } from '../../store'
 
 export function chatDetail(sub: ChatSubtitle, busy: boolean): string | undefined {
     if (busy) return t('online.downloading')
@@ -113,7 +116,15 @@ export function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phon
     const count = () => props.info.seasons.reduce((n, s) => n + s.episodes.length, 0)
     const show = () => props.info.episode?.show ?? props.info.title
     let el!: HTMLDivElement
-    onMount(() => el.querySelector<HTMLElement>('.pc-episode.playing, .pc-episode')?.focus({ preventScroll: true }))
+    const progress = useProgress()
+    const [seen] = createResource(watchedTick, async () => new Set((await watchedList()).map((w) => `${w.chatId}:${w.messageId}`)))
+    const watchedSet = () => seen.latest ?? new Set<string>()
+    // The one playing is focused first and scrolled to the middle of the list, so the viewer sees where they are.
+    onMount(() => {
+        const now = el.querySelector<HTMLElement>('.pc-episode.playing')
+        ;(now ?? el.querySelector<HTMLElement>('.pc-episode'))?.focus({ preventScroll: true })
+        now?.scrollIntoView({ block: 'center' })
+    })
     return (
         <div class="pc-sheet-scrim episodes" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
             <div ref={el} class="pc-sheet pc-episodes" role="dialog" aria-label={t('episodes.title')}>
@@ -165,12 +176,20 @@ export function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phon
                                     return (
                                         <li>
                                             <button type="button" class="pc-episode" classList={{ playing: playing() }} aria-current={playing() ? 'true' : undefined} onClick={() => !playing() && props.onPlay(e.item)}>
-                                                <span class="pc-episode-code">
-                                                    {e.code}
-                                                    <Show when={playing()}><span class="pc-badge">{t('episodes.playing')}</span></Show>
+                                                <HeldStill
+                                                    item={e.item}
+                                                    code={e.code}
+                                                    number={Number(/E(\d+)/i.exec(e.code)?.[1] ?? 0)}
+                                                    watched={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}
+                                                    progress={progress(e.item)}
+                                                />
+                                                <span class="pc-episode-text">
+                                                    <span class="pc-episode-name">{e.name || t('series.episode', { number: Number(/E(\d+)/i.exec(e.code)?.[1] ?? 0) })}</span>
+                                                    <span class="pc-episode-facts">
+                                                        <Show when={playing()}><span class="pc-badge">{t('episodes.playing')}</span></Show>
+                                                        {facts(e.item)}
+                                                    </span>
                                                 </span>
-                                                <span class="pc-episode-name">{e.name ?? e.item.title}</span>
-                                                <span class="pc-episode-facts">{facts(e.item)}</span>
                                             </button>
                                         </li>
                                     )
@@ -184,8 +203,8 @@ export function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phon
     )
 }
 
+/** An episode's running time; the file's size is the video page's (user, 2026-11-25). */
 export function facts(v: VideoItem): string {
     const m = Math.round(v.duration / 60)
-    const size = v.size >= 1e9 ? `${(v.size / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(v.size / 1e6))} MB`
-    return [m ? `${m}m` : '', size].filter(Boolean).join(dot)
+    return m ? `${m}m` : ''
 }

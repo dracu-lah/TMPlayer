@@ -64,7 +64,7 @@ test.describe('TV player safe area at 1920 x 1080', () => {
         expect(box!.x + box!.width, 'right edge inside 1824 px').toBeLessThanOrEqual(1920 - 96 + 1)
         expect(box!.y + box!.height, 'bottom edge inside 1026 px').toBeLessThanOrEqual(1080 - 54 + 1)
         // .pc-panel (the menu drawer) is attached to the screen's end edge by design, like a
-        // drawer; its rows are inside its own padding. .pc-sheet.pc-episodes is sized to
-        // 100% - 96u by 100% - 54u in player-tv.css, so it is inside by construction.
+        // drawer; its rows are inside its own padding. .pc-sheet.pc-episodes is the same kind of
+        // drawer (32 percent wide, the whole height) with 27u of padding above and below.
     })
 })

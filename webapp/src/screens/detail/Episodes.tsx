@@ -15,10 +15,11 @@ import { Icon } from '../../ui/Icon'
 import { arrowKeys } from '../../ui/arrows'
 import { form } from '../../form'
 import { loadFile, type Extras } from '../posters'
-import { shortLength, size, useProgress, watchPath } from '../VideoList'
+import { shortLength, useProgress, watchPath } from '../VideoList'
 import '../versions.css'
 import type { VideoItem, WatchInfo } from '../../tg/types'
 import { dot } from '../../ui/dot'
+import { HeldStill } from './HeldStill'
 
 
 /** The episode number in a code like "S01E04" or "S01E04a"; 0 when it has none. */
@@ -286,19 +287,19 @@ export function Episodes(props: { info: WatchInfo; current: VideoItem; extras: E
                                     return (
                                         <li>
                                             <A class="episode" classList={{ playing: here() }} href={watchPath(e.item)} state={{ video: e.item }} aria-current={here() ? 'true' : undefined}>
-                                                <span class="episode-code">{e.code}</span>
+                                                <HeldStill
+                                                    item={e.item}
+                                                    still={meta().get(line.number)?.still ?? null}
+                                                    code={e.code}
+                                                    number={line.number}
+                                                    watched={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}
+                                                    progress={progress(e.item)}
+                                                />
                                                 <span class="episode-text">
                                                     <span class="episode-name">{titled(meta().get(line.number), line.number) || (e.name ?? shortLength(e.item.duration))}</span>
                                                     <Show when={heldFacts(e.item, meta().get(line.number), day)}>{(facts) => <span class="episode-facts">{facts()}</span>}</Show>
+                                                    <Show when={meta().get(line.number)?.overview}>{(words) => <span class="episode-overview">{words()}</span>}</Show>
                                                 </span>
-                                                <Show when={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}>
-                                                    <span class="episode-watched" role="img" aria-label={t('detail.watched_line')}>
-                                                        <Icon icon={Tick02Icon} size={16} />
-                                                    </span>
-                                                </Show>
-                                                <Show when={progress(e.item)}>
-                                                    {(p) => <span class="episode-progress"><span style={{ width: `${Math.min(100, p() * 100)}%` }} /></span>}
-                                                </Show>
                                             </A>
                                         </li>
                                     )
@@ -327,10 +328,10 @@ function titled(meta: ProviderEpisode | undefined, number: number): string {
     return meta?.name && !placeholder(meta.name, number) ? meta.name : ''
 }
 
-/** What a held episode says under its name: TMDB's running time (else the file's), its day, the file's size last. */
+/** What a held episode says under its name: TMDB's running time (else the file's) and its day. The size is the video page's. */
 function heldFacts(item: VideoItem, meta: ProviderEpisode | undefined, day: (iso: string) => string): string {
     if (!meta) return ''
-    return [meta.runtime ? shortLength(meta.runtime * 60) : shortLength(item.duration), meta.airDate ? day(meta.airDate) : '', size(item.size)].filter(Boolean).join(dot)
+    return [meta.runtime ? shortLength(meta.runtime * 60) : shortLength(item.duration), meta.airDate ? day(meta.airDate) : ''].filter(Boolean).join(dot)
 }
 
 /** The picture of an episode the chat lacks: TMDB's still once the row is near the screen (a long season loads only what is seen), else its number. */

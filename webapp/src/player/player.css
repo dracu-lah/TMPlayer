@@ -374,15 +374,23 @@ html[data-motion="reduce"] .pc-panel.opening { animation: none; }
 .pc-round:disabled { opacity: .38; cursor: default; }
 .pc-round:active:not(:disabled) { transform: scale(.92); }
 
-/* The episode list (EpisodesPanel). */
-.pc-sheet.pc-episodes { width: min(960px, calc(100% - 48px)); height: min(640px, calc(100% - 48px)); }
-.pc-episodes-body { flex: 1; min-height: 0; display: flex; gap: 16px; padding: 16px 24px 24px; }
-.pc-episodes-side { width: 260px; flex: none; display: flex; flex-direction: column; gap: 8px; }
-.pc-episodes-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
-@media (max-width: 719px) {
-  .pc-episodes-body { flex-direction: column; padding: 12px 16px 16px; }
-  .pc-episodes-side { width: auto; flex-direction: row; flex-wrap: wrap; }
+/* The episode list (EpisodesPanel): a panel at the end about a third of the width (the phone upright: a bottom sheet of 82 percent), 16:9 pictures, short words. */
+.pc-sheet-scrim.episodes { place-items: stretch end; background: rgba(0,0,0,.6); }
+.pc-sheet.pc-episodes { width: clamp(340px, 32%, 520px); height: 100%; max-height: none; border-radius: 28px 0 0 28px; animation: episodes-in 200ms cubic-bezier(.2, 0, 0, 1); }
+@keyframes episodes-in { from { transform: translateX(100%); } }
+.pc-sheet.pc-episodes:dir(rtl) { border-radius: 0 28px 28px 0; }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) .pc-sheet.pc-episodes { animation: none; }
 }
+html[data-motion="reduce"] .pc-sheet.pc-episodes { animation: none; }
+@media (max-width: 599px) {
+  .pc-sheet-scrim.episodes { place-items: end stretch; }
+  .pc-sheet.pc-episodes { width: 100%; height: 82%; border-radius: 28px 28px 0 0; padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); animation-name: episodes-up; }
+  @keyframes episodes-up { from { transform: translateY(100%); } }
+}
+.pc-episodes-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; }
+.pc-episodes-side { flex: none; display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+.pc-episodes-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 .pc-step-line {
   display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px;
   background: rgba(255,255,255,.03); color: var(--fg); font: inherit; font-size: 0.875rem; font-weight: 500; text-align: start; cursor: pointer;
@@ -398,15 +406,16 @@ html[data-motion="reduce"] .pc-panel.opening { animation: none; }
 .pc-season[aria-selected="true"] small { color: var(--on-accent-container); }
 .pc-episode-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; overscroll-behavior: contain; }
 .pc-episode {
-  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 2px solid transparent;
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px; border: 2px solid transparent;
   border-radius: 12px; background: rgba(255,255,255,.05); color: var(--fg); font: inherit; text-align: start; cursor: pointer;
 }
 .pc-episode:hover { background: rgba(255,255,255,.09); }
-.pc-episode.playing { border-color: var(--accent); cursor: default; }
-.pc-episode-code { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; line-height: 1rem; color: var(--muted); }
+.pc-episode.playing { border-color: var(--accent); background: var(--accent-container); cursor: default; }
+.pc-episode .episode-still { width: 40%; max-width: 200px; min-width: 104px; }
+.pc-episode-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .pc-badge { padding: 0 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 0.6875rem; line-height: 1rem; font-weight: 500; }
-.pc-episode-name { font-size: 0.9375rem; line-height: 1.25rem; font-weight: 500; }
-.pc-episode-facts { font-size: 0.75rem; line-height: 1rem; color: var(--accent); }
+.pc-episode-name { font-size: 0.9375rem; line-height: 1.25rem; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pc-episode-facts { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; line-height: 1rem; color: var(--accent); }
 
 /* Playback details: a panel in the top start corner, as the desktop's stats. */
 .pc-details {
