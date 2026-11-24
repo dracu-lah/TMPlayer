@@ -148,6 +148,7 @@ import com.tmplayer.ui.downloads.DownloadsScreen
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.ConnectionStatus
+import com.tmplayer.ui.components.tvPillSlot
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.Setup
 import com.tmplayer.ui.onboarding.TourOnly
@@ -1832,7 +1833,7 @@ private fun Root() {
                     .align(Alignment.BottomCenter)
                     // Above the loader, which is where being offline matters most.
                     .zIndex(2f)
-                    .padding(bottom = 20.dp),
+                    .padding(bottom = if (FormFactor.isTv(context)) com.tmplayer.ui.theme.Tv.SafeV else 20.dp),
             )
             // A sign in pane with no line to Telegram yet: say so before a number goes nowhere.
             if (com.tmplayer.ui.connect.signInBannerShown()) {
@@ -2150,6 +2151,7 @@ private fun Root() {
                     onOpenDownloads = openDownloads,
                     returnToRail = railReturn,
                     tvNav = if (tvBar) touchNav else null,
+                    connectionShown = connectionNotice != ConnectionNotice.Hidden,
                     onReturnedToRail = { railReturn = null },
                     downloadCount = activeDownloadCount,
                     updateVersion = offeredUpdate,
@@ -2681,7 +2683,8 @@ private fun Root() {
         if (FormFactor.isTv(context) && inShell && screen is Screen.Chats) {
             TvBrowseHint(
                 keys = remoteKeys,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+                // Above the pill slot, which the work pill or the connection pill may hold (F-03).
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = com.tmplayer.ui.theme.Tv.SafeV + 56.dp),
                 onBusy = { tvHintUp = it },
             )
         }
@@ -2742,7 +2745,7 @@ private fun Root() {
                 notice = connectionNotice,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 20.dp),
+                    .tvPillSlot(),
             )
         }
         if (connectionNotice == ConnectionNotice.Offline && auth is AuthState.Ready && FormFactor.isTv(context)) {

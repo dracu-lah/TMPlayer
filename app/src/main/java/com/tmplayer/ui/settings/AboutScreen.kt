@@ -228,7 +228,9 @@ fun AboutScreen(onBack: () -> Unit) {
             Box(Modifier.padding(start = Tv.SafeH, end = Tv.SafeH, top = Tv.SafeV)) {
                 SettingsHeader(title = s.settingsTitle, crumb = s.aboutTitle)
             }
-            Box(Modifier.fillMaxWidth().weight(1f)) { list() }
+            // The padding is outside the list, so its viewport and clip end at the safe line: the last row
+            // is never in the bottom overscan margin (contentPadding would let it draw there).
+            Box(Modifier.fillMaxWidth().weight(1f).padding(bottom = Tv.SafeV)) { list() }
         }
         // A frame first: the row is a lazy item, composed only once the list has been measured.
         LaunchedEffect(Unit) {

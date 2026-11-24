@@ -22,9 +22,21 @@ class PageWorkTest {
 
     @Test
     fun `a failure or a partial answer beats up to date`() {
-        assertEquals(PageWork(failed, false), pageWork(WorkStatus.Updated(now), failed, now))
+        assertEquals(PageWork(failed, true), pageWork(WorkStatus.Updated(now), failed, now))
         val partial = WorkStatus.Partial(3, 2)
-        assertEquals(PageWork(partial, false), pageWork(WorkStatus.Updated(now), partial, now))
+        assertEquals(PageWork(partial, true), pageWork(WorkStatus.Updated(now), partial, now))
+    }
+
+    @Test
+    fun `a failure that comes by itself, or long after the press, is not an asked one`() {
+        assertEquals(PageWork(failed, false), pageWork(WorkStatus.Idle, failed, now))
+        assertEquals(PageWork(failed, false), pageWork(WorkStatus.Updated(now), failed, now + FAILED_PILL_MS + 1))
+    }
+
+    @Test
+    fun `a refresh asked offline says so by itself, with nothing kept`() {
+        val offline = WorkStatus.Failed("You are offline.")
+        assertEquals(PageWork(offline, true), pageWork(offline, WorkStatus.Idle, now))
     }
 
     @Test
@@ -40,6 +52,13 @@ class PageWorkTest {
         val boxed = WorkStatus.Failed("", keptAt = now)
         assertEquals(PageWork(boxed, true), pageWork(boxed, WorkStatus.Syncing(), now))
         assertEquals(PageWork(WorkStatus.Idle, false), pageWork(boxed, WorkStatus.Idle, now))
+    }
+
+    @Test
+    fun `the connection pill holds the foot slot alone`() {
+        val syncing = PageWork(WorkStatus.Syncing(), true)
+        assertEquals(PageWork(WorkStatus.Idle, false), syncing.unlessConnectionShown(true))
+        assertEquals(syncing, syncing.unlessConnectionShown(false))
     }
 
     @Test

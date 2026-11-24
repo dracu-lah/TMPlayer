@@ -5,6 +5,8 @@ import com.tmplayer.ui.theme.focusEdge
 import androidx.compose.animation.core.snap
 import com.tmplayer.data.WorkStatus
 import com.tmplayer.ui.components.WorkStatusPill
+import com.tmplayer.ui.components.tvPillSlot
+import com.tmplayer.ui.components.unlessConnectionShown
 import com.tmplayer.ui.components.rememberAskedRefresh
 import com.tmplayer.ui.components.PageWork
 import com.tmplayer.ui.components.pageWork
@@ -250,6 +252,8 @@ internal fun BrowseScreen(
     onReturnedToRail: () -> Unit = {},
     /** What the television's top bar shows and does: the phone's bar's own set. Null on a phone. */
     tvNav: TouchNav? = null,
+    /** The connection pill (Connecting, Offline) is up in the shell: it holds the foot slot, so the work pill stays out (F-03). */
+    connectionShown: Boolean = false,
     /** How many downloads are running, for the badge on that row of the drawer and the rail. */
     downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
@@ -1165,14 +1169,15 @@ internal fun BrowseScreen(
             val underBar = homeShown && state is UiState.Content
             // The asked refresh's pill, where the connection's sits; never focusable (WP-40, LS-03).
             // Updating after the menu's Refresh, or after 3 s of an automatic one, then Up to date
-            // for 2 s after a pressed one (WP-93); a failure is the page foot's line, never the pill's.
+            // for 2 s after a pressed one (WP-93); a failure the viewer asked to see is said here for 6 s
+            // as words (F-02), and Try again is the page foot's line. One pill at a time (F-03).
             val pillWork = System.currentTimeMillis().let { now ->
                 when {
                     tvSearchOpen -> PageWork(WorkStatus.Idle, false)
                     tab.isHome -> pageWork(homeAsk.status, homeStatus, now)
                     tab.onChatsPage -> pageWork(chatsAsk.status, chatsStatus, now)
                     else -> PageWork(WorkStatus.Idle, false)
-                }
+                }.unlessConnectionShown(connectionShown)
             }
             WorkStatusPill(
                 status = pillWork.status,
@@ -1180,7 +1185,7 @@ internal fun BrowseScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .zIndex(1f)
-                    .padding(bottom = 20.dp),
+                    .tvPillSlot(),
             )
             val homeScrolled by TvBarSignals.homeScrolled.collectAsState()
             val barGround by androidx.compose.animation.core.animateFloatAsState(

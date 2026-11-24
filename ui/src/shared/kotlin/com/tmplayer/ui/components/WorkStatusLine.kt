@@ -50,6 +50,7 @@ import com.tmplayer.data.secondsLeft
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.onboarding.SetupButton
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
 
 /**
@@ -386,11 +387,20 @@ fun WorkStatusLine(
 }
 
 /**
+ * The slot of the television's pills ([WorkStatusPill], `ConnectionStatus`): the bottom centre,
+ * inside the overscan margin the panel may crop ([Tv.SafeV], 27 dp). The host gives it to one pill
+ * at a time (the connection's wins, see `BrowseScreen`'s `connectionShown`), so two never overlap.
+ */
+fun Modifier.tvPillSlot(): Modifier = padding(bottom = Tv.SafeV)
+
+/**
  * The television's status pill (WP-91), in the corner slot and shape of `ConnectionStatus`: a
  * spinner and a few words for Loading, Updating, Up to date and a wait for Telegram. Never takes
- * focus and holds no button. A failure or a partial answer is not drawn here: on a television it is
- * a [WorkStatusLine] in the page's foot, where Try again is reached with the remote in reading
- * order. The host shows the connection pill instead of this one while both have something to say.
+ * focus and holds no button. A failure the viewer asked to see (Refresh, Try again) is said here as
+ * words only for [FAILED_PILL_MS], once ([failedWords] says where Try again is), because the
+ * [WorkStatusLine] with the button is in the page's foot or header, which is not where the viewer
+ * is looking; a failure the viewer did not ask for is only that line. The host shows the connection
+ * pill instead of this one while both have something to say.
  * Past [SlowAnswer.AFTER_MS] it says Telegram is slow with no Retry of its own: the host's time box
  * ends the work in a failure, which the page foot's line offers to try again.
  */
@@ -400,9 +410,10 @@ fun WorkStatusPill(
     modifier: Modifier = Modifier,
     asked: Boolean = false,
     now: () -> Long = ::wallClock,
+    failedWords: String? = null,
 ) {
     val shown = rememberWorkStatusTimer(status, asked)
-    WorkStatusPill(shown, modifier, asked, now)
+    WorkStatusPill(shown, modifier, asked, now, failedWords)
 }
 
 /** [WorkStatusPill] for a status already run through the ladder. */
@@ -412,12 +423,22 @@ fun WorkStatusPill(
     modifier: Modifier = Modifier,
     asked: Boolean = false,
     now: () -> Long = ::wallClock,
+    failedWords: String? = null,
 ) {
     val reduced = rememberLessMotion()
     val at = rememberTick(shown, now)
     // A wait that is over leaves by itself, its spinner and its ticking with it.
     val live = shown.endedAt(at)
-    val visible = live.visible && live.labelled && !live.status.needsAction()
+    // An asked failure is said for a few seconds, then only the line says it.
+    val askedFailure = asked && live.status is WorkStatus.Failed
+    var failureOver by remember(live.status) { mutableStateOf(false) }
+    LaunchedEffect(live.status, askedFailure) {
+        if (!askedFailure) return@LaunchedEffect
+        delay(FAILED_PILL_MS)
+        failureOver = true
+    }
+    val visible = live.visible && live.labelled &&
+        (!live.status.needsAction() || (askedFailure && !failureOver))
     // A fade, never a slide; none at all under less motion.
     val fade = if (reduced) 0 else PILL_FADE_MS
     // Kept for the fade out, after the status itself has gone.
@@ -431,8 +452,15 @@ fun WorkStatusPill(
         exit = fadeOut(tween(fade)),
     ) {
         val status = last.status
-        val words = visibleWords(last, at)
-        val spoken = rememberSpoken(last, asked, now)
+        val failure = status as? WorkStatus.Failed
+        // Words only: Try again is not here, so the words say where it is. Nothing kept means the
+        // failure has its own reason (offline), which is the better sentence.
+        val failureWords = failure?.let {
+            it.message.takeIf { reason -> it.keptAt == null && reason.isNotBlank() }
+                ?: failedWords ?: LocalStrings.current.stateFailedPill
+        }
+        val words = failureWords ?: visibleWords(last, at)
+        val spoken = failureWords ?: rememberSpoken(last, asked, now)
         AnnounceOnce(spoken)
         Row(
             Modifier
@@ -466,3 +494,6 @@ private const val STILL_ARC = 0.75f
 private const val TICK_MS = 1_000L
 private const val COUNT_SPOKEN_EVERY_MS = 10_000L
 private const val PILL_FADE_MS = 150
+
+/** How long a failure the viewer asked to see stays in the pill. */
+const val FAILED_PILL_MS = 6_000L

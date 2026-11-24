@@ -295,4 +295,59 @@ class AboutTvFocusRenderTest {
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-notnight-xhdpi")
     fun supportCardsLight() = cards(Look.Light)
+
+    // ----- Review fixes A: the stand-alone About list and the sign out prompt ---------------------
+
+    /** The stand-alone TV About list ends at the safe line: walking to its last row never leaves a row in the bottom 27 dp (F-16). */
+    private fun aboutKeepsTheSafeLine() {
+        val ux = show(Look.Dark) { AboutScreen(onBack = {}) }
+        ux.safeArea()
+        var presses = 0
+        var last = ux.focused().map { ux.nameOf(it) }
+        var steady = 0
+        while (steady < 2 && presses++ < 80) {
+            ux.key(android.view.KeyEvent.KEYCODE_DPAD_DOWN, 250)
+            ux.safeArea()
+            val now = ux.focused().map { ux.nameOf(it) }
+            steady = if (now == last) steady + 1 else 0
+            last = now
+        }
+        assertTrue("walked to the last row: $last", presses < 80)
+        val outside = ux.findings.filter { it.rule == "safeArea" }
+        assertTrue("rows in the margin: $outside", outside.isEmpty())
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun aboutListEndsAtTheSafeLine960() = aboutKeepsTheSafeLine()
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-television-night-mdpi")
+    fun aboutListEndsAtTheSafeLine1920() = aboutKeepsTheSafeLine()
+
+    /** Sign out's Cancel, Sign out and the backup tick are 48 dp focus rects (F-17). */
+    private fun signOutTargets() {
+        val ux = show(Look.Dark) {
+            TvConfirm(
+                title = L.settingsSignOutTitle,
+                message = "You can sign in again.",
+                confirmLabel = L.settingsSignOutConfirm,
+                onConfirm = {},
+                onDismiss = {},
+                extra = { TickRow("Save my settings backup to my Saved Messages first", checked = false, onToggle = {}) },
+            )
+        }
+        ux.targets()
+        val names = ux.focusables().map { ux.nameOf(it) }
+        assertTrue("Cancel, Sign out and the tick are all there: $names", listOf(L.commonCancel, L.settingsSignOutConfirm, "Save my settings backup").all { n -> names.any { it.startsWith(n) } })
+        assertTrue("under 48 dp: ${ux.findings}", ux.findings.none { it.rule == "targets" })
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun signOutPromptTargets960() = signOutTargets()
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-television-night-mdpi")
+    fun signOutPromptTargets1920() = signOutTargets()
 }

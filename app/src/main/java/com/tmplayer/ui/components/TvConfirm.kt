@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -172,13 +173,14 @@ fun TvConfirm(
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             ) {
+                // 48 dp targets: the buttons alone are 40 dp (F-17).
                 TmSecondaryButton(
                     onClick = onDismiss,
-                    modifier = Modifier.focusRequester(cancelFocus),
+                    modifier = Modifier.heightIn(min = 48.dp).focusRequester(cancelFocus),
                 ) {
                     Text(cancelLabel)
                 }
-                TmButton(onClick = onConfirm, destructive = destructive, modifier = Modifier.focusRequester(confirmFocus)) {
+                TmButton(onClick = onConfirm, destructive = destructive, modifier = Modifier.heightIn(min = 48.dp).focusRequester(confirmFocus)) {
                     Text(confirmLabel)
                 }
             }

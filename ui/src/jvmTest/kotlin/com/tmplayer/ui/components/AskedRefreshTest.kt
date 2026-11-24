@@ -52,6 +52,32 @@ class AskedRefreshTest {
     }
 
     @Test
+    fun `a press while offline says so at once instead of updating for a minute`() {
+        var online = false
+        val offlineAsk = AskedRefresh(floodWait = { 0 }, clock = { now }, connected = { online })
+        var started = 0
+        assertFalse(offlineAsk.ask { started++ })
+        assertEquals(0, started)
+        assertFalse(offlineAsk.running)
+        val failed = offlineAsk.status as WorkStatus.Failed
+        assertTrue("a reason, not an empty message", failed.message.isNotBlank())
+        assertEquals(null, failed.keptAt)
+        assertTrue(offlineAsk.offlineNote())
+        offlineAsk.clearOfflineNote()
+        assertEquals(WorkStatus.Idle, offlineAsk.status)
+        online = true
+        assertTrue(offlineAsk.ask { started++ })
+        assertEquals(1, started)
+    }
+
+    @Test
+    fun `the time box failure names a reason`() {
+        asked.ask { }
+        asked.finish(done = false)
+        assertTrue((asked.status as WorkStatus.Failed).message.isNotBlank())
+    }
+
+    @Test
     fun `in a flood wait the refresh holds off and the status counts the seconds down`() {
         wait = 42
         var started = 0

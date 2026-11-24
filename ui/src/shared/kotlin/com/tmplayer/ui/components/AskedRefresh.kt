@@ -19,6 +19,7 @@ import androidx.compose.runtime.snapshotFlow
 import com.tmplayer.data.Td
 import com.tmplayer.data.WorkStatus
 import com.tmplayer.data.secondsLeft
+import com.tmplayer.i18n.L
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,6 +40,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 class AskedRefresh(
     private val floodWait: () -> Int = { Td.floodWaitRemainingSeconds() },
     private val clock: () -> Long = { System.currentTimeMillis() },
+    /** False while there is no line to Telegram: a press then says so at once (F-18). */
+    private val connected: () -> Boolean = { true },
 ) {
     /** What the status line shows for this refresh; [WorkStatus.Idle] while none was asked. */
     var status: WorkStatus by mutableStateOf(WorkStatus.Idle)
@@ -65,6 +68,13 @@ class AskedRefresh(
             round++
             return false
         }
+        if (!connected()) {
+            // Known at once: say it, rather than Updating for a minute and then nothing. The refresh
+            // that runs when the connection is back is the page's own.
+            status = WorkStatus.Failed(L.stateOfflineRefresh)
+            round++
+            return false
+        }
         running = true
         status = WorkStatus.Syncing("")
         round++
@@ -75,13 +85,24 @@ class AskedRefresh(
     /** The run ended: [done] false when the time box ran out. */
     internal fun finish(done: Boolean) {
         running = false
-        status = if (done) WorkStatus.Updated(clock()) else WorkStatus.Failed("", keptAt = clock())
+        status = if (done) WorkStatus.Updated(clock()) else WorkStatus.Failed(L.stateNoAnswer, keptAt = clock())
         round++
     }
 
     /** A wait that is over leaves the line. */
     internal fun clearWait() {
         if (status is WorkStatus.RateLimited) {
+            status = WorkStatus.Idle
+            round++
+        }
+    }
+
+    /** True for the offline answer of [ask]: a failure with nothing kept, which leaves by itself. */
+    internal fun offlineNote(): Boolean = (status as? WorkStatus.Failed)?.let { it.keptAt == null } == true
+
+    /** The offline answer has been said long enough. */
+    internal fun clearOfflineNote() {
+        if (offlineNote() && !running) {
             status = WorkStatus.Idle
             round++
         }
@@ -98,6 +119,9 @@ class AskedRefresh(
 
         /** The longest a refresh may say Syncing; past it the line says it could not update, with Try again. */
         const val TIME_BOX_MS = 60_000L
+
+        /** How long "You are offline" stays after a press made while offline. */
+        const val OFFLINE_NOTE_MS = 8_000L
     }
 }
 
@@ -107,7 +131,7 @@ class AskedRefresh(
  */
 @Composable
 fun rememberAskedRefresh(busy: Boolean): AskedRefresh {
-    val asked = remember { AskedRefresh() }
+    val asked = remember { AskedRefresh(connected = { Td.connected.value }) }
     val busyNow by rememberUpdatedState(busy)
     LaunchedEffect(asked.round) {
         when {
@@ -119,6 +143,10 @@ fun rememberAskedRefresh(busy: Boolean): AskedRefresh {
             asked.status is WorkStatus.RateLimited -> {
                 delay(asked.waitLeftMs().coerceAtLeast(1L))
                 asked.clearWait()
+            }
+            asked.offlineNote() -> {
+                delay(AskedRefresh.OFFLINE_NOTE_MS)
+                asked.clearOfflineNote()
             }
         }
     }
@@ -139,12 +167,22 @@ data class PageWork(val status: WorkStatus, val asked: Boolean)
  */
 fun pageWork(asked: WorkStatus, page: WorkStatus, now: Long): PageWork = when {
     asked is WorkStatus.Syncing || asked is WorkStatus.RateLimited -> PageWork(asked, true)
-    page is WorkStatus.Failed || page is WorkStatus.Partial || page is WorkStatus.RateLimited -> PageWork(page, false)
+    // A failure that comes as the viewer's refresh ends is theirs to be told of (F-02); one that comes by itself is not.
+    page is WorkStatus.Failed || page is WorkStatus.Partial || page is WorkStatus.RateLimited ->
+        PageWork(page, asked is WorkStatus.Updated && now - asked.at in 0 until FAILED_PILL_MS)
     asked is WorkStatus.Updated && now - asked.at in 0 until WorkLadder.UPDATED_FOR_MS -> PageWork(asked, true)
-    asked is WorkStatus.Failed && page != WorkStatus.Idle -> PageWork(asked, true)
+    // The time box failure stands only while the page still works; the offline answer (nothing kept) stands by itself.
+    asked is WorkStatus.Failed && (page != WorkStatus.Idle || asked.keptAt == null) -> PageWork(asked, true)
     page is WorkStatus.Syncing -> PageWork(page, false)
     else -> PageWork(WorkStatus.Idle, false)
 }
+
+/**
+ * The pill's status while the host's connection pill (Connecting, Offline) is up: nothing, since both
+ * sit in the one foot slot of a television and the connection's is the one the viewer needs (F-03).
+ */
+fun PageWork.unlessConnectionShown(connectionShown: Boolean): PageWork =
+    if (connectionShown) PageWork(WorkStatus.Idle, false) else this
 
 /** [status] with only what a page must still say after the work: a failure or Telegram's wait; the rest is Idle. */
 fun WorkStatus.failureOnly(): WorkStatus =

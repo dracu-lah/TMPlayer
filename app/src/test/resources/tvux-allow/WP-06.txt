@@ -28,10 +28,6 @@ settings:SetupChoices | labelled | unnamed node at 62,513 dp | WP-06 TV Settings
 settings:SetupChoices | targets | Also in Home and library | WP-06 TV Settings rows
 settings:Storage | focusContrast | stream-switch | WP-06 TV Settings rows
 settings:Storage | labelled | stream-switch | WP-06 TV Settings rows
-signOutPrompt | targets | Cancel | WP-06 TV Settings rows
-signOutPrompt | targets | Save my settings backup to my Saved Messages first | WP-06 TV Settings rows
-signOutPrompt | targets | Sign out | WP-06 TV Settings rows
-about | safeArea | YOUR DATA AND THE LAW | WP-06 WP-04 gave the rows their 15 sp text, so a scrolling list now shows a row in the bottom margin; WP-06 owns the rows
 settings:Notifications | safeArea | Sponsor reminders Now and then, never more than once a month | WP-06 same, a scrolling row in the bottom margin
 settings:Storage | safeArea | Download the whole video first Off: it downloads while you w | WP-06 same, a scrolling row in the bottom margin
 

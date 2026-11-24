@@ -4,6 +4,8 @@ import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.focusEdge
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.components.dropStaleArrowRepeats
+import com.tmplayer.ui.components.tvPillSlot
+import androidx.compose.ui.zIndex
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -341,6 +343,11 @@ fun MediaGridScreen(
         .collectAsStateWithLifecycle(initialValue = 0)
     LaunchedEffect(queueSize) { viewModel.refreshLocalAvailability() }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // What the listing does behind the grid on screen (WP-94): Updating while a kept grid is
+    // read again, and the failure, with the time it was fresh, when that did not work. Read here,
+    // above the listing, because the header's Refresh pill and the pill over the grid both show it.
+    val work by viewModel.status.collectAsStateWithLifecycle()
+    val workAsked by viewModel.statusAsked.collectAsStateWithLifecycle()
     val topicBar by viewModel.topics.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     var query by remember { mutableStateOf("") }
@@ -696,10 +703,6 @@ fun MediaGridScreen(
             val filterNote = (filterLabel != null && !hidesAll && (filterHidden > 0 || filterUnknown > 0)) || (filterPaused && filtersOn && grouping)
             // Self-destructing videos are left out (only Telegram opens them): a quiet line says so.
             val selfDestructing by viewModel.selfDestructing.collectAsStateWithLifecycle()
-            // What the listing does behind the grid on screen (WP-94): Updating while a kept grid is
-            // read again, and the failure, with the time it was fresh, when that did not work.
-            val work by viewModel.status.collectAsStateWithLifecycle()
-            val workAsked by viewModel.statusAsked.collectAsStateWithLifecycle()
             val selfDestructNote = query.isBlank() && selfDestructing > 0
             val courseHeader: @Composable () -> Unit = {
                 if (filterNote) {
@@ -1115,6 +1118,23 @@ fun MediaGridScreen(
                     }
                 }
 
+                // What the listing does behind the grid, said where the viewer is looking (F-01): in a chat
+                // of thousands the foot line is a long way down. A pill never takes focus and moves no
+                // tile; a failure is words here for a few seconds and the header's Refresh becomes Try
+                // again. The chips above (a page that is slow, a page that failed) speak for themselves.
+                if (!touch && !list.loadingMore && !list.moreFailed) {
+                    com.tmplayer.ui.components.WorkStatusPill(
+                        status = work,
+                        asked = workAsked || work is com.tmplayer.data.WorkStatus.Failed,
+                        failedWords = s.stateFailedPillHeader,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .zIndex(1f)
+                            .padding(bottom = 46.dp + connectionOffset)
+                            .tvPillSlot(),
+                    )
+                }
+
                 StandingOnName(
                     { standingOn },
                     Modifier
@@ -1294,6 +1314,7 @@ fun MediaGridScreen(
                     onToggleFavorite = onToggleFavorite,
                     edge = edge,
                     onRefresh = refresh,
+                    refreshFailed = work is com.tmplayer.data.WorkStatus.Failed,
                     onBack = onBack,
                     recentSearches = recentSearches,
                     onClearRecent = clearRecent,
@@ -1688,6 +1709,8 @@ internal fun Header(
     /** How far in from the side the header starts, which is overscan on a TV and taste on a phone. */
     edge: Dp,
     onRefresh: () -> Unit,
+    /** The listing's refresh failed: Refresh reads Try again and carries a caution dot (F-01). */
+    refreshFailed: Boolean = false,
     onBack: () -> Unit,
     /** Offered as a row of pills while the remote is in the header and nothing is typed. */
     recentSearches: List<String> = emptyList(),
@@ -1806,10 +1829,18 @@ internal fun Header(
             // search that ran when it opened, so a video posted since then needs a fresh search.
             // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
             val spin = com.tmplayer.ui.components.rememberRefreshSpin()
-            Pill(s.commonRefresh, TmIcons.Refresh, showLabel = false, spin = spin, onClick = {
-                spin.kick()
-                onRefresh()
-            })
+            Pill(
+                if (refreshFailed) s.commonTryAgain else s.commonRefresh,
+                TmIcons.Refresh,
+                tintWhenIdle = if (refreshFailed) Tone.danger else Tone.text,
+                showLabel = false,
+                spin = spin,
+                alert = refreshFailed,
+                onClick = {
+                    spin.kick()
+                    onRefresh()
+                },
+            )
         }
         if (query.isBlank() && recentSearches.isNotEmpty() && (headerFocused || alwaysShowRecent)) {
             Row(
@@ -2174,6 +2205,8 @@ private fun Pill(
     starred: Boolean? = null,
     /** The refresh pill's: its arrow turns once for each press ([RefreshGlyph]). */
     spin: com.tmplayer.ui.components.RefreshSpin? = null,
+    /** A caution dot on the pill: what it opens needs the viewer (a failed refresh). */
+    alert: Boolean = false,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -2223,6 +2256,9 @@ private fun Pill(
             if (showLabel) {
                 Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
             }
+        }
+        if (alert) {
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(10.dp).background(Tone.danger, CircleShape))
         }
     }
 }

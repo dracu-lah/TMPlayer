@@ -3176,6 +3176,8 @@ internal fun TickRow(label: String, checked: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // A 48 dp target and focus rect (F-17).
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(Corner.Small))
             .focusRing(focused, RoundedCornerShape(Corner.Small))
             .toggleable(

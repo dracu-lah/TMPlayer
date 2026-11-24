@@ -39,6 +39,7 @@ import com.tmplayer.data.WorkStatus
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
+import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.Tone
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -200,5 +201,97 @@ class WorkStatusTvFocusTest {
         retry.performKeyInput { pressKey(Key.DirectionCenter) }
         rule.waitForIdle()
         rule.onNode(hasText("Last row") and hasClickAction()).assertIsFocused()
+    }
+
+    /** One pill slot for the work pill and the connection pill, as the shell draws them (F-03). */
+    private fun pills(connection: ConnectionNotice, work: WorkStatus, connectionShown: Boolean) {
+        FormFactor.override(true)
+        rule.setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(Tone.background).testTag("screen")) {
+                    val pill = PageWork(work, true).unlessConnectionShown(connectionShown)
+                    WorkStatusPill(
+                        ShownWork(pill.status),
+                        now = { now },
+                        modifier = Modifier.align(Alignment.BottomCenter).tvPillSlot().testTag("work"),
+                    )
+                    ConnectionStatus(
+                        notice = connection,
+                        modifier = Modifier.align(Alignment.BottomCenter).tvPillSlot().testTag("conn"),
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    private fun assertInsideSafeArea(tag: String) {
+        val screen = rule.onNodeWithTag("screen").getBoundsInRoot()
+        val box = rule.onNodeWithTag(tag).getBoundsInRoot()
+        assertTrue("$tag bottom ${box.bottom} is inside the safe line ${screen.bottom - Tv.SafeV}", box.bottom <= screen.bottom - Tv.SafeV)
+        assertTrue("$tag inside the screen", box.left >= screen.left && box.right <= screen.right && box.top >= screen.top)
+    }
+
+    private fun onePillAtATime() {
+        // The connection pill is up: it alone is drawn, in the safe area.
+        pills(ConnectionNotice.Connecting, WorkStatus.Syncing(), connectionShown = true)
+        rule.onAllNodes(androidx.compose.ui.test.hasTestTag("work")).assertCountEquals(0)
+        rule.onAllNodes(androidx.compose.ui.test.hasTestTag("conn")).assertCountEquals(1)
+        assertInsideSafeArea("conn")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-mdpi")
+    fun `at 960 x 540 the connection pill and the work pill never draw over each other and keep the safe area`() {
+        onePillAtATime()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-television-night-mdpi")
+    fun `at 1920 x 1080 the connection pill is alone in the foot slot and inside the safe area`() {
+        onePillAtATime()
+    }
+
+    @Test
+    fun `the work pill takes the slot again once the connection pill is gone, inside the safe area`() {
+        pills(ConnectionNotice.Hidden, WorkStatus.Syncing(), connectionShown = false)
+        rule.onAllNodes(androidx.compose.ui.test.hasTestTag("work")).assertCountEquals(1)
+        assertInsideSafeArea("work")
+    }
+
+    @Test
+    fun `a failure the viewer asked to see is said in the pill for a few seconds, then only the line says it`() {
+        FormFactor.override(true)
+        var asked by mutableStateOf(true)
+        var status by mutableStateOf<WorkStatus>(WorkStatus.Failed("", keptAt = now - 60_000))
+        rule.setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(Tone.background)) {
+                    WorkStatusPill(
+                        ShownWork(status),
+                        asked = asked,
+                        now = { now },
+                        modifier = Modifier.align(Alignment.BottomCenter).tvPillSlot().testTag("work"),
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.onNode(hasContentDescription(L.stateFailedPill)).assertExists()
+        rule.mainClock.advanceTimeBy(FAILED_PILL_MS + 1_000)
+        rule.waitForIdle()
+        rule.onAllNodes(hasContentDescription(L.stateFailedPill)).assertCountEquals(0)
+
+        // One nobody asked for is the line's alone.
+        asked = false
+        status = WorkStatus.Failed("", keptAt = now - 30_000)
+        rule.waitForIdle()
+        rule.onAllNodes(androidx.compose.ui.test.hasTestTag("work")).assertCountEquals(0)
+
+        // Asked offline: the reason itself, nothing kept.
+        asked = true
+        status = WorkStatus.Failed(L.stateOfflineRefresh)
+        rule.waitForIdle()
+        rule.onNode(hasContentDescription(L.stateOfflineRefresh)).assertExists()
     }
 }
