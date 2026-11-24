@@ -1,4 +1,4 @@
-import { createEffect, createResource, lazy, Match, onCleanup, Show, Switch } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, lazy, Match, onCleanup, Show, Switch } from 'solid-js'
 import { setPageName } from '../ui/pageTitle'
 import { useLocation, useNavigate, useParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
@@ -14,7 +14,8 @@ import { warmFile } from '../stream/reader'
 import { looksSplit } from '../stream/joined'
 import { readChatOrder } from '../player/keep'
 import { notePlayed } from '../copies'
-import type { ChatView, VideoItem } from '../tg/types'
+import { activeRun, around, belongs, endRun, nearest } from './playAllRun'
+import type { ChatView, VideoItem, WatchInfo } from '../tg/types'
 
 /** The player's code (the engines and the controls), also fetched while idle once signed in (App.tsx). */
 export const loadPlayer = () => import('../player/Player').then((m) => ({ default: m.Player }))
@@ -62,13 +63,22 @@ export function Watch() {
     createEffect(() => setPageName(video()?.title))
     onCleanup(() => setPageName(null))
     const [progress] = createResource(readProgress)
+    // Play all (WP-32): a run started in a grid or a list goes on to the next video by itself. It ends when this page
+    // closes or a video that is not part of it opens (an address, Continue watching), never carried to a stranger.
+    const [run, setRun] = createSignal(activeRun())
+    createEffect(() => {
+        const r = run()
+        if (r && !belongs(r, ids())) (endRun(), setRun(null))
+    })
+    onCleanup(endRun)
     // "After a video that is not an episode": the chat's next video in the grid's order (EG-F30).
     const [chatOrder] = createResource(() => readChatOrder().catch(() => false))
     // The Last played order needs the times the worker holds, so Next and autoplay run in the grid's order; a failed send is no times.
     const lastPlayed = () => settings().sort === 'LastPlayed'
     const [touchVer] = createResource(lastPlayed, (on) => (on ? ensureTouches().catch(() => 0) : 0))
     const view = (): ChatView => ({
-        chatOrder: chatOrder() ?? false,
+        // A chat's run follows the grid's order whatever the setting says.
+        chatOrder: (chatOrder() ?? false) || run()?.kind === 'chat',
         sort: settings().sort,
         minBytes: settings().sizeMin,
         maxBytes: settings().sizeMax,
@@ -82,6 +92,28 @@ export function Watch() {
         () => (!locked() && progress.state === 'ready' && chatOrder.state === 'ready' && (!lastPlayed() || touchVer.state === 'ready') ? { ...ids(), view: view() } : null),
         ({ chatId, messageId, view }) => api.watch(chatId, messageId, view).catch((e) => (console.warn('[watch]', e), null)),
     )
+    // A list's run: the video after and before this one are the list's, not the chat's (a list spans chats).
+    const [neighbours] = createResource(
+        () => {
+            const r = run()
+            return r?.kind === 'list' ? { keys: r.keys, key: `${ids().chatId}:${ids().messageId}` } : null
+        },
+        async ({ keys, key }) => {
+            const { next, previous } = around(keys, key)
+            const get = (k: string) => {
+                const [chatId, messageId] = k.split(':').map(Number)
+                return api.video(chatId!, messageId!).catch((e) => (chatGone(e) ? null : Promise.reject(e)))
+            }
+            const [after, before] = await Promise.all([nearest(next, get), nearest(previous, get)])
+            return { next: after, previous: before }
+        },
+    )
+    const shown = createMemo((): WatchInfo | null => {
+        const base = info() ?? null
+        if (!base || run()?.kind !== 'list') return base
+        const n = neighbours.state === 'ready' ? neighbours() : undefined
+        return { ...base, next: n?.next ?? null, nextCode: null, previous: n?.previous ?? null, previousCode: null }
+    })
     // A play noted in the quality the viewer usually plays (QualityHabit), once per video opened: a
     // card of a video posted more than once then plays the copy nearest it (HX38).
     let noted = ''
@@ -113,7 +145,7 @@ export function Watch() {
                         </div>
                     </Match>
                     <Match when={video()} keyed>
-                        {(item) => <Player item={item} info={info() ?? null} onClose={close} onPlay={play} />}
+                        {(item) => <Player item={item} info={shown()} onClose={close} onPlay={play} playAll={run() !== null} />}
                     </Match>
                 </Switch>
             </div>

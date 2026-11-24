@@ -1,6 +1,6 @@
 import { onGlobal } from '../ui/globalInput'
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js'
-import { ShuffleIcon, Sorting01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { PlayIcon, ShuffleIcon, Sorting01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { settings, setSetting } from '../store'
 import { form } from '../form'
@@ -54,6 +54,8 @@ export function SortMenu(props: {
     onFilter: (f: ChatFilter) => void
     onFacet: (field: 'length' | 'picture' | 'added' | 'hdr' | 'subtitles' | 'language', value: string | null) => void
     onClear: () => void
+    /** Play all (WP-32): the first listed video, then the chat's order; left out where there is nothing to play. */
+    onPlayAll?: () => void
     /** Play random over what is loaded; left out where there is nothing to play. */
     onRandom?: () => void
 }) {
@@ -117,6 +119,19 @@ export function SortMenu(props: {
                         }
                     }}
                 >
+                    <Show when={props.onPlayAll}>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                                props.onPlayAll!()
+                                shut()
+                            }}
+                        >
+                            <span>{t('browse.play_all')}</span>
+                            <Icon icon={PlayIcon} size={20} />
+                        </button>
+                    </Show>
                     <Show when={props.onRandom}>
                         <button
                             type="button"

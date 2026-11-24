@@ -49,6 +49,8 @@ export function Player(props: {
     onClose: () => void
     /** Plays another video of the chat (previous or next episode, a card). */
     onPlay: (item: VideoItem) => void
+    /** A Play all run (WP-32): the end of the video goes on to the next one whatever Autoplay says. */
+    playAll?: boolean
 }) {
     let video!: HTMLVideoElement
     let container!: HTMLElement
@@ -833,6 +835,7 @@ export function Player(props: {
                             root: container,
                             item,
                             info: () => props.info,
+                            playAll: () => !!props.playAll,
                             close,
                             play,
                             blocked,

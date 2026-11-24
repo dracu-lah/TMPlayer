@@ -59,7 +59,9 @@ for (const size of [
             expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Sort videos by')
             await press(page, 'Enter')
             await expect(page.getByRole('menu')).toBeVisible()
-            // The menu opens on its first line (Play random); Down walks the orders and then the chips.
+            // The menu opens on its first line (Play all, WP-32), Play random is the next; Down walks the orders and then the chips.
+            expect(await focusedText(page)).toBe('Play all')
+            await press(page, 'ArrowDown')
             expect(await focusedText(page)).toBe('Play random')
             await downTo(page, 'Unwatched first')
             await press(page, 'ArrowDown')

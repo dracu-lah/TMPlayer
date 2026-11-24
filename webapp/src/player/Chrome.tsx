@@ -505,7 +505,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         }
         if (!next) return
         setNextUp(true)
-        if (!autoplay() || nextHidden()) return
+        if (!(autoplay() || c.playAll?.()) || nextHidden()) return
         if (watching.autoplayed >= AUTOPLAY_LIMIT) return askStill('autoplay')
         startCount(5)
     }

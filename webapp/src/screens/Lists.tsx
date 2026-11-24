@@ -4,8 +4,9 @@
 // (a show is one card), in the order added, each with Remove from list under it.
 import { createEffect, createResource, createSignal, For, on, Show } from 'solid-js'
 import { A, useNavigate, useParams } from '@solidjs/router'
-import { Add01Icon, CheckmarkCircle02Icon, Delete02Icon, LeftToRightListBulletIcon, ShuffleIcon } from '@hugeicons/core-free-icons'
-import { call, errorText } from '../tg/rpc'
+import { Add01Icon, CheckmarkCircle02Icon, Delete02Icon, LeftToRightListBulletIcon, PlayIcon, ShuffleIcon } from '@hugeicons/core-free-icons'
+import { api, call, errorText } from '../tg/rpc'
+import { chatGone, forgetGone } from '../goneVideos'
 import { t } from '../i18n'
 import { addToList, createList, deleteList, namedLists, removeFromList, renameList, setListHome, watchedIds } from '../store'
 import { Icon } from '../ui/Icon'
@@ -14,7 +15,8 @@ import { askConfirm } from '../ui/Confirm'
 import { cleanName, lineKey, MAX_LISTS, NAME_MAX, type AddResult } from '../ui/lists'
 import { randomScope } from '../ui/videoFilter'
 import { playRandomOf } from './randomPlay'
-import { Card, tileCard, useProgress } from './VideoList'
+import { startListRun } from './playAllRun'
+import { Card, tileCard, useProgress, watchPath } from './VideoList'
 import type { Tile, VideoItem } from '../tg/types'
 
 interface Picking {
@@ -159,6 +161,36 @@ export function ListsPage() {
         const done = await watchedIds().catch(() => [] as string[])
         await playRandomOf({ scope: randomScope('list', listId), items, watched: done, verify: true, open: (path, item) => navigate(path, { state: { video: item } }) }).catch((e) => showToast({ text: errorText(e) }))
     }
+    // Play all (WP-32): the list's cards in the order shown, from the first that is still in its chat (a gone one is let go, HX21, a few tried);
+    // the rest follow one at a time as each ends (Watch.tsx). The queue is the list's keys, so a reload of the tab picks it up where it was.
+    let starting = false
+    const playAll = async () => {
+        const items = (tiles.latest ?? []).map((tile) => tile.item)
+        if (!items.length || starting) return
+        starting = true
+        const gone: VideoItem[] = []
+        try {
+            for (const item of items.slice(0, 4)) {
+                const alive = await api.video(item.chatId, item.messageId).then(
+                    (v) => v !== null,
+                    (e) => !chatGone(e),
+                )
+                if (!alive) {
+                    gone.push(item)
+                    continue
+                }
+                startListRun(items.slice(items.indexOf(item)))
+                navigate(watchPath(item), { state: { video: item } })
+                return
+            }
+            showToast({ text: t('web.gone_from_chat') })
+        } catch (e) {
+            showToast({ text: errorText(e) })
+        } finally {
+            starting = false
+            if (gone.length) void forgetGone(gone)
+        }
+    }
     // A list goes from every device that syncs, so it asks first (HX59); the list going away by itself closes the question.
     const askDelete = async () => {
         const list = shown()
@@ -205,6 +237,10 @@ export function ListsPage() {
                         <div class="list-actions">
                             {/* Play random (U16): one of the list's cards, unwatched first, never the one played last; a video gone from its chat is let go and another rolled. */}
                             <Show when={(tiles.latest ?? []).length}>
+                                <button class="outline-button" type="button" onClick={() => void playAll()}>
+                                    <Icon icon={PlayIcon} size={18} />
+                                    {t('browse.play_all')}
+                                </button>
                                 <button class="outline-button" type="button" onClick={() => void playRandom(list().info.id)}>
                                     <Icon icon={ShuffleIcon} size={18} />
                                     {t('grid.play_random')}

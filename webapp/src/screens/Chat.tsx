@@ -20,9 +20,10 @@ import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
 import { sizeLimits } from './sizes'
 import { playRandomOf } from './randomPlay'
+import { startChatRun } from './playAllRun'
 import { ensureTouches } from './touches'
 import { SortMenu } from './SortMenu'
-import { stableCards, tileCard, VideoList, type CardData } from './VideoList'
+import { stableCards, tileCard, VideoList, watchPath, type CardData } from './VideoList'
 import './topics.css'
 import { setPageName } from '../ui/pageTitle'
 import type { ChatPage, ChatView, RpcError, Tile } from '../tg/types'
@@ -236,6 +237,14 @@ export function Chat() {
         }
     }
 
+    // Play all (WP-32): the first video listed, in the order the grid is sorted in; the chat's order follows a page at a time (Watch.tsx).
+    const playAll = () => {
+        const first = page()?.tiles[0]?.item
+        if (!first) return
+        startChatRun(first.chatId)
+        navigate(watchPath(first), { state: { video: first } })
+    }
+
     let waitTimer = 0
     createEffect(() => {
         const w = refreshWait()
@@ -332,6 +341,7 @@ export function Chat() {
             onFilter={pickFilter}
             onFacet={pickFacet}
             onClear={clearFilter}
+            onPlayAll={page()?.tiles.length ? playAll : undefined}
             onRandom={page()?.tiles.length ? () => void playRandom() : undefined}
         />
     )

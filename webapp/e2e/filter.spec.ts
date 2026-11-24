@@ -150,6 +150,47 @@ test('Play random opens one of the loaded videos and never the same one twice in
     }
 })
 
+test('Play all opens the first listed video as a run that ends with the watch page', async ({ page }) => {
+    await page.goto('/chat/-1001')
+    await expect(page.locator('.card').first()).toBeVisible()
+    await openMenu(page)
+    // It is the menu's first line, ahead of Play random.
+    await expect(page.locator('[role^=menuitem]').first()).toHaveText('Play all')
+    await page.getByRole('menuitem', { name: 'Play all' }).click()
+    await expect(page).toHaveURL(/\/watch\/-1001\/\d+$/)
+    const run = () => page.evaluate(() => sessionStorage.getItem('tmplayer.playall'))
+    expect(JSON.parse((await run())!)).toMatchObject({ kind: 'chat', chatId: -1001 })
+    await page.goBack()
+    await expect(page.locator('.card').first()).toBeVisible()
+    expect(await run()).toBeNull()
+})
+
+test('a list has Play all, which starts a run over its cards and goes on from the first that is there', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'the card menu opens with a long press on a phone (modal-history covers it)')
+    await page.goto('/chat/-1001')
+    await expect(page.locator('.card').first()).toBeVisible()
+    await page.locator('.card').first().click({ button: 'right' })
+    await page.locator('dialog.card-menu[open]').getByRole('button', { name: /Add to a list/ }).click()
+    await page.locator('dialog[open][aria-label="Add to a list"]').getByRole('button', { name: /New list/ }).click()
+    await page.getByLabel('List name').fill('Mix')
+    await page.getByRole('button', { name: 'Create' }).click()
+    await page.goto('/lists')
+    await expect(page.getByRole('link', { name: 'Mix' })).toBeVisible()
+    await page.getByRole('button', { name: 'Play all' }).click()
+    await expect(page).toHaveURL(/\/watch\/-1001\/\d+$/)
+    const run = JSON.parse((await page.evaluate(() => sessionStorage.getItem('tmplayer.playall')))!)
+    expect(run.kind).toBe('list')
+    expect(run.keys.length).toBe(1)
+})
+
+test('a run does not carry to a video that is not part of it', async ({ page }) => {
+    await page.goto('/chat/-1001')
+    await expect(page.locator('.card').first()).toBeVisible()
+    await page.evaluate(() => sessionStorage.setItem('tmplayer.playall', JSON.stringify({ kind: 'chat', chatId: -999, at: Date.now() })))
+    await page.goto('/watch/-1001/1')
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tmplayer.playall'))).toBeNull()
+})
+
 test('Play random is left out where nothing is on screen', async ({ page }) => {
     await page.goto('/chat/-1001')
     await expect(page.locator('.card').first()).toBeVisible()
@@ -159,6 +200,7 @@ test('Play random is left out where nothing is on screen', async ({ page }) => {
     await expect(page.locator('.card')).toHaveCount(0)
     await openMenu(page)
     await expect(page.getByRole('menuitem', { name: 'Play random' })).toHaveCount(0)
+    await expect(page.getByRole('menuitem', { name: 'Play all' })).toHaveCount(0)
 })
 
 test('Watch later has Play random, and a list has it too', async ({ page }) => {

@@ -12,6 +12,8 @@ export interface Ctl {
     root: HTMLElement
     item: VideoItem
     info: () => WatchInfo | null
+    /** A Play all run: the end of a video goes on to the next one whatever the Autoplay setting says. */
+    playAll?: () => boolean
     close: () => void
     play: (next: VideoItem | null) => void
     /** A status sheet is up (stall, failure, needs the app): the controls stand aside. */
