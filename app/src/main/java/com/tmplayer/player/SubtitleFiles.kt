@@ -333,7 +333,16 @@ class SubtitleFiles(
  * file), so a line that loads a subtitle file is shown only where it can open something (WP-81):
  * the television's DocumentsUI is there on some boxes and missing on most sticks. The manifest
  * lists the intent under `queries`, so Android 11 and later answers truthfully.
+ *
+ * Android TV builds ship `com.android.tv.frameworkpackagestubs`, which answers the intent with a
+ * screen that only says no app can do it (Chromecast with Google TV, the Mi TV Stick): an answer
+ * from that package counts as none (PB2-08).
  */
 fun documentPickerAvailable(context: Context): Boolean = runCatching {
-    Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").resolveActivity(context.packageManager) != null
+    val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+        .resolveActivity(context.packageManager) ?: return@runCatching false
+    !isPickerStub(picker.packageName)
 }.getOrDefault(false)
+
+/** A package that answers system intents with a "no app can do this" screen only. See [documentPickerAvailable]. */
+fun isPickerStub(packageName: String): Boolean = packageName.endsWith(".frameworkpackagestubs")

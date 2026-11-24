@@ -37,4 +37,16 @@ class DocumentPickerAvailableTest {
         shadowOf(context.packageManager).addResolveInfoForIntent(openDocument(), info)
         assertTrue(documentPickerAvailable(context))
     }
+
+    @Test
+    fun `the TV framework stubs that only say no app can do it count as no picker (PB2-08)`() {
+        val info = ResolveInfo().apply {
+            activityInfo = android.content.pm.ActivityInfo().apply {
+                packageName = "com.android.tv.frameworkpackagestubs"
+                name = "com.android.tv.frameworkpackagestubs.Stubs\$DocumentsStub"
+            }
+        }
+        shadowOf(context.packageManager).addResolveInfoForIntent(openDocument(), info)
+        assertFalse(documentPickerAvailable(context))
+    }
 }
