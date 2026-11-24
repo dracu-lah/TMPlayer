@@ -78,17 +78,21 @@ class PlayerGestures(
      * the system's back gesture, not a scrub.
      */
     private val systemEdges: () -> Pair<Int, Int> = { 0 to 0 },
+    /**
+     * A drag for brightness, volume or a scrub took hold (once per drag): the transport row, if up,
+     * goes away so the gesture's own reading is what the viewer sees (WP-35).
+     */
+    private val onDragBegin: () -> Unit = {},
 ) {
 
     /** The viewer's settings for all of this; replaced when they are read off disk. */
     var prefs = TouchPrefs()
 
     /**
-     * True while the transport row is up, in which case drags are left alone.
-     *
-     * A thumb on the scrub bar rarely travels in a straight line, and stealing that as a volume
-     * change would make the one control everybody uses unreliable. Taps, double taps, holds and
-     * pinches on the bare picture still work, since none of them collides.
+     * True while the transport row is up. Drags that start on the bare picture work all the same
+     * (MX and VLC keep their gestures with the controls up; WP-35) and hide the row on their first
+     * step: a touch that starts on the row itself never reaches here ([isOnChrome]), so a thumb
+     * wandering off the scrub bar cannot become a volume change.
      */
     var controlsVisible = false
 
@@ -117,6 +121,9 @@ class PlayerGestures(
     /** True for the whole of a touch that began on the controls; the picture ignores it. */
     private var onChrome = false
 
+    /** True for the whole of a touch whose first event was a palm: the picture ignores it (WP-35). */
+    private var palm = false
+
     /** The run of double taps in progress, for the "+20 seconds" total. */
     private val counter = SeekCounter()
 
@@ -137,6 +144,8 @@ class PlayerGestures(
              */
             override fun onLongPress(event: MotionEvent) {
                 if (prefs.holdSpeed <= 0f || scaling || dragKind != DRAG_NONE) return
+                // A thumb resting on the bezel or in the system's gesture strip is not asking for 2x.
+                if (inEdgeGuard(event.x)) return
                 holding = true
                 onHold(true)
             }
@@ -189,7 +198,7 @@ class PlayerGestures(
             ): Boolean {
                 val from = start ?: return false
                 if (viewHeight <= 0) return false
-                if (controlsVisible || scaling || holding) return false
+                if (scaling || holding) return false
                 // Enlarged, a drag moves the picture (VLC's way) and the sideways scrub waits until
                 // it is back at 100 per cent. Brightness and volume do not wait: an up or down drag
                 // that starts in the left or right strip still sets them, so zooming in never costs
@@ -310,9 +319,16 @@ class PlayerGestures(
         viewHeight = height
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             onChrome = isOnChrome(event.rawX, event.rawY)
+            // The platform's own palm label only: devices report 0 or a constant for touchMajor, so
+            // no contact size gate (engineer correction 26).
+            palm = event.pointerCount > 0 && event.getToolType(0) == TOOL_TYPE_PALM
         }
         val finished = event.actionMasked == MotionEvent.ACTION_UP ||
             event.actionMasked == MotionEvent.ACTION_CANCEL
+        if (palm) {
+            if (finished) palm = false
+            return false
+        }
         if (onChrome) {
             if (finished) onChrome = false
             return false
@@ -355,6 +371,18 @@ class PlayerGestures(
         pinched = false
         endZoom()
         onChrome = false
+        palm = false
+    }
+
+    /**
+     * Whether a touch at [x] is inside the system's gesture strip or within [EDGE_GUARD_DP] of
+     * either edge of the picture: there a held finger is a grip, not a request for the fast hold.
+     */
+    private fun inEdgeGuard(x: Float): Boolean {
+        if (viewWidth <= 0) return false
+        val (leftEdge, rightEdge) = systemEdges()
+        val guard = EDGE_GUARD_DP * density
+        return x < maxOf(leftEdge.toFloat(), guard) || x > viewWidth - maxOf(rightEdge.toFloat(), guard)
     }
 
     /**
@@ -397,23 +425,26 @@ class PlayerGestures(
             dragFromMs = positionMs()
             seekTarget = dragFromMs
             fine = FineScrub.Tracker(start.x)
+            onDragBegin()
             return true
         }
-        // A band down the middle belongs to neither, which stops a drag started in the centre of
-        // the picture from changing whichever of the two it happened to land a pixel nearer.
-        when {
-            start.x < viewWidth * LEFT_EDGE -> {
+        // The same 35 / 30 / 35 split the taps use ([TapZone]); the middle band belongs to neither,
+        // which stops a drag started in the centre of the picture from changing whichever of the
+        // two it happened to land a pixel nearer.
+        when (TapZone.of(start.x, viewWidth)) {
+            TapZone.Left -> {
                 if (!prefs.brightnessGesture) return false
                 dragKind = DRAG_BRIGHTNESS
                 dragFrom = currentBrightness()
             }
-            start.x > viewWidth * RIGHT_EDGE -> {
+            TapZone.Right -> {
                 if (!prefs.volumeGesture) return false
                 dragKind = DRAG_VOLUME
                 dragFrom = currentVolume()
             }
-            else -> return false
+            TapZone.Centre -> return false
         }
+        onDragBegin()
         return true
     }
 
@@ -495,11 +526,14 @@ class PlayerGestures(
         /** How much taller than it is wide a drag has to be to count as vertical. */
         private const val VERTICAL_RATIO = 2f
 
-        /** The two sides a vertical drag belongs to, with a dead band between them. */
         /** The outer fraction of the width, each side, where brightness and volume survive a zoom. */
         private const val ZOOMED_STRIP = 0.2f
-        private const val LEFT_EDGE = 3f / 7f
-        private const val RIGHT_EDGE = 4f / 7f
+
+        /** A held finger this close to either edge (or in the system gesture strip) never arms the hold. */
+        private const val EDGE_GUARD_DP = 16f
+
+        /** [MotionEvent.TOOL_TYPE_PALM] (API 29), by value so the app's API 23 floor and the iOS stand-in need nothing. */
+        const val TOOL_TYPE_PALM = 5
 
         /** A drag from one edge of the picture to the other covers three minutes of video. */
         private const val SEEK_RANGE_MS = 180_000f

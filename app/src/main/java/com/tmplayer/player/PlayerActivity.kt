@@ -3234,6 +3234,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         feedback?.isOnZoomChip(x, y) == true
                 },
                 systemEdges = ::systemGestureEdges,
+                onDragBegin = { controls?.hideAnimated() },
             ).also { it.prefs = touchPrefs }
         }
 
@@ -8045,6 +8046,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun applyTouchPrefs() {
         gestures?.prefs = touchPrefs
         feedback?.hapticsEnabled = touchPrefs.haptics
+        controls?.haptics = touchPrefs.haptics
         controls?.timeoutMs = touchPrefs.timeoutFor(FormFactor.isTv(this))
         controls?.showRemaining = touchPrefs.showRemaining
     }

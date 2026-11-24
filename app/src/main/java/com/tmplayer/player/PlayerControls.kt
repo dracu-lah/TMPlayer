@@ -18,6 +18,8 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.recommendedControlsTimeout
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
+import com.tmplayer.ui.components.Haptic
+import com.tmplayer.ui.components.haptic
 
 /**
  * The transport overlay in player_controls.xml, given its behaviour.
@@ -119,6 +121,15 @@ class PlayerControls(
         root.findViewById<View>(R.id.control_rotate) to root.findViewById(R.id.label_rotate),
         root.findViewById<View>(R.id.control_lock) to root.findViewById(R.id.label_lock),
     )
+
+    /** The viewer's haptics setting (Settings, Playback gestures); the activity sets it with the other touch settings. */
+    var haptics = true
+
+    /**
+     * One light tick for a press on the row, the seek buttons or play (WP-35: every control answers
+     * its press). Never on a television, and only when the setting is on. A seam so a test can count them.
+     */
+    internal var onTick: (View) -> Unit = { it.haptic(Haptic.Tick, haptics) }
 
     /** Whether the words under the icons show: the first few openings of the player. */
     var labelsShown = false
@@ -664,6 +675,7 @@ class PlayerControls(
     /** A press does its thing and buys the row more time on screen; so does focus landing. */
     private fun wire(button: View, action: () -> Unit) {
         button.setOnClickListener {
+            if (!isTv) onTick(button)
             action()
             poke()
         }
