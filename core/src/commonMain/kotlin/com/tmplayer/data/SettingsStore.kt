@@ -2895,11 +2895,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
      * [lowStorageMode] on, so a new install starts with it on, and marks the phone's "your account
      * moved" hint seen (it never had the gear); an install that is updated never reaches this, and a
      * stored answer either way is left alone.
+     *
+     * [tvDarkByDefault] (a television's caller, WP-73): the same fresh install also starts in
+     * [ThemeChoice.Dark], as every major television app does, when no theme is stored. Only here:
+     * this is the one place that knows the install is new, so an install that is updated, a sign in
+     * again and a replay of the setup never change a look somebody has, even one that was never
+     * written (it keeps the system's). A backup restored later writes its own theme over it.
      */
-    suspend fun armSetup() {
+    suspend fun armSetup(tvDarkByDefault: Boolean = false) {
         prefs.edit {
             val fresh = it[SETUP] == null && it[SIGNED_IN] != true && it[LOW_STORAGE_MODE] == null
             if (fresh) it[LOW_STORAGE_MODE] = true
+            if (fresh && tvDarkByDefault && it[THEME_CHOICE] == null) it[THEME_CHOICE] = ThemeChoice.Dark.name
             // A fresh install never had the gear: the hint that says where it went is not for it (WP-103).
             if (fresh) it[HINTS_SEEN] = HintRegistry.encode(HintRegistry.raise(hintStateOf(it), HintIds.NAV_ACCOUNT_MOVED))
             if (it[SETUP] != SETUP_PENDING) it[SETUP] = SETUP_PENDING

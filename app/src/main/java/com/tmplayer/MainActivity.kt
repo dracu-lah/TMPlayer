@@ -1131,7 +1131,7 @@ private fun Root() {
         }
         if (Setup.isSignInStep(auth)) {
             // The setup is for a new start: after an ended session the preferences are still there.
-            if (!com.tmplayer.data.Td.sessionEnded.value) runCatching { settings.armSetup() }
+            if (!com.tmplayer.data.Td.sessionEnded.value) runCatching { settings.armSetup(tvDarkByDefault = FormFactor.isTv(context)) }
             // A sign in screen means the account is gone, however it went: signed out here, or
             // from Telegram's Devices list, which is the way back from a forgotten PIN. The lock
             // was that account's. Unless other profiles share the device (HX88): the lock is the

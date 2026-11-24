@@ -176,4 +176,52 @@ class SetupFlagTest {
         settings.dropRetiredMiniPlayer()
         assertFalse(settings.hasMiniPlayerForTest())
     }
+
+    // ---- WP-73: a new television install starts in Dark, nobody else's look changes ----------------
+
+    @Test
+    fun `a fresh television install starts in Dark`() = runBlocking {
+        val settings = store()
+        settings.armSetup(tvDarkByDefault = true)
+        assertEquals(ThemeChoice.Dark, settings.themeChoice.first())
+        // Arming again (every sign in step arms) and finishing leave it as it is.
+        settings.armSetup(tvDarkByDefault = true)
+        settings.markSetupDone()
+        assertEquals(ThemeChoice.Dark, settings.themeChoice.first())
+    }
+
+    @Test
+    fun `a phone, a tablet or a desktop first run keeps the system theme`() = runBlocking {
+        val settings = store()
+        settings.armSetup()
+        assertEquals(ThemeChoice.System, settings.themeChoice.first())
+    }
+
+    @Test
+    fun `an install that was already used keeps what it has, even a theme that was never written`() = runBlocking {
+        // Signed in before the setup existed: not fresh, so the television default does not apply.
+        val updated = store()
+        updated.markSignedIn()
+        updated.armSetup(tvDarkByDefault = true)
+        assertEquals(ThemeChoice.System, updated.themeChoice.first())
+        // Setup already seen: a second arm (a session that ended) is not a fresh install either.
+        val seen = store()
+        seen.armSetup()
+        seen.markSetupDone()
+        seen.armSetup(tvDarkByDefault = true)
+        assertEquals(ThemeChoice.System, seen.themeChoice.first())
+        // A theme that was chosen stays chosen.
+        val chosen = store()
+        chosen.setThemeChoice(ThemeChoice.Light)
+        chosen.armSetup(tvDarkByDefault = true)
+        assertEquals(ThemeChoice.Light, chosen.themeChoice.first())
+    }
+
+    @Test
+    fun `a theme chosen or restored after the default wins`() = runBlocking {
+        val settings = store()
+        settings.armSetup(tvDarkByDefault = true)
+        settings.setThemeChoice(ThemeChoice.Light)
+        assertEquals(ThemeChoice.Light, settings.themeChoice.first())
+    }
 }
