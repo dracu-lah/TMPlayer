@@ -58,7 +58,7 @@ class PlayerRemoteKeysTest {
     }
 
     @Test
-    fun `a TV remote jumps 10 s both ways while the notification and Media3 keep 5 s back`() {
+    fun `a TV remote jumps 10 s both ways while Media3 keeps 5 s back and the notification follows the double tap amount`() {
         assertEquals(10_000L, PlayerRemoteKeys.remoteBaseMs(forward = false, tv = true))
         assertEquals(10_000L, PlayerRemoteKeys.remoteBaseMs(forward = true, tv = true))
         // A phone's keyboard or paired remote is unchanged.
@@ -67,7 +67,8 @@ class PlayerRemoteKeysTest {
         assertEquals("Skip.BACK_MS is never changed globally", 5_000L, Skip.BACK_MS)
         val source = File(repo(), "app/src/main/java/com/tmplayer/player/PlayerActivity.kt").readText()
         assertTrue(".setSeekBackIncrementMs(Skip.BACK_MS)" in source)
-        assertTrue("BackgroundPlayback.notificationButtons(Skip.BACK_MS, Skip.FORWARD_MS)" in source)
+        // WP-36: the notification and lock screen seek by the double tap amount both ways, not by Skip.
+        assertTrue("BackgroundPlayback.notificationButtons(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs)" in source)
         val jump = source.substringAfter("private fun jumpFromRemote(").substringBefore("\n    }")
         assertTrue("PlayerRemoteKeys.remoteBaseMs(forward, FormFactor.isTv(this))" in jump)
     }
