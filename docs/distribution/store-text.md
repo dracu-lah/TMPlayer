@@ -28,7 +28,7 @@ Dolby, DTS and HDR names appear only as words describing what a file declares.
 
 ## Full description
 
-The F-Droid file `fastlane/metadata/android/en-US/full_description.txt` is the master (3,746
+The F-Droid file `fastlane/metadata/android/en-US/full_description.txt` is the master (3,992
 characters of 4,000). Play takes it as it is. Microsoft Store takes it too: it asks for a line per
 feature, so use the bullets below.
 

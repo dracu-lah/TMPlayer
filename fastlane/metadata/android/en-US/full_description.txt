@@ -5,7 +5,6 @@ A video starts within seconds while it is still arriving, so a large file never 
 Easy to start:
 - Sign in with your phone number, or on a TV by scanning a QR code with the phone you already use for Telegram.
 - One question after sign in: which chats hold your videos. Everything else is chosen for your device and can be changed later in Settings.
-- Videos you forward to your Saved Messages show up too.
 
 On a phone:
 - Stream without downloading first, or download a whole season. The Downloads tab shows what is running, paused or saved, and Free up space gives room back without touching Telegram.
@@ -15,10 +14,12 @@ On a phone:
 
 On a TV:
 - Everything works with the remote: rows for Continue watching and your starred chats, search across all your chats, and a player that keeps the picture clear.
+- Built for weak sticks: a held arrow stops when you let go and a scrub makes one seek, even on 1 GB of memory.
+- Profiles with a PIN and a quick sign out suit a TV the family shares.
 - Runs on Android TV and Google TV boxes, Chromecast with Google TV, NVIDIA Shield, Mi Box, projectors and Fire TV.
 
 Series and anime:
-- Series pages put every season and episode in order, with season packs and episode ranges understood, and a button that resumes the episode you were on.
+- Series pages put every season and episode in order, with season packs and episode ranges understood, and a button to resume the episode you were on.
 - Anime gets its own episode titles and pictures, even when the files count episodes straight through.
 - Skip intro, recap and credits buttons use the chapters inside the file, then community timing databases, then your own mark. Choose per kind: ask, skip by itself, or off.
 
@@ -27,6 +28,7 @@ Playing well:
 - Small badges show 4K, 1080p, HDR, Dolby Vision, Atmos or 5.1 where the file says so.
 - If the picture does not start or freezes while the sound goes on, TMPlayer tries another decoder or player by itself, and a Report stutter button marks the moment for the logs.
 - Night mode for sound keeps dialogue clear and loud scenes quiet; volume boost for quiet files.
+- A sleep timer, A-B repeat, bookmarks, a speed remembered for each show, and Save to a folder with the free space shown.
 - Light, Dark and Pure black themes for OLED screens, and 22 languages.
 - Videos posted in pieces play as one video; archives that cannot be played are listed with the reason.
 
