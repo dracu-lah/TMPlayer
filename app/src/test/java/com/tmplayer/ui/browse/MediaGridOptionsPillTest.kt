@@ -117,9 +117,9 @@ class MediaGridOptionsPillTest {
         rule.waitForIdle()
     }
 
-    /** The focusable that holds the words of the tile at [index]. */
+    /** The focusable that holds the words of the tile at [index] (the tile's semantics are merged into it, WP-90). */
     private fun tileOf(index: Int) = androidx.compose.ui.test.isFocusable() and
-        androidx.compose.ui.test.hasAnyDescendant(androidx.compose.ui.test.hasText(nameOf(index)))
+        androidx.compose.ui.test.hasText(nameOf(index), substring = true)
 
     private fun press(key: Key) {
         rule.onAllNodes(isRoot())[0].performKeyInput { pressKey(key) }

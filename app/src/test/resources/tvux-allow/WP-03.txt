@@ -1,76 +1,30 @@
 # WP-03: nothing on TV grows past its bounds, the TV button sweep, 48 dp targets, rings inside the box.
 # Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
 # screen | rule | node | reason
-chatGrid | drawnInsideClip | Add favourite | WP-03 nothing on TV grows past its bounds
 chatGrid | drawnInsideClip | Back to chats | WP-03 nothing on TV grows past its bounds
 chatGrid | drawnInsideClip | Chat info | WP-03 nothing on TV grows past its bounds
 chatGrid | drawnInsideClip | Refresh | WP-03 nothing on TV grows past its bounds
 chatGrid | drawnInsideClip | Sort | WP-03 nothing on TV grows past its bounds
-chatGrid | focusSizeStable | Add favourite | WP-03 nothing on TV grows past its bounds
 chatGrid | focusSizeStable | Back to chats | WP-03 nothing on TV grows past its bounds
 chatGrid | focusSizeStable | Chat info | WP-03 nothing on TV grows past its bounds
 chatGrid | focusSizeStable | Refresh | WP-03 nothing on TV grows past its bounds
 chatGrid | focusSizeStable | Sort | WP-03 nothing on TV grows past its bounds
 chatGrid | safeArea | Back to chats | WP-03 nothing on TV grows past its bounds
-chatList | drawnInsideClip | Channels | WP-03 nothing on TV grows past its bounds
-chatList | drawnInsideClip | Chats | WP-03 nothing on TV grows past its bounds
 chatList | drawnInsideClip | Choose chats | WP-03 nothing on TV grows past its bounds
-chatList | drawnInsideClip | Home | WP-03 nothing on TV grows past its bounds
-chatList | drawnInsideClip | Search | WP-03 nothing on TV grows past its bounds
-chatList | drawnInsideClip | Unread | WP-03 nothing on TV grows past its bounds
-chatList | focusSizeStable | Channels | WP-03 nothing on TV grows past its bounds
 chatList | focusSizeStable | Choose chats | WP-03 nothing on TV grows past its bounds
-chatList | focusSizeStable | Chats | WP-03 nothing on TV grows past its bounds
-chatList | focusSizeStable | Home | WP-03 nothing on TV grows past its bounds
-chatList | focusSizeStable | Search | WP-03 nothing on TV grows past its bounds
-chatList | focusSizeStable | Unread | WP-03 nothing on TV grows past its bounds
-chatList | targets | Chats | WP-03 nothing on TV grows past its bounds
 chatList | targets | Choose chats | WP-03 nothing on TV grows past its bounds
-chatList | targets | Downloads | WP-03 nothing on TV grows past its bounds
-chatList | targets | Home | WP-03 nothing on TV grows past its bounds
-chatList | targets | Search | WP-03 nothing on TV grows past its bounds
-chatList | targets | unnamed Button at 48,31 dp | WP-03 nothing on TV grows past its bounds
-details | safeArea | 1h 23m | WP-03 nothing on TV grows past its bounds
 details | safeArea | Close | WP-03 nothing on TV grows past its bounds
-details | safeArea | Length | WP-03 nothing on TV grows past its bounds
 details | safeArea | File name Clip 20.mp4 Video MP4 Size 954 MB Length 1h 23m | WP-03 nothing on TV grows past its bounds
 downloads | safeArea | Downloads | WP-03 nothing on TV grows past its bounds
-history | drawnInsideClip | Search | WP-03 nothing on TV grows past its bounds
-history | drawnInsideClip | Sort order: A to Z | WP-03 nothing on TV grows past its bounds
-history | drawnInsideClip | unnamed Button at 46,29 dp | WP-03 nothing on TV grows past its bounds
-history | focusSizeStable | Search | WP-03 nothing on TV grows past its bounds
-history | focusSizeStable | Sort order: A to Z | WP-03 nothing on TV grows past its bounds
-history | focusSizeStable | unnamed Button at 46,29 dp | WP-03 nothing on TV grows past its bounds
-history | safeArea | 10:00  ·  1:30:00 left | WP-03 nothing on TV grows past its bounds
-history | safeArea | unnamed Button at 46,29 dp | WP-03 nothing on TV grows past its bounds
-history | targets | Chats | WP-03 nothing on TV grows past its bounds
 history | targets | Clear history | WP-03 nothing on TV grows past its bounds
-history | targets | Downloads | WP-03 nothing on TV grows past its bounds
-history | targets | Home | WP-03 nothing on TV grows past its bounds
-history | targets | Search | WP-03 nothing on TV grows past its bounds
 history | targets | Select | WP-03 nothing on TV grows past its bounds
-history | targets | unnamed Button at 46,29 dp | WP-03 nothing on TV grows past its bounds
-home | drawnInsideClip | Chats | WP-03 nothing on TV grows past its bounds
-home | drawnInsideClip | Downloads | WP-03 nothing on TV grows past its bounds
-home | drawnInsideClip | Home | WP-03 nothing on TV grows past its bounds
-home | drawnInsideClip | Search | WP-03 nothing on TV grows past its bounds
-home | focusSizeStable | Chats | WP-03 nothing on TV grows past its bounds
-home | focusSizeStable | Downloads | WP-03 nothing on TV grows past its bounds
-home | focusSizeStable | Home | WP-03 nothing on TV grows past its bounds
-home | focusSizeStable | Search | WP-03 nothing on TV grows past its bounds
 home | safeArea | Clips, 858 MB | WP-03 nothing on TV grows past its bounds
-home | targets | Chats | WP-03 nothing on TV grows past its bounds
-home | targets | Downloads | WP-03 nothing on TV grows past its bounds
-home | targets | Home | WP-03 nothing on TV grows past its bounds
-home | targets | Search | WP-03 nothing on TV grows past its bounds
-home | targets | unnamed Button at 48,31 dp | WP-03 nothing on TV grows past its bounds
 lists | targets | Delete list | WP-03 nothing on TV grows past its bounds
 lists | targets | New list | WP-03 nothing on TV grows past its bounds
 lists | targets | Rename list | WP-03 nothing on TV grows past its bounds
 lists | targets | Show on Home: On | WP-03 nothing on TV grows past its bounds
 lists | targets | Weekend, 6 videos | WP-03 nothing on TV grows past its bounds
-playerRow | targets | 21:00 / 43:54 | WP-03 nothing on TV grows past its bounds
-playerRow | targets | 21:00 | WP-03 nothing on TV grows past its bounds
+playerRow | targets | Seek bar | WP-89 a 48 dp TV seek bar needs the row moved, WP-05 safe area
 signIn | targets | Get a new code | WP-03 nothing on TV grows past its bounds
 signIn | targets | Use my phone number | WP-03 nothing on TV grows past its bounds
 tvSearch | targets | 0 | WP-03 nothing on TV grows past its bounds

@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -87,6 +88,17 @@ fun ListPageScaffold(
         }
     }
 
+    // Back from the Delete question (or Cancel) gives the remote back to the chip that asked; a confirmed
+    // delete of the last list leaves it to the effect above, which takes the remote to the New chip.
+    val deleteFocus = remember { FocusRequester() }
+    var backToDelete by remember { mutableStateOf(false) }
+    LaunchedEffect(backToDelete, shown?.info?.id) {
+        if (!backToDelete) return@LaunchedEffect
+        withFrameNanos { }
+        backToDelete = false
+        if (tv) runCatching { deleteFocus.requestFocus() }
+    }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         top?.invoke()
         Text(
@@ -127,7 +139,7 @@ fun ListPageScaffold(
             FlowRow(Modifier.padding(sides), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CopyChip(s.listsRename, chosen = false, onClick = { renaming = shown })
                 CopyChip(s.listsOnHome, chosen = shown.info.home, onClick = { actions.setHome(shown.info.id, !shown.info.home) }, description = "${s.listsOnHome}: ${if (shown.info.home) s.commonOn else s.commonOff}")
-                CopyChip(s.listsDelete, chosen = false, onClick = { deleting = shown })
+                CopyChip(s.listsDelete, chosen = false, onClick = { deleting = shown }, modifier = Modifier.focusRequester(deleteFocus))
             }
         }
         when {
@@ -169,7 +181,7 @@ fun ListPageScaffold(
             onDismiss = { renaming = null },
         )
     }
-    deleting?.let { list -> ListDeleteDialog(list, onDelete = { actions.delete(list) }, onDismiss = { deleting = null }) }
+    deleting?.let { list -> ListDeleteDialog(list, onDelete = { actions.delete(list) }, onDismiss = { deleting = null; backToDelete = true }) }
 }
 
 @Composable

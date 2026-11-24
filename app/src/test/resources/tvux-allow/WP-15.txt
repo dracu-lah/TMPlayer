@@ -1,10 +1,12 @@
 # WP-15: focus comes back: entry focus, Back to the opener, no traps.
 # Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
 # screen | rule | node | reason
-chatGrid | noTrap | Back to chats | WP-15 focus comes back
-chatList | backReturns | Sort order | WP-15 focus comes back
-details | entryFocus | screen | WP-15 focus comes back
-history | backReturns | Sort order | WP-15 focus comes back
-lists | backReturns | Delete list | WP-15 focus comes back
-lists | entryFocus | screen | WP-15 focus comes back
-profilePicker | backReturns | Manage profiles | WP-15 focus comes back
+profilePicker | focusContrast | Asha, Open now | WP-15 the picker tile's ring on the profile colour is 1.6:1 against rest: found once Back left Manage profiles (final TV review F-10), a ring of its own needs the picker's design pass
+profilePicker | focusContrast | Ben | WP-15 same as Asha's tile
+details | noTrap | Close | WP-15 found once the page took the remote at arrival (review F-22): no arrow leaves Close, a real trap to fix with the details page focus order
+details | focusSizeStable | Close | WP-15 same: the Close button grows to 62 x 64 dp under focus, past its 48 dp box
+details | drawnInsideClip | Close | WP-15 same: the grown Close is cut by its container
+details | focusContrast | Play | WP-15 found at arrival focus (F-22): the focus look of Play is 1.57:1 against rest
+details | focusContrast | File name* | WP-15 found at arrival focus (F-22): the focus look of the facts block is 1.47:1 against rest
+lists | drawnInsideClip | 1m, 1 KB | WP-15 found at arrival focus (F-22): a list card grows past the safe area at the edge of the grid
+lists | focusContrast | 1m, 1 KB | WP-15 found at arrival focus (F-22): the focus look of a list card is under 3:1 against rest

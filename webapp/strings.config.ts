@@ -832,6 +832,8 @@ export const PAGE_STRINGS = [
     'state.updating',
     // WP-99 A profile switch says which profile it opens (ui/Profiles.tsx).
     'profiles.switching',
+    // OK on the TV bar's picture while the app lock is on says why nothing opens (tv/index.tsx).
+    'profiles.unlock_first',
     // WB18 Report stutter.
     'player.report_stutter',
     'player.stutter_marked_already',

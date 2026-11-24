@@ -1,35 +1,11 @@
 # WP-06: TV Settings rows: ring, honest roles, rows that keep focus and never shift.
 # Known failures of the tv-ux-review suite (WP-16) this package fixes; delete each line as it is fixed.
 # screen | rule | node | reason
-settings:About | safeArea | Back up Save settings, favourites, watched videos and where | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Amber | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Emerald | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Monochrome | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Orange | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Pink | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Red | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Teal | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Telegram blue | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Violet | WP-06 TV Settings rows
-settings:Appearance | focusSizeStable | Your own colour | WP-06 TV Settings rows
-settings:Appearance | targets | Amber | WP-06 TV Settings rows
-settings:Appearance | targets | Emerald | WP-06 TV Settings rows
-settings:Appearance | targets | Monochrome | WP-06 TV Settings rows
-settings:Appearance | targets | Orange | WP-06 TV Settings rows
-settings:Appearance | targets | Pink | WP-06 TV Settings rows
-settings:Appearance | targets | Red | WP-06 TV Settings rows
-settings:Appearance | targets | Teal | WP-06 TV Settings rows
-settings:Appearance | targets | Telegram blue | WP-06 TV Settings rows
-settings:Appearance | targets | Violet | WP-06 TV Settings rows
-settings:Appearance | targets | Your own colour | WP-06 TV Settings rows
-settings:SetupChoices | focusContrast | unnamed node at 62,0 dp | WP-06 TV Settings rows
-settings:SetupChoices | labelled | unnamed node at 62,257 dp | WP-06 TV Settings rows
-settings:SetupChoices | labelled | unnamed node at 62,513 dp | WP-06 TV Settings rows
 settings:SetupChoices | targets | Also in Home and library | WP-06 TV Settings rows
 settings:Storage | focusContrast | stream-switch | WP-06 TV Settings rows
 settings:Storage | labelled | stream-switch | WP-06 TV Settings rows
-settings:Notifications | safeArea | Sponsor reminders Now and then, never more than once a month | WP-06 same, a scrolling row in the bottom margin
-settings:Storage | safeArea | Download the whole video first Off: it downloads while you w | WP-06 same, a scrolling row in the bottom margin
+settings:Notifications | focusContrast | stream-switch | WP-06 the two-way switch (TabSwitch) has a 35 percent fill and no name: the final TV review F-08 gives it a name and the shared focus look
+settings:Troubleshooting | focusContrast | stream-switch | WP-06 same as Notifications (final TV review F-08)
+settings:SetupChoices | labelled | unnamed node at 318,269 dp | WP-06 the setup storage switch (SegmentedChoiceRow) has no name or role: final TV review F-08 names it
 
 # The Typeface stepper sits in the bottom margin where the page scrolls to it (a scrolling row, as WP-04's lines above).
-settings:Appearance | safeArea | Typeface The letters every screen is set in | WP-06 a scrolling row in the bottom margin (was "unnamed node at 48,475 dp")

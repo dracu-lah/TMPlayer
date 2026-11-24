@@ -136,6 +136,19 @@ export function TvBar() {
     const [scrolled, setScrolled] = createSignal(scrollY > 0)
     // The account's menu (WP-02): the picture opens it with OK; its header says whose account it is.
     const [menuOpen, setMenuOpen] = createSignal(false)
+    // OK on the picture while the app lock is on opens nothing: it says why for a few seconds, read aloud as a status.
+    const [lockedHint, setLockedHint] = createSignal(false)
+    let hintTimer: number | undefined
+    onCleanup(() => clearTimeout(hintTimer))
+    const onPicture = () => {
+        if (locked()) {
+            setLockedHint(true)
+            clearTimeout(hintTimer)
+            hintTimer = window.setTimeout(() => setLockedHint(false), 4000)
+            return
+        }
+        setMenuOpen(!menuOpen())
+    }
     const onScroll = () => {
         const s = scrollY > innerHeight * 0.25
         if (s !== scrolled()) setScrolled(s)
@@ -157,15 +170,18 @@ export function TvBar() {
                         aria-label={label()}
                         title={label()}
                         aria-current={place() === '/settings' ? 'page' : undefined}
-                        onClick={() => !locked() && setMenuOpen(!menuOpen())}
+                        onClick={onPicture}
                         style={initial() ? { background: nameArt(me()?.name), color: '#fff' } : undefined}
                     >
                         <Show when={initial()} fallback={<span class="nav-picture-blank" />}>
                             {initial()}
                         </Show>
                     </button>
+                    <span class="tv-lock-hint" role="status" aria-live="polite">
+                        {lockedHint() ? t('profiles.unlock_first') : ''}
+                    </span>
                     {/* Read once, in the picture's label: the chip is for the eye. */}
-                    <Show when={firstName()}>
+                    <Show when={firstName() && !lockedHint()}>
                         <span class="tv-picture-name" aria-hidden="true">
                             {firstName()}
                         </span>

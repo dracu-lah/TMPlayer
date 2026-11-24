@@ -93,9 +93,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -223,6 +225,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.tmplayer.ui.components.ProgressLine
@@ -1323,7 +1326,7 @@ fun MediaGridScreen(
                     onChatInfo = { chatInfoOpen = true },
                     onTyping = { typing = it },
                     optionsTarget = lastTile,
-                    onOptions = {
+                    onOptions = { leave ->
                         // The tile first, so Back from its menu finds it in view; then the same menu a long OK opens.
                         val target = lastTile.value
                         if (target != null && !selecting) {
@@ -1332,6 +1335,8 @@ fun MediaGridScreen(
                                 // A search or a filter took the tile out of the listing (or the listing is not drawn): its
                                 // menu must not open from a stale remembered video, and the pill goes.
                                 if (!found) {
+                                    // The remote leaves first: dropping the pill while it holds the remote strands it.
+                                    leave()
                                     lastTile.value = null
                                     return@launch
                                 }
@@ -1728,7 +1733,7 @@ internal fun Header(
     /** The tile the remote was on last, which the Options pill names and acts on; null leaves the pill out (WP-14). */
     optionsTarget: State<OptionsTarget?>? = null,
     /** Opens that tile's menu, the one a long OK opens. */
-    onOptions: () -> Unit = {},
+    onOptions: (leave: () -> Unit) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val s = LocalStrings.current
@@ -1779,6 +1784,7 @@ internal fun Header(
         }
         Spacer(Modifier.height(12.dp))
         val searchField = remember { FocusRequester() }
+        val sortField = remember { FocusRequester() }
         // The recent searches belong to the search, so they are shown only while the remote is up
         // here with it: down in the grid they would cost a row of posters for nothing.
         var headerFocused by remember { mutableStateOf(false) }
@@ -1822,9 +1828,12 @@ internal fun Header(
                 starred = isFavorite,
                 onClick = onToggleFavorite,
             )
-            onSort?.let { Pill(if (filtered) s.gridFilterOn else s.gridSort, TmIcons.Sort, tintWhenIdle = if (filtered) Tone.accent else Tone.text, showLabel = false, onClick = it) }
+            onSort?.let { Pill(if (filtered) s.gridFilterOn else s.gridSort, TmIcons.Sort, tintWhenIdle = if (filtered) Tone.accent else Tone.text, showLabel = false, modifier = Modifier.focusRequester(sortField), onClick = it) }
             // The options of the tile the remote left, a button for a remote with no Menu key (WP-14).
-            optionsTarget?.let { OptionsPill(it, onOptions) }
+            // Its slot is kept from the first frame, so Refresh does not move when the remote first lands on a tile.
+            optionsTarget?.let { target ->
+                OptionsPill(target) { onOptions { runCatching { (if (onSort != null) sortField else searchField).requestFocus() } } }
+            }
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
             // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
@@ -2184,9 +2193,17 @@ private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit
  */
 @Composable
 internal fun OptionsPill(target: State<OptionsTarget?>, onClick: () -> Unit) {
-    val named = target.value ?: return
+    val named = target.value
     val s = LocalStrings.current
-    Pill(s.browseTileOptionsNamed(optionsNameClipped(named.name)), TmIcons.MoreVert, showLabel = false, onClick = onClick)
+    if (named == null) {
+        // Same size, drawn and read by nobody, never focused: only the place is kept (no shift when a tile is first focused).
+        Box(Modifier.alpha(0f).focusProperties { canFocus = false }.clearAndSetSemantics {}) {
+            Pill("", TmIcons.MoreVert, showLabel = false, onClick = {})
+        }
+        return
+    }
+    val name = optionsNameClipped(named.name)
+    Pill(s.browseTileOptionsNamed(name), TmIcons.MoreVert, showLabel = false, tip = s.browseTileOptionsTip(name), onClick = onClick)
 }
 
 /**
@@ -2207,6 +2224,9 @@ private fun Pill(
     spin: com.tmplayer.ui.components.RefreshSpin? = null,
     /** A caution dot on the pill: what it opens needs the viewer (a failed refresh). */
     alert: Boolean = false,
+    /** What the tip under the pill says while the remote is on it, when it says more than [label]. */
+    tip: String = label,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -2228,9 +2248,9 @@ private fun Pill(
 
     // An icon on its own says its name under it while the remote is on it, as the rail's icons do.
     Box {
-        if (!showLabel && !isTouch()) com.tmplayer.ui.components.FocusTip(focused, label)
+        if (!showLabel && !isTouch()) com.tmplayer.ui.components.FocusTip(focused, tip)
         Row(
-            Modifier
+            modifier
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale

@@ -948,6 +948,8 @@ fun ProfileFlowScreen(flow: ProfileFlow, list: AccountList, signInStep: Boolean)
     val model = remember(list, signInStep) { flow.model(list, signInStep) }
     // From the menu, Back returns to the open profile; at launch it is left to the platform.
     if (flow.asked && flow.entered) BackHandler(enabled = flow.stage == ProfileFlow.Stage.Picker) { flow.close() }
+    // Manage profiles is left first (composed later, so asked first): the button keeps the remote and reads Manage again.
+    BackHandler(enabled = flow.manage && flow.stage == ProfileFlow.Stage.Picker) { flow.manage = false }
     // The row only while nothing is over it: a panel or a pad over a row the remote could still
     // reach let Down walk out of the panel onto a tile behind it. Closing one draws the row again
     // with the focus on the tile it came from ([ProfileFlow.focusOn]).

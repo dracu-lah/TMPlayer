@@ -54,6 +54,7 @@ import com.tmplayer.ui.profiles.ProfileKit
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsPage
 import com.tmplayer.ui.settings.SettingsScreen
+import com.tmplayer.ui.settings.railTag
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TMPlayerTheme
@@ -148,6 +149,8 @@ class TvUxChecklistTest(private val screen: String) {
                 }
             }
         }
+        // A screen whose entry focus is asked once, in its first frames, needs the remote's input mode before them.
+        if (spec.remoteFirst) ux.windowForRemote()
         // Disk reads (settings, the lists' store) answer on their own threads.
         repeat(6) { Thread.sleep(100); ux.settle(300) }
         // The window takes the remote once the screen is up (earlier, Home's first focus never
@@ -166,7 +169,10 @@ class TvUxChecklistTest(private val screen: String) {
         val graph = ux.arrowGraph()
         println("tvux $screen arrows from '${entry?.let { ux.nameOf(it) }}': $graph")
         spec.actions.forEach { ux.reach(graph, it) }
-        entry?.let { e -> ux.nodes().firstOrNull { ux.nameOf(it) == ux.nameOf(e) && it.config.contains(SemanticsProperties.Focused) }?.let { ux.focus(it) } }
+        // The arrows may have turned a page (the Settings rail's Up and Down): put the screen back first.
+        val reenter = spec.reenter
+        if (reenter != null) reenter(ux)
+        else entry?.let { e -> ux.nodes().firstOrNull { ux.nameOf(it) == ux.nameOf(e) && it.config.contains(SemanticsProperties.Focused) }?.let { ux.focus(it) } }
         spec.column?.let { ux.keyOwnership(it) }
         spec.openers.forEach { ux.backReturns(it) }
         ux.focusWalk()
@@ -219,6 +225,10 @@ internal class Screen(
     val openers: List<String> = emptyList(),
     val missing: String? = null,
     val prepare: (TvUxChecklist) -> Unit = {},
+    /** Puts the screen back where the checks that follow the arrows' walk expect it, when that walk moved it. */
+    val reenter: ((TvUxChecklist) -> Unit)? = null,
+    /** Take the remote's window mode before the screen's first frames (its entry focus is requested once, early). */
+    val remoteFirst: Boolean = false,
     val content: ((Fixtures) -> @Composable () -> Unit)?,
 )
 
@@ -306,8 +316,8 @@ internal val SCREENS: List<Screen> = listOf(
         { ProfilesGate(flow, signInStep = false) { androidx.compose.material3.Text("Home") } }
     }),
     Screen("home", column = TILE, longList = true, actions = listOf(L.browseTabChats), content = browse(BrowseTab.Home)),
-    Screen("chatList", column = TILE, longList = true, actions = listOf(L.browseTabChats), openers = listOf("Sort order"), content = browse(BrowseTab.Chats)),
-    Screen("history", column = TILE, longList = true, openers = listOf("Sort order"), content = browse(BrowseTab.History)),
+    Screen("chatList", column = TILE, longList = true, actions = listOf(L.browseTabChats), content = browse(BrowseTab.Chats)),
+    Screen("history", column = TILE, longList = true, content = browse(BrowseTab.History)),
     Screen("chatGrid", column = TILE, longList = true, content = {
         {
             com.tmplayer.ui.browse.MediaGridScreen(
@@ -318,7 +328,7 @@ internal val SCREENS: List<Screen> = listOf(
             )
         }
     }),
-    Screen("details", content = {
+    Screen("details", remoteFirst = true, content = {
         {
             MediaDetailOpened(
                 item = media(20, "Clip 20"), chatTitle = "Clips", watched = null, finished = false,
@@ -326,7 +336,7 @@ internal val SCREENS: List<Screen> = listOf(
             )
         }
     }),
-    Screen("lists", column = TILE, longList = true, openers = listOf("Delete list"), content = { f ->
+    Screen("lists", column = TILE, longList = true, openers = listOf("Delete list"), remoteFirst = true, content = { f ->
         val (store, id) = f.lists()
         val shown = runBlocking { store.visible.first() };
         {
@@ -351,7 +361,14 @@ internal val SCREENS: List<Screen> = listOf(
         }
     }),
 ) + SettingsPage.entries.map { page ->
-    Screen("settings:${page.name}", column = RAIL, longList = true, openers = SETTINGS_OPENERS[page].orEmpty(), content = settings(page))
+    Screen(
+        "settings:${page.name}", column = RAIL, longList = true, openers = SETTINGS_OPENERS[page].orEmpty(), content = settings(page),
+        // The rail's Up and Down turn the page: back on this page's own rail item, then Right into its first row.
+        reenter = { ux ->
+            val rail = ux.nodes().firstOrNull { it.config.getOrNull(SemanticsProperties.TestTag) == railTag(page) }
+            if (rail != null && ux.focus(rail)) ux.key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, 500)
+        },
+    )
 } + listOf(
     Screen("about", content = { { AboutScreen(onBack = {}) } }),
     Screen(

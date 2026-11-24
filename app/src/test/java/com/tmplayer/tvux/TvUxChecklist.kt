@@ -140,12 +140,14 @@ private fun differs(a: Int, b: Int): Boolean {
  * The bounding box of what changed between [rest] and [focused] inside [region], leaving out
  * [skip] (the node the focus came from, which changes too). Null when nothing changed.
  */
-fun drawnChange(rest: Frame, focused: Frame, region: Rect, skip: Rect?): Rect? {
+fun drawnChange(rest: Frame, focused: Frame, region: Rect, skip: Rect?, extraSkip: List<Rect> = emptyList()): Rect? {
     var l = Int.MAX_VALUE; var t = Int.MAX_VALUE; var r = Int.MIN_VALUE; var b = Int.MIN_VALUE
     val x0 = region.left.toInt().coerceAtLeast(0); val x1 = region.right.toInt().coerceAtMost(rest.width - 1)
     val y0 = region.top.toInt().coerceAtLeast(0); val y1 = region.bottom.toInt().coerceAtMost(rest.height - 1)
     for (y in y0..y1) for (x in x0..x1) {
-        if (skip != null && skip.contains(Offset(x.toFloat(), y.toFloat()))) continue
+        val at = Offset(x.toFloat(), y.toFloat())
+        if (skip != null && skip.contains(at)) continue
+        if (extraSkip.any { it.contains(at) }) continue
         if (differs(rest.at(x, y), focused.at(x, y))) {
             l = min(l, x); t = min(t, y); r = max(r, x); b = max(b, y)
         }
@@ -225,15 +227,22 @@ class TvUxChecklist(
 
     /** A window the remote works in: out of touch mode and holding focus, as on a television. */
     fun windowForRemote() {
-        val viewRoot = activity.window.decorView.parent
-        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
-            viewRoot, "ensureTouchMode",
-            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, false),
-        )
-        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
-            viewRoot, "windowFocusChanged",
-            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
-        )
+        // The activity's window and every dialog over it (a screen drawn in a Dialog has a window of its own).
+        val roots = runCatching {
+            val global = Class.forName("android.view.WindowManagerGlobal").getMethod("getInstance").invoke(null)
+            @Suppress("UNCHECKED_CAST")
+            (org.robolectric.util.ReflectionHelpers.getField<Any>(global, "mViews") as List<View>).toList()
+        }.getOrNull().orEmpty().plus(activity.window.decorView).distinct().mapNotNull { it.parent }
+        for (viewRoot in roots) {
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
+                viewRoot, "ensureTouchMode",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+            )
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod<Any>(
+                viewRoot, "windowFocusChanged",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
+            )
+        }
         settle(200)
     }
 
@@ -566,8 +575,10 @@ class TvUxChecklist(
                 current(node)?.let { if (!focus(it)) skipped += "${nameOf(it)}: refused the focus back after the neutral frame" }
             }
             if (skip == null) takeNeutral()
+            // A pinned header (Settings' breadcrumb) changes with the section the focus is in: no growth of the row.
+            val pinned = nodes(merged = false).filter { it.config.getOrNull(SemanticsProperties.TestTag) == com.tmplayer.ui.settings.SETTINGS_HEADER_TAG }.map { layoutRect(it) }
             fun growthChecks() {
-                val drawn = drawnChange(baseline, focusedFrame, region, skipNow)
+                val drawn = drawnChange(baseline, focusedFrame, region, skipNow, pinned)
                 if (drawn != null) {
                     val full = restRect.width >= screenW * 0.9f
                     val scale = if (full) 1f else FocusStyle.TvScale
@@ -705,7 +716,11 @@ class TvUxChecklist(
 
     /** backReturns: OK on [opener] opens something; Back closes it and the remote is on [opener] again. */
     fun backReturns(opener: String) {
-        val node = nodes().firstOrNull { nameOf(it).contains(opener, ignoreCase = true) && it.config.contains(SemanticsProperties.Focused) }
+        fun find() = nodes().firstOrNull { nameOf(it).contains(opener, ignoreCase = true) && it.config.contains(SemanticsProperties.Focused) }
+        // A long page keeps its lower rows uncomposed: the remote walks Down to the opener, as a viewer's does.
+        var downs = 0
+        while (find() == null && downs++ < 20) key(KeyEvent.KEYCODE_DPAD_DOWN, 250)
+        val node = find()
         if (node == null) { add("backReturns", opener, "no focusable opener with these words"); return }
         // A wrapper may hand the focus to the same control under another node: the words decide.
         fun on() = focused().any { nameOf(it).contains(opener, ignoreCase = true) }

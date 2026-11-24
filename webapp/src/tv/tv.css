@@ -123,6 +123,11 @@ html[data-tv-keys] .tv-picture:focus {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: calc(var(--dp) * 15); line-height: calc(var(--dp) * 20); font-weight: 500;
 }
+.tv-lock-hint {
+  flex: none; margin-inline-start: calc(var(--dp) * 10); white-space: nowrap;
+  font-size: calc(var(--dp) * 15); line-height: calc(var(--dp) * 20); font-weight: 500;
+}
+.tv-lock-hint:empty { margin: 0; }
 .tv-picture .nav-picture-blank { width: calc(var(--dp) * 14); height: calc(var(--dp) * 14); }
 .tv-brand { flex: none; display: flex; align-items: center; gap: calc(var(--dp) * 12); font-size: calc(var(--dp) * 22); line-height: 1; font-weight: 600; }
 .tv-brand img { width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); border-radius: calc(var(--dp) * 10); }

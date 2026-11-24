@@ -1,7 +1,6 @@
 package com.tmplayer.ui.browse
 
 import com.tmplayer.ui.theme.focusRingOnTv
-import com.tmplayer.ui.theme.focusScale
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -484,7 +483,7 @@ private fun BarTab(
         when {
             still -> 1f
             pressed -> Motion.PressScale
-            focused -> focusScale
+            // No growth under focus: the fill and the ring mark it inside the 48 dp rect, as the rail's items do.
             else -> 1f
         },
         Motion.standard(Motion.Fast),
@@ -501,7 +500,20 @@ private fun BarTab(
         label = "barTabInk",
     )
     val pill = CircleShape
-    Box(modifier, contentAlignment = Alignment.Center) {
+    // The focus rect is 48 dp tall (the target size); the 40 dp pill and its ring are drawn centred inside it.
+    Box(
+        modifier
+            .height(PROFILE_RECT)
+            .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
+            .semantics {
+                // The page shown, said to a screen reader as it is drawn (the filled icon).
+                this.selected = selected
+                if (compact) contentDescription = label
+                // "Downloads, 2": the count is read with the name.
+                if (badge > 0) contentDescription = "$label, $badge"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
         Row(
             Modifier
                 .height(CLUSTER_ITEM)
@@ -512,15 +524,7 @@ private fun BarTab(
                 .clip(pill)
                 .background(fill)
                 .focusRingOnTv(focused, pill)
-                .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = onClick)
-                .padding(horizontal = if (compact && !focused && !selected) 10.dp else 14.dp)
-                .semantics {
-                    // The page shown, said to a screen reader as it is drawn (the filled icon).
-                    this.selected = selected
-                    if (compact) contentDescription = label
-                    // "Downloads, 2": the count is read with the name.
-                    if (badge > 0) contentDescription = "$label, $badge"
-                },
+                .padding(horizontal = if (compact && !focused && !selected) 10.dp else 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {

@@ -363,7 +363,9 @@ private fun CinemaLayout(page: DetailPage, holds: Holds, height: Dp) {
     val back = LocalDetailReturn.current
     LaunchedEffect(page.item.id) {
         if (back.tookFocus()) return@LaunchedEffect
-        runCatching { page.firstAction?.requestFocus() }
+        // The first action may not be attached in the first frame: a frame at a time, up to a few tries.
+        var tries = 0
+        while (tries++ < 3 && runCatching { page.firstAction?.requestFocus() }.getOrNull() != true) androidx.compose.runtime.withFrameNanos { }
         kotlinx.coroutines.delay(FOCUS_SETTLE_MS)
         scroll.scrollTo(0)
     }
