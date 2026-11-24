@@ -9,7 +9,8 @@ import { applyLocal, collect, noBase } from './local'
 import { backupFileName, backupText, decodeBackup, type BackupRead } from './backup'
 import { fromFile, missingLines } from './listsFile'
 import { localLists, localWriter } from './index'
-import { namedListsDoc, syncMergeLists } from '../store'
+import { settings } from '../store'
+import { namedListsDoc, recentSearches, restoreSearches, syncMergeLists } from '../store'
 import { emptyLists } from '../ui/lists'
 
 /** How many lines of a restored backup's lists are read from Telegram at once. */
@@ -20,7 +21,7 @@ export async function backupNow(now = Date.now()): Promise<{ name: string; text:
     const account = me()?.id ?? 0
     const lists = await localLists()
     const doc = collect(lists, noBase(), emptyDoc(account), account, now, 'web')
-    const text = backupText({ doc, lists: lists.named ?? emptyLists() }, { now, appVersion: 'web', account })
+    const text = backupText({ doc, lists: lists.named ?? emptyLists(), recentSearches: recentSearches() }, { now, appVersion: 'web', account })
     return { name: backupFileName(now), text }
 }
 
@@ -42,6 +43,8 @@ export interface RestorePlan {
     change: SyncApply
     /** Lines of the backup's lists this device lacks. */
     lines: number
+    /** Recent searches of the backup this device lacks. */
+    searches: number
     /** True when the file says it was made for another Telegram account. */
     otherAccount: boolean
     /** Nothing in the file would change anything here. */
@@ -58,13 +61,15 @@ export async function planRestore(text: string, now = Date.now()): Promise<Resto
     const merged = merge(local, read.doc, now)
     const change = apply(local, merged)
     const lines = missingLines(fromFile(read.lists), namedListsDoc()).length
+    const have = new Set(recentSearches().map((s) => s.toLowerCase()))
+    const searches = settings().rememberSearches ? read.searches.filter((s) => !have.has(s.toLowerCase())).slice(0, Math.max(0, 10 - recentSearches().length)).length : 0
     const listsNew = lines > 0 || fromFile(read.lists).lists.some((l) => !namedListsDoc().lists.some((m) => m.id === l.id))
-    return { read, change, lines, otherAccount: read.account !== null && read.account !== 0 && account !== 0 && read.account !== account, nothing: applyCount(change) === 0 && !listsNew }
+    return { read, change, lines, searches, otherAccount: read.account !== null && read.account !== 0 && account !== 0 && read.account !== account, nothing: applyCount(change) === 0 && !listsNew && searches === 0 }
 }
 
 /** Writes the plan into the stores. Returns how many places and lines changed. */
 export async function restore(plan: RestorePlan): Promise<number> {
     const applied = await applyLocal(plan.change, localWriter)
     const lines = plan.read.lists === undefined ? 0 : await syncMergeLists(plan.read.lists, (c, m) => api.video(c, m), RESTORE_LINES)
-    return applied.changes + lines
+    return applied.changes + lines + restoreSearches(plan.read.searches)
 }

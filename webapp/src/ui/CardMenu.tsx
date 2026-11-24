@@ -5,7 +5,7 @@
 // right click menu is turned off page wide (blockBrowserMenu) so a right click feels like the app's.
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Clock01Icon, Copy01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, MoreVerticalIcon, PlayIcon, Search01Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
+import { Clock01Icon, Copy01Icon, Delete02Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, Link04Icon, MoreVerticalIcon, PlayIcon, Search01Icon, Share08Icon, TelegramIcon, Tick02Icon, Unlink04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { laterIds, settings, setLater, setWatched, watchedIds, watchedTick } from '../store'
@@ -16,6 +16,7 @@ import { canReportTitle, openRename, reportTitle } from './renameTarget'
 import { RenameSheet } from './RenameSheet'
 import { showToast } from './Toast'
 import { copyLink, isTgLink, linkOf, linkOffered } from './tgLinks'
+import { canShare, shareVideo } from './shareVideo'
 import { api } from '../tg/rpc'
 import { openListPicker } from '../screens/Lists'
 import { isApart, keepApart } from '../copies'
@@ -184,6 +185,10 @@ export function CardMenu() {
         const text = manual()
         if (text) queueMicrotask(() => dialog.querySelector<HTMLInputElement>('input.link-field')?.select())
     })
+    const share = (href: string, name: string) => {
+        close()
+        void shareVideo(href, name)
+    }
     const copy = async () => {
         const now = target()
         if (!now || copying) return
@@ -296,6 +301,15 @@ export function CardMenu() {
                             </button>
                             <Show when={manual()}>
                                 {(text) => <input class="link-field" type="text" readonly dir="ltr" value={text()} aria-label={t('grid.copy_link')} onFocus={(e) => e.currentTarget.select()} />}
+                            </Show>
+                            {/* Share: the same link, to the device's share sheet where the browser has one (WP-59). */}
+                            <Show when={canShare() && isTgLink(link()) && link()}>
+                                {(href) => (
+                                    <button class="menu-row" type="button" onClick={() => share(href(), now().item.name)}>
+                                        <Icon icon={Share08Icon} size={22} />
+                                        <span>{t('common.share')}</span>
+                                    </button>
+                                )}
                             </Show>
                             <Show when={isTgLink(link()) && link()}>
                                 {(href) => (

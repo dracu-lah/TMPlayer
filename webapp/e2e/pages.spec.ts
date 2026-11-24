@@ -301,24 +301,30 @@ test.describe('a video page', () => {
     })
 })
 
-// R2: Downloads is a place on the bar on every platform. The browser cannot keep a video, so its
-// page is one card that says so and points at the app, and the bar keeps its side margins at 5 places.
-test.describe('Downloads on the web', () => {
+// WP-59: the fourth place of the bar is History (it was Downloads, a card that only said the browser cannot
+// keep a video), and the bar keeps its side margins at 5 places.
+test.describe('History in the bar', () => {
     test.describe('on a phone', () => {
         test.use(IN.phone)
-        test('the fifth place opens the Get the app card, and the bar still fits the window', async ({ page }) => {
+        test('the fourth place opens History, and the bar still fits the window', async ({ page }) => {
             await page.goto('/')
             const bar = page.locator('nav.nav .nav-cells')
             await expect(bar.locator('.nav-cell')).toHaveCount(5)
-            await bar.getByRole('link', { name: 'Downloads' }).click()
-            await expect(page).toHaveURL(/\/downloads$/)
-            await expect(page.getByRole('heading', { name: 'Downloads are in the app' })).toBeVisible()
-            await expect(page.getByRole('link', { name: 'Get the app' })).toHaveAttribute('href', /tmplayer\.org/)
-            await expect(bar.getByRole('link', { name: 'Downloads' })).toHaveAttribute('aria-current', 'page')
+            await expect(bar.getByRole('link', { name: 'Downloads' })).toHaveCount(0)
+            await bar.getByRole('link', { name: 'History' }).click()
+            await expect(page).toHaveURL(/\/history$/)
+            await expect(bar.getByRole('link', { name: 'History' })).toHaveAttribute('aria-current', 'page')
             // Side margins: the bar never touches the window's edges at a phone's width.
             const box = (await bar.boundingBox())!
             expect(box.x).toBeGreaterThanOrEqual(8)
             expect(box.x + box.width).toBeLessThanOrEqual(393 - 8)
         })
+    })
+
+    // The Downloads page stays at its address (Ctrl+J, a link): the card that sends a person to the app.
+    test('the Downloads address still opens the Get the app card', async ({ page }) => {
+        await page.goto('/downloads')
+        await expect(page.getByRole('heading', { name: 'Downloads are in the app' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Get the app' })).toHaveAttribute('href', /tmplayer\.org/)
     })
 })

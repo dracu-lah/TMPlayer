@@ -15,6 +15,7 @@ export function restoreLines(plan: RestorePlan): string[] {
         laterIn ? t('backup.restore_watch_later', { count: laterIn }) : '',
         c.favouritesIn.size ? t('backup.restore_favourites', { count: c.favouritesIn.size }) : '',
         plan.lines ? t('backup.restore_lists', { count: plan.lines }) : '',
+        plan.searches ? t('backup.restore_searches', { count: plan.searches }) : '',
     ]
     return out.filter(Boolean)
 }

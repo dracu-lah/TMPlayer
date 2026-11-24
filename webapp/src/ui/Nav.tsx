@@ -1,5 +1,5 @@
 // The app's navigation, as the phone and the desktop draw it: one rounded pill floating at the foot
-// of the page, holding Home, Chats, Search, Downloads and the account's picture, which opens the
+// of the page, holding Home, Chats, Search, History and the account's picture, which opens the
 // account menu (WP-103: the account, Settings, the viewer's own lists and Sign out). A pointer gets a
 // short name under each icon; a phone held sideways, where height is short, gets the compact bar of
 // round icon buttons (CSS). One highlight slides to the chosen place.
@@ -8,7 +8,6 @@ import { createResource, createSignal, For, Match, onCleanup, onMount, Show, Swi
 import { A, useLocation, useNavigate } from '@solidjs/router'
 import {
     Clock01Icon,
-    Download04Icon,
     History,
     Home03Icon,
     Logout05Icon,
@@ -45,18 +44,18 @@ const PLACES: Place[] = [
     { href: '/', label: () => t('browse.tab_home'), icon: Home03Icon, on: (p) => p === '/' || p === '/recent', key: '1' },
     { href: '/chats', label: () => t('nav.chats'), icon: Message01Icon, on: (p) => p === '/chats' || p.startsWith('/chat/'), key: '2' },
     { href: '/search', label: () => t('common.search'), icon: Search01Icon, on: (p) => p === '/search', key: 'K' },
-    // Downloads is a place on every platform (R2); the browser cannot keep videos, so its page is the app's card.
-    { href: '/downloads', label: () => t('nav.downloads'), icon: Download04Icon, on: (p) => p === '/downloads', key: 'J' },
+    // The fourth place was Downloads, a card that said the browser cannot keep videos: History holds the slot until it can (WP-59, user default D7).
+    { href: '/history', label: () => t('browse.tab_history'), icon: History, on: (p) => p === '/history' || p.startsWith('/history/'), key: '' },
 ]
 
 /** The card's width (POPOVER_WIDTH). */
 const WIDTH = 232
 
 /** The pages the "You" menu leads to: the picture is lit on them. */
-const YOURS = /^\/(settings|favourites|history)(\/|$)/
+const YOURS = /^\/(settings|favourites)(\/|$)/
 
 /** "Search (Ctrl+K)" where a keyboard is the way in (a desktop), the bare name on a phone. */
-const shortcutTitle = (label: string, key: string) => (form() === 'desktop' ? `${label} (${isMac() ? '⌘' : 'Ctrl+'}${key})` : label)
+const shortcutTitle = (label: string, key: string) => (form() === 'desktop' && key ? `${label} (${isMac() ? '⌘' : 'Ctrl+'}${key})` : label)
 
 export function Nav() {
     const location = useLocation()

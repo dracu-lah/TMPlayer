@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js'
 import { A } from '@solidjs/router'
-import { ArrowDown01Icon, ArrowUp01Icon, ClapperboardIcon, Clock01Icon, Delete02Icon, Home03Icon, Image01Icon, Message01Icon, StarIcon, VideoReplayIcon } from '@hugeicons/core-free-icons'
-import { homeChatRows, namedLists, settings, setSetting, starredIds } from '../../store'
+import { ArrowDown01Icon, ArrowUp01Icon, ClapperboardIcon, Clock01Icon, Delete02Icon, Home03Icon, Image01Icon, Message01Icon, Search01Icon, StarIcon, VideoReplayIcon } from '@hugeicons/core-free-icons'
+import { clearSearches, homeChatRows, namedLists, settings, setSetting, starredIds } from '../../store'
 import { editorRows, encodeOrder, moveKey, parseOrder, type OrderEntry } from '../../ui/homeOrder'
 import { t } from '../../i18n'
 import { clearHistoryWithUndo } from '../../clearHistory'
@@ -43,6 +43,20 @@ export function HomePage() {
                         />
                     )}
                 </For>
+            </div>
+            <div class="set-card">
+                <ToggleRow
+                    id="remember_searches"
+                    icon={Search01Icon}
+                    title={t('settings.remember_searches')}
+                    subtitle={settings().rememberSearches ? t('settings.remember_searches_on') : t('settings.remember_searches_off')}
+                    on={settings().rememberSearches}
+                    onChange={(on) => {
+                        setSetting('rememberSearches', on)
+                        // Off means nothing kept: the list goes too, as the apps' switch does.
+                        if (!on) clearSearches()
+                    }}
+                />
             </div>
             <p class="muted small">{t('settings.home_follows_added')}</p>
             <HomeOrder />

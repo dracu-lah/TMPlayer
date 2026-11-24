@@ -1,10 +1,12 @@
-import { createEffect, createResource, createSignal, on, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createResource, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { A, useNavigate, useSearchParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
-import { addedIds, addedMode, addedView, progress, settings } from '../store'
+import { addedIds, addedMode, addedView, clearSearches, forgetSearch, noteSearch, progress, recentSearches, settings } from '../store'
+import { locked } from '../accounts'
+import { showToast } from '../ui/Toast'
 import { Icon } from '../ui/Icon'
 import { back, entryState } from '../session'
 import { dropsAddressSearch, keepsSearch, loadType } from '../ui/searchLifetime'
@@ -79,8 +81,25 @@ export function Search() {
         debounce = window.setTimeout(() => {
             typing = false
             setParams({ q: v || undefined }, { replace: true })
+            // A search that has settled is remembered (when remembering is on), newest first.
+            if (v.trim()) noteSearch(v)
         }, 350)
     }
+    // A recent search run again: its words in the box and in the address, and to the front of the list.
+    const rerun = (q: string) => {
+        clearTimeout(debounce)
+        typing = false
+        setText(q)
+        setParams({ q }, { replace: true })
+        noteSearch(q)
+        input?.focus()
+    }
+    const clearRecents = () => {
+        clearSearches()
+        showToast({ text: t('search.recent_cleared') })
+        input?.focus()
+    }
+    const recents = () => (!locked() && !text().trim() ? recentSearches() : [])
     // Back or Forward to other words puts them in the box, unless the box is being typed in.
     createEffect(on(() => params.q, (q) => !typing && setText(q ?? ''), { defer: true }))
     const found = () => (params.q?.trim() && !results.error ? results.latest : undefined)
@@ -96,6 +115,27 @@ export function Search() {
                     </button>
                 </Show>
             </label>
+            {/* Recent searches (WP-59): under an empty box, one tap runs one again; Clear and a remove button on each. */}
+            <Show when={recents().length}>
+                <section class="search-recents" aria-labelledby="search-recents-title">
+                    <div class="search-recents-head">
+                        <h2 id="search-recents-title">{t('browse.recent_searches')}</h2>
+                        <button class="link" type="button" onClick={clearRecents}>{t('grid.clear_recent_searches')}</button>
+                    </div>
+                    <ul class="search-recents-list">
+                        <For each={recents()}>
+                            {(q) => (
+                                <li class="recent-chip">
+                                    <button class="recent-run" type="button" onClick={() => rerun(q)}>{q}</button>
+                                    <button class="recent-remove" type="button" aria-label={t('search.remove_recent', { query: q })} title={t('search.remove_recent', { query: q })} onClick={() => forgetSearch(q)}>
+                                        <Icon icon={Cancel01Icon} size={14} />
+                                    </button>
+                                </li>
+                            )}
+                        </For>
+                    </ul>
+                </section>
+            </Show>
             <Show when={results.error}>
                 <div class="notice error-notice">
                     <p class="error" role="alert">{errorText(results.error)}</p>

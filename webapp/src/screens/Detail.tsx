@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, ClapperboardIcon, Clock01Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft02Icon, ClapperboardIcon, Clock01Icon, Edit02Icon, InformationCircleIcon, LeftToRightListBulletIcon, ListVideoIcon, PlayIcon, RepeatIcon, Search01Icon, Share08Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
@@ -31,6 +31,8 @@ import { Episodes } from './detail/Episodes'
 import { More } from './detail/More'
 import { Round } from './detail/Round'
 import { dot } from '../ui/dot'
+import { isTgLink, linkOf, linkOffered } from '../ui/tgLinks'
+import { canShare, shareVideo } from '../ui/shareVideo'
 import { setPageName } from '../ui/pageTitle'
 
 
@@ -205,6 +207,14 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
         if (kind() === undefined || kind() !== null || failed()) return null
         return askOf(item) ? 'nothing' : 'unread'
     }
+    // Share (WP-59): the video's Telegram link to the share sheet, only where the browser has one and the chat lets a link be given.
+    const [shareable] = createResource(
+        () => (canShare() && linkOffered(item) ? item : null),
+        async (it) => {
+            const a = await linkOf(it, api.messageLink)
+            return 'link' in a && isTgLink(a.link) ? a.link : null
+        },
+    )
     // The viewer's own title (Rename) leads; TMDB's, then the name the worker reads, follow.
     const title = () => renamedTitle(item) || found()?.title || props.info?.title || item.title
     // The tab's title names the video while its page is open (ui/pageTitle.ts).
@@ -384,6 +394,9 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                             <Round icon={RepeatIcon} label={t('detail.start_over')} onClick={() => play('start')} />
                         </Show>
                         <Round icon={Tick02Icon} label={t('detail.round_watched')} on={!!watched()} onClick={() => setWatched(item.chatId, item.messageId, !watched())} />
+                        <Show when={shareable()}>
+                            {(link) => <Round icon={Share08Icon} label={t('common.share')} onClick={() => void shareVideo(link(), title())} />}
+                        </Show>
                         <Round icon={Clock01Icon} label={t('detail.round_watch_later')} on={later()} onClick={() => setLater(item, !later())} />
                         {/* One of the viewer's named lists (HX43): kept by name, so a restricted chat's video goes in one too. */}
                         <Round icon={LeftToRightListBulletIcon} label={t('detail.round_list')} on={inAList()} onClick={() => openListPicker(item)} />

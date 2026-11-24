@@ -24,6 +24,8 @@ const SETTINGS = {
     homeContinue: z.boolean(),
     homeRecent: z.boolean(),
     homeStarred: z.boolean(),
+    // The apps' remember_searches: recent searches are kept to pick again (on by default).
+    rememberSearches: z.boolean(),
     // The order of Home's rows (HomeOrder.kt) is text; anything else, or an absurd length, is no order.
     homeOrder: z.string().check(z.maxLength(100_000)),
 }

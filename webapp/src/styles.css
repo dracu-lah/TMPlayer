@@ -114,6 +114,15 @@ h1, h2, h3, p { margin: 0; }
 dialog { overscroll-behavior: contain; }
 /* After a navigation focus moves to the page's heading or the page itself (WP-57): it needs no ring, it is not a control. */
 main.page:focus, main.page h1:focus { outline: none; }
+/* Recent searches (WP-59): chips under an empty search box. */
+.search-recents { display: grid; gap: 8px; margin: 8px 0 16px; }
+.search-recents-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.search-recents h2 { font-size: 1rem; line-height: 1.5rem; font-weight: 500; }
+.search-recents-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.recent-chip { display: inline-flex; align-items: center; max-width: 100%; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.recent-chip button { border: 0; background: none; color: inherit; font: inherit; min-height: 44px; }
+.recent-run { padding: 0 6px 0 16px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-remove { display: grid; place-items: center; width: 44px; color: var(--muted); }
 /* Another app's web view (WP-58): a full card before sign in. */
 .in-app-card { max-width: 420px; margin: 0 auto; padding: max(48px, env(safe-area-inset-top)) 16px 32px; display: grid; gap: 16px; justify-items: center; text-align: center; }
 .in-app-card button { min-height: 48px; }

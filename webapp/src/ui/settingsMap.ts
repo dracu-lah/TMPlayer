@@ -75,6 +75,7 @@ const defs: MapRow[] = [
     { id: 'home_starred_rows', page: 'home', core: true, title: 'settings.home_starred_rows' },
     { id: 'home_order', page: 'home', core: true, title: 'settings.home_order' },
     { id: 'chosen_chats', page: 'home', core: true, title: 'picker.row_title' },
+    { id: 'remember_searches', page: 'home', core: true, title: 'settings.remember_searches', details: ['settings.remember_searches_on', 'settings.remember_searches_off'] },
     { id: 'posters', page: 'home', core: true, title: 'web.posters_title' },
     { id: 'trailers_in_app', page: 'home', core: true, title: 'metadata.trailers_in_app' },
     { id: 'clear_history', page: 'home', core: true, title: 'browse.clear_history' },

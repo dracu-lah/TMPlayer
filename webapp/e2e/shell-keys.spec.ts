@@ -101,7 +101,8 @@ test.describe('window keys', () => {
     test('the bar says its chords on a desktop', async ({ page }) => {
         const mod = (await command(page)) === 'Meta' ? '⌘' : 'Ctrl+'
         await expect(page.locator('.nav-cell[href="/search"]')).toHaveAttribute('title', `Search (${mod}K)`)
-        await expect(page.locator('.nav-cell[href="/downloads"]')).toHaveAttribute('title', `Downloads (${mod}J)`)
+        // History took the fourth place when the web could not save (WP-59): it has no chord, its name stands alone.
+        await expect(page.locator('.nav-cell[href="/history"]')).toHaveAttribute('title', 'History')
     })
 
     test('/ and Command+F focus the page search; inside the box, / is a letter', async ({ page }) => {
