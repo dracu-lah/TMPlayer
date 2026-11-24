@@ -357,6 +357,20 @@ html[data-form=tv] .danger-button:hover { background: none; }
 
 /* ---- Settings: one column of panels, the choices filled under the remote ---- */
 html[data-form=tv] .settings { max-width: calc(var(--dp) * 600); gap: calc(var(--dp) * 12); }
+/* The rail and the pane (WP-88, the TV app's WP-07): the pages down the left, the page's panels beside them, the header and its breadcrumb pinned. */
+html[data-form=tv] .settings.tv-set { max-width: none; display: grid; grid-template-columns: calc(var(--dp) * 220) minmax(0, calc(var(--dp) * 600)); grid-template-rows: auto 1fr; column-gap: calc(var(--dp) * 24); align-content: start; }
+html[data-form=tv] .tv-set-head { grid-column: 1 / -1; position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: calc(var(--dp) * 8); }
+html[data-form=tv] .tv-set-head .page-title { margin-bottom: 0; }
+html[data-form=tv] .tv-crumb { margin: 0; font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .tv-rail { position: sticky; top: calc(var(--dp) * 64); align-self: start; display: grid; gap: calc(var(--dp) * 2); }
+html[data-form=tv] .tv-rail-item {
+  min-height: calc(var(--dp) * 40); padding: 0 calc(var(--dp) * 16); border: 0; border-radius: calc(var(--dp) * 20); background: none; color: var(--fg);
+  font: inherit; font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); text-align: start; transition: background-color var(--fast), color var(--fast);
+}
+/* The page the pane shows stays marked while the remote is in the pane, so Left comes back to a place it can see. */
+html[data-form=tv] .tv-rail-item[aria-current=page] { background: var(--surface-high); font-weight: 600; }
+html[data-form=tv][data-tv-keys] .tv-rail-item:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv] .tv-pane { display: grid; gap: calc(var(--dp) * 12); align-content: start; min-width: 0; }
 html[data-form=tv] .panel { padding: calc(var(--dp) * 16) calc(var(--dp) * 20); gap: calc(var(--dp) * 10); border-radius: calc(var(--dp) * 16); }
 html[data-form=tv] .panel-title { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
 html[data-form=tv] .segmented { padding: calc(var(--dp) * 4); gap: calc(var(--dp) * 4); }

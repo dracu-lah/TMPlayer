@@ -518,6 +518,15 @@ export function createFocusMap(host: Host) {
             if (!active.isConnected) return true
         }
         const within = scope()
+        // A pane with a rail beside it (Settings, WP-88): Back goes to the rail's chosen page first, and leaves from there.
+        const railOf = within === document.body ? (active as Element | null)?.closest?.('[data-tv-back-to]') : null
+        if (railOf) {
+            const to = document.querySelector<HTMLElement>(railOf.getAttribute('data-tv-back-to') ?? '')
+            if (to && !railOf.contains(to)) {
+                focus(to)
+                return true
+            }
+        }
         if (within.matches?.(REACH)) {
             leaveReach()
             return true
