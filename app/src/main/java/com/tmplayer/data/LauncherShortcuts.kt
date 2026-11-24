@@ -79,6 +79,7 @@ object LauncherShortcuts {
     }
 
     /** Every copy of the last chat's shortcut, pinned ones too, as "Last chat" that only opens the app. */
+    // profile-notifications: the signature only takes the manager; the body below relabels and names nothing
     private fun unnameLastChat(context: Context, manager: ShortcutManager) {
         // profile-notifications: relabels to the generic "Last chat" first, so no name stays on a pinned copy
         runCatching { manager.updateShortcuts(listOf(build(context, ID_LAST_CHAT, L.chatsLastShortcut, R.mipmap.ic_launcher) { })) }
