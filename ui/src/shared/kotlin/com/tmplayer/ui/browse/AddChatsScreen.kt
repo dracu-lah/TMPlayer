@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -118,6 +119,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import com.tmplayer.data.AddedChats
+import com.tmplayer.data.WorkStatus
+import com.tmplayer.ui.components.WorkStatusLine
+import com.tmplayer.ui.components.liveMessage
 import com.tmplayer.data.ChatBrief
 import com.tmplayer.data.ChatCount
 import com.tmplayer.data.ChatCountCalls
@@ -200,6 +204,8 @@ import androidx.compose.ui.semantics.role
  *   when the list is whole, nothing was recommended and nothing is ticked, since then there is
  *   nothing sensible to tick and Back would leave the app. The gate still stands whenever a
  *   Recommended band exists. Null offers nothing.
+ * @param onAdded how many chats the save added, told just before [onClose] when it is more than
+ *   none, so the host can say "3 chats added" as the picker leaves (WP-95).
  */
 @Composable
 fun AddChatsScreen(
@@ -222,6 +228,7 @@ fun AddChatsScreen(
     onLeave: () -> Unit = onClose,
     confirmLeave: Boolean = false,
     onContinue: (() -> Unit)? = null,
+    onAdded: (Int) -> Unit = {},
 ) {
     val s = LocalStrings.current
     val form = deviceForm()
@@ -508,7 +515,12 @@ fun AddChatsScreen(
     LaunchedEffect(savedId) { model.knowSaved(savedId) }
     // Nothing is counted once the screen is gone, and a count already running is cancelled.
     DisposableEffect(model) { onDispose { model.stop() } }
-    LaunchedEffect(state.saved) { if (state.saved) onClose() }
+    LaunchedEffect(state.saved) {
+        if (state.saved) {
+            if (state.justAdded > 0) onAdded(state.justAdded)
+            onClose()
+        }
+    }
     // The remote starts on the first row, where OK ticks, not in the search box (HX76). Until a row
     // is there it stands on the filters, and moves down to the first row when one lands, unless a
     // key has been pressed since.
@@ -652,6 +664,24 @@ fun AddChatsScreen(
         }
         }
         val listPane: @Composable ColumnScope.() -> Unit = {
+            // The count of chats read so far, above the list and not in it: a list scrolled down
+            // would hide it, and on a big account that is where the viewer is (WP-95). Nothing
+            // while the list is whole, and no space taken then.
+            if (!listComplete && !partial) {
+                val sofar = rememberThrottledCount(chats.size)
+                val wait = s.pickerLoading
+                Column(Modifier.fillMaxWidth()) {
+                    WorkStatusLine(
+                        WorkStatus.Syncing(what = if (sofar > 0) s.pickerLoadingCount(sofar) else wait),
+                        asked = true,
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = wait },
+                        color = Tone.accent,
+                        trackColor = Tone.track,
+                    )
+                }
+            }
             // On the television the list steps instead of sliding each focused row a third of the way
             // down: the slide was a fresh layout of the list on every frame of every press (HX76).
             EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) {
@@ -733,20 +763,10 @@ fun AddChatsScreen(
                         }
                     }
                     }
-                    if (!listComplete && !partial) {
-                        item(key = "loading") {
-                            val words = s.pickerLoading
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = words },
-                                color = Tone.accent,
-                                trackColor = Tone.track,
-                            )
-                        }
-                    }
                     if (partial) {
                         item(key = "partial") {
                             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(s.chatsSomeNotLoaded, style = MaterialTheme.typography.bodyMedium, color = Tone.danger)
+                                Text(s.chatsSomeNotLoaded, style = MaterialTheme.typography.bodyMedium, color = Tone.danger, modifier = Modifier.liveMessage())
                                 // Wraps: the two buttons side by side ran off a narrow phone at a large font.
                                 @OptIn(ExperimentalLayoutApi::class)
                                 FlowRow(
@@ -1010,9 +1030,16 @@ fun AddChatsScreen(
             if (required && none) {
                 DisabledDone(s.pickerGateDoneNone)
             } else {
+                // While the choice is written the button says so and keeps the focus (the model
+                // ignores a second press); the screen closes when it is done.
                 SetupButton(
-                    if (none) s.pickerDoneNone else s.commonDone,
+                    when {
+                        state.saving -> s.pickerSaving
+                        none -> s.pickerDoneNone
+                        else -> s.commonDone
+                    },
                     primary = true,
+                    busy = state.saving,
                     modifier = Modifier.focusRequester(doneFocus),
                     onClick = { model.done(chats) },
                 )
@@ -1389,6 +1416,25 @@ private fun FoldRow(label: String, modifier: Modifier, onOpen: () -> Unit) {
         )
     }
 }
+
+/**
+ * [count] as it grows, handed on at once and then at most once a second, so a list that gains a
+ * page every few hundred milliseconds does not redraw its count line each time (a low-end stick).
+ */
+@Composable
+private fun rememberThrottledCount(count: Int): Int {
+    val latest by rememberUpdatedState(count)
+    var shown by remember { mutableIntStateOf(count) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { latest }.collect {
+            shown = it
+            delay(COUNT_EVERY_MS)
+        }
+    }
+    return shown
+}
+
+private const val COUNT_EVERY_MS = 1_000L
 
 /**
  * The mandatory choice's Done while nothing is ticked: the button's shape and place, dimmed and
@@ -1805,6 +1851,7 @@ fun AddChatsFed(
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
     confirmLeave: Boolean = false,
+    onAdded: (Int) -> Unit = {},
 ) {
     val everything by chatsViewModel.everything.collectAsState()
     val paging by chatsViewModel.paging.collectAsState()
@@ -1842,6 +1889,7 @@ fun AddChatsFed(
         required = required,
         onLeave = onLeave,
         confirmLeave = confirmLeave,
+        onAdded = onAdded,
         // Nothing to tick in a required choice: go on for this visit, nothing written (ON-4).
         onContinue = if (required) ChatsGate::waive else null,
     )

@@ -10,6 +10,8 @@ import com.tmplayer.ui.browse.AddChatsRequest
 import com.tmplayer.ui.browse.AddChatsState
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.newAddChatsViewModel
+import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 
 /**
  * The Add chats picker (HX27) over the desktop window while [AddChatsState.open]: a full page like
@@ -29,11 +31,14 @@ internal fun AddChatsPage(state: ShellState, chats: ChatListViewModel) {
     // One view model per opening, so a closed picker never comes back with its old ticks.
     val model = rememberViewModel(Unit) { newAddChatsViewModel(state.settings) }
     CoverWindowControls()
+    val toast = rememberToast()
+    val strings = LocalStrings.current
     AddChatsFed(
         settings = state.settings,
         chatsViewModel = chats,
         model = model,
         onClose = { AddChatsState.open = false },
         sendLogs = { SendLogsActions() },
+        onAdded = { count -> toast(strings.pickerAddedCount(count)) },
     )
 }

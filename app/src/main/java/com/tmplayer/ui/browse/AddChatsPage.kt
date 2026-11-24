@@ -8,6 +8,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.settings.SendLogsButton
 
 /**
@@ -27,6 +29,10 @@ internal fun AddChatsPage(
     required: Boolean = false,
     onLeave: () -> Unit = onClose,
 ) {
+    // "3 chats added", as the picker closes: the viewer sees the save was heard before Home fills.
+    val toast = rememberToast()
+    val strings = LocalStrings.current
+    val said: (Int) -> Unit = { count -> toast(strings.pickerAddedCount(count)) }
     if (DebugFakeChats.active) {
         // Debug only (HX76): 3,000 fake chats and their counts, to measure the TV picker on a long list.
         val fake: AddChatsViewModel = viewModel(
@@ -47,6 +53,7 @@ internal fun AddChatsPage(
             sendLogs = { SendLogsButton() },
             required = required,
             onLeave = onLeave,
+            onAdded = said,
         )
         return
     }
@@ -69,6 +76,7 @@ internal fun AddChatsPage(
         },
         required = required,
         onLeave = onLeave,
+        onAdded = said,
         // The ticks live only in the picker, and Back here leaves the app: it asks first.
         confirmLeave = required,
     )

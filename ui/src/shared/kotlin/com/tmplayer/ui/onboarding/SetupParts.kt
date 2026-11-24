@@ -33,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,6 +70,8 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -129,6 +132,12 @@ internal fun SetupButton(
     modifier: Modifier = Modifier,
     /** False draws the button dimmed, takes no press and no focus (the picker's band button while every chat counts). */
     enabled: Boolean = true,
+    /**
+     * True while the press is being answered (a save that runs): a 20 dp spinner, a still arc
+     * under less motion, goes before [label], which then says what runs. The button keeps its
+     * focus and takes no second press; a screen reader hears [label] as its state.
+     */
+    busy: Boolean = false,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -137,6 +146,7 @@ internal fun SetupButton(
     Row(
         modifier
             .then(if (enabled) Modifier else Modifier.alpha(0.4f))
+            .then(if (busy) Modifier.alpha(0.8f).semantics { stateDescription = label } else Modifier)
             // A finger needs 48 dp to hit (HX56: the picker's Done was 37).
             .then(if (touch) Modifier.heightIn(min = 48.dp) else Modifier)
             // Sinks a little under a finger or a click, and comes back up on release.
@@ -159,7 +169,7 @@ internal fun SetupButton(
                 indication = if (touch) LocalIndication.current else null,
                 role = Role.Button,
                 enabled = enabled,
-                onClick = onClick,
+                onClick = { if (!busy) onClick() },
             )
             .padding(horizontal = 18.dp, vertical = 10.dp),
         // Centred: a button given the full width (the crash question's three) keeps its words in the middle.
@@ -175,6 +185,16 @@ internal fun SetupButton(
         if (icon) {
             Icon(TmIcons.ArrowBack, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
+        }
+        if (busy) {
+            // Only a picture of the wait: the label is what is spoken.
+            val mark = Modifier.size(20.dp).clearAndSetSemantics { }
+            if (com.tmplayer.ui.components.rememberLessMotion()) {
+                CircularProgressIndicator(progress = { 0.75f }, modifier = mark, color = color, strokeWidth = 2.dp, trackColor = Color.Transparent)
+            } else {
+                CircularProgressIndicator(modifier = mark, color = color, strokeWidth = 2.dp)
+            }
+            Spacer(Modifier.width(8.dp))
         }
         Text(label, style = MaterialTheme.typography.labelLarge, color = color)
     }

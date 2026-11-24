@@ -68,6 +68,8 @@ class AddChatsViewModel(
      *   added: opening the picker to add one more needs no wait.
      * @param saving true while the choice is being written, so Done cannot run twice.
      * @param saved true once it is written and the screen may close.
+     * @param justAdded how many chats this save added that were not chosen when the picker opened,
+     *   for the "3 chats added" notice as the screen closes; 0 when "All chats" was written.
      * @param error what went wrong when the last write failed, shown with Try again, or null.
      */
     data class State(
@@ -83,6 +85,7 @@ class AddChatsViewModel(
         val recommending: Boolean = false,
         val saving: Boolean = false,
         val saved: Boolean = false,
+        val justAdded: Int = 0,
         val error: String? = null,
     )
 
@@ -450,9 +453,10 @@ class AddChatsViewModel(
                 _state.update { it.copy(saving = false, error = Failures.humanise(failure)) }
                 return@launch
             }
+            val added = if (all) 0 else ticked.count { it !in (opened ?: emptySet()) }
             opened = ticked
             openedAll = all
-            _state.update { it.copy(saving = false, saved = true) }
+            _state.update { it.copy(saving = false, saved = true, justAdded = added) }
         }
     }
 
