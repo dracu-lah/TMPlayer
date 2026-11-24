@@ -153,7 +153,8 @@ class PauseControlsRowTest {
         playing = false
         controls.paused()
         controls.onPlayingChanged()
-        idle(30_000)
+        // For the first ten seconds of the pause (WP-21: then the row, the clock with it, makes way for the mark).
+        idle(9_000)
         assertTrue(controls.visible)
         val clock = disc.rootView.findViewById<android.widget.TextView>(R.id.controls_clock)
         assertEquals(View.VISIBLE, clock.visibility)
@@ -178,5 +179,91 @@ class PauseControlsRowTest {
         controls.paused()
         val clock = disc.rootView.findViewById<View>(R.id.controls_clock)
         assertEquals(View.GONE, clock.visibility)
+    }
+
+    // ---- the pause dim on a television (WP-21) ------------------------------------------------
+
+    private fun mark(root: View): android.widget.TextView? =
+        (root.findViewById<View>(R.id.player_controls).parent as android.view.ViewGroup).let { group ->
+            (0 until group.childCount).map { group.getChildAt(it) }
+                .filterIsInstance<android.widget.TextView>()
+                .firstOrNull { it.text == com.tmplayer.i18n.L.playerPaused }
+        }
+
+    @Test
+    fun `on a television a pause of ten seconds takes the row away and leaves a small mark, any key brings the row back`() {
+        val (controls, disc) = row(tv = true)
+        playing = false
+        controls.paused()
+        controls.onPlayingChanged()
+        idle(9_000)
+        assertTrue("the row stays for the first ten seconds", controls.visible)
+        assertTrue(mark(disc.rootView)?.visibility != View.VISIBLE)
+        idle(2_000)
+        assertFalse("then it goes", controls.visible)
+        assertEquals(View.VISIBLE, mark(disc.rootView)?.visibility)
+        // A key: the row, and the mark is gone.
+        controls.show()
+        assertTrue(controls.visible)
+        assertEquals(View.GONE, mark(disc.rootView)?.visibility)
+        // And a pause that goes on counts ten seconds again from that key.
+        idle(9_000)
+        assertTrue(controls.visible)
+        idle(2_000)
+        assertFalse(controls.visible)
+    }
+
+    @Test
+    fun `the mark steps to another corner every minute, and stays put under Reduce motion`() {
+        val (controls, disc) = row(tv = true)
+        playing = false
+        controls.paused()
+        controls.onPlayingChanged()
+        idle(11_000)
+        val gravity = { (mark(disc.rootView)!!.layoutParams as FrameLayout.LayoutParams).gravity }
+        val first = gravity()
+        idle(60_000)
+        assertTrue("another corner after a minute", gravity() != first)
+        com.tmplayer.ui.theme.Motion.reduced = true
+        try {
+            val (still, stillDisc) = row(tv = true)
+            playing = false
+            still.paused()
+            still.onPlayingChanged()
+            idle(11_000)
+            val stayed = (mark(stillDisc.rootView)!!.layoutParams as FrameLayout.LayoutParams).gravity
+            idle(120_000)
+            assertEquals("it does not move", stayed, (mark(stillDisc.rootView)!!.layoutParams as FrameLayout.LayoutParams).gravity)
+            assertTrue("it only dims", mark(stillDisc.rootView)!!.alpha < 1f)
+        } finally {
+            com.tmplayer.ui.theme.Motion.reduced = false
+        }
+    }
+
+    @Test
+    fun `playing again, a stopped screen and a phone never dim`() {
+        val (controls, disc) = row(tv = true)
+        playing = false
+        controls.paused()
+        controls.onPlayingChanged()
+        // The screen stops (the activity's onStop): no timer survives it.
+        controls.stopPauseDim()
+        idle(30_000)
+        assertTrue(controls.visible)
+        assertTrue(mark(disc.rootView)?.visibility != View.VISIBLE)
+        // Playing again: nothing dims, however long.
+        playing = true
+        controls.resumed(PauseControls.hideAfterResumeMs(controls.timeoutMs, downBeforePause = false))
+        controls.onPlayingChanged()
+        idle(60_000)
+        assertTrue(mark(disc.rootView)?.visibility != View.VISIBLE)
+        // A phone keeps the row up for the whole pause (above), and has no mark.
+        val (phone, phoneDisc) = row(tv = false)
+        playing = false
+        phone.paused()
+        phone.onPlayingChanged()
+        idle(60_000)
+        assertTrue(phone.visible)
+        assertEquals(null, mark(phoneDisc.rootView))
     }
 }

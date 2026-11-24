@@ -54,6 +54,9 @@ object HintIds {
     /** The television Settings' line that Page and Channel keys jump between sections, once such a key has arrived (WP-75). */
     const val SETTINGS_PAGE_KEYS = "settings_page_keys"
 
+    /** The first Info press on the television's player: Hold Info reports a stutter (WP-21). */
+    const val INFO_HOLD = "info_hold"
+
     /** The tile's second line on the television: Hold OK or press Menu for options (WP-14). */
     const val TILE_OPTIONS = "tile_options"
 

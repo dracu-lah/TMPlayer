@@ -5199,6 +5199,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private var failurePinned = false
 
+    /**
+     * A key reached the failure sheet (WP-21): from then on nothing may move the remote under the
+     * viewer's thumb, so the late answers of [showFailureActions] (the disk's, a download's) no
+     * longer take focus. Cleared by [showError] for each failure.
+     */
+    private var sheetKeyed = false
+
+    /** Focus for a late button of the failure sheet, unless the viewer has already pressed a key on it. */
+    private fun focusLate(view: View) {
+        if (!sheetKeyed) view.requestFocus()
+    }
+
     /** True while the sheet counts down to the next episode ([onVideoEnded]). */
     private var countingDownToNext = false
 
@@ -7167,6 +7179,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // The first key on a failure sheet is the viewer's: no late answer moves the remote after it (WP-21).
+        if (event.action == KeyEvent.ACTION_DOWN && statusOverlay.visibility == View.VISIBLE) sheetKeyed = true
         // Locked means locked: Back, the media keys, the D-pad and a keyboard all offer the way
         // out rather than doing what they usually do. See [LockedKeys].
         if (locked) return lockedKey(event)
@@ -7247,6 +7261,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 statusOverlay.visibility != View.VISIBLE && sheets?.isOpen != true && !detailsOpen && player != null
             ) {
                 showPlaybackDetails()
+                hintInfoHold()
             }
             return true
         }
@@ -9383,6 +9398,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         showGestureFeedback(L.playerFromTheStart)
     }
 
+    /**
+     * The first Info press says that holding it reports a stutter (WP-21), once ever, through the hint
+     * registry (WP-68): never while the video plays, except on the very first run, and never once the
+     * tour was skipped twice. It is marked as it appears.
+     */
+    private fun hintInfoHold() {
+        lifecycleScope.launch {
+            val state = runCatching { settings.hintState.first() }.getOrNull()
+            val playingNow = playing?.isPlaying == true
+            if (!com.tmplayer.ui.components.hintAllowed(state, com.tmplayer.data.HintIds.INFO_HOLD, inPlayback = playingNow)) return@launch
+            runCatching { settings.bumpHint(com.tmplayer.data.HintIds.INFO_HOLD) }
+            feedback?.message(L.playerInfoHoldHint, holdMs = HINT_MS)
+        }
+    }
+
     /** What is actually playing: the figures a bug report needs, in words a viewer can read. */
     private fun showPlaybackDetails() {
         val (title, lines) = playbackDetails() ?: return
@@ -10521,6 +10551,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun showError(message: String, retryable: Boolean = true, freeUp: Boolean = false) {
         failurePinned = true
+        sheetKeyed = false
         val beyond = beyondDevice
         beyondDevice = false
         // The opening is over, if not the way it was meant to be: the waiting lookups go ahead.
@@ -10815,20 +10846,23 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (engine) return
         if (fileId <= 0) return
         lifecycleScope.launch {
+            // What is on the disk first, for at most a second (then the safe answer: nothing there),
+            // so the sheet's buttons come together and the remote is placed once (WP-21).
+            val local = downloadedVideo
+            val availability = if (local != null) {
+                LocalFileAvailability.Complete
+            } else {
+                kotlinx.coroutines.withTimeoutOrNull(AVAILABILITY_WAIT_MS) {
+                    runCatching { Td.localFileAvailability(fileId) }.getOrDefault(LocalFileAvailability.Missing)
+                } ?: LocalFileAvailability.Missing
+            }
             if (retryable) {
                 statusReload?.apply {
                     text = L.commonReload
                     visibility = View.VISIBLE
                     markPrimaryAction(this)
-                    requestFocus()
+                    focusLate(this)
                 }
-            }
-
-            val local = downloadedVideo
-            val availability = if (local != null) {
-                LocalFileAvailability.Complete
-            } else {
-                runCatching { Td.localFileAvailability(fileId) }.getOrDefault(LocalFileAvailability.Missing)
             }
             val downloaded = local?.length()
                 ?: runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
@@ -10846,7 +10880,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 visibility = View.VISIBLE
                 markPrimaryAction(this)
-                requestFocus()
+                focusLate(this)
             }
             // Said on the sheet rather than in a dialog on the way out: the viewer is being asked
             // to choose between two buttons, and the difference between them is this sentence.
@@ -11255,6 +11289,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     override fun onStop() {
         super.onStop()
+        // The pause mark's timers never run in the background (WP-21).
+        controls?.stopPauseDim()
         // A key that was held when the window went away never reports its release.
         endRemoteHold()
         // A SubMaker translation waits while nobody can see it, and carries on when they are back.
@@ -11759,6 +11795,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the first-run hint stays up. */
         private const val HINT_MS = 5_000L
+
+        /** The longest the failure sheet waits for the disk's answer before it shows its buttons (WP-21). */
+        private const val AVAILABILITY_WAIT_MS = 1_000L
 
         /** The phone's gesture hint, up to four lines: long enough to read, "Got it" ends it sooner. */
         private const val PHONE_HINT_MS = 12_000L

@@ -1332,9 +1332,77 @@ class PlayerControls(
         poke()
     }
 
+    /**
+     * A television, paused by the viewer (WP-21): an OLED panel must not hold the row and the
+     * clock still for an hour, so [PAUSE_DIM_MS] after the last press the row goes and a small
+     * "Paused" mark takes its place, which moves to another corner every minute (not under Reduce
+     * motion, where it stays and only dims). Any key brings the row back.
+     */
+    private val pauseDim = Runnable { dimPause() }
+    private var pauseMark: TextView? = null
+    private var markSpot = 0
+    private val moveMark = object : Runnable {
+        override fun run() {
+            markSpot = (markSpot + 1) % MARK_GRAVITY.size
+            placeMark()
+            container.postDelayed(this, MARK_MOVE_MS)
+        }
+    }
+
+    private fun pausedByViewer(): Boolean = isTv && player()?.let { it.playWhenReady.not() && it.playbackState != Player.STATE_ENDED } == true
+
+    private fun dimPause() {
+        if (!pausedByViewer() || !shown || scrubbing || held) return
+        hideAnimated()
+        val parent = container.parent as? android.widget.FrameLayout ?: return
+        val mark = pauseMark ?: TextView(container.context).apply {
+            val density = resources.displayMetrics.density
+            background = ContextCompat.getDrawable(context, R.drawable.bg_player_chip)
+            setPadding((14 * density).toInt(), (6 * density).toInt(), (14 * density).toInt(), (6 * density).toInt())
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            maxLines = 1
+            // The state is already said by the play disc's description when the row is up; the mark is for the eyes.
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            parent.addView(this, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+            pauseMark = this
+        }
+        mark.text = L.playerPaused
+        mark.alpha = if (com.tmplayer.ui.theme.Motion.reduced) MARK_DIM_ALPHA else 1f
+        mark.visibility = View.VISIBLE
+        placeMark()
+        container.removeCallbacks(moveMark)
+        if (!com.tmplayer.ui.theme.Motion.reduced) container.postDelayed(moveMark, MARK_MOVE_MS)
+    }
+
+    private fun placeMark() {
+        val mark = pauseMark ?: return
+        val density = mark.resources.displayMetrics.density
+        val params = mark.layoutParams as android.widget.FrameLayout.LayoutParams
+        params.gravity = MARK_GRAVITY[markSpot]
+        // Inside the television's safe area (Tv.SafeH 48 dp, Tv.SafeV 27 dp).
+        params.setMargins((48 * density).toInt(), (27 * density).toInt(), (48 * density).toInt(), (27 * density).toInt())
+        mark.layoutParams = params
+    }
+
+    private fun hideMark() {
+        container.removeCallbacks(moveMark)
+        pauseMark?.visibility = View.GONE
+    }
+
+    /** Nothing of the dim runs once the screen is left or stopped: no timer outlives the activity (the low-end rule). */
+    fun stopPauseDim() {
+        container.removeCallbacks(pauseDim)
+        hideMark()
+    }
+
     /** Buys the row its timeout again. Called by every interaction, however it arrived. */
     fun poke() {
         container.removeCallbacks(hide)
+        // Whatever the viewer just did: the mark is gone, and a pause starts counting again.
+        container.removeCallbacks(pauseDim)
+        hideMark()
+        if (pausedByViewer()) container.postDelayed(pauseDim, PAUSE_DIM_MS)
         if (held || player()?.isPlaying != true) return
         // The resume's own time holds for the pokes the resume itself sets off (the player's
         // listeners answer it more than once); anything later is the viewer, who gets the usual.
@@ -1501,6 +1569,23 @@ class PlayerControls(
             .format(java.util.Date(atMillis))
 
     private companion object {
+        /** After this long paused with no press, a television's row goes and the mark takes its place (WP-21). */
+        const val PAUSE_DIM_MS = 10_000L
+
+        /** The mark steps to the next corner this often. */
+        const val MARK_MOVE_MS = 60_000L
+
+        /** A mark that does not move (Reduce motion) is drawn at this strength. */
+        const val MARK_DIM_ALPHA = 0.6f
+
+        /** The corners the mark visits, top left first, clockwise. */
+        val MARK_GRAVITY = intArrayOf(
+            android.view.Gravity.TOP or android.view.Gravity.START,
+            android.view.Gravity.TOP or android.view.Gravity.END,
+            android.view.Gravity.BOTTOM or android.view.Gravity.END,
+            android.view.Gravity.BOTTOM or android.view.Gravity.START,
+        )
+
         /** When, after a press that stays on the row, the remote is checked to still be on its button. */
         val HOLD_FOCUS_CHECKS_MS = longArrayOf(0L, 150L, 400L, 900L)
 
