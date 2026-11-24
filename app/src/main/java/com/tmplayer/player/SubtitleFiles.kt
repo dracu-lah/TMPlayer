@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.result.contract.ActivityResultContracts
@@ -325,3 +327,13 @@ class SubtitleFiles(
         }
     }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')
 }
+
+/**
+ * Whether an app answers the system document picker ([Intent.ACTION_OPEN_DOCUMENT], any openable
+ * file), so a line that loads a subtitle file is shown only where it can open something (WP-81):
+ * the television's DocumentsUI is there on some boxes and missing on most sticks. The manifest
+ * lists the intent under `queries`, so Android 11 and later answers truthfully.
+ */
+fun documentPickerAvailable(context: Context): Boolean = runCatching {
+    Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").resolveActivity(context.packageManager) != null
+}.getOrDefault(false)

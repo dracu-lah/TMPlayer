@@ -99,6 +99,11 @@ enum class PlayerMenuEntry {
     /** The video's Telegram link with the time playing (U9); not for a protected chat or a video of pieces. */
     CopyLinkAtTime,
     /**
+     * Load a subtitle file (WP-81), through the system document picker. Only where a picker is installed
+     * ([documentPickerAvailable]): most sticks have none, and a line that opens nothing is not shown.
+     */
+    LoadSubtitleFile,
+    /**
      * Marks the moment as stuttering and keeps the last minute of the playback trace for Send logs
      * (L3). Also a held Info key on the remote. Not offered on a cast, which plays on the other TV.
      */
@@ -303,6 +308,9 @@ object PlayerMenu {
      * [rotatePicture] adds Rotate picture under the shapes (a picture, not a cast), and
      * [playerVolume] adds Player volume above Volume boost (the sound plays here, not on a cast).
      *
+     * [loadSubtitleFile] is whether a document picker is installed ([documentPickerAvailable]): the
+     * line is left out where there is none, so no press opens nothing.
+     *
      * [addToList] is whether the video came from a message, which a named list points at (the
      * same gate as [markWatched]); a list keeps a name, never a copy, so a chat that restricts
      * saving may be in one too, as the card menu has it.
@@ -328,6 +336,7 @@ object PlayerMenu {
         playerVolume: Boolean = false,
         addToList: Boolean = false,
         decoder: Boolean = false,
+        loadSubtitleFile: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
         // WP-20: Lock first, then the frequent lines under no header, then the groups. Every line
         // is added under its own gate, so a group a device leaves empty is never drawn.
@@ -361,6 +370,7 @@ object PlayerMenu {
         if (decoder) add(PlayerMenuEntry.Decoder)
         if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         add(PlayerMenuEntry.StartOver)
+        if (loadSubtitleFile) add(PlayerMenuEntry.LoadSubtitleFile)
         if (bookmarks) {
             add(PlayerMenuEntry.AddBookmark)
             add(PlayerMenuEntry.Bookmarks)
@@ -395,6 +405,7 @@ object PlayerMenu {
         PlayerMenuEntry.PreviousChapter, PlayerMenuEntry.NextFrame, PlayerMenuEntry.PreviousFrame,
         PlayerMenuEntry.Decoder, PlayerMenuEntry.OtherEngine, PlayerMenuEntry.StartOver, PlayerMenuEntry.AddBookmark,
         PlayerMenuEntry.Bookmarks, PlayerMenuEntry.MarkIntro, PlayerMenuEntry.RemoveIntroMark,
+        PlayerMenuEntry.LoadSubtitleFile,
         -> PlayerMenuGroup.Playback
         PlayerMenuEntry.SaveToDownloads, PlayerMenuEntry.OpenInAnotherApp, PlayerMenuEntry.CopyLinkAtTime,
         -> PlayerMenuGroup.Library

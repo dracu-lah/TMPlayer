@@ -148,6 +148,7 @@ class PlayerMenuTest {
             rotatePicture = true,
             playerVolume = true,
             addToList = true,
+            loadSubtitleFile = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -177,6 +178,7 @@ class PlayerMenuTest {
                 rotatePicture = true,
                 playerVolume = true,
                 addToList = true,
+                loadSubtitleFile = true,
             ).toSet(),
         )
     }
@@ -444,6 +446,17 @@ class PlayerMenuTest {
         assertFalse(PlayerMenuEntry.AddToList in PlayerMenu.tvEntries(pictureInPicture = true, markWatched = true))
     }
 
+    @Test
+    fun `load a subtitle file is a Playback line on the television, shown only where a document picker answers (WP-81)`() {
+        val tv = PlayerMenu.tvEntries(pictureInPicture = true, loadSubtitleFile = true)
+        assertTrue(PlayerMenuEntry.LoadSubtitleFile in tv)
+        assertEquals(PlayerMenuGroup.Playback, PlayerMenu.groupOf(PlayerMenuEntry.LoadSubtitleFile))
+        assertEquals(tv.indexOf(PlayerMenuEntry.StartOver) + 1, tv.indexOf(PlayerMenuEntry.LoadSubtitleFile))
+        // No picker (most sticks): no line, so no press opens nothing.
+        assertFalse(PlayerMenuEntry.LoadSubtitleFile in PlayerMenu.tvEntries(pictureInPicture = true))
+        assertEquals(com.tmplayer.i18n.L.playerLoadSubtitleFile, PhoneMenuEntry.LoadSubtitleFile.label())
+    }
+
     private fun everything(pictureInPicture: Boolean = true) = PlayerMenu.tvEntries(
         pictureInPicture = pictureInPicture,
         saveToDownloads = true,
@@ -464,6 +477,7 @@ class PlayerMenuTest {
         rotatePicture = true,
         playerVolume = true,
         addToList = true,
+        loadSubtitleFile = true,
     )
 
     @Test

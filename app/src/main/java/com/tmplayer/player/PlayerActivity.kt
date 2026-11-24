@@ -8297,6 +8297,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PhoneMenuEntry.NightMode -> toggleNightMode()
             PhoneMenuEntry.EvenVolume -> toggleEvenVolume()
             PhoneMenuEntry.AbLoop -> pressLoop()
+            loadSubtitleFile = documentPickerAvailable(this@PlayerActivity),
             PhoneMenuEntry.RepeatVideo -> toggleRepeatVideo()
             PhoneMenuEntry.NextChapter -> stepChapter(forward = true)
             PhoneMenuEntry.PreviousChapter -> stepChapter(forward = false)
@@ -8428,6 +8429,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /** Paused by the viewer, not stalled for bytes: when the frame steps are offered. */
+            PlayerMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
     private fun isPaused(): Boolean = playing?.playWhenReady == false
 
     /**

@@ -70,6 +70,12 @@
         <intent>
             <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
         </intent>
+        <!-- Load a subtitle file (WP-81): the television shows the line only where a document picker answers. -->
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT" />
+            <category android:name="android.intent.category.OPENABLE" />
+            <data android:mimeType="*/*" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="vnd.youtube" />
