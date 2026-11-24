@@ -44,6 +44,19 @@ object VersionLine {
     fun shown(version: String): String = clean(version, VERSION_MAX)
 
     /**
+     * The version as the compact mark shows it: "v1.28.7". Everything after the first dash or plus
+     * (`-beta.3`, the preview's `-test`, a build suffix) is left off, since the full text, the
+     * build and the update source are in About and in the copied support line. A version that
+     * does not start with a digit (a development build) is shown as built, never invented into a
+     * number.
+     */
+    fun compact(version: String): String {
+        val flat = shown(version)
+        val core = flat.substringBefore('-').substringBefore('+').trim()
+        return if (core.isNotEmpty() && core[0].isDigit()) "v$core" else flat
+    }
+
+    /**
      * The state beside the version. "Up to date" needs a completed check ([lastCheck] above 0,
      * epoch milliseconds, 0 for never); before one the version shows alone, never a false claim.
      */

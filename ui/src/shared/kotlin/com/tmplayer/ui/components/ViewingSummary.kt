@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -31,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
+
+/** The tag of the three figures' strip, for tests. */
+const val VIEWING_STRIP_TAG = "viewingStrip"
 
 /**
  * "Your viewing" at the top of the profile picture's menu (REELBOX-PARITY: a profile header): how
@@ -47,12 +51,23 @@ fun ViewingSummary(
     onWatched: () -> Unit,
     onStarred: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * One quiet strip (the phone's account sheet): no heading line, which the strip's own
+     * description says to a screen reader, and less room round the three figures.
+     */
+    compact: Boolean = false,
 ) {
     val s = LocalStrings.current
-    Column(modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
-        Text(s.profileHeading, style = MaterialTheme.typography.labelMedium, color = Tone.muted)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = if (compact) 2.dp else 6.dp)
+            .then(if (compact) Modifier.semantics { contentDescription = s.profileHeading } else Modifier)
+            .testTag(VIEWING_STRIP_TAG),
+    ) {
+        if (!compact) Text(s.profileHeading, style = MaterialTheme.typography.labelMedium, color = Tone.muted)
         Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
+            Modifier.fillMaxWidth().padding(top = if (compact) 0.dp else 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Count(watching, s.profileWatching, onWatching, Modifier.weight(1f))

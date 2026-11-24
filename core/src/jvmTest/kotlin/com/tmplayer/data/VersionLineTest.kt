@@ -76,4 +76,19 @@ class VersionLineTest {
         val state = VersionLine.state(UpdateState.Available(release.copy(version = "9".repeat(1_024))), true, 0)
         assertEquals(VersionLine.VERSION_MAX, (state as VersionState.Available).version.length)
     }
+
+    @Test
+    fun `the compact version is v and the number, whatever follows the dash`() {
+        assertEquals("v1.28.7", VersionLine.compact("1.28.7"))
+        assertEquals("v1.28.7", VersionLine.compact("1.28.7-test"))
+        assertEquals("v1.28.7", VersionLine.compact("1.28.7-beta.3"))
+        assertEquals("v1.28.7", VersionLine.compact(" 1.28.7+12\n"))
+    }
+
+    @Test
+    fun `a version that is no number is shown as built and a huge one is cut`() {
+        assertEquals("dev", VersionLine.compact("dev"))
+        assertEquals("", VersionLine.compact(""))
+        assertTrue(VersionLine.compact("9".repeat(1_000)).length <= VersionLine.VERSION_MAX + 1)
+    }
 }
