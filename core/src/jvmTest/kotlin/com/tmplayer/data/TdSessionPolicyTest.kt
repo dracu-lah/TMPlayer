@@ -70,7 +70,7 @@ class TdSessionPolicyTest {
 
         "ui/src/shared/kotlin/com/tmplayer/data/Thumbnails.kt" to (3 to "pictures for the screen on screen, a read"),
         "ui/src/shared/kotlin/com/tmplayer/ui/browse/AddChatsViewModel.kt" to (1 to screenRead),
-        "ui/src/shared/kotlin/com/tmplayer/ui/browse/BrowseViewModel.kt" to (22 to "the chat browser's reads and the sponsored signals of the screen on screen; its view models are per profile"),
+        "ui/src/shared/kotlin/com/tmplayer/ui/browse/BrowseViewModel.kt" to (17 to "the chat browser's reads and the sponsored signals of the screen on screen; its view models are per profile"),
         "ui/src/shared/kotlin/com/tmplayer/ui/browse/ChatInfoLoad.kt" to (1 to screenRead),
         "ui/src/shared/kotlin/com/tmplayer/ui/browse/GlobalSearchViewModel.kt" to (2 to screenRead),
         "ui/src/shared/kotlin/com/tmplayer/ui/browse/HomeViewModel.kt" to (3 to "Home's reads, its snapshot stamped"),
