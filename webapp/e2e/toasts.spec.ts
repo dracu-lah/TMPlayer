@@ -178,6 +178,8 @@ test.describe('the TV', () => {
         await expect(page.locator('.tv-bar')).toBeVisible()
         await show(page, 'success', 'Link copied')
         await expect(toast(page)).toBeVisible()
+        // The entry animation moves the card sideways while it runs (WebKit is slower than Chromium): measure it at rest.
+        await page.evaluate(() => Promise.all(document.querySelector('.toast')!.getAnimations().map((a) => a.finished.catch(() => null))))
         const m = await page.evaluate(() => {
             const t = document.querySelector('.toast')!.getBoundingClientRect()
             return { bottom: t.bottom, left: t.left, right: t.right, font: parseFloat(getComputedStyle(document.querySelector('.toast p')!).fontSize), h: innerHeight, w: innerWidth }

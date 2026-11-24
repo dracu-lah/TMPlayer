@@ -5,8 +5,9 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { fakeCase, noSizeFloor } from './helpers'
 
-test.beforeEach(async ({ page, isMobile }) => {
+test.beforeEach(async ({ page, isMobile, browserName }) => {
     test.skip(isMobile, 'a desktop browser saves to its downloads folder')
+    test.skip(browserName !== 'chromium', 'the service worker is blocked in the WebKit projects (playwright.config.ts); the other engines are the user\'s device check')
     await noSizeFloor(page)
 })
 

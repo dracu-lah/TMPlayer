@@ -287,10 +287,17 @@ test.describe('a video page', () => {
         await summary.click()
         const options = page.getByRole('option')
         await expect(options).toHaveCount(3)
-        // Recommended first (HX38): this Chromium has no HEVC, so the 1080p it plays leads and the HEVC 4K goes last.
-        await expect(options.nth(0)).toContainText('1080p')
-        await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true')
-        await expect(options.nth(2)).toContainText('4K')
+        // Recommended first (HX38): where the browser has no HEVC (Chromium here) the 1080p it plays leads and the
+        // HEVC 4K goes last; where it plays HEVC (WebKit) the 4K leads, as the page asks the same way (slowKinds).
+        const hevc = await page.evaluate(() => {
+            const ms = (window as unknown as { MediaSource?: { isTypeSupported?: (m: string) => boolean } }).MediaSource
+            const m = 'video/mp4; codecs="hvc1.1.6.L93.B0"'
+            return !!ms?.isTypeSupported?.(m) || document.createElement('video').canPlayType(m) !== ''
+        })
+        await expect(options.nth(0)).toContainText(hevc ? '4K' : '1080p')
+        // The page shows the 1080p copy, so that one is the selected option wherever it stands in the list.
+        await expect(options.filter({ hasText: '1080p' })).toHaveAttribute('aria-selected', 'true')
+        await expect(options.nth(hevc ? 1 : 2)).toContainText(hevc ? '1080p' : '4K')
         // R9: the list is a list box, so the arrows walk it (a TV has its remote's own walk).
         if (!(await page.evaluate(() => document.documentElement.dataset.form === 'tv'))) {
             await options.nth(0).focus()
@@ -299,7 +306,7 @@ test.describe('a video page', () => {
             await page.keyboard.press('End')
             await expect(options.nth(2)).toBeFocused()
         }
-        await options.nth(1).click()
+        await options.filter({ hasText: '720p' }).click()
         await expect(page).toHaveURL(/\/video\/-1005\/27$/)
         await expect(page.locator('.detail-copy-summary')).toContainText('720p')
     })
