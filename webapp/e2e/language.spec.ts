@@ -202,7 +202,8 @@ for (const tag of ['de', 'ar'])
         })
         for (const [name, path, ready] of SCREENS)
             test(name, async ({ page }, info) => {
-                await page.goto(path)
+                // The TV's Settings opens its pane on the page a row's address names (WP-88), not on a path.
+                await page.goto(formOf(info) === 'tv-1920' && path === '/settings/appearance' ? '/settings#language' : path)
                 await expect(page.locator(ready).first()).toBeVisible()
                 await expect(page.locator('html')).toHaveAttribute('lang', tag)
                 await expect(page.locator('html')).toHaveAttribute('dir', tag === 'ar' ? 'rtl' : 'ltr')

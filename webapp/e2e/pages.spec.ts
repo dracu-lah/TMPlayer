@@ -115,6 +115,8 @@ test.describe('Settings as pages', () => {
             await expect(page).toHaveURL(/\/settings$/)
             // A click while the TV's Settings is still taking the desktop's place can land on the page going away: clicked again then.
             await expect(async () => {
+                // The TV's pane opens on Account; the layout is on Appearance and language (WP-88).
+                await page.getByRole('button', { name: 'Appearance and language' }).click()
                 await page.getByRole('radio', { name: 'Desktop' }).click({ force: true })
                 await expect(page.locator('html')).toHaveAttribute('data-form', 'desktop', { timeout: 2000 })
             }).toPass()
