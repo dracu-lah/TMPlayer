@@ -6,11 +6,13 @@
 // `node --test`.
 
 /** The pages of Settings on the web, in the list's order. */
-export const PAGE_IDS = ['appearance', 'home', 'playback', 'subtitles', 'privacy', 'storage', 'about'] as const
+// WP-78: the order and the names of core's SettingsGroup (WP-08): Account, Playback, Subtitles and audio, Downloads and data,
+// Appearance and language, Home and library, Help, About. Privacy and lock and Notifications have no web rows, so they are not listed.
+export const PAGE_IDS = ['account', 'playback', 'subtitles', 'storage', 'appearance', 'home', 'help', 'about'] as const
 export type PageId = (typeof PAGE_IDS)[number]
 
 /** Addresses that were pages once: Home and Library are one page now (Home and library). */
-export const OLD_PAGES: Readonly<Record<string, PageId>> = { library: 'home' }
+export const OLD_PAGES: Readonly<Record<string, PageId>> = { library: 'home', privacy: 'account' }
 
 /** The page an address names, an old address included, or null. */
 export function pageFor(name: string | undefined): PageId | null {
@@ -21,13 +23,14 @@ export function pageFor(name: string | undefined): PageId | null {
 
 /** The catalog key of each page's name, as the list and the page's heading say it. */
 export const PAGE_TITLES: Readonly<Record<PageId, string>> = {
-    appearance: 'settings.appearance',
-    home: 'settings.page_home_library',
+    account: 'settings.group_account',
     playback: 'settings.playback',
     subtitles: 'settings.page_subtitles_audio',
-    privacy: 'settings.page_privacy_lock',
-    storage: 'web.settings_storage',
-    about: 'settings.page_about',
+    storage: 'settings.page_downloads_data',
+    appearance: 'settings.page_appearance',
+    home: 'settings.page_home_library',
+    help: 'settings.help',
+    about: 'settings.group_about',
 }
 
 /** What decides whether a row is drawn now: the form, and what this device and account have. */
@@ -68,9 +71,28 @@ const always = () => true
 
 /** Every row the web's Settings draws on a phone or a desktop, by page in the order the page draws them. */
 const defs: MapRow[] = [
+    // Account: who is signed in and resume on the other devices. Sign out stays beside every page (the list), and the account's menu.
+    { id: 'resume_sync', page: 'account', core: true, title: 'settings.resume_sync' },
+    { id: 'resume_sync_delete', page: 'account', core: true, title: 'settings.resume_sync_delete', shown: (c) => c.sync || c.syncFile },
+    { id: 'sign_out', page: null, core: true, title: 'settings.sign_out' },
+
+    { id: 'resume_rewind', page: 'playback', core: true, title: 'settings.resume_rewind' },
+
+    { id: 'subtitle_style', page: 'subtitles', core: true, title: 'settings.subtitle_style' },
+    { id: 'msone', page: 'subtitles', core: true, title: 'msone.title', shown: (c) => c.msone },
+    { id: 'submaker_base', page: 'subtitles', core: true, title: 'submaker.settings_title', details: ['submaker.settings_message'] },
+
+    { id: 'install', page: 'storage', core: false, title: 'web.install_title', details: ['web.install_pwa_body'], shown: (c) => c.installable },
+    { id: 'storage', page: 'storage', core: false, title: 'web.storage_title', details: ['web.storage_body_stream'] },
+    { id: 'clear_cache', page: 'storage', core: false, title: 'web.storage_clear_cache', details: ['web.storage_clear_cache_detail'], shown: (c) => c.storageEstimate },
+    { id: 'keep_storage', page: 'storage', core: false, title: 'web.keep_storage' },
+    { id: 'back_up', page: 'storage', core: true, title: 'backup.back_up', details: ['backup.back_up_detail'] },
+    { id: 'restore', page: 'storage', core: true, title: 'backup.restore', details: ['backup.restore_detail'] },
+
+    // Appearance and language: Language is the first row.
+    { id: 'language', page: 'appearance', core: true, title: 'settings.language' },
     { id: 'theme', page: 'appearance', core: true, title: 'settings.theme' },
     { id: 'layout', page: 'appearance', core: false, title: 'settings.layout', shown: (c) => (c.form !== 'phone' || !!c.tablet) && !c.layoutFixed },
-    { id: 'language', page: 'appearance', core: true, title: 'settings.language' },
     { id: 'reduce_motion', page: 'appearance', core: false, title: 'settings.reduce_motion', details: ['settings.reduce_motion_on', 'settings.reduce_motion_off'] },
     { id: 'high_contrast', page: 'appearance', core: true, title: 'settings.high_contrast', details: ['settings.high_contrast_detail'] },
 
@@ -85,30 +107,29 @@ const defs: MapRow[] = [
     { id: 'trailers_in_app', page: 'home', core: true, title: 'metadata.trailers_in_app' },
     { id: 'clear_history', page: 'home', core: true, title: 'browse.clear_history' },
 
-    { id: 'resume_rewind', page: 'playback', core: true, title: 'settings.resume_rewind' },
-    { id: 'subtitle_style', page: 'subtitles', core: true, title: 'settings.subtitle_style' },
-    { id: 'msone', page: 'subtitles', core: true, title: 'msone.title', shown: (c) => c.msone },
-    { id: 'submaker_base', page: 'subtitles', core: true, title: 'submaker.settings_title', details: ['submaker.settings_message'] },
+    // Help: the news, the reports.
+    { id: 'whats_new', page: 'help', core: true, title: 'settings.whats_new' },
+    { id: 'changelog', page: 'help', core: true, title: 'settings.changelog', details: ['settings.changelog_detail'] },
+    { id: 'report_problem', page: 'help', core: true, title: 'settings.report_problem' },
+    { id: 'request_feature', page: 'help', core: true, title: 'web.request_feature', details: ['web.request_feature_detail'] },
 
-    { id: 'resume_sync', page: 'privacy', core: true, title: 'settings.resume_sync' },
-    { id: 'resume_sync_delete', page: 'privacy', core: true, title: 'settings.resume_sync_delete', shown: (c) => c.sync || c.syncFile },
-
-    { id: 'install', page: 'storage', core: false, title: 'web.install_title', details: ['web.install_pwa_body'], shown: (c) => c.installable },
-    { id: 'storage', page: 'storage', core: false, title: 'web.storage_title', details: ['web.storage_body_stream'] },
-    { id: 'clear_cache', page: 'storage', core: false, title: 'web.storage_clear_cache', details: ['web.storage_clear_cache_detail'], shown: (c) => c.storageEstimate },
-    { id: 'keep_storage', page: 'storage', core: false, title: 'web.keep_storage' },
-    { id: 'back_up', page: 'storage', core: true, title: 'backup.back_up', details: ['backup.back_up_detail'] },
-    { id: 'restore', page: 'storage', core: true, title: 'backup.restore', details: ['backup.restore_detail'] },
-
-    { id: 'whats_new', page: 'about', core: true, title: 'settings.whats_new' },
-    { id: 'changelog', page: 'about', core: true, title: 'settings.changelog', details: ['settings.changelog_detail'] },
-    { id: 'report_problem', page: 'about', core: true, title: 'settings.report_problem' },
-    { id: 'request_feature', page: 'about', core: true, title: 'web.request_feature', details: ['web.request_feature_detail'] },
     { id: 'notices', page: 'about', core: false, title: 'about.notices_title', details: ['about.notices_detail'] },
     { id: 'legal', page: 'about', core: false, title: 'login.legal' },
     { id: 'chip_in', page: 'about', core: false, title: 'support.buy_coffee', details: ['support.pay_upi'] },
+]
 
-    { id: 'sign_out', page: null, core: true, title: 'settings.sign_out' },
+/**
+ * Rows that moved in the WP-08 taxonomy and keep a "Moved to" line at their old place for one release (the apps' `also_in_moved`):
+ * the old page lists them with the new page's name, and a press goes to the row. Remove them in the release after the beta.
+ * Resume on your other devices moved from Privacy and lock, a page the web no longer has: its address goes to Account (OLD_PAGES).
+ */
+export const MOVED: readonly { id: string; from: PageId; to: PageId }[] = [
+    { id: 'submaker_base', from: 'playback', to: 'subtitles' },
+    { id: 'msone', from: 'playback', to: 'subtitles' },
+    { id: 'whats_new', from: 'about', to: 'help' },
+    { id: 'changelog', from: 'about', to: 'help' },
+    { id: 'report_problem', from: 'about', to: 'help' },
+    { id: 'request_feature', from: 'about', to: 'help' },
 ]
 
 export const ROWS: readonly MapRow[] = defs.map((r): MapRow => ({ shown: always, ...r }))

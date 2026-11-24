@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import * as core from '../rules/core/tmplayer-rules.mjs'
 import type { Rules } from '../rules'
-import { coreForm, mergeHits, ownHits, pageFor, PAGE_IDS, PAGE_TITLES, QUERY_MAX, ROWS, rowFor, shownRows, words, type RowContext } from './settingsMap.ts'
+import { MOVED, OLD_PAGES, coreForm, mergeHits, ownHits, pageFor, PAGE_IDS, PAGE_TITLES, QUERY_MAX, ROWS, rowFor, shownRows, words, type RowContext } from './settingsMap.ts'
 
 const json = readFileSync(new URL('../../../core/src/commonMain/resources/i18n/en.json', import.meta.url), 'utf8')
 core.provideCatalog('en', json)
@@ -132,4 +132,47 @@ test('what is new is the apps sheet: a version, an address and lines', () => {
     assert.match(n.version, /^\d+\.\d+\.\d+$/)
     assert.match(n.changelog, /^https:\/\//)
     assert.ok(n.highlights.length >= 3 && n.highlights.every((h) => h.trim() && !h.startsWith('whatsnew.')))
+})
+
+// WP-78: the order and the names of core's SettingsGroup.
+test('the pages are in the apps\' order and have the apps\' names', () => {
+    assert.deepEqual([...PAGE_IDS], ['account', 'playback', 'subtitles', 'storage', 'appearance', 'home', 'help', 'about'])
+    const core = readFileSync(new URL('../../../core/src/pureMain/kotlin/com/tmplayer/data/SettingsMap.kt', import.meta.url), 'utf8')
+    const titles = [...core.matchAll(/^    \w+\("([a-z_.]+)", "[a-z_.]+"(?:, \w+)?\),?;?$/gm)].map((m) => m[1]!)
+    // The groups core lists (a sub page and Notifications have no web page); the web's pages follow in the same order.
+    const web = PAGE_IDS.map((id) => PAGE_TITLES[id])
+    const listed = titles.filter((k) => web.includes(k))
+    assert.deepEqual(listed, web)
+})
+
+test('one home for every row: no id twice, and a page the web lacks (Privacy and lock) leads to the one that took its rows', () => {
+    const ids = ROWS.map((r) => r.id)
+    assert.equal(new Set(ids).size, ids.length)
+    assert.equal(pageFor('privacy'), 'account')
+    assert.equal(OLD_PAGES.privacy, 'account')
+    assert.equal(pageFor('library'), 'home')
+    assert.equal(rowFor('resume_sync')?.page, 'account')
+})
+
+test('"Moved to" lines are for rows that exist, on the page they left, pointing at their new page', () => {
+    for (const m of MOVED) {
+        const row = rowFor(m.id)
+        assert.ok(row, m.id)
+        assert.equal(row.page, m.to, `${m.id} lives on ${m.to}`)
+        assert.notEqual(m.from, m.to)
+        assert.ok((PAGE_IDS as readonly string[]).includes(m.from))
+    }
+    assert.ok(text('settings.also_in_moved').includes('{page}'))
+})
+
+test('Language is the first row of Appearance and language, as in the apps', () => {
+    assert.equal(ROWS.find((r) => r.page === 'appearance')?.id, 'language')
+})
+
+test('Sign out, Back up and Language are found by their words', () => {
+    const context = everything('desktop')
+    const rows = shownRows(context)
+    for (const [query, id] of [['sign out', 'sign_out'], ['back up', 'back_up'], ['language', 'language'], ['resume', 'resume_sync']] as const) {
+        assert.ok(ownHits(query, rows, text).includes(id) || r.settingsSearch(query, coreForm('desktop'), null).includes(id), `${query} finds ${id}`)
+    }
 })

@@ -27,52 +27,7 @@ export function TvSettings() {
             <h1 class="page-title">{t('nav.settings')}</h1>
             {/* The version, the build and the update state, read only: the account menu's last row is the TV's copy target (WP-104). */}
             <VersionFooter look="text" />
-            <TvPanel title={t('picker.row_title')} id="add-chats-label" anchor={rowDomId('chosen_chats')}>
-                <p class="muted small">{chosenDetail()}</p>
-                <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('picker.choose_chats')}</A>
-            </TvPanel>
-            <TvPanel title={t('settings.theme')} id="theme-label" anchor={rowDomId('theme')}>
-                <ThemeChoices />
-            </TvPanel>
-            <Show when={!layoutFixed()}>
-                <TvPanel title={t('settings.layout')} id="layout-label" anchor={rowDomId('layout')}>
-                    <LayoutChoices />
-                </TvPanel>
-            </Show>
-            <div class="panel">
-                <LanguageBlock />
-            </div>
-            <For each={HOME_SWITCHES}>
-                {(s) => <TvSwitch id={s.id} row={s.row} title={t(s.title)} on={settings()[s.key]} onText={t(s.on)} offText={t(s.off)} onPick={(on) => setSetting(s.key, on)} />}
-            </For>
-            <p class="muted small">{t('settings.home_follows_added')}</p>
-            <HomeOrder />
-            <TvSwitch id="sync" row="resume_sync" title={t('settings.resume_sync')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
-            <p class="muted small">{t('syncplace.privacy')}</p>
-            <Show when={syncOn()}>
-                <p class="muted small" role="status">{statusLine()}</p>
-                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" disabled={syncRunning()} onClick={() => void syncNow()}>{!syncRunning() && syncStatus()?.kind === 'failed' ? t('common.try_again') : t('settings.resume_sync_now')}</button>
-            </Show>
-            <TvPanel title={t('browse.clear_history')} id="history-label" anchor={rowDomId('clear_history')}>
-                <p class="muted small">{t('browse.clear_history_detail')}</p>
-                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="history-label" onClick={() => void clearHistoryWithUndo()}>
-                    {t('browse.clear_history')}
-                </button>
-            </TvPanel>
-            <TvPanel title="" id="rewind-panel">
-                <Rewind />
-            </TvPanel>
-            <Show when={msoneOn()}>
-                <TvMsone />
-            </Show>
-            <TvSwitch id="posters" row="posters" title={t('web.posters_title')} on={settings().posters} onText={t('web.posters_on_detail')} offText={t('metadata.toggle_off')} onPick={(on) => setSetting('posters', on)}>
-                <TmdbCredit />
-            </TvSwitch>
-            <TvSwitch id="trailers" row="trailers_in_app" title={t('metadata.trailers_in_app')} on={settings().trailersInApp} onText={t('metadata.trailers_in_app_detail')} offText={t('metadata.trailers_in_app_detail')} onPick={(on) => setSetting('trailersInApp', on)} />
-            <Install />
-            <div class="panel">
-                <StorageBlock />
-            </div>
+            {/* The apps' order (WP-78): Account, Playback, Subtitles and audio, Downloads and data, Appearance and language, Home and library, Help, About. */}
             <div class="panel">
                 <h2 class="panel-title">{t('settings.account')}</h2>
                 <Show when={me()?.name}>
@@ -84,6 +39,52 @@ export function TvSettings() {
                 <SignOut />
                 <RemoveAllButton />
             </div>
+            <TvSwitch id="sync" row="resume_sync" title={t('settings.resume_sync')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
+            <p class="muted small">{t('syncplace.privacy')}</p>
+            <Show when={syncOn()}>
+                <p class="muted small" role="status">{statusLine()}</p>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" disabled={syncRunning()} onClick={() => void syncNow()}>{!syncRunning() && syncStatus()?.kind === 'failed' ? t('common.try_again') : t('settings.resume_sync_now')}</button>
+            </Show>
+            <TvPanel title="" id="rewind-panel">
+                <Rewind />
+            </TvPanel>
+            <Show when={msoneOn()}>
+                <TvMsone />
+            </Show>
+            <Install />
+            <div class="panel">
+                <StorageBlock />
+            </div>
+            <div class="panel">
+                <LanguageBlock />
+            </div>
+            <TvPanel title={t('settings.theme')} id="theme-label" anchor={rowDomId('theme')}>
+                <ThemeChoices />
+            </TvPanel>
+            <Show when={!layoutFixed()}>
+                <TvPanel title={t('settings.layout')} id="layout-label" anchor={rowDomId('layout')}>
+                    <LayoutChoices />
+                </TvPanel>
+            </Show>
+            <TvPanel title={t('picker.row_title')} id="add-chats-label" anchor={rowDomId('chosen_chats')}>
+                <p class="muted small">{chosenDetail()}</p>
+                <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('picker.choose_chats')}</A>
+            </TvPanel>
+            <For each={HOME_SWITCHES}>
+                {(s) => <TvSwitch id={s.id} row={s.row} title={t(s.title)} on={settings()[s.key]} onText={t(s.on)} offText={t(s.off)} onPick={(on) => setSetting(s.key, on)} />}
+            </For>
+            <p class="muted small">{t('settings.home_follows_added')}</p>
+            <HomeOrder />
+            <TvPanel title={t('browse.clear_history')} id="history-label" anchor={rowDomId('clear_history')}>
+                <p class="muted small">{t('browse.clear_history_detail')}</p>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="history-label" onClick={() => void clearHistoryWithUndo()}>
+                    {t('browse.clear_history')}
+                </button>
+            </TvPanel>
+            <TvSwitch id="posters" row="posters" title={t('web.posters_title')} on={settings().posters} onText={t('web.posters_on_detail')} offText={t('metadata.toggle_off')} onPick={(on) => setSetting('posters', on)}>
+                <TmdbCredit />
+            </TvSwitch>
+            <TvSwitch id="trailers" row="trailers_in_app" title={t('metadata.trailers_in_app')} on={settings().trailersInApp} onText={t('metadata.trailers_in_app_detail')} offText={t('metadata.trailers_in_app_detail')} onPick={(on) => setSetting('trailersInApp', on)} />
             <TvPanel title={t('feedback.title')} id="feedback-label" anchor={rowDomId('report_problem')}>
                 <p class="muted small">{t('feedback.tv_phone_hint')}</p>
                 <button class="outline-button" style={{ 'align-self': 'start' }} type="button" onClick={(e) => openFeedback('problem', e.currentTarget)}>

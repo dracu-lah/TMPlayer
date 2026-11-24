@@ -230,7 +230,7 @@ test.describe('the crash card', () => {
         // The next start keeps it for the report: the earlier run's crash is in what Copy details gives.
         await page.reload()
         await page.addInitScript(() => localStorage.setItem('tmplayer-feedback-off', '1'))
-        await page.goto('/settings/about')
+        await page.goto('/settings/help')
         await page.getByRole('button', { name: /Copy details/ }).click()
         await expect(page.getByText('Details copied')).toBeVisible()
         const next = await page.evaluate(() => navigator.clipboard.readText())

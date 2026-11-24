@@ -234,8 +234,8 @@ test.describe('TV remote', () => {
         }
         const label = () => page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') ?? '')
         await expect.poll(() => page.evaluate(() => document.activeElement?.tagName ?? '')).not.toBe('BODY')
-        for (let i = 0; i < 80 && (await label()) !== 'history-label' && (await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name)) !== 'rewind'; i++) await press('ArrowDown')
-        for (let i = 0; i < 4 && (await label()) !== 'history-label'; i++) await press('ArrowUp')
+        // Clear history is under Home and library, after Account, Playback, Downloads and Appearance (WP-78): the walk goes on to it.
+        for (let i = 0; i < 160 && (await label()) !== 'history-label'; i++) await press('ArrowDown')
         expect(await label()).toBe('history-label')
         await press('Enter')
         await expect(page.getByRole('dialog', { name: 'Clear history?' })).toBeVisible()

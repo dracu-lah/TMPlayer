@@ -321,13 +321,14 @@ for (const size of [
             await expect.poll(() => focused(page)).toContain('tv-picture')
             // Down to the theme's choices (Chosen chats stands above them since HX27).
             const onTheme = () => page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name === 'theme')
-            for (let i = 0; i < 6 && !(await onTheme()); i++) await press(page, 'ArrowDown')
+            for (let i = 0; i < 120 && !(await onTheme()); i++) await press(page, 'ArrowDown')
             expect(await onTheme()).toBe(true)
             await press(page, 'ArrowRight')
             expect(await page.evaluate(() => document.documentElement.dataset.theme ?? 'system')).toBe('system')
             await press(page, 'Enter')
             expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
-            for (let i = 0; i < 30 && !(await focused(page)).includes('danger-button'); i++) await press(page, 'ArrowDown')
+            // Sign out is in the Account panel, above the theme since WP-78.
+            for (let i = 0; i < 120 && !(await focused(page)).includes('danger-button'); i++) await press(page, 'ArrowUp')
             expect(await focused(page)).toContain('danger-button')
             // Its icon beside the words, not on a line above them (the TV's Settings is not .set).
             expect(await offCentre(page, '.danger-button', 'svg', 'y')).toBeLessThanOrEqual(1)
@@ -398,8 +399,10 @@ for (const size of [
         test('Settings: choosing Desktop with the remote takes the TV bar and keys away at once', async ({ page }) => {
             await page.goto('/settings')
             await expect.poll(() => focused(page)).not.toBe('')
-            for (let i = 0; i < 6 && !(await focused(page)).startsWith('INPUT|'); i++) await press(page, 'ArrowDown')
-            await press(page, 'ArrowDown')
+            // The layout's choices are far down the page since WP-78 (Account, Playback and storage come first).
+            const onLayout = () => page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name === 'layout')
+            for (let i = 0; i < 120 && !(await onLayout()); i++) await press(page, 'ArrowDown')
+            expect(await onLayout()).toBe(true)
             for (let i = 0; i < 4 && (await page.evaluate(() => document.activeElement?.closest('label')?.textContent?.trim())) !== 'Desktop'; i++) await press(page, 'ArrowLeft')
             await press(page, 'Enter')
             await expect(page.locator('html')).toHaveAttribute('data-form', 'desktop')

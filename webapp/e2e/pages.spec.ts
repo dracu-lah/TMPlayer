@@ -57,10 +57,12 @@ test.describe('Settings as pages', () => {
         test.use(IN.desktop)
         test('a desktop shows the list beside the page, which its address names', async ({ page }) => {
             await page.goto('/settings')
-            await expect(page).toHaveURL(/\/settings\/appearance$/)
+            await expect(page).toHaveURL(/\/settings\/account$/)
             const list = page.getByRole('navigation', { name: 'Settings' })
-            // Appearance, Home and library, Playback, Privacy and lock, Storage and About.
-            await expect(list.getByRole('link')).toHaveCount(6)
+            // The apps' order (WP-78): Account, Playback, Subtitles and audio, Downloads and data, Appearance and language, Home and library, Help and About.
+            await expect(list.getByRole('link')).toHaveCount(8)
+            await expect(list.getByRole('link', { name: /^Account/ })).toHaveAttribute('aria-current', 'page')
+            await list.getByRole('link', { name: /^Appearance/ }).click()
             await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
             await expect(list.getByRole('link', { name: /^Appearance/ })).toHaveAttribute('aria-current', 'page')
             await list.getByRole('link', { name: /^Home/ }).click()
@@ -106,7 +108,7 @@ test.describe('Settings as pages', () => {
     test.describe('on a desktop', () => {
         test.use(IN.desktop)
         test('changing the layout on a page keeps the viewer on it', async ({ page }) => {
-            await page.goto('/settings')
+            await page.goto('/settings/appearance')
             await page.getByRole('radio', { name: 'TV' }).click({ force: true })
             await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
             // The TV's Settings is one page: back on the desktop, the page it was on comes back.

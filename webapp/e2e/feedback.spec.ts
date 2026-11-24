@@ -38,7 +38,8 @@ const ok = (route: Route, duplicate = false) =>
 
 async function about(page: Page) {
     await noSizeFloor(page)
-    await page.goto('/settings/about')
+    // The reports are under Help since WP-78.
+    await page.goto('/settings/help')
     await expect(page.locator('[data-feedback-rows]')).toBeVisible()
 }
 

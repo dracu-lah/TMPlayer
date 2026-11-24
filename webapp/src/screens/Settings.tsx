@@ -1,7 +1,7 @@
 import { createEffect, For, Match, Show, Switch } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { ArrowLeft02Icon, HardDriveIcon, Home03Icon, InformationCircleIcon, LockKeyholeIcon, PaintBoardIcon, PlayIcon, SubtitleIcon as SubtitlesIcon } from '@hugeicons/core-free-icons'
-import { OLD_PAGES, pageFor, type PageId, type RowContext } from '../ui/settingsMap'
+import { ArrowLeft02Icon, HardDriveIcon, HelpCircleIcon, Home03Icon, InformationCircleIcon, PaintBoardIcon, PlayIcon, SubtitleIcon as SubtitlesIcon, UserIcon } from '@hugeicons/core-free-icons'
+import { MOVED, OLD_PAGES, pageFor, PAGE_TITLES, rowFor, type PageId, type RowContext } from '../ui/settingsMap'
 import { rowDomId, SettingsSearch, showingResults, useRowTarget } from './SettingsFind'
 import { settings } from '../store'
 import { back, me } from '../session'
@@ -13,7 +13,7 @@ import { installed, installPrompt, iosBrowser } from '../install'
 import { msoneOn } from '../msoneFlag'
 import { syncHasFile, syncOn } from '../sync'
 import { Chevron, RowBody } from '../ui/SettingsParts'
-import { About } from './settings/About'
+import { About, Help } from './settings/About'
 import { HomePage, Library } from './settings/Home'
 import { LanguageBlock } from './settings/Language'
 import { Playback } from './settings/Playback'
@@ -28,20 +28,22 @@ import { TvSettings } from './settings/Tv'
 import { dot } from '../ui/dot'
 import { VersionFooter } from '../ui/VersionFooter'
 
-/** The app's pages (SettingsPage) that the web has something to put in, in its order. Home and library are one page, as in the apps (11.1). */
+/** The app's pages (SettingsGroup, WP-08) that the web has something to put in, in the apps' order (ui/settingsMap.ts PAGE_IDS). */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
+    { id: 'account', icon: UserIcon, title: () => t('settings.group_account'), summary: () => (syncOn() ? t('syncplace.switch_on') : t('syncplace.switch_off')) },
+    { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
+    { id: 'subtitles', icon: SubtitlesIcon, title: () => t('settings.page_subtitles_audio'), summary: () => t('settings.subtitle_style') },
+    { id: 'storage', icon: HardDriveIcon, title: () => t('settings.page_downloads_data'), summary: () => t('web.settings_storage_summary') },
     {
         id: 'appearance',
         icon: PaintBoardIcon,
-        title: () => t('settings.appearance'),
-        summary: () => [t(`theme.${settings().theme}`), form() === 'phone' || layoutFixed() ? '' : t(`settings.layout_${layout()}`), languageName(language())].filter(Boolean).join(dot),
+        title: () => t('settings.page_appearance'),
+        // Language first, as on the page.
+        summary: () => [languageName(language()), t(`theme.${settings().theme}`), form() === 'phone' || layoutFixed() ? '' : t(`settings.layout_${layout()}`)].filter(Boolean).join(dot),
     },
     { id: 'home', icon: Home03Icon, title: () => t('settings.page_home_library'), summary: () => t('settings.page_home_library_summary') },
-    { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
-    { id: 'subtitles', icon: SubtitlesIcon, title: () => t('settings.page_subtitles_audio'), summary: () => t('settings.subtitle_style') },
-    { id: 'privacy', icon: LockKeyholeIcon, title: () => t('settings.page_privacy_lock'), summary: () => (syncOn() ? t('syncplace.switch_on') : t('syncplace.switch_off')) },
-    { id: 'storage', icon: HardDriveIcon, title: () => t('web.settings_storage'), summary: () => t('web.settings_storage_summary') },
-    { id: 'about', icon: InformationCircleIcon, title: () => t('settings.page_about'), summary: () => t('about.licence_line') },
+    { id: 'help', icon: HelpCircleIcon, title: () => t('settings.help'), summary: () => t('settings.group_help_summary') },
+    { id: 'about', icon: InformationCircleIcon, title: () => t('settings.group_about'), summary: () => t('about.licence_line') },
 ]
 const PAGE_ICONS = Object.fromEntries(PAGES.map((p) => [p.id, p.icon])) as Record<PageId, IconData>
 
@@ -204,37 +206,68 @@ function AccountHeader() {
 
 function PageBody(props: { id: PageId }) {
     return (
-        <Switch>
-            <Match when={props.id === 'appearance'}>
-                <Appearance />
-            </Match>
-            <Match when={props.id === 'home'}>
-                <HomePage />
-                <Library />
-            </Match>
-            <Match when={props.id === 'playback'}>
-                <Playback />
-            </Match>
-            <Match when={props.id === 'subtitles'}>
-                <SubtitlesPage />
-            </Match>
-            <Match when={props.id === 'privacy'}>
-                <Privacy />
-            </Match>
-            <Match when={props.id === 'storage'}>
-                <StoragePage />
-            </Match>
-            <Match when={props.id === 'about'}>
-                <Support />
-                <About />
-            </Match>
-        </Switch>
+        <>
+            <Switch>
+                <Match when={props.id === 'account'}>
+                    <Privacy />
+                </Match>
+                <Match when={props.id === 'playback'}>
+                    <Playback />
+                </Match>
+                <Match when={props.id === 'subtitles'}>
+                    <SubtitlesPage />
+                </Match>
+                <Match when={props.id === 'storage'}>
+                    <StoragePage />
+                </Match>
+                <Match when={props.id === 'appearance'}>
+                    <Appearance />
+                </Match>
+                <Match when={props.id === 'home'}>
+                    <HomePage />
+                    <Library />
+                </Match>
+                <Match when={props.id === 'help'}>
+                    <Help />
+                </Match>
+                <Match when={props.id === 'about'}>
+                    <Support />
+                    <About />
+                </Match>
+            </Switch>
+            <MovedRows page={props.id} />
+        </>
+    )
+}
+
+/** What left this page in the WP-08 order, for one release: the row's name and where it went (settings.also_in_moved). */
+function MovedRows(props: { page: PageId }) {
+    const gone = () =>
+        MOVED.filter((m) => m.from === props.page)
+            .map((m) => ({ ...m, row: rowFor(m.id)! }))
+            .filter((m) => m.row && (m.row.shown?.(rowContext()) ?? true))
+    return (
+        <Show when={gone().length}>
+            <div class="set-card moved-rows">
+                <For each={gone()}>
+                    {(m) => (
+                        <A class="set-row" href={`/settings/${m.to}#${rowDomId(m.id)}`}>
+                            <RowBody icon={PAGES.find((p) => p.id === m.to)!.icon} title={t(m.row.title as never)} subtitle={t('settings.also_in_moved', { page: t(PAGE_TITLES[m.to] as never) })} />
+                            <Chevron />
+                        </A>
+                    )}
+                </For>
+            </div>
+        </Show>
     )
 }
 
 function Appearance() {
     return (
         <>
+            <div class="set-card set-blocks">
+                <LanguageBlock />
+            </div>
             <div class="set-card set-blocks">
                 <div class="set-block" id={rowDomId('theme')}>
                     <h3 class="set-block-title" id="theme-label">{t('settings.theme')}</h3>
@@ -246,9 +279,6 @@ function Appearance() {
                         <LayoutChoices />
                     </div>
                 </Show>
-            </div>
-            <div class="set-card set-blocks">
-                <LanguageBlock />
             </div>
             <div class="set-card set-blocks">
                 <LookChoices />

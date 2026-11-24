@@ -49,6 +49,18 @@ function Feedback() {
     )
 }
 
+/** Help (WP-78, the apps' Help group): what is new, the reports and the way to write to the developer. */
+export function Help() {
+    return (
+        <>
+            <div class="set-card">
+                <AboutNews variant="row" icon={StarIcon} changelogIcon={Clock01Icon} />
+            </div>
+            <Feedback />
+        </>
+    )
+}
+
 export function About() {
     return (
         <>
@@ -56,10 +68,6 @@ export function About() {
             <div class="set-version set-masthead">
                 <VersionFooter look="line" />
             </div>
-            <div class="set-card">
-                <AboutNews variant="row" icon={StarIcon} changelogIcon={Clock01Icon} />
-            </div>
-            <Feedback />
             <div class="set-card">
                 <LinkRow row="notices" href={LICENCES} icon={File01Icon} title={t('about.notices_title')} subtitle={t('about.notices_detail')} />
                 <LinkRow row="legal" href="https://tmplayer.org/legal" icon={LegalDocument01Icon} title={t('login.legal')} subtitle={t('auth.unofficial')} />

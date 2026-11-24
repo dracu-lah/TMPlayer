@@ -84,11 +84,11 @@ test.describe('on a phone', () => {
         const moves: string[] = []
         page.on('framenavigated', (f) => f === page.mainFrame() && moves.push(f.url()))
         await page.goto('/settings/library#resume_sync')
-        await expect(page).toHaveURL(/\/settings\/privacy#resume_sync$/)
+        await expect(page).toHaveURL(/\/settings\/account#resume_sync$/)
         await expect.poll(() => focusedId(page)).toBe('row-resume_sync')
         // No loop: it stays put, and the address changed by history only a few times (the redirect, then the page).
         await page.waitForTimeout(800)
-        await expect(page).toHaveURL(/\/settings\/privacy#resume_sync$/)
+        await expect(page).toHaveURL(/\/settings\/account#resume_sync$/)
         expect(moves.length).toBeLessThan(6)
         expect(await page.evaluate(() => history.length)).toBeLessThan(5)
     })
@@ -111,11 +111,11 @@ test.describe('on a phone', () => {
         await expect.poll(() => focusedId(page)).toBe('row-trailers_in_app')
         // A row on another page than the address says: its page.
         await page.goto('/settings/appearance#resume_sync')
-        await expect(page).toHaveURL(/\/settings\/privacy#resume_sync$/)
+        await expect(page).toHaveURL(/\/settings\/account#resume_sync$/)
         await expect.poll(() => focusedId(page)).toBe('row-resume_sync')
         // An anchor that names nothing, or a hostile one, is ignored.
         await page.goto('/settings/storage#nope%ZZ')
-        await expect(page.getByRole('heading', { name: 'Storage', exact: true }).first()).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Downloads and data', exact: true }).first()).toBeVisible()
     })
 
     test('Home and library are one page: the Home rows, the order and the library', async ({ page }, info) => {
@@ -130,7 +130,8 @@ test.describe('on a phone', () => {
     })
 
     test('What is new opens the apps sheet for this build, in a dialog with a way to the changelog', async ({ page }, info) => {
-        await page.goto('/settings/about')
+        // What is new lives under Help since WP-78 (About keeps a Moved to line).
+        await page.goto('/settings/help')
         const row = page.getByRole('button', { name: /^What's new/ })
         await expect(row).toContainText(/The highlights of version \d+\.\d+\.\d+/)
         await row.click()
@@ -173,7 +174,7 @@ test.describe('on a desktop', () => {
 
     test('the box sits over the list, Down walks the results, Enter opens the first, Escape clears', async ({ page }, info) => {
         await page.goto('/settings')
-        await expect(page).toHaveURL(/\/settings\/appearance$/)
+        await expect(page).toHaveURL(/\/settings\/account$/)
         await box(page).fill('home')
         await expect(results(page).first()).toBeVisible()
         await shot(page, info, 'desktop-search-results')
