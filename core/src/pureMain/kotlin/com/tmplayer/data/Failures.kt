@@ -22,7 +22,24 @@ object Failures {
     fun humanise(message: String?): String {
         val raw = message?.trim().orEmpty()
         if (raw.isEmpty()) return DEFAULT
+        return known(raw) ?: run {
+            Logger.w(TAG, "Unmapped failure: $raw")
+            DEFAULT
+        }
+    }
 
+    /**
+     * Whether [message] is a failure of the line itself (a timeout, a dropped connection, the
+     * network): the ones [humanise] answers with the offline sentence. A flood wait, a revoked
+     * session or a missing chat is not, even when its text mentions a connection.
+     */
+    fun isNetwork(message: String?): Boolean {
+        val raw = message?.trim().orEmpty()
+        return raw.isNotEmpty() && known(raw) == OFFLINE
+    }
+
+    /** [raw]'s sentence when it is a failure this knows, null for anything else. */
+    private fun known(raw: String): String? {
         floodWaitSeconds(raw)?.let { return floodMessage(it) }
 
         return when {
@@ -53,10 +70,7 @@ object Failures {
                 raw.contains("Network", ignoreCase = true) -> // i18n-ok: TDLib text, matched
                 OFFLINE
 
-            else -> {
-                Logger.w(TAG, "Unmapped failure: $raw")
-                DEFAULT
-            }
+            else -> null
         }
     }
 

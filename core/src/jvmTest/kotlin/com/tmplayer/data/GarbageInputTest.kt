@@ -184,6 +184,25 @@ class GarbageInputTest {
         "http://169.254.1.1/d.xml", "http://100.64.1.1:8080/d.xml", "HTTP://10.0.0.5/D.XML",
     )
 
+    /** The work status line reads a failed call's error text for a flood wait (WorkStatus, WP-91). */
+    @Test
+    fun workStatusNeverThrows() {
+        val now = 1_800_000_000_000L
+        for (text in texts) {
+            survive("WorkStatus", text) {
+                // No garbage here names a flood wait, so none of it may become a wait.
+                for (network in NetworkStatus.entries) {
+                    val status = WorkStatus.ofFailure(text, now, keptAt = text.length.toLong() - 50, network = network)
+                    check(status !is WorkStatus.RateLimited) { "a wait from garbage: $status" }
+                    check(WorkStatusWords.line(status, now).isNotBlank())
+                    check(WorkStatusWords.line(status, Long.MIN_VALUE).isNotBlank())
+                }
+                check(WorkStatus.RateLimited(text.length.toLong()).secondsLeft(Long.MIN_VALUE) >= 0)
+            }
+        }
+        assertNoFailures()
+    }
+
     /** The sign in failure's sentence reads TDLib's and the native loader's error text (StartFailures). */
     @Test
     fun startFailuresNeverThrow() {
