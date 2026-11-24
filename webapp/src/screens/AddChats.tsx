@@ -514,7 +514,8 @@ export function AddChats() {
                     </button>
                 </div>
             </dialog>
-            <dialog class="confirm" ref={discard} aria-labelledby="discard-title" onClose={() => (retryLeave = null)}>
+            {/* Opened from the router's leave guard, in the middle of a Back: it takes no history entry of its own (ui/modalHistory.ts), or that push would cut the entry the router steps back to. */}
+            <dialog class="confirm" data-no-history ref={discard} aria-labelledby="discard-title" onClose={() => (retryLeave = null)}>
                 <h2 id="discard-title">{t('picker.discard_title')}</h2>
                 <p>{t('picker.discard_body')}</p>
                 <div class="confirm-buttons">
