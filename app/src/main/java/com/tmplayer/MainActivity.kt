@@ -1339,11 +1339,15 @@ private fun Root() {
     val shortcutHidden by remember { com.tmplayer.data.ProfileUnlock.hidden() }.collectAsStateWithLifecycle(initialValue = true)
     val lastChatForShortcut by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val lastChatTitle = chatList.value.firstOrNull { it.id == lastChatForShortcut }?.title
-    LaunchedEffect(lastChatForShortcut, lastChatTitle, shortcutHidden) {
+    LaunchedEffect(lastChatForShortcut, lastChatTitle, shortcutHidden, appLock) {
         // The chat's name goes out of the app only where OutsideWrites allows (a hidden PIN profile: never).
+        // Hidden by the same rule the process-wide follower removes it by: the profile, a PIN on it, a
+        // lock over the app, and a lock not read yet.
         com.tmplayer.data.LauncherShortcuts.publish(
             context, lastChatForShortcut, lastChatTitle,
-            hidden = shortcutHidden || !com.tmplayer.data.OutsideWrites.mayWriteNow(),
+            hidden = com.tmplayer.data.LauncherShortcuts.hiddenFor(
+                appLock, shortcutHidden, com.tmplayer.data.Accounts.active.pin != null, com.tmplayer.data.OutsideWrites.mayWriteNow(),
+            ),
         )
     }
 

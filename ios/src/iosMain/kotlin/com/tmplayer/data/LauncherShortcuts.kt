@@ -12,6 +12,11 @@ object LauncherShortcuts {
 
     fun planIds(hidden: Boolean, lastChatId: Long, lastChatTitle: String?): List<String> = emptyList()
 
+    fun hiddenFor(lock: AppLockSettings?, profileHidden: Boolean, profileHasPin: Boolean, mayWrite: Boolean): Boolean = true
+
+    @Suppress("UNUSED_PARAMETER")
+    fun follow(context: Any?, scope: kotlinx.coroutines.CoroutineScope): kotlinx.coroutines.Job = kotlinx.coroutines.Job()
+
     @Suppress("UNUSED_PARAMETER")
     fun publish(context: Any?, lastChatId: Long, lastChatTitle: String?, hidden: Boolean) = Unit
 }

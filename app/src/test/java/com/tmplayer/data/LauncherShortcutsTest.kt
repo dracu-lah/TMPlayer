@@ -65,6 +65,51 @@ class LauncherShortcutsTest {
     }
 
     @Test
+    fun theLastChatStaysOffWheneverAnythingHidesIt() {
+        val open = AppLockSettings()
+        assertFalse(LauncherShortcuts.hiddenFor(open, profileHidden = false, profileHasPin = false, mayWrite = true))
+        // A lock not read yet: hidden, never open.
+        assertTrue(LauncherShortcuts.hiddenFor(null, false, false, true))
+        // A locked or away profile; a profile with a PIN even unlocked (its chat names are its own).
+        assertTrue(LauncherShortcuts.hiddenFor(open, profileHidden = true, profileHasPin = true, mayWrite = true))
+        assertTrue(LauncherShortcuts.hiddenFor(open, profileHidden = false, profileHasPin = true, mayWrite = true))
+        // The app lock asking when the app opens, and the kids lock, as the widget has it.
+        assertTrue(LauncherShortcuts.hiddenFor(AppLockSettings(pinSet = true, onOpen = true), false, false, true))
+        assertTrue(LauncherShortcuts.hiddenFor(AppLockSettings(pinSet = true, kids = true), false, false, true))
+        // Outside writes refused.
+        assertTrue(LauncherShortcuts.hiddenFor(open, false, false, mayWrite = false))
+        // A PIN set without "ask when the app opens" hides nothing by itself.
+        assertFalse(LauncherShortcuts.hiddenFor(AppLockSettings(pinSet = true), false, false, true))
+    }
+
+    private fun waitUntil(what: String, condition: () -> Boolean) {
+        val end = System.currentTimeMillis() + 5_000
+        while (!condition()) {
+            check(System.currentTimeMillis() < end) { what }
+            Thread.sleep(20)
+        }
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun theFollowerTakesTheChatOffWithTheLockOnOpenAndAtProcessStart() {
+        val store = SettingsStore(context)
+        kotlinx.coroutines.runBlocking {
+            store.setPin("1234")
+            store.setLockOnOpen(true)
+        }
+        // An earlier run left the chat on the launcher.
+        LauncherShortcuts.publish(context, 7L, "Night Train", hidden = false)
+        assertTrue(published().any { it.id == "last_chat" })
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val job = LauncherShortcuts.follow(context, scope)
+        waitUntil("the chat shortcut is removed") { published().none { it.id == "last_chat" } }
+        // Only the chat: the three generic shortcuts hold no content of the profile.
+        assertEquals(setOf("continue", "search", "downloads"), published().map { it.id }.toSet())
+        job.cancel()
+    }
+
+    @Test
     @Config(sdk = [24])
     fun android7AndOlderPublishNothing() {
         assertFalse(LauncherShortcuts.supported())

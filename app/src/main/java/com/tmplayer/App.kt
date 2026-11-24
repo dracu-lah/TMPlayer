@@ -244,6 +244,8 @@ class App : Application() {
         com.tmplayer.data.ProfileNotifications.follow(this, backgroundScope)
         // Its first value too: a cold start with the profile already locked (the process was
         // killed) clears what an earlier run left on the launcher.
+        // The launcher's last chat shortcut follows the same lock (WP-42): off the moment anything hides it.
+        if (!com.tmplayer.data.FormFactor.isTv(this)) com.tmplayer.data.LauncherShortcuts.follow(this, backgroundScope)
         if (com.tmplayer.data.FormFactor.isTv(this)) {
             com.tmplayer.data.OutsideSurfaces.follow(backgroundScope) {
                 runCatching { com.tmplayer.data.TvChannelsPublisher.clearPrograms(this@App) }

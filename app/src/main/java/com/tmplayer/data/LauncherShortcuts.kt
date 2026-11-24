@@ -9,6 +9,12 @@ import android.os.Build
 import com.tmplayer.MainActivity
 import com.tmplayer.R
 import com.tmplayer.i18n.L
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 
 /**
  * The launcher's long press shortcuts (WP-42): Continue watching, Search, Downloads, and the chat
@@ -43,6 +49,39 @@ object LauncherShortcuts {
         add(ID_SEARCH)
         add(ID_DOWNLOADS)
         if (!hidden && lastChatId != 0L && !lastChatTitle.isNullOrBlank()) add(ID_LAST_CHAT)
+    }
+
+    /**
+     * Whether the last chat's name must stay off the launcher: the open profile is hidden (PIN locked, or
+     * the app away), has a PIN at all (its chat names are its own, whether or not it is unlocked now),
+     * a lock hides the app's contents (the widget's rule: [ContinueWidget.lockedBy], asking when the app
+     * opens or the kids lock), outside writes are refused, or the lock has not been read yet ([lock]
+     * null): never open before it is known.
+     */
+    fun hiddenFor(lock: AppLockSettings?, profileHidden: Boolean, profileHasPin: Boolean, mayWrite: Boolean): Boolean =
+        lock == null || profileHidden || profileHasPin || ContinueWidget.lockedBy(lock) || !mayWrite
+
+    /** Takes the last chat off the launcher, whatever else is published. */
+    fun removeLastChat(context: Context) {
+        if (!supported()) return
+        runCatching { context.getSystemService(ShortcutManager::class.java)?.removeDynamicShortcuts(listOf(ID_LAST_CHAT)) }
+    }
+
+    /**
+     * Follows the lock for the whole process, not only while a screen is up (the other outside surfaces'
+     * way, [OutsideSurfaces]): the chat's shortcut is removed the moment the profile is hidden or a lock
+     * covers the app, at the start of the process when that already holds (a lock not yet read counts),
+     * and on every switch of profile. The activity publishes it again when nothing hides it.
+     */
+    fun follow(context: Context, scope: CoroutineScope): Job {
+        val app = context.applicationContext
+        val hidden = combine(
+            SettingsStore(app).appLock.map<AppLockSettings, AppLockSettings?> { it }.onStart { emit(null) },
+            ProfileUnlock.hidden(),
+        ) { lock, profileHidden ->
+            hiddenFor(lock, profileHidden, Accounts.active.pin != null, OutsideWrites.mayWriteNow())
+        }.distinctUntilChanged()
+        return OutsideSurfaces.follow(scope, hidden = hidden) { removeLastChat(app) }
     }
 
     /** Sets the shortcuts to [planIds], replacing what was there. A failure leaves them as they were. */
