@@ -1252,6 +1252,7 @@ dialog.you-sheet::backdrop { background: rgb(0 0 0 / .5); }
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion="full"]) dialog.you-sheet { animation: none; transition: none; }
 }
+/* The same, when Reduce motion is On in Settings (WP-60). */
 html[data-motion="reduce"] dialog.you-sheet { animation: none; transition: none; }
 .version-line { margin: 0; font-size: 0.8125rem; line-height: 1.125rem; color: var(--muted); overflow-wrap: anywhere; }
 button.version-copy { display: block; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-radius: 12px; background: none; font: inherit; font-size: 0.8125rem; line-height: 1.125rem; color: var(--muted); text-align: start; cursor: pointer; }
