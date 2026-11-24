@@ -157,8 +157,11 @@ class ProfilesGateTest {
         rule.onNodeWithText(L.profilesRemove).performClick()
         rule.waitUntil(15_000) { k.book.list.value.byId(k.ids[2]) == null }
         rule.waitForIdle()
+        // The book changes before the remove's own work ends (the lock and the picker follow it
+        // on another thread): wait for both, so a loaded machine does not race the check.
+        rule.waitUntil(15_000) { ProfileUnlock.unlockedId.value == null }
         assertEquals("a remove locks the open profile too", null, ProfileUnlock.unlockedId.value)
-        rule.onNodeWithText(L.profilesWhoIsWatching).assertExists()
+        waitFor(L.profilesWhoIsWatching)
         rule.onNodeWithContentDescription("Ben", substring = true).performClick()
         rule.waitForIdle()
         rule.onNodeWithText(L.profilesPinFor(name = "Ben")).assertExists()
