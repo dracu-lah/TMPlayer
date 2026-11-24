@@ -10,7 +10,7 @@ import { Choice, Entry, Panel, PhoneSheet, Picker, ShortcutsSheet, TimePrompt, v
 import { SHAPES } from './shape'
 import { percent, zoomed } from './zoom'
 import './zoom.css'
-import { chapterAt, chapterListable, chapterMarks, chapterNext, chapterPrevious, chapterRows, isGeneric } from './chapters'
+import { chapterAt, chapterInside, chapterListable, chapterMarks, chapterNext, chapterPrevious, chapterRows, isGeneric } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, LinkSheet, SIZES, TimingSheet } from './extra-sheets'
 import { MsoneSheet } from './msone-sheet'
@@ -284,7 +284,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         return i < 0 ? null : chapterText(i)
     }
     const stepChapter = (forward: boolean) => {
-        const list = chapters()
+        // Only the marks inside the video: one past the end of a malformed file would end it.
+        const list = chapterInside(chapters(), duration())
         const i = forward ? chapterNext(list, v.currentTime) : chapterPrevious(list, v.currentTime)
         if (i === null) return flash(forward ? t('player.last_chapter') : t('player.before_first_chapter'))
         seekTo(list[i].start)
@@ -974,7 +975,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Entry text={t('settings.keep_repeat')} trailing={keepRepeat() ? t('common.on') : t('common.off')} onClick={() => changeKeepRepeat(!keepRepeat())} />
                         <Entry text={t('settings.play_chat_order')} trailing={chatOrder() ? t('common.on') : t('common.off')} onClick={() => changeChatOrder(!chatOrder())} />
                         {/* The chapters as a page (WP-26), from two marks; the steps stay beside it. */}
-                        <Show when={chapterListable(chapters())}>
+                        <Show when={chapterListable(chapters(), duration())}>
                             <Entry text={t('player.chapters')} trailing={chapterTextAt(v.currentTime) ?? undefined} onClick={() => setSheet('chapters')} />
                         </Show>
                         <Show when={chapters().length}>
@@ -1003,7 +1004,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 </Match>
                 <Match when={sheet() === 'chapters'}>
                     <Pick title={t('player.chapters')} panel onBack={() => setSheet('options')}>
-                        <For each={chapterRows(chapters(), v.currentTime, (number) => t('player.chapter_untitled', { number }))}>
+                        <For each={chapterRows(chapters(), v.currentTime, (number) => t('player.chapter_untitled', { number }), duration())}>
                             {(row) => (
                                 <Choice
                                     text={row.title}

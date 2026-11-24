@@ -975,6 +975,23 @@ class GarbageInputTest {
                     com.tmplayer.player.Chapter(random.nextLong(-5_000, 2_000_000), if (it % 2 == 0) text else null)
                 }
                 com.tmplayer.player.Chapters.rows(marks, random.nextLong(-5_000, 2_000_000))
+                // PB-02: marks past the length, and lengths that are unknown, zero or Media3's TIME_UNSET.
+                for (length in listOf(random.nextLong(1, 2_000_000), 0L, -1L, Long.MIN_VALUE + 1, 500L)) {
+                    val rows = com.tmplayer.player.Chapters.rows(marks, random.nextLong(-5_000, 2_000_000), length)
+                    if (length > 0 && rows.any { it.startMs >= length }) throw AssertionError("a row past the end of $length")
+                    val inside = com.tmplayer.player.Chapters.inside(marks, length)
+                    for (mark in inside) {
+                        val to = com.tmplayer.player.Chapters.seekTarget(mark.startMs, length)
+                        if (to < 0 || (length > com.tmplayer.player.Chapters.END_GUARD_MS && to >= length)) throw AssertionError("a seek to $to in $length")
+                    }
+                }
+            }
+            survive("Chapters.rows, 5,000 marks", text) {
+                val random = Random(text.hashCode())
+                val marks = List(5_000) { com.tmplayer.player.Chapter(random.nextLong(-5_000, 50_000_000), text) }
+                val rows = com.tmplayer.player.Chapters.rows(marks, 0, random.nextLong(0, 50_000_000))
+                if (rows.size > com.tmplayer.player.Chapters.MAX_ROWS) throw AssertionError("${rows.size} rows")
+                if (rows.any { it.title.length > com.tmplayer.player.Chapters.MAX_TITLE }) throw AssertionError("a title not cut")
             }
             survive("SkipSession.chapters", text) {
                 SkipSession().apply {

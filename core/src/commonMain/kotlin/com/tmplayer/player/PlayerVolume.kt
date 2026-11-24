@@ -35,4 +35,7 @@ object PlayerVolume {
         val share = percent.coerceIn(MIN, FULL) / FULL.toFloat()
         return share * share * share
     }
+
+    /** The gain an engine is given: 0 while the keyboard's M has the sound off, else [gain]. */
+    fun gain(percent: Int, muted: Boolean): Float = if (muted) 0f else gain(percent)
 }

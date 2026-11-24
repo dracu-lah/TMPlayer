@@ -53,4 +53,46 @@ class ChapterRowsTest {
         assertTrue(rows.last().current)
         assertEquals("Chapter 300", rows.last().title)
     }
+
+    // PB-02: a malformed file's marks at or past the end, which a seek would turn into the end of the video.
+    private val pastTheEnd = listOf(Chapter(0, "Opening"), Chapter(600_000, "Part A"), Chapter(1_199_500, "At the end"), Chapter(5_000_000, "Way past"))
+
+    @Test
+    fun `with the length known, marks at or past the end are not listed, offered or stepped to`() {
+        val rows = Chapters.rows(pastTheEnd, positionMs = 700_000, durationMs = 1_200_000)
+        assertEquals(listOf("Opening", "Part A"), rows.map { it.title })
+        assertFalse(Chapters.listable(listOf(Chapter(0, "A"), Chapter(9_000_000, "B")), durationMs = 1_200_000))
+        val marks = Chapters.inside(pastTheEnd, 1_200_000)
+        assertEquals(listOf(0L, 600_000L), marks.map { it.startMs })
+        assertEquals("forward from the last real chapter is the last one, not a seek past the end", null, Chapters.next(marks, 700_000))
+        // The length unknown: everything stays, as before.
+        assertEquals(4, Chapters.rows(pastTheEnd, 0).size)
+        assertEquals(4, Chapters.inside(pastTheEnd, 0).size)
+    }
+
+    @Test
+    fun `a chapter seek lands from zero to a second short of the end, whatever the mark says`() {
+        assertEquals(1_199_000L, Chapters.seekTarget(5_000_000, 1_200_000))
+        assertEquals(0L, Chapters.seekTarget(-40, 1_200_000))
+        assertEquals(600_000L, Chapters.seekTarget(600_000, 1_200_000))
+        // Unknown length (0, or Media3's TIME_UNSET): the mark as it is, never below zero.
+        assertEquals(5_000_000L, Chapters.seekTarget(5_000_000, 0))
+        assertEquals(5_000_000L, Chapters.seekTarget(5_000_000, Long.MIN_VALUE + 1))
+    }
+
+    @Test
+    fun `inside sorts mpv's own order, so the flash names the chapter picked`() {
+        val unsorted = listOf(Chapter(600_000, "Second"), Chapter(0, "First"))
+        val marks = Chapters.inside(unsorted, 1_200_000)
+        assertEquals("Second", marks[Chapters.at(marks, 600_000)].title)
+    }
+
+    @Test
+    fun `ten thousand marks list a thousand lines, and a huge name is cut`() {
+        val many = List(10_000) { Chapter(it * 1_000L, if (it == 0) "x".repeat(100_000) else null) }
+        val rows = Chapters.rows(many, 0)
+        assertEquals(Chapters.MAX_ROWS, rows.size)
+        assertEquals(Chapters.MAX_TITLE, rows.first().title.length)
+        assertTrue(rows.first().title.endsWith("\u2026"))
+    }
 }

@@ -115,6 +115,19 @@ class PlayerControlsReaderTimeoutTest {
     }
 
     @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xhdpi")
+    fun `a row put away with the reader on it goes by itself again the next time it shows (PB-11)`() {
+        val shown = open(touchExploration = true)
+        focusEvent(shown, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED)
+        // Back puts the row away; no focus cleared event comes from the gone view.
+        shown.controls.hideAnimated()
+        idleFor(1_000)
+        shown.controls.show()
+        idleFor(3_500L * 3 + 1_500)
+        assertFalse("the row goes after its time again", shown.controls.visible)
+    }
+
+    @Test
     @Config(sdk = [35], qualifiers = "w360dp-h740dp-port-night-xhdpi")
     fun `the total is 48 dp tall at the system font and at twice it`() {
         for (scale in listOf(1f, 2f)) {

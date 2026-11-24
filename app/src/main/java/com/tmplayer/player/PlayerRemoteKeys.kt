@@ -63,6 +63,24 @@ object PlayerRemoteKeys {
     }
 
     /**
+     * How late a repeat of a held arrow over the bare picture may be handled and still seek: one
+     * older than this waited behind a slow seek on a busy stick, and the key may be up already.
+     * Looser than the bar's and the lists' [STALE_REPEAT_MS], since each step here is a real seek
+     * that keeps the main thread busy, and the 150 ms gate already paces the run (PB-04).
+     */
+    const val STALE_JUMP_MS = 250L
+
+    /**
+     * A step of a held arrow, rewind or fast forward over the bare picture: [jumpStepMs]'s ramp and
+     * gate, and a repeat made at [eventMs] that waited past [STALE_JUMP_MS] is dropped, so the video
+     * stops moving when the key is let go. 0 lets the repeat pass without a seek.
+     */
+    fun pictureStepMs(repeatCount: Int, baseMs: Long, eventMs: Long, nowMs: Long, lastJumpMs: Long, durationMs: Long): Long {
+        if (repeatCount > 0 && nowMs - eventMs > STALE_JUMP_MS) return 0L
+        return jumpStepMs(repeatCount, baseMs, nowMs, lastJumpMs, durationMs)
+    }
+
+    /**
      * How many plain steps [stepMs] is, for the pace beside the running total, to one decimal: 1
      * for a tap or the first stretch of a hold, then 3 and 6 as the hold grows, and the real figure
      * where the length caps it (3.6 for a 36 s step on a two hour video).

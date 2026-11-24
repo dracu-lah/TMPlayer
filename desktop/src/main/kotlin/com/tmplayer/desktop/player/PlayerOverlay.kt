@@ -1168,7 +1168,7 @@ internal fun PlayerMenu(
                 // An episode only: two presses, the start and the end; the menu closes so the picture shows.
                 if (markIntro != null) Entry(markIntro, trailing = "O") { pick(MenuAction.Do(PlayerAction.MarkIntro)) }
                 // The chapters as a page (WP-26), from two marks; the steps stay beside it.
-                if (Chapters.listable(status.chapters)) {
+                if (Chapters.listable(status.chapters, status.durationMs)) {
                     Entry(s.playerChapters, trailing = Chapters.labelAt(status.chapters, status.positionMs)) { page(MenuPage.Chapters) }
                 }
                 // A chaptered file only; the menu stays open for the next step, as the frame steps do.
@@ -1248,7 +1248,7 @@ internal fun PlayerMenu(
             MenuPage.Chapters -> {
                 // Sorted and de-duplicated by the page's own guard; the one playing is ticked and the
                 // time is a figure, kept left to right in a right-to-left language.
-                Chapters.rows(status.chapters, status.positionMs).forEach { row ->
+                Chapters.rows(status.chapters, status.positionMs, status.durationMs).forEach { row ->
                     Entry(row.title, checked = row.current, detail = "\u2066" + s.messages.formatter.clock(row.startMs) + "\u2069") {
                         pick(MenuAction.Chapter(row.startMs))
                     }

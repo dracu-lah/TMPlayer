@@ -2897,7 +2897,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             vlc.prepare(source, carry?.positionMs ?: resumeMs.coerceAtLeast(0L))
             for (file in subtitleFiles.files) vlc.addSubtitleFile(file.uri.toString())
             vlc.speed = carry?.speed ?: playbackSpeed
-            vlc.volume = carry?.volume ?: PlayerVolume.gain(playerVolumePercent)
+            vlc.volume = if (keyMuted) 0f else carry?.volume ?: PlayerVolume.gain(playerVolumePercent)
             vlc.setDelays(syncDelays.audioMs, syncDelays.subtitleMs)
             crashNote.began("libvlc")
             startStats()
@@ -3140,8 +3140,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         player = exo
-        keyMuted = false
-        exo.volume = PlayerVolume.gain(playerVolumePercent)
+        // M's mute holds across a new engine (a remedy restart, a decoder fallback): only a new
+        // video starts with the sound on again ([forgetTheLastVideo], a new screen) (PB-06).
+        exo.volume = PlayerVolume.gain(playerVolumePercent, keyMuted)
         crashNote.began("media3")
         startStats()
         traceRecorder.attach(exo)
@@ -3330,60 +3331,30 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (nowPlaying) exo.play() else exo.pause()
     }
 
-    /** Whether the row was down when the pause came, for how soon it goes after the resume. */
-    private var rowDownBeforePause = false
+    /**
+     * The row around a pause and a resume ([PauseRow]); under the More panel or a track picker it
+     * waits for them to close, so the pause never takes their focus (WP-19).
+     */
+    private val pauseRow = PauseRow(
+        controls = { controls },
+        controlsUp = { controlsUp },
+        blocked = { statusOverlay.visibility == View.VISIBLE || locked || inPictureInPicture },
+        stillWatching = { stillWatchingUp },
+        underPanel = { morePanel?.isOpen == true || TrackPickerFragment.isOpen(supportFragmentManager) },
+        pausedNow = { playing?.playWhenReady == false },
+        sayPaused = { showGestureFeedback(L.commonPause) },
+    )
 
-    /** True between [raiseRowForPause] and the pause it was for, so the row's state is read before it rose. */
-    private var pauseNoted = false
+    private fun payPauseRow() = pauseRow.pay()
 
-    /** True once the viewer has paused this video, so the first play is not taken for a resume. */
-    private var sawPause = false
-
-    /** A pause came under a panel or a picker, which kept the row down: it is raised once they close. */
-    private var pauseRowOwed = false
-
-    private fun payPauseRow() {
-        if (!pauseRowOwed) return
-        pauseRowOwed = false
-        if (playing?.playWhenReady == false) raiseRowForPause()
-    }
-
-    private fun raiseRowForPause() {
-        if (statusOverlay.visibility == View.VISIBLE || locked || inPictureInPicture) return
-        // A pause from the key under the More panel or a picker leaves the row alone: raising it would take their focus (WP-19).
-        if (morePanel?.isOpen == true || TrackPickerFragment.isOpen(supportFragmentManager)) {
-            // Says so now, and the row comes up when the picker closes ([payPauseRow]).
-            pauseRowOwed = true
-            showGestureFeedback(L.commonPause)
-            return
-        }
-        rowDownBeforePause = !controlsUp
-        pauseNoted = true
-        controls?.show()
-    }
+    private fun raiseRowForPause() = pauseRow.raiseForPause()
 
     /**
      * A pause or a resume, from anywhere: the row, a key, the picture, the remote, a headset, the
-     * notification, the headphones coming out. See [PauseControls]: a pause brings the row up
-     * for its whole length (on a television with the disc focused, so OK resumes), a resume
-     * leaves it up for the disc to turn and then lets it go, sooner when it was down before.
+     * notification, the headphones coming out. See [PauseRow] and [PauseControls].
      */
-    private fun onPauseChanged(playWhenReady: Boolean, reason: Int) {
-        val quiet = statusOverlay.visibility == View.VISIBLE || locked || inPictureInPicture || stillWatchingUp
-        if (!playWhenReady) {
-            if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) return
-            if (!pauseNoted) rowDownBeforePause = !controlsUp
-            pauseNoted = false
-            sawPause = true
-            if (!quiet) controls?.paused()
-            return
-        }
-        if (!sawPause) return
-        sawPause = false
-        val after = PauseControls.hideAfterResumeMs(controls?.timeoutMs ?: 0L, rowDownBeforePause)
-        rowDownBeforePause = false
-        if (!quiet) controls?.resumed(after)
-    }
+    private fun onPauseChanged(playWhenReady: Boolean, reason: Int) =
+        pauseRow.changed(playWhenReady, endOfItem = reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM)
 
     /** Adds up a run of key jumps on one side, so the figure counts 10, 20, 30 like the double tap. */
     private val jumpRun = SeekCounter()
@@ -3397,7 +3368,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the seek lands at once, and the only thing drawn is the double tap's chevrons and the run's
      * total on the side the jump went.
      */
-    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0, fixedStepMs: Long? = null) {
+    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0, fixedStepMs: Long? = null, eventMs: Long? = null) {
         // A television remote is 10 s both ways; a phone's keyboard keeps Skip's 5 back and 10
         // forward, and so do Media3's increments and the notification, which read Skip directly.
         val base = fixedStepMs ?: PlayerRemoteKeys.remoteBaseMs(forward, FormFactor.isTv(this))
@@ -3406,7 +3377,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The larger steps are held to a share of the length, so a short video is not overshot.
         val now = SystemClock.uptimeMillis()
         val duration = playing?.duration ?: 0L
-        val step = if (fixedStepMs == null) PlayerRemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt, duration) else base
+        // A repeat that waited behind a slow seek ([eventMs], a television's remote) is dropped, so
+        // the video stops when the key is let go (PB-04).
+        val step = when {
+            fixedStepMs != null -> base
+            eventMs != null -> PlayerRemoteKeys.pictureStepMs(repeatCount, base, eventMs, now, lastRemoteJumpAt, duration)
+            else -> PlayerRemoteKeys.jumpStepMs(repeatCount, base, now, lastRemoteJumpAt, duration)
+        }
         if (step <= 0) return
         lastRemoteJumpAt = now
         skipBy(if (forward) step else -step)
@@ -5229,6 +5206,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** What belonged to the last video, cleared for the next one played in place. */
     private fun forgetTheLastVideo() {
+        // M muted the last video only.
+        keyMuted = false
         endTranslations()
         // The scrub card's pictures were of the last video.
         trickplay?.forget()
@@ -7273,11 +7252,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     return true
                 }
                 if (remoteHolding) return true
-                jumpFromRemote(forward = true, repeatCount = event.repeatCount)
+                jumpFromRemote(forward = true, repeatCount = event.repeatCount, eventMs = event.eventTime)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                jumpFromRemote(forward = false, repeatCount = event.repeatCount)
+                jumpFromRemote(forward = false, repeatCount = event.repeatCount, eventMs = event.eventTime)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -7305,7 +7284,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return true
             }
             // Page Up and Page Down on a television: a chapter, or a minute where there are none
-            // (PlayerRemoteKeys.pageStep). A phone's keyboard passes them on as before.
+            // (PlayerRemoteKeys.pageStep), whatever sent them. Off a television handleTouchDeviceKey
+            // reads a keyboard's Page keys through PlayerKeyMap first, as the previous and next
+            // episode, the desktop's and the web's meaning (PB-03, docs/agents/tv-keys.md); one the
+            // map passes on (a sheet or a panel up) arrives here and goes to the focused view.
             KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_DOWN -> {
                 val forward = PlayerRemoteKeys.pageStep(event.keyCode, FormFactor.isTv(this)) ?: return super.dispatchKeyEvent(event)
                 if (event.repeatCount == 0 && player != null && statusOverlay.visibility != View.VISIBLE) pageFromRemote(forward)
@@ -7332,7 +7314,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // reach the focused view through super, which on the bar is the stride and on
                 // the buttons is walking the row.
                 if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    jumpFromRemote(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT, repeatCount = event.repeatCount)
+                    jumpFromRemote(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT, repeatCount = event.repeatCount, eventMs = event.eventTime)
                     return true
                 }
             }
@@ -7653,17 +7635,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerKeyMap.Kind.Chapter -> if (once) {
                 if (chapters.isNotEmpty()) stepChapter(action.flag) else jumpFromRemote(action.flag, fixedStepMs = PlayerRemoteKeys.PAGE_JUMP_MS)
             }
-            PlayerKeyMap.Kind.Episode -> if (once) stepEpisode(action.flag)
+            // With no episode to go to the key says so, as the remote's Next and Previous do.
+            PlayerKeyMap.Kind.Episode -> if (once && !stepEpisode(action.flag)) {
+                showGestureFeedback(if (action.flag) L.playerNoNextEpisode else L.playerNoPreviousEpisode)
+            }
             PlayerKeyMap.Kind.Speed -> if (once) setSpeed(PlaybackSpeed.fine(playbackSpeed, up = action.flag))
             PlayerKeyMap.Kind.SpeedReset -> if (once) setSpeed(PlaybackSpeed.DEFAULT)
             PlayerKeyMap.Kind.Jump -> if (once && !jumpToTenth(action.value)) return false
             PlayerKeyMap.Kind.Mute -> if (once) toggleKeyMute()
             PlayerKeyMap.Kind.SubtitlesToggle -> if (once) toggleCaptions()
             PlayerKeyMap.Kind.Details -> if (once && player != null) showPlaybackDetails()
-            PlayerKeyMap.Kind.Sheet -> if (once) morePanel?.openKeys(keyboard = true)
+            PlayerKeyMap.Kind.Sheet -> if (once) openKeyboardKeys()
             else -> return false
         }
         return true
+    }
+
+    /**
+     * "?": the keyboard keys page of the More panel, opened as the More button opens the panel, so
+     * the row is held under it and [PlayerMoreHost.closed] finds the state it clears (PB-09).
+     */
+    private fun openKeyboardKeys() {
+        menuOpen = true
+        holdControls()
+        moreAnchor = null
+        morePanel?.openKeys(keyboard = true)
     }
 
     /** M: the sound off and on again, said over the picture; the stored Player volume is left as it is. */
@@ -8080,7 +8076,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             paused = isPaused(),
             bookmarks = hasMessage(),
             chapters = chapters.isNotEmpty(),
-            chapterList = Chapters.listable(chapters),
+            chapterList = Chapters.listable(chapters, playing?.duration ?: 0L),
             // Only once the chat is known to allow saving: a protected chat's frames stay in it.
             saveFrame = savable == true,
             // A picture to shape, as for 3D: not while a cast plays it.
@@ -8107,7 +8103,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             paused = isPaused(),
             bookmarks = hasMessage(),
             chapters = chapters.isNotEmpty(),
-            chapterList = Chapters.listable(chapters),
+            chapterList = Chapters.listable(chapters, playing?.duration ?: 0L),
             stereo = stereoOffered(),
             pictureShape = stereoOffered(),
             reportStutter = stutterReportable(),
@@ -8141,8 +8137,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun chapter(): String? =
             if (chapters.isEmpty()) null
             else Chapters.labelAt(chapters, playing?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
-        override fun chapterList(): List<ChapterRow> =
-            if (Chapters.listable(chapters)) Chapters.rows(chapters, playing?.currentPosition ?: 0L) else emptyList()
+        override fun chapterList(): List<ChapterRow> {
+            val length = playing?.duration ?: 0L
+            return if (Chapters.listable(chapters, length)) Chapters.rows(chapters, playing?.currentPosition ?: 0L, length) else emptyList()
+        }
         override fun jumpToChapter(startMs: Long) = jumpToChapterStart(startMs)
         override fun watched() = onWatchedList
         override fun engineNow(): String? = if (vlcEngine != null) L.settingsEngineVlc else L.settingsEngineExoplayer
@@ -8159,6 +8157,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun closed() {
             menuOpen = false
             holdControls()
+            // A pause that came under the panel raises the row now, before the remote goes back to the opener.
+            payPauseRow()
             if (tv) {
                 controls?.show()
                 val anchor = moreAnchor?.takeIf { it.isShown }
@@ -8498,22 +8498,29 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The Chapters page's OK (WP-26): play from the start of the chapter chosen, and say which it is. */
     private fun jumpToChapterStart(startMs: Long) {
         val exo = playing ?: return
-        exo.seekTo(startMs.coerceAtLeast(0L))
-        val index = Chapters.at(chapters, startMs)
-        if (index >= 0) showGestureFeedback(Chapters.label(chapters, index))
+        // A file with no seek index is not seeked (a linear read stalls a stick), and a mark past
+        // the end of a malformed file lands just short of it rather than ending the video (PB-02).
+        if (refuseSeek()) return
+        val marks = Chapters.inside(chapters, exo.duration)
+        exo.seekTo(Chapters.seekTarget(startMs, exo.duration))
+        val index = Chapters.at(marks, startMs)
+        if (index >= 0) showGestureFeedback(Chapters.label(marks, index))
     }
 
     /** The menus' chapter lines: the next chapter, or the start of this one, as [Chapters] has it. */
     private fun stepChapter(forward: Boolean) {
         val exo = playing ?: return
+        if (refuseSeek()) return
         val at = exo.currentPosition
-        val target = if (forward) Chapters.next(chapters, at) else Chapters.previous(chapters, at)
+        // Only the marks inside the video: one past its end would end it, mark it watched and start the next.
+        val marks = Chapters.inside(chapters, exo.duration)
+        val target = if (forward) Chapters.next(marks, at) else Chapters.previous(marks, at)
         if (target == null) {
             showGestureFeedback(if (forward) L.playerLastChapter else L.playerBeforeFirstChapter)
             return
         }
-        exo.seekTo(chapters[target].startMs)
-        showGestureFeedback(Chapters.label(chapters, target))
+        exo.seekTo(Chapters.seekTarget(marks[target].startMs, exo.duration))
+        showGestureFeedback(Chapters.label(marks, target))
     }
 
     /**

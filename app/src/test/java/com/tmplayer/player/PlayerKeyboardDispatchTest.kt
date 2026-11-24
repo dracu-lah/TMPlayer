@@ -49,6 +49,39 @@ class PlayerKeyboardDispatchTest {
         val perform = activity.substringAfter("private fun performKeyboardAction(").substringBefore("/** M: the sound off")
         assertTrue("else -> return false" in perform)
         assertFalse("Volume", "Kind.Volume" in perform)
-        assertTrue("morePanel?.openKeys(keyboard = true)" in perform)
+        assertTrue("openKeyboardKeys()" in perform)
+    }
+
+    @Test
+    fun `a keyboard's Page keys are episodes and say when there is none, the chapter step stays a television's (PB-03)`() {
+        val perform = activity.substringAfter("private fun performKeyboardAction(").substringBefore("/** M: the sound off")
+        assertTrue("PlayerKeyMap.Kind.Episode -> if (once && !stepEpisode(action.flag)) {" in perform)
+        assertTrue("L.playerNoNextEpisode else L.playerNoPreviousEpisode" in perform)
+        // The remote's Page case, chapters or a minute, only answers on a television.
+        val page = activity.substringAfter("KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_DOWN -> {").substringBefore("return true")
+        assertTrue("PlayerRemoteKeys.pageStep(event.keyCode, FormFactor.isTv(this)) ?: return super.dispatchKeyEvent(event)" in page)
+        assertFalse("the old comment saying a phone passes Page keys on", "A phone's keyboard passes them on as before" in activity)
+    }
+
+    @Test
+    fun `M stays off across a new engine, and the gain is set from it (PB-06)`() {
+        val exo = activity.substringAfter("        player = exo\n").substringBefore("crashNote.began(\"media3\")")
+        assertFalse("a new ExoPlayer does not bring the sound back", "keyMuted = false" in exo)
+        assertTrue("exo.volume = PlayerVolume.gain(playerVolumePercent, keyMuted)" in exo)
+        assertTrue("vlc.volume = if (keyMuted) 0f else carry?.volume ?: PlayerVolume.gain(playerVolumePercent)" in activity)
+        // Only a new video in this screen starts with the sound on again.
+        val forget = activity.substringAfter("private fun forgetTheLastVideo() {").substringBefore("\n    }\n")
+        assertTrue("keyMuted = false" in forget)
+    }
+
+    @Test
+    fun `the keys page from the question mark holds the row like the More button does (PB-09)`() {
+        val perform = activity.substringAfter("private fun performKeyboardAction(").substringBefore("/** M: the sound off")
+        assertTrue("PlayerKeyMap.Kind.Sheet -> if (once) openKeyboardKeys()" in perform)
+        val open = activity.substringAfter("private fun openKeyboardKeys() {").substringBefore("\n    }\n")
+        assertTrue("menuOpen = true" in open)
+        assertTrue("holdControls()" in open)
+        assertTrue("moreAnchor = null" in open)
+        assertTrue("morePanel?.openKeys(keyboard = true)" in open)
     }
 }

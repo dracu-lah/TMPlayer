@@ -44,8 +44,17 @@ export function chapterMarks(chapters: Chapter[], duration: number): number[] {
 /** Chapters.LIST_FROM: the page of chapters is offered from this many marks. */
 export const CHAPTER_LIST_FROM = 2
 
+/** Chapters.END_GUARD_MS, in seconds: a mark this close to the end of a known length, or past it, is no place to seek to. */
+export const CHAPTER_END_GUARD = 1
+
+/** Chapters.inside: the marks inside a video of known length (seconds), sorted; with the length unknown, all of them. */
+export function chapterInside(chapters: Chapter[], duration = 0): Chapter[] {
+    const kept = duration > 0 ? chapters.filter((c) => c.start < duration - CHAPTER_END_GUARD) : chapters
+    return [...kept].sort((a, b) => a.start - b.start)
+}
+
 /** Chapters.listable. */
-export const chapterListable = (chapters: Chapter[]): boolean => chapters.length >= CHAPTER_LIST_FROM
+export const chapterListable = (chapters: Chapter[], duration = 0): boolean => chapterInside(chapters, duration).length >= CHAPTER_LIST_FROM
 
 /** One line of the Chapters page. */
 export interface ChapterRow {
@@ -59,12 +68,13 @@ export interface ChapterRow {
 /**
  * Chapters.rows: the page's lines, sorted by start, one per start, a start below zero taken as
  * zero, a mark that is not a number left out, and a chapter with no name numbered ("Chapter 3",
- * by `untitled`). The one playing is marked; none before the first mark.
+ * by `untitled`). The one playing is marked; none before the first mark. With a known `duration`
+ * (seconds), a mark at or past the end is left out, as a seek there would end the video.
  */
-export function chapterRows(chapters: Chapter[], position: number, untitled: (number: number) => string): ChapterRow[] {
+export function chapterRows(chapters: Chapter[], position: number, untitled: (number: number) => string, duration = 0): ChapterRow[] {
     const seen = new Set<number>()
     const sorted = chapters
-        .filter((c) => Number.isFinite(c.start))
+        .filter((c) => Number.isFinite(c.start) && (duration <= 0 || c.start < duration - CHAPTER_END_GUARD))
         .map((c) => ({ start: Math.max(0, c.start), title: c.title }))
         .sort((a, b) => a.start - b.start)
         .filter((c) => (seen.has(c.start) ? false : (seen.add(c.start), true)))

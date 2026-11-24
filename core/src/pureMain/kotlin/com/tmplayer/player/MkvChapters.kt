@@ -28,6 +28,9 @@ object MkvChapters {
     /** More chapters than anyone writes; a bigger element is not read. */
     const val MAX_ELEMENT_BYTES = 1024 * 1024
 
+    /** The most chapters kept, the first by start, as an MP4's chapter track is held to ([Mp4Chapters]). */
+    const val MAX_CHAPTERS = 1000
+
     /** What the head of the file says about chapters. */
     sealed interface Head {
         data object NotMatroska : Head
@@ -154,7 +157,7 @@ object MkvChapters {
             ?: editions.firstOrNull { !it.hidden }
             ?: editions.firstOrNull()
             ?: return emptyList()
-        return chosen.chapters.sortedBy { it.startMs }.distinctBy { it.startMs }
+        return chosen.chapters.sortedBy { it.startMs }.distinctBy { it.startMs }.take(MAX_CHAPTERS)
     }
 
     private fun atom(bytes: ByteArray, atom: Element, language: String?): Chapter? {

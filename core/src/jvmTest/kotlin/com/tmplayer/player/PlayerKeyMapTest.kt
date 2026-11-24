@@ -148,4 +148,12 @@ class PlayerKeyMapTest {
         assertNull(PlayerKeyMap.shellKeyFor(Press("Comma")))
         assertNull(PlayerKeyMap.shellKeyFor(Press("Slash", "?", shift = true)))
     }
+
+    @Test
+    fun `Page Up and Page Down are the previous and next episode on a keyboard, as on the desktop and the web (PB-03)`() {
+        assertEquals(PlayerKeyMap.Action(PlayerKeyMap.Kind.Episode, flag = true), PlayerKeyMap.actionFor(PlayerKeyMap.Press("PageDown")))
+        assertEquals(PlayerKeyMap.Action(PlayerKeyMap.Kind.Episode, flag = false), PlayerKeyMap.actionFor(PlayerKeyMap.Press("PageUp")))
+        assertEquals("PageUp", PlayerKeyMap.codeOfAndroid(92))
+        assertEquals("PageDown", PlayerKeyMap.codeOfAndroid(93))
+    }
 }

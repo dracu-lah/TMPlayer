@@ -34,27 +34,60 @@ object Chapters {
     /** The Chapters page is offered from this many marks: one mark is only the start of the video. */
     const val LIST_FROM = 2
 
-    /** Whether the file has enough chapters for a page of them. */
-    fun listable(chapters: List<Chapter>): Boolean = chapters.size >= LIST_FROM
+    /**
+     * How close to the end a chapter seek may land: a seek to the very end, or past it, ends the
+     * video, marks it watched and may start the next one. The players' seeks keep the same second.
+     */
+    const val END_GUARD_MS = 1_000L
+
+    /** The most lines the Chapters page lists: a broken file with 10,000 marks still opens it at once. */
+    const val MAX_ROWS = 1_000
+
+    /** The most characters of a chapter's name a line shows; a longer one is cut with an ellipsis. */
+    const val MAX_TITLE = 200
+
+    /** Whether the file has enough chapters for a page of them, counting only those inside [durationMs] when it is known. */
+    fun listable(chapters: List<Chapter>, durationMs: Long = 0L): Boolean = within(chapters, durationMs).size >= LIST_FROM
+
+    /**
+     * The marks a seek may go to, sorted by start: a malformed file's mark at or past the end
+     * ([END_GUARD_MS] before it) is left out once [durationMs] is known, since a seek there ends the
+     * video. With the length unknown (0 or less) every mark stays.
+     */
+    fun inside(chapters: List<Chapter>, durationMs: Long): List<Chapter> = within(chapters, durationMs).sortedBy { it.startMs }
+
+    private fun within(chapters: List<Chapter>, durationMs: Long): List<Chapter> =
+        if (durationMs <= 0L) chapters else chapters.filter { it.startMs < durationMs - END_GUARD_MS }
+
+    /** Where a seek to a chapter that starts at [startMs] lands: from zero, and never past the end of a video of known length. */
+    fun seekTarget(startMs: Long, durationMs: Long): Long {
+        val floor = startMs.coerceAtLeast(0L)
+        return if (durationMs > END_GUARD_MS) floor.coerceAtMost(durationMs - END_GUARD_MS) else floor
+    }
 
     /**
      * The lines of the Chapters page: sorted by start, one per start (a file that lists two marks at
      * one time keeps the first), a start below zero taken as zero, and a chapter with no name worth
      * showing numbered ("Chapter 3"). [positionMs] marks the one playing; none is marked before
      * the first mark. The parsers sort already, and the desktop's mpv gives its own order: this is
-     * the page's own guard, so a broken file shows a list that still reads and jumps.
+     * the page's own guard, so a broken file shows a list that still reads and jumps. A mark at or
+     * past the end of a video of known [durationMs] is left out ([inside]), at most [MAX_ROWS]
+     * lines are listed, and a name longer than [MAX_TITLE] is cut.
      */
-    fun rows(chapters: List<Chapter>, positionMs: Long): List<ChapterRow> {
-        val sorted = chapters
+    fun rows(chapters: List<Chapter>, positionMs: Long, durationMs: Long = 0L): List<ChapterRow> {
+        val sorted = within(chapters, durationMs)
             .map { Chapter(it.startMs.coerceAtLeast(0L), it.title) }
             .sortedBy { it.startMs }
             .distinctBy { it.startMs }
+            .take(MAX_ROWS)
         val playing = at(sorted, positionMs)
         return sorted.mapIndexed { index, chapter ->
-            val name = chapter.title?.trim()?.takeIf { it.isNotEmpty() }
+            val name = chapter.title?.trim()?.takeIf { it.isNotEmpty() }?.let(::cut)
             ChapterRow(index, name ?: L.playerChapterUntitled(index + 1), chapter.startMs, index == playing)
         }
     }
+
+    private fun cut(name: String): String = if (name.length <= MAX_TITLE) name else name.take(MAX_TITLE - 1).trimEnd() + "\u2026"
 
     /** The chapter playing at [positionMs], or -1 before the first mark. */
     fun at(chapters: List<Chapter>, positionMs: Long): Int =

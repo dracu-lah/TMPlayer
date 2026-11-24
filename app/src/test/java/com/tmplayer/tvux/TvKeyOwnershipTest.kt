@@ -219,8 +219,12 @@ class TvKeyOwnershipTest {
         assertTrue("PlayerRemoteKeys.PanelMedia.Stop -> leaveByBack()" in body)
         assertTrue("PanelMedia.Toggle -> togglePlayback()" in body)
         // The pause does not raise the row under a panel (it would take the panel's focus).
-        val raise = source.substringAfter("private fun raiseRowForPause() {").substringBefore("\n    }")
-        assertTrue("morePanel?.isOpen == true || TrackPickerFragment.isOpen(supportFragmentManager)" in raise)
+        // The pause and the resume leave the row alone under a panel or a picker (PauseRow, PauseRowTest), and the
+        // owed row comes up once the More panel or the picker closes.
+        val row = source.substringAfter("private val pauseRow = PauseRow(").substringBefore("\n    )")
+        assertTrue("underPanel = { morePanel?.isOpen == true || TrackPickerFragment.isOpen(supportFragmentManager) }" in row)
+        val closed = source.substringAfter("override fun closed() {").substringBefore("\n        }\n")
+        assertTrue("payPauseRow()" in closed)
     }
 
     @Test

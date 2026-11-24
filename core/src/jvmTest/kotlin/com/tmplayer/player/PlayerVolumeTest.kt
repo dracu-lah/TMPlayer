@@ -68,4 +68,10 @@ class PlayerVolumeTest {
         assertEquals(16.0 / 9.0, PictureRotation.turnedAspect(16.0 / 9.0, 180), 1e-9)
         assertEquals(0.0, PictureRotation.turnedAspect(0.0, 90), 0.0)
     }
+
+    @Test
+    fun `muted by M the engine gets no sound, whatever the volume, and unmuted the usual gain (PB-06)`() {
+        assertEquals(0f, PlayerVolume.gain(PlayerVolume.FULL, muted = true))
+        assertEquals(PlayerVolume.gain(70), PlayerVolume.gain(70, muted = false))
+    }
 }

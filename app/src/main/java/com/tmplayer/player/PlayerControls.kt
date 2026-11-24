@@ -1231,6 +1231,9 @@ class PlayerControls(
         container.removeCallbacks(tick)
         if (!shown) return
         shown = false
+        // A row put away (by Back) with the reader on one of its parts may send no focus cleared
+        // from a gone view: without this every later show would stay up for good (PB-11).
+        readerFocusInRow = false
         container.animate().alpha(0f).setDuration(FADE_MS)
             .withEndAction { if (!shown) container.visibility = View.GONE }
             .start()

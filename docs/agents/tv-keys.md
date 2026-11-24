@@ -55,7 +55,11 @@ Found while pinning the table (WP-69):
 - **Stop, Channel and Media Next, Previous and Skip.** Stop saves the place and leaves like Back.
   Channel up and down, Next, Previous and Skip step the video (`PlayerRemoteKeys.episodeStep`), once
   per press. Page Up and Page Down step a chapter, or a minute without
-  chapters, once per press, on a TV only (`PlayerRemoteKeys.pageStep`, WP-18).
+  chapters, once per press, on a TV only (`PlayerRemoteKeys.pageStep`, WP-18). On a phone, a tablet,
+  a Chromebook, the desktop and the web a keyboard's Page Up and Page Down are the previous and next
+  episode (`PlayerKeyMap`, the desktop's `PlayerKeys`), as the desktop and the web had them before
+  WP-28; with none to go to the player says so. One meaning per kind of device: the chapter step is
+  a television remote's only, whatever sent the key there (PB-03).
 - **Info.** A short Info (released before the long press) shows the details; a held Info reports a
   stutter.
 - **Menu elsewhere.** Besides the tile (`Holdable.kt`) and the player: the profile picker's tiles

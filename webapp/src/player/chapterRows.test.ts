@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { chapterListable, chapterRows } from './chapters.ts'
+import { chapterInside, chapterListable, chapterRows } from './chapters.ts'
 
 // The same cases as core's ChapterRowsTest: the page and the apps list the same lines.
 const untitled = (n: number) => `Chapter ${n}`
@@ -50,4 +50,18 @@ test('three hundred chapters list at once and the last is found', () => {
     assert.equal(rows.length, 300)
     assert.ok(rows[299].current)
     assert.equal(rows[299].title, 'Chapter 300')
+})
+
+// PB-02: a malformed file's marks at or past the end are no place to seek to.
+test('with the length known, marks at or past the end are not listed, offered or stepped to', () => {
+    const past = [
+        { start: 0, title: 'Opening' },
+        { start: 600, title: 'Part A' },
+        { start: 1199.5, title: 'At the end' },
+        { start: 5000, title: 'Way past' },
+    ]
+    assert.deepEqual(chapterRows(past, 700, untitled, 1200).map((r) => r.title), ['Opening', 'Part A'])
+    assert.equal(chapterListable([{ start: 0, title: 'A' }, { start: 9000, title: 'B' }], 1200), false)
+    assert.deepEqual(chapterInside(past, 1200).map((c) => c.start), [0, 600])
+    assert.equal(chapterRows(past, 0, untitled).length, 4)
 })

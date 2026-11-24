@@ -37,6 +37,21 @@ class PlayerRemoteKeysTest {
     }
 
     @Test
+    fun `a held arrow's repeat that waited behind a slow seek over the picture does not seek (PB-04)`() {
+        // 300 ms between the repeat and its handling: the key may be up already.
+        assertEquals(0L, PlayerRemoteKeys.pictureStepMs(8, 10_000L, eventMs = 1_000, nowMs = 1_300, lastJumpMs = 0, durationMs = 3_600_000))
+        // 100 ms late is still a live hold here (the bar's 80 ms rule would drop it).
+        assertEquals(10_000L, PlayerRemoteKeys.pictureStepMs(8, 10_000L, eventMs = 1_000, nowMs = 1_100, lastJumpMs = 0, durationMs = 3_600_000))
+        // The first press is never dropped, however late.
+        assertEquals(10_000L, PlayerRemoteKeys.pictureStepMs(0, 10_000L, eventMs = 1_000, nowMs = 5_000, lastJumpMs = 4_990, durationMs = 3_600_000))
+        // And the remote's own call sites pass the key's time.
+        val source = File(repo(), "app/src/main/java/com/tmplayer/player/PlayerActivity.kt").readText()
+        assertEquals(3, Regex("repeatCount = event.repeatCount, eventMs = event.eventTime\\)").findAll(source).count())
+        val jump = source.substringAfter("private fun jumpFromRemote(").substringBefore("\n    }")
+        assertTrue("PlayerRemoteKeys.pictureStepMs(repeatCount, base, eventMs, now, lastRemoteJumpAt, duration)" in jump)
+    }
+
+    @Test
     fun `a long hold grows the step`() {
         assertEquals(30_000L, PlayerRemoteKeys.jumpStepMs(40, 10_000L, 10_000, 0))
         assertEquals(60_000L, PlayerRemoteKeys.jumpStepMs(100, 10_000L, 10_000, 0))
@@ -118,7 +133,8 @@ class PlayerRemoteKeysTest {
         assertEquals(true, PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_DOWN, tv = true))
         assertEquals(false, PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_UP, tv = true))
         assertNull(PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_CHANNEL_UP, tv = true))
-        // A phone's or tablet's keyboard: the player does not take Page keys.
+        // A phone's or tablet's keyboard: no chapter step, a TV's meaning only. Its Page keys are
+        // the episodes of PlayerKeyMap, as on the desktop and the web (PB-03).
         assertNull(PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_DOWN, tv = false))
         assertNull(PlayerRemoteKeys.pageStep(KeyEvent.KEYCODE_PAGE_UP, tv = false))
         assertEquals(60_000L, PlayerRemoteKeys.PAGE_JUMP_MS)

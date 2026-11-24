@@ -579,7 +579,8 @@ fun PlayerScreen(
         undoOffer = seekUndo.seeked(liveStatus.value.positionMs, to, System.currentTimeMillis())
         // The resume notice holds the same corner and answers the same question; the newer wins.
         if (undoOffer != null) resumedFrom = null
-        engine.seekTo(target)
+        // The clamped place: a chapter mark past the end of a malformed file would end the video (PB-02).
+        engine.seekTo(to)
     }
 
     fun jumpBy(delta: Long) {
@@ -1608,8 +1609,9 @@ fun PlayerScreen(
 
     /** Ctrl+Left and Ctrl+Right: the next chapter, or the start of this one, as [Chapters] has it. */
     fun stepChapter(forward: Boolean) {
-        val chapters = status.chapters
-        if (chapters.isEmpty()) {
+        // Sorted, and only the marks inside the video: mpv gives its own order, and a mark past the end would end it.
+        val chapters = Chapters.inside(status.chapters, status.durationMs)
+        if (status.chapters.isEmpty()) {
             // The minute those keys seeked before they meant chapters, for a file that has none.
             val delta = if (forward) PlayerKeys.SEEK_LONG_MS else -PlayerKeys.SEEK_LONG_MS
             jumpBy(delta)
@@ -2107,8 +2109,10 @@ fun PlayerScreen(
                         is MenuAction.Sleep -> setSleepTimer(action.minutes)
                         is MenuAction.Chapter -> {
                             jumpTo(action.startMs)
-                            val index = Chapters.at(status.chapters, action.startMs)
-                            if (index >= 0) showFlash(Flash.Kind.Text, Chapters.label(status.chapters, index))
+                            // Named from the sorted marks: mpv's own order could name another chapter (PB-08).
+                            val marks = Chapters.inside(status.chapters, status.durationMs)
+                            val index = Chapters.at(marks, action.startMs)
+                            if (index >= 0) showFlash(Flash.Kind.Text, Chapters.label(marks, index))
                         }
                         is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
                         is MenuAction.AudioDelay -> stepAudioDelay(action.direction)

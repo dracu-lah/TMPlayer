@@ -16,6 +16,12 @@ import com.tmplayer.i18n.L
  * Pure: no Android, no JVM only API, no DOM. The screen decides what it can do with an [Action]; a
  * key whose action a screen lacks is left alone there. A television never reads this table: its
  * remote has its own rules (docs/agents/tv-keys.md).
+ *
+ * Page Up and Page Down are the previous and next episode here, as the desktop's own table has had
+ * them, and the web's: one meaning for every keyboard. On a television the remote's Page keys step
+ * a chapter instead (`PlayerRemoteKeys.pageStep`, WP-18), a meaning only a TV has (PB-03). A bare
+ * Left or Right on an Android keyboard over the bare picture keeps that player's jump (5 s back,
+ * 10 s forward); with a modifier it is this table's.
  */
 object PlayerKeyMap {
 

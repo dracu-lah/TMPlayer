@@ -313,6 +313,8 @@ val androidPlayerForIos = tasks.register<Sync>("androidPlayerForIos") {
             "VlcBackend", "VlcOptions",
             // The remote key helper (what each key means in the player), pure Kotlin over KeyEvent.
             "PlayerRemoteKeys",
+            // The row around a pause, kept out of the activity for its focus test (PB-01).
+            "PauseRow",
         )
             .forEach { include("com/tmplayer/player/$it.kt") }
     }
