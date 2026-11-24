@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toasts: the four kinds</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 24px 16px; background: #101114; color: #e8e8ea; }
+  h1 { font-size: 22px; } h2 { font-size: 17px; margin-top: 32px; }
+  p { max-width: 70ch; color: #b7b8bd; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+  figure { margin: 0; border: 1px solid #2a2c33; border-radius: 12px; overflow: hidden; background: #000; }
+  figcaption { padding: 6px 10px; font-size: 13px; color: #b7b8bd; }
+  .phone img { width: 200px; display: block; }
+  .desktop img { width: 420px; display: block; }
+  .tv img { width: 420px; display: block; }
+</style>
+</head>
+<body>
+<h1>Toasts: Success, Info, Warning, Error</h1>
+<p>One card: the surface colour with a wash of the kind's colour, a 1 dp border in it (no shadow), a 32 dp round icon chip, up to two lines, an optional action at the end. It stands 12 dp over the floating bar (stand-in pill drawn under it), centred. The phone's card is the width less 16 dp each side up to 560 dp, the desktop's wraps between 280 and 480 dp, the television's words are 18 sp inside the 5 percent margin. The icon moves once as the toast arrives: the tick draws itself (300 ms), the cross shakes, the warning pulses, the note scales in; none of it with reduced motion.</p>
+
+<h2>Phone (411 x 891), dark</h2>
+<div class="row phone">
+  <figure><img src="phone-success-dark.png" alt=""><figcaption>Success</figcaption></figure>
+  <figure><img src="phone-info-dark.png" alt=""><figcaption>Info</figcaption></figure>
+  <figure><img src="phone-warning-dark.png" alt=""><figcaption>Warning</figcaption></figure>
+  <figure><img src="phone-error-dark.png" alt=""><figcaption>Error</figcaption></figure>
+  <figure><img src="phone-action-dark.png" alt=""><figcaption>With an action</figcaption></figure>
+</div>
+<h2>Phone, light</h2>
+<div class="row phone">
+  <figure><img src="phone-success-light.png" alt=""><figcaption>Success</figcaption></figure>
+  <figure><img src="phone-info-light.png" alt=""><figcaption>Info</figcaption></figure>
+  <figure><img src="phone-warning-light.png" alt=""><figcaption>Warning</figcaption></figure>
+  <figure><img src="phone-error-light.png" alt=""><figcaption>Error</figcaption></figure>
+  <figure><img src="phone-action-light.png" alt=""><figcaption>With an action</figcaption></figure>
+</div>
+
+<h2>Desktop (1280 x 800), dark</h2>
+<div class="row desktop">
+  <figure><img src="desktop-success-dark.png" alt=""><figcaption>Success</figcaption></figure>
+  <figure><img src="desktop-info-dark.png" alt=""><figcaption>Info</figcaption></figure>
+  <figure><img src="desktop-warning-dark.png" alt=""><figcaption>Warning</figcaption></figure>
+  <figure><img src="desktop-error-dark.png" alt=""><figcaption>Error</figcaption></figure>
+  <figure><img src="desktop-action-dark.png" alt=""><figcaption>With an action</figcaption></figure>
+</div>
+<h2>Desktop, light</h2>
+<div class="row desktop">
+  <figure><img src="desktop-success-light.png" alt=""><figcaption>Success</figcaption></figure>
+  <figure><img src="desktop-info-light.png" alt=""><figcaption>Info</figcaption></figure>
+  <figure><img src="desktop-warning-light.png" alt=""><figcaption>Warning</figcaption></figure>
+  <figure><img src="desktop-error-light.png" alt=""><figcaption>Error</figcaption></figure>
+  <figure><img src="desktop-action-light.png" alt=""><figcaption>With an action</figcaption></figure>
+</div>
+
+<h2>Television (1920 x 1080), dark</h2>
+<div class="row tv">
+  <figure><img src="tv-success-dark.png" alt=""><figcaption>Success</figcaption></figure>
+  <figure><img src="tv-info-dark.png" alt=""><figcaption>Info</figcaption></figure>
+  <figure><img src="tv-warning-dark.png" alt=""><figcaption>Warning</figcaption></figure>
+  <figure><img src="tv-error-dark.png" alt=""><figcaption>Error</figcaption></figure>
+</div>
+<h2>Television, light</h2>
+<div class="row tv">
+  <figure><img src="tv-success-light.png" alt=""><figcaption>Success</figcaption></figure>
+  <figure><img src="tv-info-light.png" alt=""><figcaption>Info</figcaption></figure>
+  <figure><img src="tv-warning-light.png" alt=""><figcaption>Warning</figcaption></figure>
+  <figure><img src="tv-error-light.png" alt=""><figcaption>Error</figcaption></figure>
+</div>
+<p>Made by desktop ToastGalleryTest with TMPLAYER_SHOTS. The phone and television hosts are Android's; their position is pinned by the app's ToastPositionTest (Robolectric).</p>
+</body>
+</html>

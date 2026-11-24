@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desktop design audit</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 24px 16px; background: #101114; color: #e8e8ea; max-width: 1100px; }
+  h1 { font-size: 22px; } h2 { font-size: 17px; margin-top: 32px; }
+  table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #2a2c33; padding: 6px 10px; vertical-align: top; text-align: left; }
+  th { background: #1a1c21; }
+  img { max-width: 100%; border: 1px solid #2a2c33; border-radius: 10px; display: block; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; } .row figure { margin: 0; flex: 1 1 420px; } figcaption { color: #b7b8bd; font-size: 13px; padding: 4px 2px; }
+  code { color: #9ad; }
+</style>
+</head>
+<body>
+<h1>Desktop design audit</h1>
+<p>Method: the real app was not driven (a signed-in instance already held the profile and the person was working in the same session), so every check runs as a Compose test with made-up data, and the frames below come from those tests (TMPLAYER_SHOTS). Machine checks use <code>LayoutChecks</code> (shared left and right edges, equal widths, heights, gaps and text sizes, centring, inside-the-parent, tolerance 1 dp).</p>
+
+<h2>Found and fixed</h2>
+<table>
+<tr><th>Screen</th><th>Found placed without a reason</th><th>Fix</th></tr>
+<tr><td>Home hero</td><td>Words and buttons 10 dp right of the row headings and cards (x 42 against 32); hero 636 dp tall on 1080p, pushing Continue watching under the fold with the artwork spilling under its heading; hard picture edge at the foot</td><td>Words on the page gutter; height 58 percent of the window, 360 to 560 dp; start scrim solid at the left, clear by 55 percent of the width; a 96 dp fade into the page; no spill below the frame on the desktop</td></tr>
+<tr><td>Home headings</td><td>See all right edge (1873) against the carousel dots (1885); generic label</td><td>See all hangs its 4 dp padding past the gutter so its text ends where the dots do; named for its row ("See all Continue watching") for a screen reader and the tooltip</td></tr>
+<tr><td>Home, away and back</td><td>The layout setting was read again from nothing at every return (rows built empty for a frame, sections cut away and popped back), the scroll place was lost</td><td>HomeLayoutMemory gives the first frame the last layout; the rows' scroll place is kept in ShellState</td></tr>
+<tr><td>Chats list</td><td>A pinned chat's pin sat before the name and shifted it 20 px right of every other name</td><td>The pin follows the name; names share one edge (LayoutChecksTest)</td></tr>
+<tr><td>Chats chips</td><td>Last chip cut at the window edge with no hint it scrolls</td><td>Edge fade over the margins</td></tr>
+<tr><td>Player transport</td><td>No skip buttons for a mouse; with no Previous episode Play and Pause sat off the middle</td><td>Five fixed slots, Back 10 and Forward 10 beside Play, a hidden slot keeps its room, Play on the middle of the picture in all four cases</td></tr>
+<tr><td>Toasts</td><td>Toast behind the floating bar; plain pill, no kind</td><td>See the toast gallery</td></tr>
+</table>
+
+<h2>Frames</h2>
+<div class="row">
+  <figure><img src="home-1920-dark.png" alt=""><figcaption>Home 1920 x 1080, hero 560 dp, left side faded, See all on the gutter</figcaption></figure>
+  <figure><img src="home-900-dark.png" alt=""><figcaption>Home 900 x 700</figcaption></figure>
+</div>
+<div class="row">
+  <figure><img src="home-1280-dark.png" alt=""><figcaption>Home 1280 x 800</figcaption></figure>
+  <figure><img src="home-1920-light.png" alt=""><figcaption>Home 1920 x 1080, light</figcaption></figure>
+</div>
+<div class="row">
+  <figure><img src="player-transport-four-cases.png" alt=""><figcaption>Player transport: first episode, a middle one, the last, a single video; the red line is the middle of the picture</figcaption></figure>
+</div>
+<p><a href="../toasts/index.html">Toast gallery</a></p>
+
+<h2>Left, and why</h2>
+<ul>
+<li>A title logo from TMDB has transparent margins of its own, so its first letter can start a few dp right of the meta line under it. Content, not layout; trimming logos is a separate job.</li>
+<li>Downloads dialog, Settings pages, History, Lists, search and the player's other controls were read in code, not photographed: their insets come from named constants (ROW_INSET, pageMargin) and nothing contradicted them. A live pass on a real window is still a person's check.</li>
+<li>The old <code>TopMessageHost</code> in NavBar.kt is unused now; it stays until the bar's owner has merged.</li>
+</ul>
+</body>
+</html>
