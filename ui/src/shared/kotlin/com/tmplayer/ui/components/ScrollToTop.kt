@@ -81,7 +81,8 @@ fun BoxScope.ScrollToTop(state: LazyGridState, modifier: Modifier = Modifier, bo
  *
  * Touch and pointer only: a remote has no fling to undo and steps back up a row at a time, and a
  * floating button would be one more place for its focus to land, so on the television this draws
- * nothing. [bottom] is the room under it above the navigation bar. Only as much of the bar as the
+ * nothing: the television's way to the top is the Back key and the Page and Channel keys (see
+ * [BackToTop] and [pageKeys]). [bottom] is the room under it above the navigation bar. Only as much of the bar as the
  * list actually reaches down over is added, so a list that a Scaffold has already lifted clear of
  * the bar does not get the bar's height twice.
  */

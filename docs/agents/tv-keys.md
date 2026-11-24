@@ -27,10 +27,10 @@ the same change.
 | Menu | account menu, on release (today) | item options (today) | account menu where the bar is shown, else the profile picker with two profiles or more (today) | the profile picker with two profiles or more, as no bar is shown there (today) | player menu where the quirk says so (today) | player menu (today) | closes the panel (today, check) | OK on the picture; long OK on a tile; More button |
 | Info | nothing | item options (today) | nothing | nothing | details on a short Info, report stutter on a held one (today; hint WP-21) | same | nothing | long OK; More, Help (WP-89) |
 | Long OK | picture: account menu (today, plain OK does the same) | item options (today) | nothing | nothing | chooser after 1.5 s (WP-19) | plain OK (WP-19) | nothing | n/a |
-| Back | leaves to Home or exits (today) | to the bar or the top first in long grids (WP-12) | top first, then leave (WP-12) | pane to rail, rail out (WP-07) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
+| Back | leaves to Home or exits (today) | to the bar, or to the top first in the chat list and the video grid once more than 2 screens down (today, WP-12) | top first, then leave (today, WP-12) | pane to rail, rail out (WP-07) | leave (today) | row down (today) | closes the panel, focus on its opener | n/a |
 | Search | TV search (today, WP-22 everywhere) | TV search (WP-22) | TV search (WP-22) | nothing | nothing | nothing | nothing | the bar's Search tab |
 | CC, Audio | nothing | nothing | nothing | nothing | CC toggles, second press opens (WP-19); Audio opens picker (today) | same | nothing | the row's subtitle and audio buttons |
-| Page, Channel | nothing | screenful (WP-12) | screenful (WP-12) | section jump (WP-75) | Page: chapter, or 60 s without chapters, once per press (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (WP-89) |
+| Page, Channel | nothing | screenful (today, WP-12; Fast forward and Rewind too) | screenful (today, WP-12) | section jump (WP-75) | Page: chapter, or 60 s without chapters, once per press (WP-18); Channel: previous or next video (today) | same | group jump in More (WP-20) | Back to top; row buttons; More entries (WP-89) |
 | Play/Pause, Stop | nothing | nothing | nothing | nothing | toggle (today); Stop leaves (today) | same | still work under the panel (WP-19) | OK on the play button |
 | Left, Right hold | move (today, tested on tiles only) | move, stale repeats dropped (WP-13) | same | same (WP-07) | 10 s, live ramp, gated (WP-18) | bar: 10 s, ramped scrub, stale repeats dropped, one commit (WP-18) | move | n/a |
 
@@ -76,5 +76,5 @@ the key fails the test: add it here with its context first.
 | Menu | `Holdable.kt`, `ProfilePicker.kt`, `AddChatsScreen.kt`, `MainActivity.kt`, `PlayerActivity.kt`, `TvTopBar.kt`, `TvMenu.kt` |
 | Info | `Holdable.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (short Info), `PlaybackMarks.kt` (held) |
 | Search | `BrowseScreen.kt`, `SearchKeyGuard.kt` (swallows it on a phone) |
-| Page, Channel | `AddChatsScreen.kt`, `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel steps the video, Page a chapter or a minute) |
+| Page, Channel | `PageKeys.kt` (every long list: the key names live there only), `PlayerActivity.kt` and `PlayerRemoteKeys.kt` (Channel steps the video, Page a chapter or a minute) |
 | Stop | `PlayerActivity.kt`, `PlayerRemoteKeys.kt` |

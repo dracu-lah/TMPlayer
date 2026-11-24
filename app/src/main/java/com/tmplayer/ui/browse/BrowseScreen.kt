@@ -3,7 +3,10 @@ package com.tmplayer.ui.browse
 import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.focusEdge
 import androidx.compose.animation.core.snap
+import com.tmplayer.ui.components.BackToTop
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.pageKeys
+import com.tmplayer.ui.components.pageTile
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -1601,6 +1604,7 @@ private fun <T : Any> ContinueSection(
     val first = remember { FocusRequester() }
     // The card a page was opened from, which the remote goes back to when the page closes.
     val tileReturn = rememberTileReturn()
+    val pageTiles = com.tmplayer.ui.components.rememberPageTiles()
     val now = remember(records) { System.currentTimeMillis() }
     val days = remember(records, dayOf != null) { dayOf?.let { DayGroup.headings(records, it, now) } }
     val sections: List<Pair<DayGroup?, List<T>>> = days ?: listOf(null to records)
@@ -1652,7 +1656,7 @@ private fun <T : Any> ContinueSection(
             // kind of list, and a card around each row here made it the one list that was boxed.
             LazyColumn(
                 state = listState,
-                modifier = Modifier.keepTopInSight(listState, enabled = !isTouch()),
+                modifier = Modifier.keepTopInSight(listState, enabled = !isTouch()).pageKeys(listState, pageTiles),
                 verticalArrangement = Arrangement.spacedBy(if (isTouch()) 2.dp else 4.dp),
                 contentPadding = padding,
             ) {
@@ -1670,7 +1674,7 @@ private fun <T : Any> ContinueSection(
                             finished = card.fraction >= 1f,
                             onClick = { resumeThis(record) },
                             onHold = { holdThis(record) },
-                            modifier = focusOf(record).returnTile(tileReturn, text(record).key),
+                            modifier = focusOf(record).pageTile(pageTiles, text(record).key).returnTile(tileReturn, text(record).key),
                         )
                     }
                 }
@@ -2430,6 +2434,9 @@ internal fun StarModeBar(onDone: () -> Unit, modifier: Modifier = Modifier) {
 /** Placeholder rows at the chat list's foot while its older chats are read. */
 private const val MORE_CHATS_PLACEHOLDERS = 2
 
+/** The recent chats strip's lazy item key, which a jump to the top can land on. */
+private const val STRIP_KEY = "recent-strip"
+
 @Composable
 internal fun ChatSection(
     chats: List<ChatSummary>,
@@ -2466,6 +2473,11 @@ internal fun ChatSection(
     // Around the strip's tiles, for the television's focus scale. A phone does not grow them.
     val clearance = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance
     val first = remember { FocusRequester() }
+    // The rows a Page or Channel key, or the first Back from deep in the list, can land on (WP-12).
+    val chatContext = androidx.compose.ui.platform.LocalContext.current
+    val pageTiles = com.tmplayer.ui.components.rememberPageTiles(
+        remember(chatContext) { com.tmplayer.data.SettingsStore(chatContext) },
+    )
     // The strip is what a viewer lands on when it is there, because it is the largest thing on the
     // screen; otherwise the first card takes it.
     fun focusOf(chat: ChatSummary, inStrip: Boolean): Modifier = when {
@@ -2535,11 +2547,11 @@ internal fun ChatSection(
         // the list's side padding dropped for their sake, this heading has to put it
         // back or it prints hard against the panel edge.
         Column(
-            if (rowsAreFullBleed) {
+            (if (rowsAreFullBleed) {
                 Modifier.padding(start = insets.start, end = insets.end)
             } else {
                 Modifier
-            },
+            }).pageTile(pageTiles, STRIP_KEY),
         ) {
             Text(
                 s.browseJumpBackIn,
@@ -2589,7 +2601,7 @@ internal fun ChatSection(
             twoColumns -> LazyVerticalGrid(
                 columns = GridCells.Fixed(TV_CHAT_COLUMNS),
                 state = rowsState,
-                modifier = Modifier.fillMaxSize().keepTopInSight(rowsState).dropStaleArrowRepeats(),
+                modifier = Modifier.fillMaxSize().keepTopInSight(rowsState).dropStaleArrowRepeats().pageKeys(rowsState, pageTiles),
                 // The television's rows are cards, with room on every side to grow a border.
                 contentPadding = PaddingValues(start = insets.start, end = insets.end, bottom = insets.bottom),
                 horizontalArrangement = Arrangement.spacedBy(TV_CHAT_COLUMN_GAP),
@@ -2605,7 +2617,7 @@ internal fun ChatSection(
                         opensOnLaunch = chat.id == launchChatId,
                         onClick = { open(chat, chat.id) },
                         onHold = { onHold(chat) },
-                        modifier = focusOf(chat, inStrip = false).then(backOf(chat.id)),
+                        modifier = focusOf(chat, inStrip = false).pageTile(pageTiles, chat.id).then(backOf(chat.id)),
                     )
                 }
                 if (paging.loading || paging.failure != null) {
@@ -2616,7 +2628,7 @@ internal fun ChatSection(
             }
 
             else -> LazyColumn(
-                Modifier.fillMaxSize().keepTopInSight(listState, enabled = !isTouch()),
+                Modifier.fillMaxSize().keepTopInSight(listState, enabled = !isTouch()).pageKeys(listState, pageTiles),
                 state = listState,
                 // Rows carry their own side padding on a phone so the ripple reaches both edges, and
                 // they sit against each other with no gap: the list is one surface, not a stack of
@@ -2643,6 +2655,7 @@ internal fun ChatSection(
                         onClick = { open(chat, chat.id) },
                         onHold = { onHold(chat) },
                         modifier = focusOf(chat, inStrip = false)
+                            .pageTile(pageTiles, chat.id)
                             .then(if (animateRows) Modifier.animateItem() else Modifier),
                     )
                 }
@@ -2655,6 +2668,8 @@ internal fun ChatSection(
 
         }
         if (twoColumns) ScrollToTop(rowsState) else ScrollToTop(listState)
+        // On the television the first Back from deep in the list goes to its top (WP-12).
+        if (twoColumns) BackToTop(rowsState, pageTiles) else BackToTop(listState, pageTiles)
         // The hold to scroll handle; listed by name, its bubble gives the letter.
         val byId = remember(chats) { chats.associateBy { it.id } }
         val scrollLabel: ((Any) -> String?)? = if (sort != ChatSort.Name) null else { key -> byId[key]?.let { ScrollLabels.letter(it.title) } }

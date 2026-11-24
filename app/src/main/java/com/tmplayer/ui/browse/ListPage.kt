@@ -34,6 +34,8 @@ import com.tmplayer.data.VisibleList
 import com.tmplayer.data.WatchLaterRecord
 import com.tmplayer.ui.components.FloatingBackButton
 import com.tmplayer.ui.components.dropStaleArrowRepeats
+import com.tmplayer.ui.components.pageKeys
+import com.tmplayer.ui.components.pageTile
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.isTouch
@@ -84,7 +86,11 @@ internal fun ListPage(
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
                     .padding(top = if (touch) 64.dp else Tv.SafeV),
             ) { list, cards, _ ->
+                val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+                // The cards a Page or Channel key can land on (WP-12), by their lazy item key.
+                val pageTiles = com.tmplayer.ui.components.rememberPageTiles()
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Adaptive(if (touch) 160.dp else 240.dp),
                     contentPadding = PaddingValues(
                         start = sides.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
@@ -93,7 +99,7 @@ internal fun ListPage(
                     ),
                     horizontalArrangement = Arrangement.spacedBy(if (touch) 10.dp else 20.dp),
                     verticalArrangement = Arrangement.spacedBy(if (touch) 14.dp else 20.dp),
-                    modifier = Modifier.fillMaxWidth().weight(1f).dropStaleArrowRepeats().testTag(LIST_GRID_TAG),
+                    modifier = Modifier.fillMaxWidth().weight(1f).dropStaleArrowRepeats().pageKeys(gridState, pageTiles).testTag(LIST_GRID_TAG),
                 ) {
                     items(cards, key = { it.key }) { card ->
                         val tile = card.tile
@@ -107,6 +113,7 @@ internal fun ListPage(
                             onClick = { onOpen(tile) },
                             onLongClick = { menu = list to card },
                             dense = touch,
+                            modifier = Modifier.pageTile(pageTiles, card.key),
                         )
                     }
                 }

@@ -442,7 +442,7 @@ fun AddChatsScreen(
         }
         if (event.type != KeyEventType.KeyDown) return false
         val at = nowPlace[id] ?: return false
-        val page = (listState.layoutInfo.visibleItemsInfo.size - 2).coerceAtLeast(3)
+        val page = com.tmplayer.ui.components.PageKeys.listScreenful(listState.layoutInfo.visibleItemsInfo.size)
         val end = if (rtl) Key.DirectionLeft else Key.DirectionRight
         val start = if (rtl) Key.DirectionRight else Key.DirectionLeft
         return when (event.key) {
@@ -464,8 +464,6 @@ fun AddChatsScreen(
                 }
                 true
             }
-            Key.PageDown, Key.ChannelDown -> { focusRow(at + page); true }
-            Key.PageUp, Key.ChannelUp -> { if (at == 0) toTop() else focusRow(at - page); true }
             Key.DirectionDown, Key.DirectionUp -> {
                 // A held arrow walks row by row for a moment, then half a screen at a time; a jump
                 // still running swallows the repeats, so a slow television is not queued up. Half,
@@ -477,7 +475,15 @@ fun AddChatsScreen(
                 focusRow(if (event.key == Key.DirectionDown) at + step else at - step)
                 true
             }
-            else -> false
+            // Page, Channel and Fast forward move a screenful (PageKeys owns which keys they are).
+            else -> {
+                val dir = com.tmplayer.ui.components.PageKeys.step(event.key)
+                when {
+                    dir == 0 -> false
+                    dir < 0 && at == 0 -> { toTop(); true }
+                    else -> { focusRow(at + dir * page); true }
+                }
+            }
         }
     }
     fun rowModifier(id: Long, requester: FocusRequester): Modifier = Modifier

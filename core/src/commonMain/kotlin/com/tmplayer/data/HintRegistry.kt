@@ -42,6 +42,9 @@ object HintIds {
     /** Device fact, not a hint: how many times the quick tour was turned down or skipped. */
     const val TOUR_SKIPPED = "tour_skipped"
 
+    /** The long list hint: Back goes to the top, or the Channel keys sentence (WP-12). */
+    const val LONG_LIST = "long_list"
+
     /** Device fact, not a hint: a Page or Channel key arrived once on this remote (WP-12, WP-75). */
     const val PAGE_KEY_ARRIVED = "page_key_arrived"
 }

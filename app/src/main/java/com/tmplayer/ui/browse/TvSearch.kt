@@ -3,6 +3,8 @@ package com.tmplayer.ui.browse
 import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.pageKeys
+import com.tmplayer.ui.components.pageTile
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -216,6 +218,8 @@ internal fun TvSearchScreen(
     val briefs = remember(state.chats, chats) { state.chats + chats.associate { it.id to ChatBrief.of(it) } }
     var focusedGroup by remember { mutableStateOf<ResultGroup?>(null) }
     val grid = com.tmplayer.ui.components.rememberAheadGridState()
+    // The results a Page or Channel key can land on (WP-12), by their lazy item key.
+    val pageTiles = com.tmplayer.ui.components.rememberPageTiles()
     // Back from a result's page the remote lands on the poster it was opened from, as in a chat's
     // grid: results arriving meanwhile must not leave it on the field (Mi TV, 2026-10-23). A poster
     // scrolled out of the list comes back through its index, which follows the header items.
@@ -260,7 +264,8 @@ internal fun TvSearchScreen(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(COLUMNS),
                 state = grid,
-                modifier = Modifier.weight(1f).fillMaxWidth().keepTopInSight(grid).dropStaleArrowRepeats(),
+                modifier = Modifier.weight(1f).fillMaxWidth().keepTopInSight(grid).dropStaleArrowRepeats()
+                    .pageKeys(grid, pageTiles),
                 // Under the top bar, which names the page and carries the clock, the field leads.
                 contentPadding = PaddingValues(end = Tv.SafeH, top = 4.dp, bottom = CARD_CLEARANCE),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -520,6 +525,7 @@ internal fun TvSearchScreen(
                                 fraction = group.copies.firstNotNullOfOrNull { progress(it) },
                                 reduced = reduced,
                                 tileReturn = tileReturn,
+                                pageTiles = pageTiles,
                                 onFocused = {
                                     focusedGroup = group
                                     // The next page well before the last row.
@@ -749,6 +755,7 @@ private fun PosterCard(
     fraction: Float?,
     reduced: Boolean,
     tileReturn: TileReturn,
+    pageTiles: com.tmplayer.ui.components.PageTiles,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onHold: () -> Unit,
@@ -763,6 +770,7 @@ private fun PosterCard(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(12.dp))
             .border(if (focused) 3.dp else 0.dp, if (focused) Tone.accent else Color.Transparent, RoundedCornerShape(12.dp))
+            .pageTile(pageTiles, group.key)
             .returnTile(tileReturn, group.key)
             .onFocusChanged { if (it.isFocused) onFocused() }
             .semantics { contentDescription = title }

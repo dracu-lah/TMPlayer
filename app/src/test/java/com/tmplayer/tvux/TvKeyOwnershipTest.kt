@@ -343,7 +343,7 @@ class TvKeyOwnershipTest {
             claimants("""(?<![A-Za-z])Key\.Search\b|KEYCODE_SEARCH\b"""),
         )
         assertEquals(
-            listOf("AddChatsScreen.kt", "PlayerActivity.kt", "PlayerRemoteKeys.kt"),
+            listOf("PageKeys.kt", "PlayerActivity.kt", "PlayerRemoteKeys.kt"),
             claimants("""(?<![A-Za-z])Key\.(PageUp|PageDown|ChannelUp|ChannelDown)\b|KEYCODE_(PAGE_UP|PAGE_DOWN|CHANNEL_UP|CHANNEL_DOWN)\b"""),
         )
         assertEquals(

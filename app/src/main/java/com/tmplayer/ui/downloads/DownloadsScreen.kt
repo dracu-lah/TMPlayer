@@ -2,6 +2,10 @@ package com.tmplayer.ui.downloads
 
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.PageTiles
+import com.tmplayer.ui.components.pageKeys
+import com.tmplayer.ui.components.pageTile
+import com.tmplayer.ui.components.rememberPageTiles
 import androidx.compose.foundation.BorderStroke
 import com.tmplayer.ui.theme.Danger
 import androidx.tv.material3.Text as TvText
@@ -325,6 +329,8 @@ fun DownloadsScreen(
     var rowFocusAsked by remember { mutableStateOf(0) }
     val rowFocus = remember { FocusRequester() }
     val remote = !isTouch()
+    // The rows a Page or Channel key can land on (WP-12), by their lazy item key.
+    val pageTiles = rememberPageTiles(settings)
     // The row the player was opened from: when the player closes the remote is on it again, not on
     // whatever the window picked (R2, "Back from the player returns focus to the opener").
     val opener = remember { OpenerMemory() }
@@ -336,7 +342,7 @@ fun DownloadsScreen(
     }
     // A row of the list, wearing the requester when it is the one the remote goes to next.
     val focusTarget: @Composable (String, @Composable () -> Unit) -> Unit = { key, card ->
-        Box(if (remote && key == rowFocusKey) Modifier.focusRequester(rowFocus) else Modifier) { card() }
+        Box(Modifier.pageTile(pageTiles, key).then(if (remote && key == rowFocusKey) Modifier.focusRequester(rowFocus) else Modifier)) { card() }
     }
 
     /**
@@ -1261,6 +1267,7 @@ fun DownloadsScreen(
             chosenWarning = chosenWarning,
             onDeleteChosen = { confirmingDeleteMany = true },
             listState = listState,
+            pageTiles = pageTiles,
             body = body,
         )
     } else if (!isTouch()) {
@@ -1282,6 +1289,7 @@ fun DownloadsScreen(
             chosenWarning = chosenWarning,
             onDeleteChosen = { confirmingDeleteMany = true },
             listState = listState,
+            pageTiles = pageTiles,
             refocus = deleted,
             body = body,
         )
@@ -1362,7 +1370,7 @@ fun DownloadsScreen(
                     val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().dropStaleArrowRepeats(),
+                        modifier = Modifier.fillMaxSize().dropStaleArrowRepeats().pageKeys(listState, pageTiles),
                         contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp + LocalBottomChrome.current),
                         content = body,
                     )
@@ -2305,6 +2313,7 @@ private fun PhoneDownloads(
     chosenWarning: String?,
     onDeleteChosen: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    pageTiles: PageTiles,
     body: LazyListScope.() -> Unit,
 ) {
     val s = LocalStrings.current
@@ -2359,7 +2368,7 @@ private fun PhoneDownloads(
                     val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().dropStaleArrowRepeats(),
+                        modifier = Modifier.fillMaxSize().dropStaleArrowRepeats().pageKeys(listState, pageTiles),
                         contentPadding = PaddingValues(start = gutter, end = gutter, bottom = bottom),
                         content = body,
                     )
@@ -2444,6 +2453,7 @@ private fun TvDownloads(
     chosenWarning: String?,
     onDeleteChosen: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    pageTiles: PageTiles,
     /**
      * Bumped when a delete left no row to go on to (or took several at once): focus goes back to
      * the tab.
@@ -2530,7 +2540,7 @@ private fun TvDownloads(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().keepTopInSight(listState).dropStaleArrowRepeats(),
+                modifier = Modifier.fillMaxSize().keepTopInSight(listState).dropStaleArrowRepeats().pageKeys(listState, pageTiles),
                 contentPadding = PaddingValues(bottom = Tv.SafeV),
                 content = body,
             )

@@ -175,7 +175,10 @@ import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.ConnectionNotice
+import com.tmplayer.ui.components.BackToTop
 import com.tmplayer.ui.components.ScrollToTop
+import com.tmplayer.ui.components.pageKeys
+import com.tmplayer.ui.components.pageTile
 import com.tmplayer.ui.components.FastScroller
 import com.tmplayer.ui.components.FocusOnOpen
 import com.tmplayer.ui.components.MediaGridSkeleton
@@ -737,6 +740,8 @@ fun MediaGridScreen(
             // The tile a video's page (or a show's, or the hold menu) was opened from, which the
             // remote goes back to when it closes rather than to the first tile.
             val tileReturn = rememberTileReturn()
+            // The tiles a Page or Channel key, or the first Back from deep in the grid, can land on.
+            val pageTiles = com.tmplayer.ui.components.rememberPageTiles(settings)
             val firstKey = shelf.firstOrNull()?.key
             // The first row of a television's listing, by key. Focus landing there asks to be
             // brought into view with the focus clearance above it, which scrolls the listing a
@@ -822,7 +827,7 @@ fun MediaGridScreen(
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
                     state = gridState,
-                    modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !touch).dropStaleArrowRepeats(),
+                    modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !touch).dropStaleArrowRepeats().pageKeys(gridState, pageTiles),
                     contentPadding = padding,
                     horizontalArrangement = Arrangement.spacedBy(gap),
                     verticalArrangement = Arrangement.spacedBy(gap),
@@ -871,7 +876,9 @@ fun MediaGridScreen(
                                                 tileReturn.open(shelved.key)
                                                 heldSeries = shelved.series
                                             }),
-                                            modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
+                                            modifier = focusOf(shelved)
+                                                .pageTile(pageTiles, shelved.key)
+                                                .returnTile(tileReturn, shelved.key),
                                         )
                                     } else {
                                     val item = (shelved as ShelfEntry.File).item
@@ -895,7 +902,9 @@ fun MediaGridScreen(
                                             }
                                         },
                                         onFocused = { standingOn = item },
-                                        modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
+                                        modifier = focusOf(shelved)
+                                                .pageTile(pageTiles, shelved.key)
+                                                .returnTile(tileReturn, shelved.key),
                                     )
                                     }
                                 }
@@ -931,6 +940,9 @@ fun MediaGridScreen(
                     )
                 }
                 ScrollToTop(gridState)
+                // On the television the first Back from deep in the grid goes to its top (WP-12).
+                // Not while a selection or a search owns Back.
+                BackToTop(gridState, pageTiles, enabled = !selecting && query.isBlank())
                 // The hold to scroll handle, its bubble saying where the grid is in the chat's order.
                 val scrollStrings = LocalStrings.current
                 val entryByKey = remember(feed) {

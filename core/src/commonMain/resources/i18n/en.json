@@ -4041,8 +4041,10 @@
     "unavailable_in_app": "This trailer cannot play here. Opening it in YouTube."
   },
   "tv": {
+    "back_to_top_hint": "Back goes to the top",
     "browse_hint": "OK opens a chat or plays a video. Hold OK on a chat to add it to your favourites. Back goes up a level.",
     "menu_hint": "Press Down to choose, or Back to close this.",
+    "page_keys_hint": "Channel keys jump a screen. Back goes to the top.",
     "voice_hint_fire": "Hold the mic button on the remote to dictate"
   },
   "unit": {
