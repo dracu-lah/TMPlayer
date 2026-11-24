@@ -43,6 +43,11 @@ data class DesktopSettings(
     val layout: DesktopLayout = DesktopLayout.Desktop,
     /** Open filling the screen, for a media PC that starts TMPlayer with the television. */
     val startFullscreen: Boolean = false,
+    /**
+     * "Do not ask again" on the question a quit with downloads running asks (WP-46): quit without
+     * asking, downloads paused as the question's Quit and pause does. Per device, so it lives here.
+     */
+    val quitWithoutAsking: Boolean = false,
 ) {
     companion object {
         /**
@@ -142,6 +147,7 @@ class DesktopPrefs(private val file: File) {
             setProperty("system_title_bar", s.systemTitleBar.toString())
             setProperty("layout", s.layout.name)
             setProperty("start_fullscreen", s.startFullscreen.toString())
+            setProperty("quit_without_asking", s.quitWithoutAsking.toString())
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -182,6 +188,7 @@ class DesktopPrefs(private val file: File) {
                 systemTitleBar = bool("system_title_bar", d.systemTitleBar),
                 layout = DesktopLayout.from(p.getProperty("layout")),
                 startFullscreen = bool("start_fullscreen", d.startFullscreen),
+                quitWithoutAsking = bool("quit_without_asking", d.quitWithoutAsking),
             )
         }
     }

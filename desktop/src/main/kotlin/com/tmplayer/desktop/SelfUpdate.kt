@@ -97,6 +97,14 @@ class SelfUpdate(
     @Volatile
     var quit: () -> Unit = {}
 
+    /**
+     * Set by the window: asked before Restart now starts its helper, so a question about running
+     * downloads (WP-46) is answered first and Keep running leaves nothing half started. Runs the
+     * action itself where nothing asks.
+     */
+    @Volatile
+    var beforeQuit: (proceed: () -> Unit) -> Unit = { it() }
+
     /** Runs after the app has gone, on Windows: the install itself. */
     private var pendingHelper: List<String>? = null
 
@@ -126,7 +134,9 @@ class SelfUpdate(
     }
 
     /** "Restart now": hands over to the staged install (Windows) or simply relaunches. */
-    fun restart() {
+    fun restart() = beforeQuit { restartNow() }
+
+    private fun restartNow() {
         val helper = pendingHelper ?: relaunchCommand()
         if (helper != null) {
             runCatching { startDetached(helper, helperDir) }.onFailure { Logger.w(TAG, "could not start the restart helper: ${it.message}") }

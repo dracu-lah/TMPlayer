@@ -106,6 +106,18 @@ class DesktopDownloadRunner(
     /** Every download as it lands in the Downloads folder. */
     val finished: SharedFlow<Finished> = _finished.asSharedFlow()
 
+    private val _pausedAtLaunch = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    /**
+     * How many downloads a restore brought back paused and nobody has been told about yet (WP-46):
+     * the window says "3 downloads were paused" with a Resume, then calls [noticeShown].
+     */
+    val pausedAtLaunch: kotlinx.coroutines.flow.StateFlow<Int> = _pausedAtLaunch
+
+    fun noticeShown() {
+        _pausedAtLaunch.value = 0
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DesktopDownloads"))
     private val lock = Any()
 
@@ -329,12 +341,18 @@ class DesktopDownloadRunner(
      */
     suspend fun restore() {
         OfflineDownloads.restore(settings)
+        var moved = 0
+        val held = OfflineDownloads.ordered.count { !it.busy }
         for (row in OfflineDownloads.ordered) {
             if (row.busy) continue
             if (runCatching { Td.localFileAvailability(row.fileId) }.getOrNull() == LocalFileAvailability.Complete) {
                 OfflineDownloads.resume(this, row.fileId)
+                moved++
             }
         }
+        // What is left paused is what the viewer is told about, once, with a Resume in the notice
+        // (the finished ones above are carried on, not paused).
+        _pausedAtLaunch.value = (held - moved).coerceAtLeast(0)
     }
 
     private fun idsFor(fileId: Int): List<Int> =

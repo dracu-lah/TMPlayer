@@ -292,7 +292,7 @@ fun main(args: Array<String>) {
                 com.tmplayer.data.PlaybackWarmup.warmer = com.tmplayer.data.PlaybackWarmup.Warmer { shell.warmStream(it) }
                 onDispose { com.tmplayer.data.PlaybackWarmup.warmer = null }
             }
-            val quit = {
+            val quitNow = {
                 // Saving is a courtesy; a failure there must never keep the app from closing.
                 runCatching { WindowMemory.save(windowState) }
                 // Should taking the window down hang (a native player that will not let go), the
@@ -303,6 +303,17 @@ fun main(args: Array<String>) {
                 }.apply { isDaemon = true }.start()
                 exitApplication()
             }
+            // Every way out asks first while a download runs (WP-46): Keep running, Quit and pause,
+            // Do not ask again (a device choice, in desktop.properties).
+            val quitGuard = remember {
+                com.tmplayer.desktop.ui.QuitGuard(
+                    running = { com.tmplayer.data.OfflineDownloads.runningCount(com.tmplayer.data.OfflineDownloads.active.value) },
+                    skip = { DesktopServices.prefs.now.quitWithoutAsking },
+                    rememberSkip = { DesktopServices.prefs.update { it.copy(quitWithoutAsking = true) } },
+                    pauseAll = { com.tmplayer.data.OfflineDownloads.pauseAll(DesktopServices.downloads) },
+                )
+            }
+            val quit = { quitGuard.request(quitNow) }
             // Focus drawn for the keyboard only: a click hides it, Tab and the arrows show it.
             com.tmplayer.desktop.ui.FocusVisible.install()
             // A screen that throws is put away behind an error card, not the end of the app (HX10).
@@ -385,7 +396,9 @@ fun main(args: Array<String>) {
                         )
                     }
                 }
-                DesktopServices.selfUpdate.quit = quit
+                // Restart now asks before its helper starts; the quit itself is then not asked twice.
+                DesktopServices.selfUpdate.quit = quitNow
+                DesktopServices.selfUpdate.beforeQuit = quitGuard::request
                 shell.quit = quit
                 shell.minimize = if (undecorated) ({ windowState.isMinimized = true }) else null
                 // Transfers show outside the window too, once there is a window for the taskbar bar.
@@ -524,6 +537,8 @@ fun main(args: Array<String>) {
                             if (!shell.playerUp || recovery.failure != null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))
                             // A crash from the last run, signed in or not (DesktopCrashReports).
                             com.tmplayer.desktop.ui.CrashQuestionHost(settings)
+                            // Closing with a download running (WP-46).
+                            com.tmplayer.desktop.ui.QuitQuestionHost(quitGuard)
                             // Undecorated and floating: a hairline for the edge the system no
                             // longer draws, and the edges to resize by.
                             if (undecorated && windowState.placement == WindowPlacement.Floating && !shell.fullscreen) {

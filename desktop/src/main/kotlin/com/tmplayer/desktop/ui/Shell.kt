@@ -453,6 +453,22 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         ) { forgotten -> toast(com.tmplayer.data.GoneVideos.message(forgotten)) }
     }
     LaunchedEffect(Unit) { state.notices.collect { toast(it) } }
+    // "3 downloads were paused" with Resume, once after a restore brought a queue back paused
+    // (WP-46). Resume goes through the same start as the Downloads page's Resume all, so space and
+    // metered rules apply as there.
+    val actionToast = com.tmplayer.ui.components.rememberActionToast()
+    val pausedRunner = state.downloads as? com.tmplayer.desktop.DesktopDownloadRunner
+    if (pausedRunner != null) {
+        LaunchedEffect(pausedRunner) {
+            pausedRunner.pausedAtLaunch.collect { count ->
+                if (count <= 0) return@collect
+                actionToast(s.downloadsPausedAtLaunch(count = count), s.downloadsResume) {
+                    com.tmplayer.data.OfflineDownloads.resumeAll(pausedRunner)
+                }
+                pausedRunner.noticeShown()
+            }
+        }
+    }
     // The chosen storage location could not be used at launch, so this run is on the default
     // folders (#35): said once per run, the first time the window is up.
     LaunchedEffect(Unit) {
