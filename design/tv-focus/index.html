@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV focus, before and after</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 64px; background: #0e1013; color: #e6e8eb; font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 40px 0 8px; }
+  p { margin: 4px 0 12px; color: #aab0b8; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  figure { margin: 0; }
+  figcaption { font-size: 13px; color: #aab0b8; margin: 4px 0; }
+  img { width: 100%; height: auto; display: block; border: 1px solid #2a2f36; }
+  .single { max-width: 632px; }
+  @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+<h1>TV focus: one indicator per control</h1>
+<p>Robolectric frames of the real composables, written by <code>TvOneIndicatorRenderTest</code> and <code>TvFocusPicturesTest</code> (1920 x 1080 px at xhdpi and 960 x 540 px at mdpi; the 960 px frames are shown with the 1920 px ones in each row). Before is <code>ux/master</code> as it stood, after is this change. Home's hero was 328 dp under the heading before, 232 dp after.</p>
+
+<h2>Top bar over Home, the remote on Home (1920 x 1080)</h2>
+<p>Before: a fill, a dark band, and a second ring outside it. After: the fill alone. The hero is about 59 percent of the window instead of 77, so Continue watching stands whole.</p>
+<div class="pair">
+  <figure><figcaption>Before</figcaption><img src="tv-focus-before-home-bar-1920.png" alt="Top bar with a double ring on Home, hero covering Continue watching"></figure>
+  <figure><figcaption>After</figcaption><img src="tv-focus-after-home-bar-1920.png" alt="Top bar with one fill on Home, Continue watching whole under the hero"></figure>
+</div>
+
+<h2>Top bar over Home (960 x 540)</h2>
+<div class="pair">
+  <figure><figcaption>Before</figcaption><img src="tv-focus-before-home-bar-960.png" alt="Before at 960 by 540"></figure>
+  <figure><figcaption>After</figcaption><img src="tv-focus-after-home-bar-960.png" alt="After at 960 by 540"></figure>
+</div>
+
+<h2>The remote on Play (1920 x 1080 and 960 x 540)</h2>
+<div class="pair">
+  <figure><figcaption>Before, 1920</figcaption><img src="tv-focus-before-home-play-1920.png" alt="Before, Play focused"></figure>
+  <figure><figcaption>After, 1920</figcaption><img src="tv-focus-after-home-play-1920.png" alt="After, Play focused"></figure>
+  <figure><figcaption>Before, 960</figcaption><img src="tv-focus-before-home-play-960.png" alt="Before, Play focused at 960"></figure>
+  <figure><figcaption>After, 960</figcaption><img src="tv-focus-after-home-play-960.png" alt="After, Play focused at 960"></figure>
+</div>
+
+<h2>Chips</h2>
+<div class="pair">
+  <figure><figcaption>Before, 1920</figcaption><img src="tv-focus-before-chips-1920.png" alt="Chips before"></figure>
+  <figure><figcaption>After, 1920</figcaption><img src="tv-focus-after-chips-1920.png" alt="Chips after"></figure>
+  <figure><figcaption>Before, 960</figcaption><img src="tv-focus-before-chips-960.png" alt="Chips before at 960"></figure>
+  <figure><figcaption>After, 960</figcaption><img src="tv-focus-after-chips-960.png" alt="Chips after at 960"></figure>
+</div>
+
+<h2>Settings rows</h2>
+<div class="pair">
+  <figure><figcaption>Before, 1920</figcaption><img src="tv-focus-before-settings-1920.png" alt="Settings before"></figure>
+  <figure><figcaption>After, 1920</figcaption><img src="tv-focus-after-settings-1920.png" alt="Settings after"></figure>
+  <figure><figcaption>Before, 960</figcaption><img src="tv-focus-before-settings-960.png" alt="Settings before at 960"></figure>
+  <figure><figcaption>After, 960</figcaption><img src="tv-focus-after-settings-960.png" alt="Settings after at 960"></figure>
+</div>
+
+<h2>Dialog</h2>
+<div class="pair">
+  <figure><figcaption>Before, 1920</figcaption><img src="tv-focus-before-dialog-1920.png" alt="Dialog before"></figure>
+  <figure><figcaption>After, 1920</figcaption><img src="tv-focus-after-dialog-1920.png" alt="Dialog after"></figure>
+  <figure><figcaption>Before, 960</figcaption><img src="tv-focus-before-dialog-960.png" alt="Dialog before at 960"></figure>
+  <figure><figcaption>After, 960</figcaption><img src="tv-focus-after-dialog-960.png" alt="Dialog after at 960"></figure>
+</div>
+
+<h2>The four kinds of control, after (1920 x 1080)</h2>
+<p>A pill (the bar tab), a row, a button and a tile, each with the remote on it. The tile has no fill, so it draws one 2 dp ring. Light theme in the second row.</p>
+<div class="pair">
+  <figure><figcaption>Tab, dark (before: <a href="tv-focus-before-dark-tab-1920.png">double ring</a>)</figcaption><img src="tv-focus-after-dark-tab-1920.png" alt="Tab, dark"></figure>
+  <figure><figcaption>Tab, light (before: <a href="tv-focus-before-light-tab-1920.png">double ring</a>)</figcaption><img src="tv-focus-after-light-tab-1920.png" alt="Tab, light"></figure>
+  <figure><figcaption>Row, dark</figcaption><img src="tv-focus-after-dark-row-1920.png" alt="Row, dark"></figure>
+  <figure><figcaption>Row, light</figcaption><img src="tv-focus-after-light-row-1920.png" alt="Row, light"></figure>
+  <figure><figcaption>Button, dark</figcaption><img src="tv-focus-after-dark-button-1920.png" alt="Button, dark"></figure>
+  <figure><figcaption>Button, light</figcaption><img src="tv-focus-after-light-button-1920.png" alt="Button, light"></figure>
+  <figure><figcaption>Tile, dark</figcaption><img src="tv-focus-after-dark-tile-1920.png" alt="Tile, dark"></figure>
+  <figure><figcaption>Tile, light</figcaption><img src="tv-focus-after-light-tile-1920.png" alt="Tile, light"></figure>
+</div>
+
+<h2>High contrast focus (the loud look, by choice)</h2>
+<p>Switched on in Settings, it still adds its ring, thinner than before (3 dp with a 1 dp line outside and a 1 dp keyline).</p>
+<div class="pair">
+  <figure><figcaption>Before, tab</figcaption><img src="tv-focus-before-high-tab-1920.png" alt="High contrast tab before"></figure>
+  <figure><figcaption>After, tab</figcaption><img src="tv-focus-after-high-tab-1920.png" alt="High contrast tab after"></figure>
+  <figure><figcaption>Before, tile</figcaption><img src="tv-focus-before-high-tile-1920.png" alt="High contrast tile before"></figure>
+  <figure><figcaption>After, tile</figcaption><img src="tv-focus-after-high-tile-1920.png" alt="High contrast tile after"></figure>
+</div>
+</main>
+</body>
+</html>
