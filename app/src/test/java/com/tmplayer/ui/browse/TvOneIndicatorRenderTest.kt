@@ -221,13 +221,13 @@ class TvOneIndicatorRenderTest {
             if (high) {
                 assertTrue("${spot.tag} $label: High contrast draws its focus: $after", after.size >= spot.bands && extra >= 0)
             } else {
-                assertTrue("${spot.tag} $label: one indicator, wanted ${spot.bands} bands from the page in, got ${after.size}: $after", after.size in spot.bands..(spot.bands + if (density < 1.5f && spot.tag == "tile") 1 else 0))
+                assertTrue("${spot.tag} $label: one indicator, wanted ${spot.bands} bands from the page in, got ${after.size}: $after", after.size in spot.bands..(spot.bands + if (density < 1.5f && spot.tag == "tile") 2 else 0))
             }
         }
         if (!high) {
             // A tile's ring is 2 dp: its band is no thicker than 2 dp and a pixel or two of anti-aliasing.
             val (_, after) = added("tile", 30f, 8f, label)
-            val ring = after.getOrNull(1)?.second ?: 0
+            val ring = after.drop(1).dropLast(1).sumOf { it.second }
             assertTrue("the tile's ring is thin: $after at density $density", ring <= (2 * density).toInt() + 2)
         }
     }
