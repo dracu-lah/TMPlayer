@@ -79,9 +79,9 @@ class ShortcutSheetTest {
             presses(keys).mapNotNull { PlayerKeys.actionFor(it, KeyContext(speedIsNormal = row != "Speed up, down, reset")) }
         }.map { it.javaClass }.toSet()
         // Play, Pause and ExitFullscreen come from media keys and Esc in fullscreen, which the
-        // sheet covers under Play or pause and Back.
+        // sheet covers under Play or pause and Back; Stay is Esc with "Esc leaves the video" off.
         val expected = PlayerAction::class.java.declaredClasses.toSet() -
-            setOf(PlayerAction.Play::class.java, PlayerAction.Pause::class.java, PlayerAction.ExitFullscreen::class.java)
+            setOf(PlayerAction.Play::class.java, PlayerAction.Pause::class.java, PlayerAction.ExitFullscreen::class.java, PlayerAction.Stay::class.java)
         assertEquals(expected - reached, emptySet<Any>())
     }
 

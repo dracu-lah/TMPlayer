@@ -41,6 +41,19 @@ object SeekMath {
     fun volume(current: Int, delta: Int): Int = (current + delta).coerceIn(0, 100)
 
     /**
+     * Where a key pressed on the focused time bar goes (WP-47): Left and Right step
+     * [PlayerKeys.SEEK_SHORT_MS], Home the start, End the end (kept off the last frame). Null for
+     * any other key, which the bar leaves alone.
+     */
+    fun barKey(key: androidx.compose.ui.input.key.Key, position: Long, duration: Long): Long? = when (key) {
+        androidx.compose.ui.input.key.Key.DirectionLeft -> clampSeek(position, -PlayerKeys.SEEK_SHORT_MS, duration)
+        androidx.compose.ui.input.key.Key.DirectionRight -> clampSeek(position, PlayerKeys.SEEK_SHORT_MS, duration)
+        androidx.compose.ui.input.key.Key.MoveHome -> 0L
+        androidx.compose.ui.input.key.Key.MoveEnd -> clampTarget(duration, duration)
+        else -> null
+    }
+
+    /**
      * A wheel turn: volume by default, a seek with Shift held or on a horizontal wheel. [notches]
      * is the scroll delta, positive away from the viewer as Compose reports it (down).
      */

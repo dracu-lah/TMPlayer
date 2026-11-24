@@ -48,6 +48,11 @@ data class DesktopSettings(
      * asking, downloads paused as the question's Quit and pause does. Per device, so it lives here.
      */
     val quitWithoutAsking: Boolean = false,
+    /**
+     * "Esc leaves the video" (WP-47): on, as it always was, Esc outside full screen goes back from
+     * the player; off, it does nothing there. Per device.
+     */
+    val escLeavesVideo: Boolean = true,
 ) {
     companion object {
         /**
@@ -148,6 +153,7 @@ class DesktopPrefs(private val file: File) {
             setProperty("layout", s.layout.name)
             setProperty("start_fullscreen", s.startFullscreen.toString())
             setProperty("quit_without_asking", s.quitWithoutAsking.toString())
+            setProperty("esc_leaves_video", s.escLeavesVideo.toString())
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -189,6 +195,7 @@ class DesktopPrefs(private val file: File) {
                 layout = DesktopLayout.from(p.getProperty("layout")),
                 startFullscreen = bool("start_fullscreen", d.startFullscreen),
                 quitWithoutAsking = bool("quit_without_asking", d.quitWithoutAsking),
+                escLeavesVideo = bool("esc_leaves_video", d.escLeavesVideo),
             )
         }
     }

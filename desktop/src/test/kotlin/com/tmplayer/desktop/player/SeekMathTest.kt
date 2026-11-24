@@ -18,6 +18,28 @@ class SeekMathTest {
     }
 
     @Test
+    fun `the focused time bar steps 5 s, Home and End go to the ends`() {
+        val key = androidx.compose.ui.input.key.Key
+        assertEquals(57_000L, SeekMath.barKey(key.DirectionLeft, 62_000, 600_000))
+        assertEquals(67_000L, SeekMath.barKey(key.DirectionRight, 62_000, 600_000))
+        assertEquals(0L, SeekMath.barKey(key.DirectionLeft, 2_000, 600_000))
+        assertEquals(599_000L, SeekMath.barKey(key.DirectionRight, 598_000, 600_000))
+        assertEquals(0L, SeekMath.barKey(key.MoveHome, 62_000, 600_000))
+        assertEquals(599_000L, SeekMath.barKey(key.MoveEnd, 62_000, 600_000))
+        assertNull(SeekMath.barKey(key.Spacebar, 62_000, 600_000))
+    }
+
+    @Test
+    fun `the double click time is the system's, between 300 ms and a second`() {
+        assertEquals(300L, doubleClickMs { null })
+        assertEquals(300L, doubleClickMs { "slow" })
+        assertEquals(300L, doubleClickMs { 200 })
+        assertEquals(500L, doubleClickMs { 500 })
+        assertEquals(1_000L, doubleClickMs { 5_000 })
+        assertEquals(300L, doubleClickMs { error("no toolkit") })
+    }
+
+    @Test
     fun `tenths need a known length`() {
         assertNull(SeekMath.tenth(0, 5))
         assertEquals(0L, SeekMath.tenth(7_200_000, 0))

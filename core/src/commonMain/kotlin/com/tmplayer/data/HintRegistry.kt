@@ -39,6 +39,9 @@ object HintIds {
     /** The one line that says where "Play in TMPlayer" is. Was `external_hint_seen`. */
     const val EXTERNAL = "external"
 
+    /** The desktop and web player's first-run line: Space plays, Left and Right jump, ? lists every key (WP-47). */
+    const val PLAYER_KEYS = "player_keys"
+
     /** Device fact, not a hint: how many times the quick tour was turned down or skipped. */
     const val TOUR_SKIPPED = "tour_skipped"
 

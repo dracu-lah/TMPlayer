@@ -482,6 +482,10 @@ fun PlayerScreen(
     // Whether the keys are on the player itself rather than on one of its controls: in the
     // big-screen mode a remote walks into the controls with Up and Down (plan 8.7).
     var keysOnPlayer by remember { mutableStateOf(true) }
+    // Tab has walked focus into the controls: Space, Enter and the arrows are then the focused
+    // control's, not the player's (WP-47). A click or a refocus ends it, so a control the mouse
+    // pressed never takes the seek keys from the picture.
+    var navByKeyboard by remember { mutableStateOf(false) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val item = current.item
     DisposableEffect(item.fileId) {
@@ -566,6 +570,7 @@ fun PlayerScreen(
     }
 
     fun refocus() {
+        navByKeyboard = false
         runCatching { focus.requestFocus() }
     }
 
@@ -1300,8 +1305,10 @@ fun PlayerScreen(
 
     val menusOpen = menu != null || showShortcuts
     // "Hide the controls after" is the phone's setting, shared: zero keeps them up while playing.
-    val hideAfterMs by remember(settings) { settings.touchPrefs.map { it.controlsTimeoutMs } }
-        .collectAsState(initial = TouchPrefs.TIMEOUT_DEFAULT_MS)
+    // The big screen gets the television's own default until the viewer chooses (WP-47).
+    val bigScreenNow = com.tmplayer.desktop.ui.BigScreen.on
+    val hideAfterMs by remember(settings, bigScreenNow) { settings.touchPrefs.map { it.timeoutFor(bigScreenNow) } }
+        .collectAsState(initial = TouchPrefs().timeoutFor(bigScreenNow))
     // The phone's "Hold to speed up", shared with it: 0 is off.
     val holdSpeed by remember(settings) { settings.touchPrefs.map { it.holdSpeed } }
         .collectAsState(initial = TouchPrefs.HOLD_DEFAULT)
@@ -1718,6 +1725,7 @@ fun PlayerScreen(
                 menu = null
                 timePrompt = true
             }
+            PlayerAction.Stay -> Unit
         }
     }
 
@@ -1868,6 +1876,12 @@ fun PlayerScreen(
         val tv = com.tmplayer.desktop.ui.BigScreen.on
         val remote = com.tmplayer.desktop.ui.remoteKeyOf(event)
         val plain = !event.isShiftPressed && !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
+        // Tab starts the control walk (the default traversal does the moving).
+        if (event.key == Key.Tab) navByKeyboard = true
+        // Focus is on a control Tab walked to: Space and Enter press it and the arrows go on from
+        // it (the time bar steps itself), where they were the player's play and seek (WP-47). The
+        // big-screen mode has its own walk below.
+        if (!tv && navByKeyboard && !keysOnPlayer && PlayerKeys.focusedControlOwns(event.key, plain)) return false
         if (tv && !keysOnPlayer && menu == null && !showShortcuts && !showDetails && !showOnline) {
             // A remote on the controls: the arrows walk them, OK presses the one it is
             // on, and Back leaves them for the picture, the controls staying up meanwhile.
@@ -1909,7 +1923,7 @@ fun PlayerScreen(
             alt = event.isAltPressed,
             meta = event.isMetaPressed,
         )
-        val context = KeyContext(fullscreen = fullscreen, speedIsNormal = status.speed == 1f, mac = mac, tv = tv)
+        val context = KeyContext(fullscreen = fullscreen, speedIsNormal = status.speed == 1f, mac = mac, tv = tv, escLeaves = desktop.escLeavesVideo)
         val action = PlayerKeys.actionFor(press, context) ?: return false
         // Over the loading and error sheets only the way out works.
         if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return false
@@ -1953,7 +1967,10 @@ fun PlayerScreen(
                 .focusRequester(focus)
                 .focusable()
                 .onPointerEvent(PointerEventType.Move, PointerEventPass.Initial) { poke() }
-                .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { noteInput() }
+                .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) {
+                    navByKeyboard = false
+                    noteInput()
+                }
                 .onPointerEvent(PointerEventType.Enter, PointerEventPass.Initial) { poke() }
                 .onPointerEvent(PointerEventType.Exit, PointerEventPass.Initial) {
                     if (status.playing && menu == null) controlsUp = false
@@ -1978,7 +1995,7 @@ fun PlayerScreen(
                 // Hidden with the controls only while a video plays: the loading, end and error
                 // sheets have no controls to bring it back with, and the sheets are for the mouse.
                 .pointerHoverIcon(
-                    if (fullscreen && phase == Phase.Playing && !showControls && menu == null && !showEpisodes && !showOnline && !(screenLocked && showUnlock)) {
+                    if (phase == Phase.Playing && !showControls && menu == null && !showEpisodes && !showOnline && !(screenLocked && showUnlock)) {
                         blankCursor
                     } else {
                         PointerIcon.Default
@@ -2032,6 +2049,21 @@ fun PlayerScreen(
             ).joinToString("  ·  ")
             castTitle[0] = com.tmplayer.desktop.cast.CastTitle(title, subtitle)
 
+            // The first run's one line about the keys (WP-47), through the hint registry: shown with
+            // the controls, once, and never again (a first run only, as the registry allows a hint
+            // during playback). The big screen has a remote, not a keyboard.
+            if (!com.tmplayer.desktop.ui.BigScreen.on) {
+                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 112.dp)) {
+                    com.tmplayer.ui.components.OneTimeHint(
+                        settings,
+                        com.tmplayer.data.HintIds.PLAYER_KEYS,
+                        label = s.playerFirstKeysHint,
+                        visible = showControls,
+                        inPlayback = true,
+                        style = com.tmplayer.ui.components.HintStyle.Bubble,
+                    )
+                }
+            }
             CompositionLocalProvider(
                 LocalPlayerCopies provides PlayerCopies(copies, current.item.id, qualities, current.item.playingQuality),
                 LocalChatSubtitles provides chatHits,

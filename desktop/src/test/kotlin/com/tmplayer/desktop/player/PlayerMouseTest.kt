@@ -16,6 +16,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertRangeInfoEquals
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -23,6 +26,7 @@ import androidx.compose.ui.test.ScrollWheel
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.moveTo
 import androidx.compose.ui.test.onNodeWithTag
@@ -133,7 +137,8 @@ class PlayerMouseTest {
         onNodeWithTag("video").performMouseInput { click(onPicture) }
         mainClock.advanceTimeBy(150)
         assertEquals(0, engine.count("toggle"))
-        mainClock.advanceTimeBy(300)
+        // The window is the system's double click time (300 ms to a second), whatever this machine says.
+        mainClock.advanceTimeBy(1_000)
         assertEquals(1, engine.count("toggle"))
     }
 
@@ -263,13 +268,71 @@ class PlayerMouseTest {
     }
 
     @Test
-    fun `hovering the volume button shows its slider`() = runComposeUiTest {
+    fun `the volume slider is always in the tree and opens on hover, focus and a press on Mute`() = runComposeUiTest {
         open()
-        val slider = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
-        onNode(slider).assertDoesNotExist()
+        val slider = hasContentDescription("Volume") and SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
+        // In the semantics tree at rest, for a screen reader and for Tab, though drawn closed.
+        onNode(slider).assertExists()
+        val closed = onNode(slider).getBoundsInRoot().let { it.right - it.left }
         onNode(hasContentDescription("Mute (M)")).performMouseInput { moveTo(center) }
         waitForIdle()
-        onNode(slider).assertExists()
+        val open = onNode(slider).getBoundsInRoot().let { it.right - it.left }
+        assertTrue("opened on hover ($closed to $open)", open > closed)
+        // A press on Mute leaves it out a few seconds, the pointer gone.
+        onNodeWithTag("video").performMouseInput { moveTo(onPicture) }
+        waitForIdle()
+        assertEquals("closed again once the pointer left", closed, onNode(slider).getBoundsInRoot().let { it.right - it.left })
+        onNode(hasContentDescription("Mute (M)")).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        waitForIdle()
+        assertTrue("open after a press on Mute", onNode(slider).getBoundsInRoot().let { it.right - it.left } > closed)
+    }
+
+    @Test
+    fun `the time bar is a slider for the keyboard and a reader, and Left and Right step it`() = runComposeUiTest {
+        open()
+        engine.seekTo(62_000)
+        waitForIdle()
+        val bar = onNodeWithTag("timebar")
+        bar.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+        bar.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1:02 of 10:00"))
+        bar.assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Seek bar")))
+        bar.assertRangeInfoEquals(androidx.compose.ui.semantics.ProgressBarRangeInfo(62_000f, 0f..600_000f))
+        // Tab walks to it from the picture (and starts the control walk, which hands it the arrows).
+        var tabs = 0
+        while (onAllNodes(isFocused() and hasTestTag("timebar")).fetchSemanticsNodes().isEmpty()) {
+            check(tabs++ < 60) { "Tab never reached the time bar" }
+            press(Key.Tab)
+        }
+        bar.assertIsFocused()
+        engine.calls.clear()
+        // Tab walked here: the arrows are the bar's, a 5 s step each, never the player's seek.
+        press(Key.DirectionRight)
+        assertEquals(listOf("seekTo:67000"), engine.calls.filter { it.startsWith("seek") })
+        press(Key.MoveEnd)
+        assertEquals("seekTo:599000", engine.calls.last { it.startsWith("seek") })
+        press(Key.MoveHome)
+        assertEquals("seekTo:0", engine.calls.last { it.startsWith("seek") })
+    }
+
+    @Test
+    fun `Tab to Fullscreen, then Enter or Space presses it and never toggles play`() = runComposeUiTest {
+        open()
+        engine.calls.clear()
+        val fullscreen = hasContentDescription("Fullscreen (F)")
+        var tabs = 0
+        while (onAllNodes(isFocused() and fullscreen).fetchSemanticsNodes().isEmpty()) {
+            check(tabs++ < 60) { "Tab never reached Fullscreen" }
+            press(Key.Tab)
+        }
+        press(Key.Enter)
+        assertEquals(1, fullscreenToggles)
+        assertEquals(0, engine.count("toggle"))
+        press(Key.Spacebar)
+        assertEquals(2, fullscreenToggles)
+        assertEquals(0, engine.count("toggle"))
+        // Esc and the letters stay the player's wherever focus is: K plays.
+        press(Key.K)
+        assertEquals(1, engine.count("toggle"))
     }
 
     @Test

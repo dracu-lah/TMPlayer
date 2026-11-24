@@ -32,7 +32,18 @@ class DesktopPrefsTest {
     }
 
     @Test
-    fun updateSettingsMoveOutOnce() = kotlinx.coroutines.runBlocking {
+    fun quitAndEscChoicesSurviveARestart() {
+        // Defaults: ask before a quit that cuts downloads, Esc leaves the video (WP-46, WP-47).
+        assertFalse(DesktopPrefs(file).now.quitWithoutAsking)
+        assertTrue(DesktopPrefs(file).now.escLeavesVideo)
+        DesktopPrefs(file).update { it.copy(quitWithoutAsking = true, escLeavesVideo = false) }
+        val again = DesktopPrefs(file).now
+        assertTrue(again.quitWithoutAsking)
+        assertFalse(again.escLeavesVideo)
+    }
+
+    @Test
+    fun updateSettingsMoveOutOnce()= kotlinx.coroutines.runBlocking {
         file.writeText("volume=40\ncheck_for_updates=false\nlast_update_check=42\ndismissed_release=2.0.1\n")
         val prefs = DesktopPrefs(file)
         val moved = mutableListOf<LegacyUpdatePrefs>()

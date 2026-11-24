@@ -75,6 +75,9 @@ sealed interface PlayerAction {
     data object Back : PlayerAction
     data object Quit : PlayerAction
     data object ShortcutSheet : PlayerAction
+
+    /** A key the viewer has switched off ("Esc leaves the video" off): taken, and nothing happens. */
+    data object Stay : PlayerAction
 }
 
 /** One key press with its modifiers, free of Compose's event type so the table can be tested. */
@@ -96,6 +99,12 @@ data class KeyContext(
      * video, never only full screen (the whole app is) and never the speed.
      */
     val tv: Boolean = false,
+    /**
+     * Settings' "Esc leaves the video" (WP-47, on by default): off, Esc outside full screen does
+     * nothing here, so a stray press cannot close a video. Esc still leaves full screen, and the
+     * big-screen mode's Esc is a remote's Back whatever this says.
+     */
+    val escLeaves: Boolean = true,
 )
 
 /**
@@ -171,7 +180,11 @@ object PlayerKeys {
             Key.PageDown -> return PlayerAction.NextEpisode
             Key.PageUp -> return PlayerAction.PreviousEpisode
             Key.F11 -> return PlayerAction.ToggleFullscreen
-            Key.Escape -> return if (context.fullscreen && !context.tv) PlayerAction.ExitFullscreen else PlayerAction.Back
+            Key.Escape -> return when {
+                context.fullscreen && !context.tv -> PlayerAction.ExitFullscreen
+                !context.escLeaves && !context.tv -> PlayerAction.Stay
+                else -> PlayerAction.Back
+            }
             // mpv's revert-seek. Shift alone: Backspace with nothing held keeps its two meanings.
             Key.Backspace -> return when {
                 shift && !ctrl && !alt && !meta -> PlayerAction.UndoSeek
@@ -242,6 +255,18 @@ object PlayerKeys {
             Key.Slash -> if (shift) PlayerAction.ShortcutSheet else null
             else -> null
         }
+    }
+
+    /**
+     * Whether a key belongs to the control Tab has walked focus to (WP-47): Space and Enter press
+     * it, the arrows move on from it (or, on the time bar, step it). Plain presses only; Esc, the
+     * letters and every modified key stay the player's wherever focus is.
+     */
+    fun focusedControlOwns(key: Key, plain: Boolean): Boolean = plain && when (key) {
+        Key.Spacebar, Key.Enter, Key.NumPadEnter,
+        Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown,
+        -> true
+        else -> false
     }
 
     private fun digit(key: Key): Int? = when (key) {

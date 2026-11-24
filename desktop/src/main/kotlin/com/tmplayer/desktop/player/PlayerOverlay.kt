@@ -9,7 +9,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.Role
@@ -96,6 +101,9 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -391,7 +399,7 @@ internal fun BoxScope.VideoGestures(
                                     hold(false)
                                 }
                                 else -> pending = scope.launch {
-                                    delay(DOUBLE_CLICK_MS)
+                                    delay(DOUBLE_CLICK_WAIT_MS)
                                     pending = null
                                     click()
                                 }
@@ -406,7 +414,19 @@ internal fun BoxScope.VideoGestures(
     )
 }
 
+/**
+ * The longest gap between two presses that is a double click (WP-47): the system's own
+ * `awt.multiClickInterval` where it says one (Windows' double click time, a slow one set for a
+ * tremor), never under 300 ms, and no more than a second so a single click is not held back long.
+ * [read] is the desktop property, a parameter so a test can hand in its own.
+ */
+internal fun doubleClickMs(read: () -> Any? = { java.awt.Toolkit.getDefaultToolkit().getDesktopProperty("awt.multiClickInterval") }): Long {
+    val system = runCatching { (read() as? Number)?.toLong() }.getOrNull() ?: return DOUBLE_CLICK_MS
+    return system.coerceIn(DOUBLE_CLICK_MS, 1_000L)
+}
+
 private const val DOUBLE_CLICK_MS = 300L
+private val DOUBLE_CLICK_WAIT_MS: Long by lazy { doubleClickMs() }
 
 /** How long the left button stays down before a press is a hold rather than a click. */
 private const val HOLD_MS = 500L
@@ -818,18 +838,35 @@ internal fun Chip(text: String, modifier: Modifier = Modifier) {
 private fun VolumeControl(volume: Int, muted: Boolean, onVolume: (Int) -> Unit, onToggleMute: () -> Unit) {
     val s = LocalStrings.current
     var hovered by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    // Mute pressed: the slider stays out a few seconds, so the next move is a drag away (WP-47).
+    var mutePresses by remember { mutableStateOf(0) }
+    var pinned by remember { mutableStateOf(false) }
+    LaunchedEffect(mutePresses) {
+        if (mutePresses == 0) return@LaunchedEffect
+        pinned = true
+        delay(VOLUME_PIN_MS)
+        pinned = false
+    }
+    val open = hovered || focused || pinned
+    val slideWidth by animateDpAsState(if (open) VOLUME_SLIDER_WIDTH else 0.dp, Motion.standard(Motion.Fast))
     Row(
         Modifier.onPointerEvent(PointerEventType.Enter) { hovered = true }
-            .onPointerEvent(PointerEventType.Exit) { hovered = false },
+            .onPointerEvent(PointerEventType.Exit) { hovered = false }
+            .onFocusChanged { focused = it.hasFocus },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AnimatedVisibility(hovered) {
+        // Always in the tree, at its full size behind a clip that opens: a screen reader finds the
+        // slider and Tab reaches it (it opens on focus), 48 dp high to press (WP-47).
+        Box(Modifier.width(slideWidth).clipToBounds(), contentAlignment = Alignment.CenterStart) {
             Slider(
                 value = if (muted) 0f else volume / 100f,
                 onValueChange = { onVolume((it * 100).roundToInt()) },
-                // Never the keyboard's: a slider that took focus on a click would keep Space and
-                // Esc from the player until the video was clicked again.
-                modifier = Modifier.width(110.dp).padding(end = 4.dp).focusProperties { canFocus = false },
+                modifier = Modifier.requiredWidth(VOLUME_SLIDER_WIDTH).heightIn(min = 48.dp).padding(end = 4.dp)
+                    .semantics {
+                        contentDescription = s.keysRowVolume
+                        stateDescription = "${if (muted) 0 else volume} %"
+                    },
                 colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color(0x55FFFFFF)),
             )
         }
@@ -838,9 +875,18 @@ private fun VolumeControl(volume: Int, muted: Boolean, onVolume: (Int) -> Unit, 
             volume < 50 -> TmIcons.VolumeDown
             else -> TmIcons.VolumeUp
         }
-        OverlayButton(icon, if (muted) s.playerUnmuteHint else s.playerMuteHint, onToggleMute)
+        OverlayButton(
+            icon,
+            if (muted) s.playerUnmuteHint else s.playerMuteHint,
+            { mutePresses++; onToggleMute() },
+        )
     }
 }
+
+private val VOLUME_SLIDER_WIDTH = 110.dp
+
+/** How long the volume slider stays out after a press on Mute. */
+private const val VOLUME_PIN_MS = 3_000L
 
 /**
  * The time, the chapter and the time left over the bar, and the bar: the only parts of the
@@ -918,8 +964,35 @@ private fun TimeBar(
     var dragX by remember { mutableStateOf<Float?>(null) }
     val seek by rememberUpdatedState(onSeekTo)
     val length by rememberUpdatedState(duration)
+    val here by rememberUpdatedState(position)
+    val s = LocalStrings.current
+    val focusInteractions = remember { MutableInteractionSource() }
+    // A slider for the keyboard and a screen reader (WP-47): Tab reaches it, Left and Right step 5 s,
+    // Home and End go to the ends, and the reader hears "Seek bar, 1:02 of 1:30:00".
+    val stateText = if (duration > 0) s.playerPositionOf(SeekMath.clock(position), SeekMath.clock(duration)) else SeekMath.clock(position)
     Box(
         Modifier.fillMaxWidth().height(28.dp).testTag("timebar")
+            .semantics {
+                // The range info makes it a slider to a screen reader (Compose has no Slider role).
+                contentDescription = s.playerSeekBar
+                stateDescription = stateText
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    position.coerceIn(0L, duration.coerceAtLeast(0L)).toFloat(),
+                    0f..duration.coerceAtLeast(1L).toFloat(),
+                )
+                setProgress { target ->
+                    seek(SeekMath.clampTarget(target.toLong(), length))
+                    true
+                }
+            }
+            .overlayFocusRing(focusInteractions, RoundedCornerShape(4.dp))
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val to = SeekMath.barKey(event.key, here, length) ?: return@onKeyEvent false
+                seek(to)
+                true
+            }
+            .focusable(interactionSource = focusInteractions)
             .onSizeChanged { width = it.width.toFloat() }
             .onPointerEvent(PointerEventType.Move) { hoverX = it.changes.firstOrNull()?.position?.x }
             .onPointerEvent(PointerEventType.Enter) { hoverX = it.changes.firstOrNull()?.position?.x }

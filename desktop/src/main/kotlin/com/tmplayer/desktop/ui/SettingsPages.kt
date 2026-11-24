@@ -330,6 +330,13 @@ internal fun MouseRows(state: ShellState) {
         desktop.wheelSeeks,
         icon = SettingsGlyphs.Mouse,
     ) { on -> state.extras.prefs.update { it.copy(wheelSeeks = on) } }
+    // Esc leaves the video (WP-47): on as it always was; off keeps a stray Esc from closing one.
+    Toggle(
+        s.settingsEscLeavesVideo,
+        if (desktop.escLeavesVideo) s.settingsEscLeavesVideoOn else s.settingsEscLeavesVideoOff,
+        desktop.escLeavesVideo,
+        icon = SettingsGlyphs.Mouse,
+    ) { on -> state.extras.prefs.update { it.copy(escLeavesVideo = on) } }
 }
 
 /**

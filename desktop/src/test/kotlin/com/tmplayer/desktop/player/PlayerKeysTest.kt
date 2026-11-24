@@ -57,6 +57,24 @@ class PlayerKeysTest {
     }
 
     @Test
+    fun `Esc leaves the video is a switch, and never takes full screen or the remote's Back away`() {
+        val keeps = KeyContext(escLeaves = false)
+        assertEquals(PlayerAction.Stay, action(Key.Escape, context = keeps))
+        assertEquals(PlayerAction.ExitFullscreen, action(Key.Escape, context = KeyContext(fullscreen = true, escLeaves = false)))
+        assertEquals(PlayerAction.Back, action(Key.Escape, context = KeyContext(tv = true, escLeaves = false)))
+        assertEquals(PlayerAction.Back, action(Key.Escape))
+    }
+
+    @Test
+    fun `a focused control owns Space, Enter and the arrows, never Esc, letters or modified keys`() {
+        listOf(Key.Spacebar, Key.Enter, Key.NumPadEnter, Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)
+            .forEach { assertTrue("$it", PlayerKeys.focusedControlOwns(it, plain = true)) }
+        listOf(Key.Escape, Key.K, Key.F, Key.M, Key.Slash, Key.Tab)
+            .forEach { assertTrue("$it", !PlayerKeys.focusedControlOwns(it, plain = true)) }
+        assertTrue(!PlayerKeys.focusedControlOwns(Key.DirectionRight, plain = false))
+    }
+
+    @Test
     fun `backspace resets a changed speed and otherwise goes back`() {
         assertEquals(PlayerAction.Back, action(Key.Backspace, context = KeyContext(speedIsNormal = true)))
         assertEquals(PlayerAction.SpeedReset, action(Key.Backspace, context = KeyContext(speedIsNormal = false)))
