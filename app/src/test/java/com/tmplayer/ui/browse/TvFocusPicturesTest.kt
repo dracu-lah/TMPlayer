@@ -108,7 +108,7 @@ class TvFocusPicturesTest {
     private fun picture(scene: String) {
         rule.waitForIdle()
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
-        val width = (rule.activity.resources.displayMetrics.widthPixels / density).toInt()
+        val width = rule.activity.resources.displayMetrics.widthPixels
         val file = File("../build/device-test/review/tv-focus-$label-$scene-$width.png").absoluteFile
         file.parentFile?.mkdirs()
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

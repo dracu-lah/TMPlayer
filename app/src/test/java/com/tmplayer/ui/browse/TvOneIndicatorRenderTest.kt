@@ -154,7 +154,7 @@ class TvOneIndicatorRenderTest {
 
     private fun save(bitmap: Bitmap, scene: String) {
         val label = System.getenv("TVFOCUS_LABEL") ?: "after"
-        val width = (rule.activity.resources.displayMetrics.widthPixels / density).toInt()
+        val width = rule.activity.resources.displayMetrics.widthPixels
         val file = File("../build/device-test/review/tv-focus-$label-$scene-$width.png").absoluteFile
         file.parentFile?.mkdirs()
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
