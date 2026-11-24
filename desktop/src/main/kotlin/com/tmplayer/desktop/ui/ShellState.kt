@@ -19,6 +19,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.CopyHandoff
@@ -270,6 +271,9 @@ class ShellState(
      * it, so Esc and Ctrl+K again bring back what was typed, selected.
      */
     var paletteOpen by mutableStateOf(false)
+
+    /** The shell's keyboard sheet, opened by ? and F1 and by Settings' Keyboard shortcuts row (WP-51). */
+    var shortcutsOpen by mutableStateOf(false)
 
     var paletteQuery by mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(""))
 
@@ -587,7 +591,9 @@ class ShellState(
             it()
             return
         }
-        runCatching { searchFocus.requestFocus() }
+        // A page with no field on screen (Home, Downloads, Settings): Ctrl+F opens the search across
+        // every chat rather than doing nothing (WP-51).
+        if (!runCatching { searchFocus.requestFocus() }.getOrDefault(false)) paletteOpen = true
     }
 
     /** Set by a page whose search field is not on screen until asked for (a chat's bar). */
@@ -785,11 +791,24 @@ class ShellState(
                 return true
             }
         }
-        if (event.type == KeyEventType.KeyDown && event.key == Key.Slash && !playerUp &&
-            !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed
-        ) {
-            focusSearch()
-            return true
+        if (event.type == KeyEventType.KeyDown && !playerUp && !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
+            // By the character the key types, not by its place: "?" is Shift+/ on a US keyboard and
+            // its own key elsewhere, and "/" is Shift+7 on a German one (WP-51).
+            val typed = event.utf16CodePoint
+            when {
+                typed == '?'.code -> {
+                    shortcutsOpen = !shortcutsOpen
+                    return true
+                }
+                typed == '/'.code || (event.key == Key.Slash && !event.isShiftPressed) -> {
+                    focusSearch()
+                    return true
+                }
+                event.key == Key.F1 && !event.isShiftPressed -> {
+                    shortcutsOpen = !shortcutsOpen
+                    return true
+                }
+            }
         }
         return false
     }

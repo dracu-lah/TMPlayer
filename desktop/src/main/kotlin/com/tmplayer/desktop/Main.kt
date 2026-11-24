@@ -317,6 +317,14 @@ fun main(args: Array<String>) {
                 )
             }
             val quit = { quitGuard.request(quitNow) }
+            // The title follows the page and the video, and is only the name while a PIN profile is hidden (WP-51).
+            val profileHidden by remember { com.tmplayer.data.ProfileUnlock.hidden() }
+                .collectAsState(initial = com.tmplayer.desktop.os.ProfileOutside.hiddenNow())
+            val windowTitle = com.tmplayer.desktop.ui.WindowTitle.of(
+                hidden = profileHidden,
+                page = shell.destination.label,
+                video = shell.nowPlaying?.item?.title,
+            )
             // Focus drawn for the keyboard only: a click hides it, Tab and the arrows show it.
             com.tmplayer.desktop.ui.FocusVisible.install()
             // A screen that throws is put away behind an error card, not the end of the app (HX10).
@@ -325,7 +333,7 @@ fun main(args: Array<String>) {
                 recovery = recovery,
                 onCloseRequest = quit,
                 state = windowState,
-                title = "TMPlayer",
+                title = windowTitle,
                 undecorated = undecorated,
                 icon = rememberVectorPainter(AppLogo.Mark),
                 // The open player hears its keys from the window too, wherever Compose's focus went
@@ -577,16 +585,18 @@ private fun unchosenUiScale(): com.tmplayer.data.UiScale = runCatching {
 
 /** 960 by 600 at [factor], no larger than the usable part of the screen [window] is on. */
 private fun minimumWindow(window: java.awt.Window, factor: Float): java.awt.Dimension {
-    val config = window.graphicsConfiguration ?: return java.awt.Dimension(MIN_WIDTH, MIN_HEIGHT)
+    val config = window.graphicsConfiguration
+        ?: return com.tmplayer.desktop.ui.WindowFloor.minimum(factor, Int.MAX_VALUE, Int.MAX_VALUE).let { java.awt.Dimension(it.first, it.second) }
     val insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(config)
     val bounds = config.bounds
-    val width = (MIN_WIDTH * factor).toInt().coerceAtMost(bounds.width - insets.left - insets.right).coerceAtLeast(MIN_WIDTH)
-    val height = (MIN_HEIGHT * factor).toInt().coerceAtMost(bounds.height - insets.top - insets.bottom).coerceAtLeast(MIN_HEIGHT)
+    // Down to 800 by 480 on a small or scaled screen (WP-51), where the layouts scroll.
+    val (width, height) = com.tmplayer.desktop.ui.WindowFloor.minimum(
+        factor,
+        bounds.width - insets.left - insets.right,
+        bounds.height - insets.top - insets.bottom,
+    )
     return java.awt.Dimension(width, height)
 }
-
-private const val MIN_WIDTH = 960
-private const val MIN_HEIGHT = 600
 
 /**
  * The theme the Settings choice asks for. "System" follows the OS (SystemAppearance: Windows,

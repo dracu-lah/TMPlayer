@@ -34,7 +34,9 @@ Command is Ctrl, or Cmd on a Mac. Read in `ShellState.onPreviewKey` (works insid
 | Key | Does | Notes |
 | --- | --- | --- |
 | Command+K | Open or close search across every chat | |
-| Command+F, `/` | Focus the page's search box | `/` is not taken inside a text field, and counts where it needs Shift (German, Nordic) |
+| Command+F, `/` | Focus the page's search box, or open the search across every chat where the page has none (WP-51) | `/` is not taken inside a text field, and counts where it needs Shift (German, Nordic) |
+| `?`, F1 | The shell's keyboard sheet (Settings, Help has the same as a row), again to close | read by the character typed, so `/` on a German key (Shift+7) stays a search; the player has its own sheet |
+| Command+=, Command+-, Command+0 | Interface size larger, smaller, back to Default | Huge (1.5) is a desktop-only step after Largest (WP-50); not read in the player, where Ctrl+= and Ctrl+- are the sound delay |
 | Command+Shift+A | Choose chats | Ctrl+A alone is the picker's Select all |
 | Command+, | Settings | |
 | Command+J | Downloads, again to close it | the floating bar's Downloads button; Ctrl+Shift+J is not taken |

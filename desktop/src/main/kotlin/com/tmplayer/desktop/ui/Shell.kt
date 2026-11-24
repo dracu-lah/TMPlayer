@@ -602,6 +602,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
         // Over the page and over a show opened from the search, whose episodes open it too.
         DetailPaneHost(state)
+        if (state.shortcutsOpen && !state.playerUp) ShellShortcutsDialog(onClose = { state.shortcutsOpen = false })
         if (state.paletteOpen && !state.playerUp) {
             SearchPalette(
                 state = state,

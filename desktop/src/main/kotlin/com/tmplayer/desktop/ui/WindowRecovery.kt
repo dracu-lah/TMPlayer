@@ -1,7 +1,10 @@
 package com.tmplayer.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +24,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DefaultWindowExceptionHandlerFactory
@@ -242,19 +250,31 @@ fun ShellOrFailure(
 }
 
 /** The card itself: what happened in a line, Try again (focused), Settings, and the logs. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WindowFailureCard(onTryAgain: () -> Unit, onSettings: () -> Unit) {
     val s = LocalStrings.current
     val first = remember { FocusRequester() }
-    Centred {
-        EmptyArt(TmIcons.Warning, tone = Tone.danger, modifier = Modifier.padding(bottom = 4.dp))
-        Text(s.errorsScreenFailedTitle, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-        Text(s.errorsScreenFailed, color = Tone.muted, textAlign = TextAlign.Center)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onTryAgain, modifier = Modifier.focusRequester(first)) { Text(s.commonTryAgain) }
-            OutlinedButton(onClick = onSettings) { Text(s.navSettings) }
+    // The window can still be moved by the card's empty space, and Esc is Try again (WP-51): this
+    // card is all there is to press while the screen under it is down.
+    Box(
+        Modifier.fillMaxSize().windowDrag().onPreviewKeyEvent { event ->
+            val esc = event.type == KeyEventType.KeyDown && event.key == Key.Escape
+            if (esc) onTryAgain()
+            esc
+        },
+    ) {
+        Centred {
+            EmptyArt(TmIcons.Warning, tone = Tone.danger, modifier = Modifier.padding(bottom = 4.dp))
+            Text(s.errorsScreenFailedTitle, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Text(s.errorsScreenFailed, color = Tone.muted, textAlign = TextAlign.Center)
+            // Wraps under a long translation or a large interface size rather than running off.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onTryAgain, modifier = Modifier.focusRequester(first)) { Text(s.commonTryAgain) }
+                OutlinedButton(onClick = onSettings) { Text(s.navSettings) }
+            }
+            SendLogsActions()
         }
-        SendLogsActions()
     }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 }
