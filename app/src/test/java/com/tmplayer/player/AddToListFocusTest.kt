@@ -38,7 +38,7 @@ import java.time.Duration
 
 /**
  * "Add to a list" (HX43) inside the player on a television, by remote alone, through the real
- * More options panel: Down from Mark as watched reaches the line, OK opens the page on the first
+ * More options panel: Down from Speed reaches the line, OK opens the page on the first
  * list, Down walks to New list, OK on a list toggles it (the page stays, the tick is the answer),
  * and Back returns to the list with the remote on the same line and playback untouched.
  */
@@ -130,10 +130,10 @@ class AddToListFocusTest {
         val host = PlayerMoreRenderTest.FakeHost(true, true, target())
         val (panel, activity) = open(host)
         val add = hasText(L.listsAddToDetail, substring = true)
-        val markWatched = hasText(L.playerMarkWatched)
+        val speed = hasText(L.playerSpeed)
 
-        // The arrow model: Down from Mark as watched is Add to a list.
-        rule.onNode(markWatched).requestFocus()
+        // The arrow model: Down from Speed is Add to a list (the top group, WP-20).
+        rule.onNode(speed).requestFocus()
         idle()
         press(Key.DirectionDown)
         rule.onNode(add).assertIsFocused()
@@ -172,7 +172,7 @@ class AddToListFocusTest {
     @Test
     fun `with no list yet the page starts on New list`() {
         val (panel, _) = open(PlayerMoreRenderTest.FakeHost(true, true, target()))
-        rule.onNode(hasText(L.playerMarkWatched)).requestFocus()
+        rule.onNode(hasText(L.playerSpeed)).requestFocus()
         idle()
         press(Key.DirectionDown)
         press(Key.DirectionCenter)

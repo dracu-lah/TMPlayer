@@ -8996,7 +8996,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             if (seen) return@launch
             runCatching { settings.markPlayerHintSeen() }
             if (FormFactor.isTv(this@PlayerActivity)) {
-                feedback?.message(L.playerRemoteHint, holdMs = HINT_MS)
+                // Said once through the hint registry (HintIds.PLAYER); Remote keys always sits in More, Help (WP-20).
+                feedback?.message(L.playerRemoteHint + "\n" + L.playerRemoteKeysHint, holdMs = HINT_MS)
             } else {
                 val lines = FirstRunHint.phone(touchPrefs, L)
                 feedback?.offer(lines.joinToString("\n"), L.commonGotIt, holdMs = PHONE_HINT_MS) {}

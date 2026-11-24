@@ -83,7 +83,8 @@ class VolumeAndRotationFocusTest {
         FormFactor.override(true)
         val entries = PlayerMenu.tvEntries(pictureInPicture = false, playerVolume = true, rotatePicture = true, pictureShape = true)
         val at = entries.indexOf(PlayerMenuEntry.PlayerVolume)
-        assertEquals(PlayerMenuEntry.Speed, entries[at - 1])
+        // The last of the Picture group, then the Sound group opens with Player volume (WP-20).
+        assertEquals(PlayerMenuEntry.RotatePicture, entries[at - 1])
         assertEquals(PlayerMenuEntry.VolumeBoost, entries[at + 1])
         assertEquals(entries.indexOf(PlayerMenuEntry.PictureShape) + 1, entries.indexOf(PlayerMenuEntry.RotatePicture))
         var volume by mutableIntStateOf(50)

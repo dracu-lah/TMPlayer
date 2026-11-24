@@ -13,20 +13,20 @@ class PlayerMenuTest {
         assertEquals(
             listOf(
                 PlayerMenuEntry.LockScreen,
-                PlayerMenuEntry.PlaybackDetails,
-                PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.Speed,
+                PlayerMenuEntry.MarkWatched,
+                PlayerMenuEntry.SleepTimer,
+                PlayerMenuEntry.PictureInPicture,
                 PlayerMenuEntry.VolumeBoost,
                 PlayerMenuEntry.NightMode,
                 PlayerMenuEntry.EvenVolume,
-                PlayerMenuEntry.SleepTimer,
                 PlayerMenuEntry.AbLoop,
+                PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.AddBookmark,
                 PlayerMenuEntry.Bookmarks,
                 PlayerMenuEntry.SaveToDownloads,
-                PlayerMenuEntry.MarkWatched,
-                PlayerMenuEntry.PictureInPicture,
                 PlayerMenuEntry.OpenInAnotherApp,
+                PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.RemoteKeys,
             ),
             PlayerMenu.tvEntries(
@@ -179,7 +179,7 @@ class PlayerMenuTest {
     fun `3D video sits by the picture's own lines and only for a picture`() {
         assertFalse(PlayerMenuEntry.Stereo in PlayerMenu.tvEntries(pictureInPicture = true))
         val tv = PlayerMenu.tvEntries(pictureInPicture = true, stereo = true)
-        assertEquals(tv.indexOf(PlayerMenuEntry.StartOver) + 1, tv.indexOf(PlayerMenuEntry.Stereo))
+        assertEquals(tv.indexOf(PlayerMenuEntry.SleepTimer) + 1, tv.indexOf(PlayerMenuEntry.Stereo))
         val shaped = PlayerMenu.tvEntries(pictureInPicture = true, stereo = true, pictureShape = true)
         assertEquals(shaped.indexOf(PlayerMenuEntry.PictureShape) + 1, shaped.indexOf(PlayerMenuEntry.Stereo))
         val phone = PlayerMenu.phoneEntries(true, true, true, true, pictureShape = true, stereo = true)
@@ -257,7 +257,7 @@ class PlayerMenuTest {
         val all = PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true, markWatched = true, paused = true, bookmarks = true, chapters = true)
         assertFalse(PlayerMenuEntry.PictureShape in all)
         val shaped = PlayerMenu.tvEntries(pictureInPicture = true, pictureShape = true)
-        assertEquals(shaped.indexOf(PlayerMenuEntry.StartOver) + 1, shaped.indexOf(PlayerMenuEntry.PictureShape))
+        assertEquals(shaped.indexOf(PlayerMenuEntry.SleepTimer) + 1, shaped.indexOf(PlayerMenuEntry.PictureShape))
         assertTrue(PlayerMenuEntry.Speed in all)
     }
 
@@ -347,12 +347,13 @@ class PlayerMenuTest {
     }
 
     @Test
-    fun `try the other engine sits just above open in another app on both, and only when offered`() {
+    fun `try the other engine sits above open in another app on the phone, in Playback ahead of start over on the television`() {
         val phone = PlayerMenu.phoneEntries(true, true, true, true, otherEngine = true)
         assertEquals(phone.indexOf(PhoneMenuEntry.OtherEngine) + 1, phone.indexOf(PhoneMenuEntry.OpenInAnotherApp))
         assertFalse(PhoneMenuEntry.OtherEngine in PlayerMenu.phoneEntries(true, true, true, true))
         val tv = PlayerMenu.tvEntries(pictureInPicture = true, otherEngine = true)
-        assertEquals(tv.indexOf(PlayerMenuEntry.OtherEngine) + 1, tv.indexOf(PlayerMenuEntry.OpenInAnotherApp))
+        assertEquals(PlayerMenuGroup.Playback, PlayerMenu.groupOf(PlayerMenuEntry.OtherEngine))
+        assertEquals(tv.indexOf(PlayerMenuEntry.OtherEngine) + 1, tv.indexOf(PlayerMenuEntry.StartOver))
         assertFalse(PlayerMenuEntry.OtherEngine in PlayerMenu.tvEntries(pictureInPicture = true))
         // A protected chat leaves Open in another app off; the other engine is still TMPlayer's own player.
         assertTrue(PlayerMenuEntry.OtherEngine in PlayerMenu.tvEntries(pictureInPicture = true, openInAnotherApp = false, otherEngine = true))
@@ -380,12 +381,12 @@ class PlayerMenuTest {
     }
 
     @Test
-    fun `add to a list is offered for a video from a message, on the phone and the television, under Mark as watched`() {
+    fun `add to a list is offered for a video from a message, under Mark as watched on the phone and above it in the television top group`() {
         // A list keeps a name, never a copy: a chat that restricts saving (openInAnotherApp false) may be in one.
         val phone = PlayerMenu.phoneEntries(pictureInPicture = true, openInAnotherApp = false, saveToDownloads = true, markWatched = true, addToList = true)
         assertEquals(phone.indexOf(PhoneMenuEntry.MarkWatched) + 1, phone.indexOf(PhoneMenuEntry.AddToList))
         val tv = PlayerMenu.tvEntries(pictureInPicture = true, openInAnotherApp = false, saveToDownloads = true, markWatched = true, addToList = true)
-        assertEquals(tv.indexOf(PlayerMenuEntry.MarkWatched) + 1, tv.indexOf(PlayerMenuEntry.AddToList))
+        assertEquals(tv.indexOf(PlayerMenuEntry.AddToList) + 1, tv.indexOf(PlayerMenuEntry.MarkWatched))
         assertEquals("Add to a list", PhoneMenuEntry.AddToList.label())
     }
 
@@ -393,5 +394,98 @@ class PlayerMenuTest {
     fun `add to a list is left off a file with no message`() {
         assertFalse(PhoneMenuEntry.AddToList in PlayerMenu.phoneEntries(true, true, true, true))
         assertFalse(PlayerMenuEntry.AddToList in PlayerMenu.tvEntries(pictureInPicture = true, markWatched = true))
+    }
+
+    private fun everything(pictureInPicture: Boolean = true) = PlayerMenu.tvEntries(
+        pictureInPicture = pictureInPicture,
+        saveToDownloads = true,
+        markWatched = true,
+        paused = true,
+        bookmarks = true,
+        chapters = true,
+        stereo = true,
+        pictureShape = true,
+        reportStutter = true,
+        copyLinkAtTime = true,
+        otherEngine = true,
+        repeatVideo = true,
+        markIntro = true,
+        removeIntroMark = true,
+        rotatePicture = true,
+        playerVolume = true,
+        addToList = true,
+    )
+
+    @Test
+    fun `the groups come in one order and every line is in exactly one of them (WP-20)`() {
+        val all = everything()
+        val groups = all.map(PlayerMenu::groupOf)
+        // Lock heads the top group, Remote keys ends Help; the groups never interleave.
+        assertEquals(PlayerMenuEntry.LockScreen, all.first())
+        assertEquals(PlayerMenuEntry.RemoteKeys, all.last())
+        assertEquals(PlayerMenuGroup.entries, groups.distinct())
+        assertEquals(
+            listOf(PlayerMenuEntry.Speed, PlayerMenuEntry.AddToList, PlayerMenuEntry.MarkWatched, PlayerMenuEntry.SleepTimer),
+            all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Top }.drop(1),
+        )
+        assertEquals(
+            listOf(PlayerMenuEntry.PictureShape, PlayerMenuEntry.RotatePicture, PlayerMenuEntry.Stereo, PlayerMenuEntry.PictureInPicture),
+            all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Picture },
+        )
+        assertEquals(
+            listOf(PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.VolumeBoost, PlayerMenuEntry.NightMode, PlayerMenuEntry.EvenVolume),
+            all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Sound },
+        )
+        assertEquals(
+            listOf(PlayerMenuEntry.SaveToDownloads, PlayerMenuEntry.OpenInAnotherApp, PlayerMenuEntry.CopyLinkAtTime),
+            all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Library },
+        )
+        assertEquals(
+            listOf(PlayerMenuEntry.PlaybackDetails, PlayerMenuEntry.ReportStutter, PlayerMenuEntry.ReportWrongPicture, PlayerMenuEntry.RemoteKeys),
+            all.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Help },
+        )
+        // Every entry has a group, and the full menu carries every entry.
+        assertEquals(PlayerMenuEntry.entries.toSet(), all.toSet())
+    }
+
+    @Test
+    fun `a device without 3D, rotate or the picture lines leaves no empty group (WP-20)`() {
+        val bare = PlayerMenu.tvEntries(pictureInPicture = false, openInAnotherApp = false)
+        val groups = bare.map(PlayerMenu::groupOf)
+        // No Picture and no Library group at all; the rest keep their order and each is non-empty.
+        assertEquals(
+            listOf(PlayerMenuGroup.Top, PlayerMenuGroup.Sound, PlayerMenuGroup.Playback, PlayerMenuGroup.Help),
+            groups.distinct(),
+        )
+        // A restricted chat (no saving, no hand-over, no link) leaves no Library either; with the
+        // link allowed the group is back with just that line.
+        val withLink = PlayerMenu.tvEntries(pictureInPicture = false, openInAnotherApp = false, copyLinkAtTime = true)
+        assertEquals(listOf(PlayerMenuEntry.CopyLinkAtTime), withLink.filter { PlayerMenu.groupOf(it) == PlayerMenuGroup.Library })
+    }
+
+    @Test
+    fun `Remote keys is in Help whatever else the device offers (WP-20)`() {
+        for (entries in listOf(everything(), everything(pictureInPicture = false), PlayerMenu.tvEntries(pictureInPicture = false))) {
+            assertEquals(PlayerMenuGroup.Help, PlayerMenu.groupOf(PlayerMenuEntry.RemoteKeys))
+            assertEquals(PlayerMenuEntry.RemoteKeys, entries.last())
+        }
+    }
+
+    @Test
+    fun `Page Down goes to the next group's first line, Page Up to this group's first, then the one before (WP-20)`() {
+        val all = everything()
+        val groups = all.map(PlayerMenu::groupOf)
+        fun first(g: PlayerMenuGroup) = groups.indexOf(g)
+        // From Lock: the Picture group (the top group is Lock, Speed and the frequent lines).
+        assertEquals(first(PlayerMenuGroup.Picture), PlayerMenu.pageTarget(groups, 0, forward = true))
+        assertEquals(first(PlayerMenuGroup.Sound), PlayerMenu.pageTarget(groups, first(PlayerMenuGroup.Picture) + 1, forward = true))
+        // Last group: nowhere further down.
+        assertEquals(null, PlayerMenu.pageTarget(groups, all.size - 1, forward = true))
+        // Up from the middle of a group is its first line; from the first line, the group before's first.
+        assertEquals(first(PlayerMenuGroup.Playback), PlayerMenu.pageTarget(groups, first(PlayerMenuGroup.Playback) + 2, forward = false))
+        assertEquals(first(PlayerMenuGroup.Sound), PlayerMenu.pageTarget(groups, first(PlayerMenuGroup.Playback), forward = false))
+        assertEquals(null, PlayerMenu.pageTarget(groups, 0, forward = false))
+        assertEquals(null, PlayerMenu.pageTarget(groups, -1, forward = true))
+        assertEquals(null, PlayerMenu.pageTarget(emptyList(), 0, forward = true))
     }
 }

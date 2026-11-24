@@ -49,7 +49,9 @@ Found while pinning the table (WP-69):
   back to the bar. A Previous episode button stands left of Next on the row while the chat has an
   earlier episode.
 - **Panels.** Only the More panel closes on Menu (where the quirk says so); the track pickers hand
-  every key to their own view.
+  every key to their own view. In the More panel on a TV, Page Up and Page Down (and Channel,
+  Fast forward, Rewind) jump between its groups (`PlayerMorePanel`, `PlayerMenu.pageTarget`, WP-20):
+  down to the next group's first line, up to this group's first line, then the one before.
 - **Stop, Channel and Media Next, Previous and Skip.** Stop saves the place and leaves like Back.
   Channel up and down, Next, Previous and Skip step the video (`PlayerRemoteKeys.episodeStep`), once
   per press. Page Up and Page Down step a chapter, or a minute without

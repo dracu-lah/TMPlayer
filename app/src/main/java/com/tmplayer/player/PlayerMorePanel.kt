@@ -68,6 +68,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -87,9 +91,11 @@ import com.tmplayer.ui.browse.ListPickerActions
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.components.ChoicePage
+import com.tmplayer.ui.components.ChoiceSection
 import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.FocusOnOpen
 import com.tmplayer.ui.components.LocalChoicePageHost
+import com.tmplayer.ui.components.PageKeys
 import com.tmplayer.ui.components.PhoneSheet
 import com.tmplayer.ui.components.TvChoiceRow
 import com.tmplayer.ui.components.isTouch
@@ -453,11 +459,32 @@ class PlayerMorePanel(
         val count = bookmarks?.bookmarks?.collectAsState()?.value?.size ?: 0
         val lines = kinds.map { line(it, count) }
         val requesters = remember { mutableMapOf<Kind, FocusRequester>() }
+        // The television's groups (WP-20): the group of each line, and the line the remote is on,
+        // so Page Down and Page Up jump from group to group.
+        val groups = if (host.tv) kinds.map { PlayerMenu.groupOf(PlayerMenuEntry.valueOf(it.name)) } else emptyList()
+        var focusedLine by remember { mutableIntStateOf(-1) }
+        val pageKeys = if (host.tv) {
+            Modifier.onPreviewKeyEvent { event ->
+                val step = PageKeys.step(event.key, tv = true)
+                if (step == 0) return@onPreviewKeyEvent false
+                if (event.type == KeyEventType.KeyDown) {
+                    val to = PlayerMenu.pageTarget(groups, focusedLine, forward = step > 0)
+                    if (to != null) lines.getOrNull(to)?.let { requesters[it.kind]?.requestFocus() }
+                }
+                true
+            }
+        } else {
+            Modifier
+        }
         Header(title = s.playerMoreOptions, subtitle = host.title().ifBlank { null })
-        Column(Modifier.weight(1f, fill = false).fillMaxWidth().padding(horizontal = PAD)) {
+        Column(Modifier.weight(1f, fill = false).fillMaxWidth().padding(horizontal = PAD).then(pageKeys)) {
             ChoiceList {
                 lines.forEachIndexed { index, line ->
                     val requester = requesters.getOrPut(line.kind) { FocusRequester() }
+                    // A headed group starts with its heading: spoken as one, never a stop for the remote.
+                    if (groups.isNotEmpty() && (index == 0 || groups[index] != groups[index - 1])) {
+                        groupTitle(groups[index], s)?.let { ChoiceSection(it) }
+                    }
                     // Player volume steps on its own line with Left and Right, held to repeat,
                     // so the remote need not open its page for a few per cent.
                     val keys = if (line.kind == Kind.PlayerVolume && !touch) {
@@ -469,7 +496,7 @@ class PlayerMorePanel(
                         title = line.label,
                         detail = line.detail,
                         icon = line.icon,
-                        modifier = keys.focusRequester(requester),
+                        modifier = keys.onFocusChanged { if (it.hasFocus) focusedLine = index }.focusRequester(requester),
                     ) { choose(line.kind) }
                     // Lock the screen heads the list in a group of its own.
                     if (index == 0 && line.kind == Kind.LockScreen && lines.size > 1) {
@@ -483,6 +510,16 @@ class PlayerMorePanel(
         }
         val target = openedFrom?.let { requesters[it] } ?: lines.firstOrNull()?.let { requesters[it.kind] }
         if (target != null) FocusOnOpen(target, key = openedFrom)
+    }
+
+    /** The heading of a television group (WP-20); the top group, with the lock, has none. */
+    private fun groupTitle(group: PlayerMenuGroup, s: com.tmplayer.i18n.Messages): String? = when (group) {
+        PlayerMenuGroup.Top -> null
+        PlayerMenuGroup.Picture -> s.playerMenuGroupPicture
+        PlayerMenuGroup.Sound -> s.playerMenuGroupSound
+        PlayerMenuGroup.Playback -> s.playerMenuGroupPlayback
+        PlayerMenuGroup.Library -> s.playerMenuGroupLibrary
+        PlayerMenuGroup.Help -> s.playerMenuGroupHelp
     }
 
     @Composable

@@ -221,6 +221,12 @@ fun PhoneMenuEntry.label(
     PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
 }
 
+/**
+ * The television More menu's groups (WP-20), in the order they are drawn. [Top] has no header; the
+ * others have one in the panel, which is not focusable, so Page Up and Page Down jump over them.
+ */
+enum class PlayerMenuGroup { Top, Picture, Sound, Playback, Library, Help }
+
 /** Which lines the More menu offers on this device, in the order it draws them. */
 object PlayerMenu {
 
@@ -293,18 +299,24 @@ object PlayerMenu {
         playerVolume: Boolean = false,
         addToList: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
+        // WP-20: Lock first, then the frequent lines under no header, then the groups. Every line
+        // is added under its own gate, so a group a device leaves empty is never drawn.
         add(PlayerMenuEntry.LockScreen)
-        add(PlayerMenuEntry.PlaybackDetails)
-        add(PlayerMenuEntry.StartOver)
+        add(PlayerMenuEntry.Speed)
+        if (addToList) add(PlayerMenuEntry.AddToList)
+        if (markWatched) add(PlayerMenuEntry.MarkWatched)
+        add(PlayerMenuEntry.SleepTimer)
+        // Picture
         if (pictureShape) add(PlayerMenuEntry.PictureShape)
         if (rotatePicture) add(PlayerMenuEntry.RotatePicture)
         if (stereo) add(PlayerMenuEntry.Stereo)
-        add(PlayerMenuEntry.Speed)
+        if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
+        // Sound
         if (playerVolume) add(PlayerMenuEntry.PlayerVolume)
         add(PlayerMenuEntry.VolumeBoost)
         add(PlayerMenuEntry.NightMode)
         add(PlayerMenuEntry.EvenVolume)
-        add(PlayerMenuEntry.SleepTimer)
+        // Playback
         add(PlayerMenuEntry.AbLoop)
         if (repeatVideo) add(PlayerMenuEntry.RepeatVideo)
         if (chapters) {
@@ -315,24 +327,66 @@ object PlayerMenu {
             add(PlayerMenuEntry.NextFrame)
             add(PlayerMenuEntry.PreviousFrame)
         }
+        if (otherEngine) add(PlayerMenuEntry.OtherEngine)
+        add(PlayerMenuEntry.StartOver)
         if (bookmarks) {
             add(PlayerMenuEntry.AddBookmark)
             add(PlayerMenuEntry.Bookmarks)
         }
         if (markIntro) add(PlayerMenuEntry.MarkIntro)
         if (removeIntroMark) add(PlayerMenuEntry.RemoveIntroMark)
+        // Library
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
-        if (markWatched) add(PlayerMenuEntry.MarkWatched)
-        if (addToList) add(PlayerMenuEntry.AddToList)
-        if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
-        if (otherEngine) add(PlayerMenuEntry.OtherEngine)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
         if (copyLinkAtTime) add(PlayerMenuEntry.CopyLinkAtTime)
+        // Help: Remote keys always lives here, whatever the hint state (designer #29).
+        add(PlayerMenuEntry.PlaybackDetails)
         if (reportStutter) {
             add(PlayerMenuEntry.ReportStutter)
             add(PlayerMenuEntry.ReportWrongPicture)
         }
         add(PlayerMenuEntry.RemoteKeys)
+    }
+
+    /** The group a television line belongs to (WP-20). The lock and the frequent lines share [PlayerMenuGroup.Top]. */
+    fun groupOf(entry: PlayerMenuEntry): PlayerMenuGroup = when (entry) {
+        PlayerMenuEntry.LockScreen, PlayerMenuEntry.Speed, PlayerMenuEntry.AddToList,
+        PlayerMenuEntry.MarkWatched, PlayerMenuEntry.SleepTimer,
+        -> PlayerMenuGroup.Top
+        PlayerMenuEntry.PictureShape, PlayerMenuEntry.RotatePicture, PlayerMenuEntry.Stereo,
+        PlayerMenuEntry.PictureInPicture,
+        -> PlayerMenuGroup.Picture
+        PlayerMenuEntry.PlayerVolume, PlayerMenuEntry.VolumeBoost, PlayerMenuEntry.NightMode,
+        PlayerMenuEntry.EvenVolume,
+        -> PlayerMenuGroup.Sound
+        PlayerMenuEntry.RepeatVideo, PlayerMenuEntry.AbLoop, PlayerMenuEntry.NextChapter,
+        PlayerMenuEntry.PreviousChapter, PlayerMenuEntry.NextFrame, PlayerMenuEntry.PreviousFrame,
+        PlayerMenuEntry.OtherEngine, PlayerMenuEntry.StartOver, PlayerMenuEntry.AddBookmark,
+        PlayerMenuEntry.Bookmarks, PlayerMenuEntry.MarkIntro, PlayerMenuEntry.RemoveIntroMark,
+        -> PlayerMenuGroup.Playback
+        PlayerMenuEntry.SaveToDownloads, PlayerMenuEntry.OpenInAnotherApp, PlayerMenuEntry.CopyLinkAtTime,
+        -> PlayerMenuGroup.Library
+        PlayerMenuEntry.PlaybackDetails, PlayerMenuEntry.ReportStutter, PlayerMenuEntry.ReportWrongPicture,
+        PlayerMenuEntry.RemoteKeys,
+        -> PlayerMenuGroup.Help
+    }
+
+    /**
+     * Where Page Down ([forward]) or Page Up goes from the line at [from], as an index into
+     * [groups] (the group of each line, in order): Page Down is the first line of the next group,
+     * Page Up the first line of this group, or of the one before when already on it. Null when there
+     * is nowhere to go (the last group down, the very first line up).
+     */
+    fun pageTarget(groups: List<PlayerMenuGroup>, from: Int, forward: Boolean): Int? {
+        if (from !in groups.indices) return null
+        if (forward) return (from + 1 until groups.size).firstOrNull { groups[it] != groups[from] }
+        var first = from
+        while (first > 0 && groups[first - 1] == groups[from]) first--
+        if (first != from) return first
+        if (first == 0) return null
+        var before = first - 1
+        while (before > 0 && groups[before - 1] == groups[before]) before--
+        return before
     }
 
     /**

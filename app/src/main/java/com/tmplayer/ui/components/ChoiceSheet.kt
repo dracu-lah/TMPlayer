@@ -50,6 +50,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.layout
@@ -432,7 +433,8 @@ fun ChoiceSection(title: String) {
         title,
         style = MaterialTheme.typography.titleSmall,
         color = Tone.accent,
-        modifier = Modifier.padding(
+        // A heading for TalkBack, and never a focus stop: the remote walks the lines only.
+        modifier = Modifier.semantics { heading() }.padding(
             start = if (touch) PANEL_PAD_TOUCH else 20.dp,
             top = if (touch) 16.dp else 12.dp,
             bottom = if (touch) 4.dp else 2.dp,
