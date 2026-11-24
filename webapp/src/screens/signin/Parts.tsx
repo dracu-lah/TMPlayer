@@ -3,6 +3,7 @@ import { ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
 import { iosBrowser } from '../../install'
 import { t } from '../../i18n'
 import { Icon } from '../../ui/Icon'
+import { HomeScreenSteps } from '../../ui/HomeScreenSteps'
 
 // The parts the steps of sign in share.
 
@@ -69,10 +70,7 @@ export function SignInFooter(): JSX.Element {
                 <details class="signin-install">
                     <summary>{t('web.install_ios_short')}</summary>
                     <p>{t('web.install_ios_before_sign_in')}</p>
-                    <ol class="install-steps">
-                        <li>{t('web.install_ios_step_share')}</li>
-                        <li>{t('web.install_ios_step_add')}</li>
-                    </ol>
+                    <HomeScreenSteps />
                 </details>
             </Show>
             <p>{t('auth.unofficial')}</p>

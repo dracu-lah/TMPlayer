@@ -4,6 +4,7 @@
 import { createSignal } from 'solid-js'
 import { Workbox } from 'workbox-window'
 import { TV_BROWSER, tvNativeOff } from './player/tvnative'
+import { inAppBrowser, iosMajor } from './ui/inAppBrowser'
 
 const HOUR = 60 * 60 * 1000
 
@@ -86,6 +87,14 @@ export const standalone = matchMedia('(display-mode: standalone)').matches || (n
 
 /** Safari on an iPhone or iPad (an iPad says it is a Mac): no install prompt, Share then Add to Home Screen instead. */
 export const iosBrowser = !standalone && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
+const agent = { ua: navigator.userAgent, touch: navigator.maxTouchPoints, standalone, worker: 'serviceWorker' in navigator }
+
+/** Another app's web view on an iPhone or iPad (a link from Telegram, Instagram, Mail): no Home Screen, storage apart from Safari's (WP-58). */
+export const inAppIos = inAppBrowser(agent)
+
+/** The iOS (Safari) version the install wording follows: 26 and later say More, Share, Add to Home Screen; 0 off iOS. */
+export const iosVersion = iosMajor(agent)
 
 const [installPrompt, setInstallPrompt] = createSignal<InstallPrompt | null>(null)
 const [installed, setInstalled] = createSignal(standalone)

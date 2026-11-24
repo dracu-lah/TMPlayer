@@ -7,6 +7,7 @@ import { checkKept, install, installed, installPrompt, iosBrowser, keepData, kep
 import { cacheSizes, clearCaches } from '../../cacheBounds'
 import { rowDomId } from '../SettingsFind'
 import { BackupBlock } from './Backup'
+import { HomeScreenSteps } from '../../ui/HomeScreenSteps'
 import { SafariClearsRow } from '../SafariClearsCard'
 
 export function StoragePage() {
@@ -40,10 +41,7 @@ export function Install() {
                             <>
                                 <h3 class="set-block-title">{t('web.install_ios_title')}</h3>
                                 <p class="muted small">{t('web.install_ios_body')}</p>
-                                <ol class="install-steps">
-                                    <li>{t('web.install_ios_step_share')}</li>
-                                    <li>{t('web.install_ios_step_add')}</li>
-                                </ol>
+                                <HomeScreenSteps />
                                 <p class="muted small">{t('web.install_ios_own_sign_in')}</p>
                             </>
                         }

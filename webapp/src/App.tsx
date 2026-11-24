@@ -22,7 +22,8 @@ import { installShellKeys } from './ui/shellKeys'
 import { ListPicker, ListsPage } from './screens/Lists'
 import { PosterPicker } from './ui/PosterPicker'
 import { TrailerSheet } from './ui/TrailerSheet'
-import { applyUpdate, updateReady } from './install'
+import { applyUpdate, inAppIos, updateReady } from './install'
+import { InAppCard } from './screens/signin/InAppCard'
 import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
 import { focusTarget, pageName, pageTitle } from './ui/pageTitle'
@@ -109,6 +110,8 @@ const toGate = (next: string) => `/setup/chats?next=${encodeURIComponent(next)}`
 
 // Safari has no requestIdleCallback.
 const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn) : setTimeout(fn, 1500))
+
+const [inAppStay, setInAppStay] = createSignal(false)
 
 /** Every page: waits for the session, sends a signed out visitor to sign in and back again after. */
 function Shell(props: ParentProps) {
@@ -277,7 +280,12 @@ function Shell(props: ParentProps) {
                         <button class="primary" onClick={() => window.location.reload()}>{t('common.try_again')}</button>
                     </div>
                 </Match>
-                <Match when={me() === null && location.pathname === '/signin'}>{props.children}</Match>
+                <Match when={me() === null && location.pathname === '/signin'}>
+                    {/* Inside another app's web view the sign in would be lost: Safari first (WP-58). */}
+                    <Show when={inAppIos && !inAppStay()} fallback={props.children}>
+                        <InAppCard onContinue={() => setInAppStay(true)} />
+                    </Show>
+                </Match>
                 <Match when={signedIn()}>
                     <Show when={navShown()}>
                         <a class="skip-link" href="#main-nav" onClick={toNav}>{t('web.skip_to_navigation')}</a>

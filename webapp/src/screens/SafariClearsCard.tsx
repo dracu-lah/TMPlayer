@@ -3,7 +3,8 @@ import { Download04Icon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
 import { me } from '../session'
-import { iosBrowser } from '../install'
+import { inAppIos, iosBrowser } from '../install'
+import { HomeScreenSteps } from '../ui/HomeScreenSteps'
 import { setSyncOn, syncOn } from '../sync'
 import { showToast } from '../ui/Toast'
 import { readDismissed, saveDismissed, showSafariCard } from '../ui/safariCard'
@@ -14,16 +15,6 @@ const storage = () => {
     } catch {
         return null
     }
-}
-
-/** The steps to add TMPlayer to the Home Screen, as the sign in page and Settings say them. */
-export function HomeScreenSteps() {
-    return (
-        <ol class="install-steps">
-            <li>{t('web.install_ios_step_share')}</li>
-            <li>{t('web.install_ios_step_add')}</li>
-        </ol>
-    )
 }
 
 /**
@@ -45,7 +36,7 @@ export function SafariClearsCard() {
         showToast({ text: t('syncplace.started') })
     }
     return (
-        <Show when={showSafariCard({ inTab: iosBrowser, signedIn: !!me(), dismissed: closed() })}>
+        <Show when={showSafariCard({ inTab: iosBrowser && !inAppIos, signedIn: !!me(), dismissed: closed() })}>
             <section class="keep-place safari-clears" aria-labelledby="safari-clears-title">
                 <Icon icon={Download04Icon} size={28} class="keep-place-icon" />
                 <div class="keep-place-text">
