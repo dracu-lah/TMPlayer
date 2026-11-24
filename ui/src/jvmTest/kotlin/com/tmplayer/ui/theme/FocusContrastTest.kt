@@ -73,6 +73,13 @@ class FocusContrastTest {
     }
 
     @Test
+    fun `a control that rests in the accent shows focus with a ring in the on-accent ink that stands 3 to 1 off the accent`() = each { name, s, dark ->
+        // On a television the focus fill IS the accent, so a fill swap shows nothing: the premise of focusFillOver.
+        assertEquals("$name tv focus fill is the accent", s.primary, FocusPalette.fill(s, dark, tv = true))
+        atLeast("$name on-accent ring on the accent", FocusContrast.againstSurface(s.onPrimary, s.primary))
+    }
+
+    @Test
     fun `the television's focus is thin (2 dp, 1_04) and high contrast adds to it`() {
         val phone = FocusStyle.Standard
         val tv = FocusStyle.tv(highContrast = false)

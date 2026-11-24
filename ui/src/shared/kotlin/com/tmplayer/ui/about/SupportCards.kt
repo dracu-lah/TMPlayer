@@ -78,6 +78,7 @@ import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.floatingSurface
+import com.tmplayer.ui.theme.focusFillOver
 import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -205,12 +206,13 @@ private fun SupportButton(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(Corner.Medium)
-    val fill = when {
-        focused -> Tone.focusFill
+    val rest = when {
         primary -> Tone.accent
         quiet -> Color.Transparent
         else -> FloatingTone.control
     }
+    // The primary one rests in the accent: it keeps it and shows focus with the ring (focusFillOver).
+    val fill = if (focused) focusFillOver(rest) else rest
     val ink = when {
         focused -> Tone.onFocusFill
         primary -> Tone.onAccent
@@ -223,7 +225,7 @@ private fun SupportButton(
             .pressScale(interactions)
             .clip(shape)
             .background(fill)
-            .focusRing(focused, shape)
+            .focusRing(focused, shape, rest = rest)
             .hoverable(interactions)
             .pointerHoverIcon(PointerIcon.Hand)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)

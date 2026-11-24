@@ -144,7 +144,10 @@ object FocusContrast {
  *   the fill ([Tone.focusFill] with [Tone.onFocusFill] on it) and nothing else. Only the High
  *   contrast focus switch adds the ring, as a thing the viewer asked for;
  * - a control with no fill (a card, a tile, a text field, a scroll pane: [filled] false, or a
- *   [color] passed) draws one [FocusStyle.ring] stroke, 2 dp, flush with its edge, no gap.
+ *   [color] passed) draws one [FocusStyle.ring] stroke, 2 dp, flush with its edge, no gap;
+ * - a control that is accent-filled at rest ([rest] equals [Tone.focusFill], a primary button) keeps
+ *   its fill (see [focusFillOver]) and draws that same flush ring in [Tone.onAccent], which is 3:1
+ *   or more on the accent in both themes: a focused control is never the same as an unfocused one.
  *
  * On the phone and the desktop (keyboard focus) nothing changed: the ring in [focusRingColor].
  */
@@ -154,9 +157,11 @@ fun Modifier.focusRing(
     shape: Shape,
     color: Color = Color.Unspecified,
     filled: Boolean = true,
+    rest: Color = Color.Unspecified,
 ): Modifier {
     if (!focused || !FocusVisibility.visible) return this
     val style = LocalFocusStyle.current
+    if (!color.isSpecified && fillsAsFocus(rest)) return focusStroke(shape, Tone.onAccent, style.ring)
     if (!style.tv) return focusStroke(shape, if (color.isSpecified) color else focusRingColor(), style.ring)
     return when {
         color.isSpecified -> focusStroke(shape, color, style.ring)
@@ -165,6 +170,39 @@ fun Modifier.focusRing(
         else -> this
     }
 }
+
+/**
+ * Whether a control that rests in [rest] would look the same focused: [rest] is the colour focus
+ * fills with ([Tone.focusFill], which is the accent itself on a television and in the dark theme).
+ * A control accent-filled at rest (a primary button, a switched-on action) cannot show focus by a
+ * fill swap, so it keeps its fill and shows the one other indicator, see [focusFillOver] and
+ * [focusRing]'s `rest`. [Color.Unspecified] is never the same.
+ */
+@Composable
+@ReadOnlyComposable
+fun fillsAsFocus(rest: Color): Boolean = rest.isSpecified && rest == Tone.focusFill
+
+/**
+ * The fill of a focused control that rests in [rest]: [Tone.focusFill], except where that is [rest]
+ * itself (a control accent-filled at rest on a television), which keeps its fill and answers focus
+ * with [focusRing]'s flush ring in [Tone.onAccent] instead. ONE indicator, and a focused control is
+ * never the same as an unfocused one (user, 2026-11-25). Pass the same [rest] to [focusRing]'s
+ * `rest` (or [focusRingOnSameFill]) so the ring appears exactly when the fill cannot.
+ */
+@Composable
+@ReadOnlyComposable
+fun focusFillOver(rest: Color): Color = if (fillsAsFocus(rest)) rest else Tone.focusFill
+
+/**
+ * The ring of a control whose fill is the same focused or not ([fillsAsFocus]), and nothing for one
+ * whose fill swap already shows focus: for a control that otherwise draws no ring on the phone and
+ * the desktop (a round action), so a switched-on one still answers the keyboard.
+ */
+@Composable
+fun Modifier.focusRingOnSameFill(focused: Boolean, shape: Shape, rest: Color): Modifier =
+    if (focused && FocusVisibility.visible && fillsAsFocus(rest)) {
+        focusStroke(shape, Tone.onAccent, LocalFocusStyle.current.ring)
+    } else this
 
 /**
  * [focusRing] for a pill or a row that fills under focus on every device: on a television the fill

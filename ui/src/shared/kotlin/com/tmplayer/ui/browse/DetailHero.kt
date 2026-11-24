@@ -69,7 +69,9 @@ import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.Scrims
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusFillOver
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.focusRingOnSameFill
 
 /*
  * The pieces a title page is built from, shared by a video's detail page and a show's page on
@@ -318,12 +320,11 @@ fun RoundAction(
         else -> Tone.text
     }
     val tick = rememberToggleTick()
+    // Switched on it rests in the accent, which is also the focus fill in the dark theme: it keeps the
+    // fill and the ring shows focus (focusFillOver, focusRingOnSameFill).
+    val rest = if (on) Tone.accent else Tone.surfaceHigh
     val fill by androidx.compose.animation.animateColorAsState(
-        when {
-            focused -> Tone.focusFill
-            on -> Tone.accent
-            else -> Tone.surfaceHigh
-        },
+        if (focused) focusFillOver(rest) else rest,
         Motion.standard(Motion.Fast),
         label = "roundActionFill",
     )
@@ -360,6 +361,7 @@ fun RoundAction(
                 .downloadRing(progress)
                 .clip(CircleShape)
                 .background(fill)
+                .focusRingOnSameFill(focused, CircleShape, rest)
                 .border(1.dp, if (focused || on) Color.Transparent else Tone.outline, CircleShape),
             contentAlignment = Alignment.Center,
         ) {

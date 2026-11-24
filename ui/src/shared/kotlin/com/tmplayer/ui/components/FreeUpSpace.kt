@@ -67,6 +67,7 @@ import com.tmplayer.ui.theme.LocalOnFloating
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
 import com.tmplayer.ui.theme.floatingSurface
+import com.tmplayer.ui.theme.focusFillOver
 import com.tmplayer.ui.theme.focusRing
 
 /**
@@ -591,11 +592,11 @@ internal fun ReviewButton(
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
+    val rest = if (kind == ButtonKind.Primary) Tone.accent else Tone.surfaceHigh
     val target = when {
         focused && kind == ButtonKind.Danger -> Tone.danger
-        focused && !isTouch() -> Tone.focusFill
-        kind == ButtonKind.Primary -> Tone.accent
-        else -> Tone.surfaceHigh
+        focused && !isTouch() -> focusFillOver(rest)
+        else -> rest
     }
     val background by animateColorAsState(target, Motion.standard(Motion.Fast), label = "reviewButton")
     val foreground = when {
@@ -609,7 +610,7 @@ internal fun ReviewButton(
         modifier
             .heightIn(min = 48.dp)
             .clip(CircleShape)
-            .focusRing(focused && kind != ButtonKind.Danger, CircleShape)
+            .focusRing(focused && kind != ButtonKind.Danger, CircleShape, rest = rest)
             .background(background)
             // A quiet button keeps an edge, so it still reads as a button on a fill of its own
             // colour (Low storage mode's box in the review).

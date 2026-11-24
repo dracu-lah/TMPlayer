@@ -93,6 +93,7 @@ import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.collectIsFocusVisibleAsState
+import com.tmplayer.ui.theme.focusFillOver
 import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -485,11 +486,10 @@ fun ProfileButton(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusVisibleAsState()
     val shape = RoundedCornerShape(Corner.Large)
-    val fill = when {
-        focused -> Tone.focusFill
-        primary -> Tone.accent
-        else -> Tone.surface
-    }
+    // A primary button rests in the accent, which is also the television's focus fill: it keeps the
+    // fill and shows focus with the ring instead (focusFillOver), so focused never equals unfocused.
+    val rest = if (primary) Tone.accent else Tone.surface
+    val fill = if (focused) focusFillOver(rest) else rest
     val ink = when {
         focused -> Tone.onFocusFill
         primary -> Tone.onAccent
@@ -501,7 +501,7 @@ fun ProfileButton(
             .heightIn(min = 48.dp)
             .clip(shape)
             .background(fill, shape)
-            .focusRing(focused, shape)
+            .focusRing(focused, shape, rest = rest)
             .combinedClickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

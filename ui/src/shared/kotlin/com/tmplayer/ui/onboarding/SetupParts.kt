@@ -91,6 +91,7 @@ import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
+import com.tmplayer.ui.theme.focusFillOver
 import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -143,6 +144,7 @@ internal fun SetupButton(
     val interactions = remember { MutableInteractionSource() }
     val focused = interactions.collectIsFocusVisibleAsState().value
     val touch = deviceForm() == DeviceForm.Phone
+    val rest = if (primary) Tone.accent else Tone.surfaceHigh
     Row(
         modifier
             .then(if (enabled) Modifier else Modifier.alpha(0.4f))
@@ -155,15 +157,14 @@ internal fun SetupButton(
             .background(
                 when {
                     focused && tonal && !primary -> Tone.text.copy(alpha = TONAL_FOCUS_ALPHA).compositeOver(Tone.surfaceHigh)
-                    focused -> Tone.focusFill
-                    primary -> Tone.accent
-                    else -> Tone.surfaceHigh
+                    focused -> focusFillOver(rest)
+                    else -> rest
                 },
             )
-            .focusRing(focused, CircleShape)
-            // The accent fill and the focus fill are near one colour in the dark theme, so a
-            // focused primary button also gets an outline in the text colour.
-            .then(if ((primary || tonal) && focused) Modifier.border(2.dp, Tone.text, CircleShape) else Modifier)
+            // A primary button rests in the accent, which is the focus fill too: it keeps the fill and
+            // draws the one flush ring in the on-accent ink (focusFillOver), never a second outline.
+            .focusRing(focused, CircleShape, rest = rest)
+            .then(if (tonal && !primary && focused) Modifier.border(2.dp, Tone.text, CircleShape) else Modifier)
             .clickable(
                 interactionSource = interactions,
                 indication = if (touch) LocalIndication.current else null,
