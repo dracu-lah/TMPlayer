@@ -6,6 +6,8 @@ import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { addedGate, addedShows, setStarred, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
+import { PullToRefresh, RefreshButton, useAskedRefresh } from '../ui/AskedRefresh'
+import { WorkStatusLine } from '../ui/WorkStatus'
 import { ChooseChatsButton } from '../ui/ChooseChatsButton'
 import { tvDp, VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
 import { form } from '../form'
@@ -35,6 +37,12 @@ export function Chats() {
     const [partial, setPartial] = createSignal<ChatItem[]>([])
     const [chats, { refetch }] = createResource(() => call('chats', [false], { onEvent: (e) => void setPartial((e as ChatsEvent).chats) }))
     onBackOnline(() => chats.error && refetch())
+    // Refresh (WP-40): the button, a pull on a phone and coming back after 5 minutes hidden are one asked reload; the list on
+    // screen stays while it runs (a resource keeps its last value), so the scroll stays.
+    const refresh = useAskedRefresh(async () => {
+        await refetch()
+        if (chats.error) throw chats.error
+    })
     // Chats browses the viewer's own choice (HX27): a chat left out of it never shows here, though
     // it still answers a link, a notification or an address typed by hand.
     const main = () => (chats.error ? partial() : (chats() ?? partial())).filter((c) => addedShows(c.id))
@@ -84,10 +92,15 @@ export function Chats() {
             <div class="list-head">
                 <h1 class="page-title">{t('nav.chats')}</h1>
                 {/* The TV's bar holds its own (tv/index.tsx). */}
-                <Show when={form() !== 'tv'}>
-                    <ChooseChatsButton />
-                </Show>
+                <div class="list-head-actions">
+                    <RefreshButton busy={refresh.busy()} onRefresh={refresh.ask} />
+                    <Show when={form() !== 'tv'}>
+                        <ChooseChatsButton />
+                    </Show>
+                </div>
             </div>
+            <WorkStatusLine status={refresh.status()} onRetry={refresh.ask} />
+            <PullToRefresh onRefresh={refresh.ask} />
             <label class="search-field">
                 <Icon icon={Search01Icon} size={20} />
                 <input type="search" placeholder={t('chats.search')} aria-label={t('chats.search')} value={text()} onInput={(e) => onType(e.currentTarget.value)} />

@@ -137,6 +137,13 @@ class PlayerKeyMapTest {
         assertEquals(PlayerKeyMap.ShellKey.Search, PlayerKeyMap.shellKeyFor(Press("Slash", "/")))
         assertEquals(PlayerKeyMap.ShellKey.Settings, PlayerKeyMap.shellKeyFor(Press("Comma", ",", ctrl = true)))
         assertEquals(PlayerKeyMap.ShellKey.Search, PlayerKeyMap.shellKeyFor(Press("KeyF", meta = true), mac = true))
+        // WP-40: F5 and Ctrl+R (Command+R on a Mac) refresh the page; a bare R or Ctrl+Shift+R is not that.
+        assertEquals(PlayerKeyMap.ShellKey.Refresh, PlayerKeyMap.shellKeyFor(Press("F5")))
+        assertEquals(PlayerKeyMap.ShellKey.Refresh, PlayerKeyMap.shellKeyFor(Press("KeyR", "r", ctrl = true)))
+        assertEquals(PlayerKeyMap.ShellKey.Refresh, PlayerKeyMap.shellKeyFor(Press("KeyR", meta = true), mac = true))
+        assertNull(PlayerKeyMap.shellKeyFor(Press("KeyR", "r")))
+        assertNull(PlayerKeyMap.shellKeyFor(Press("KeyR", "R", ctrl = true, shift = true)))
+        assertNull(PlayerKeyMap.shellKeyFor(Press("F5", ctrl = true)))
         assertNull(PlayerKeyMap.shellKeyFor(Press("KeyF")))
         assertNull(PlayerKeyMap.shellKeyFor(Press("Comma")))
         assertNull(PlayerKeyMap.shellKeyFor(Press("Slash", "?", shift = true)))

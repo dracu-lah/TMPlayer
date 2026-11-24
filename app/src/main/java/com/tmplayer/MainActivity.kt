@@ -1630,6 +1630,8 @@ private fun Root() {
                     Key.F -> "KeyF" to "f"
                     Key.Slash -> "Slash" to "/"
                     Key.Comma -> "Comma" to ","
+                    Key.F5 -> "F5" to ""
+                    Key.R -> "KeyR" to "r"
                     else -> return@onKeyEvent false
                 }
                 val press = com.tmplayer.player.PlayerKeyMap.Press(
@@ -1645,6 +1647,9 @@ private fun Root() {
                         shellKeys.settings()
                         true
                     }
+                    // F5 and Ctrl+R: the page's refresh, only where it has one (WP-40).
+                    com.tmplayer.player.PlayerKeyMap.ShellKey.Refresh ->
+                        screen is Screen.Chats && touchChrome.refreshNow()
                     null -> false
                 }
             },
@@ -2242,6 +2247,7 @@ private fun Root() {
                     onHomeLaterArtWanted = homeViewModel::requestArt,
                     onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
                     homeRefreshing = homeViewModel.refreshing.collectAsStateWithLifecycle().value,
+                    chatsRefreshing = chatsViewModel.refreshing.collectAsStateWithLifecycle().value,
                     // Home's own rows alone (HX44): the chat list no longer needs a manual sync
                     // piggybacked on this, since TDLib's own updates already keep it live.
                     onRefreshHome = { homeViewModel.refreshInPlace() },

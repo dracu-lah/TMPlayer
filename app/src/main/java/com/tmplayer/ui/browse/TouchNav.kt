@@ -253,6 +253,16 @@ internal class TouchChrome {
     /** Set by the bar's magnifier on a page without a search; the browser opens its search and clears it. */
     var searchAsked by mutableStateOf(false)
 
+    /**
+     * The page's refresh, asked from a keyboard (F5, Ctrl+R: WP-40); false where this page has none
+     * (Downloads, a settings page), so the key stays free. It is the pull's and the menu row's own.
+     */
+    fun refreshNow(): Boolean {
+        val refresh = specs[pageKey]?.refresh ?: return false
+        refresh()
+        return true
+    }
+
     /** The account menu behind the picture ([AccountButton]) is open. */
     var youOpen by mutableStateOf(false)
 

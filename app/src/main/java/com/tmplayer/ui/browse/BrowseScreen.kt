@@ -3,6 +3,9 @@ package com.tmplayer.ui.browse
 import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.focusEdge
 import androidx.compose.animation.core.snap
+import com.tmplayer.data.WorkStatus
+import com.tmplayer.ui.components.WorkStatusPill
+import com.tmplayer.ui.components.rememberAskedRefresh
 import com.tmplayer.ui.components.BackToTop
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.components.pageKeys
@@ -87,6 +90,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.focusGroup
@@ -306,6 +310,8 @@ internal fun BrowseScreen(
     onRefreshHome: () -> Unit = {},
     /** True while Home's rows are being fetched again in place: the phone's pull spinner stays up. */
     homeRefreshing: Boolean = false,
+    /** True while the chat list is being fetched again: the pull's spinner and the status line wait for it (LS-02). */
+    chatsRefreshing: Boolean = false,
     /** "Mark as watched" (true) or back (false) from a detail panel opened here; the third is the chat's name. */
     onSetMediaWatched: (MediaItem, String, Boolean) -> Unit = { _, _, _ -> },
     /** One line for the viewer, such as what a Download from a detail panel did. */
@@ -965,16 +971,36 @@ internal fun BrowseScreen(
         val under = if (tab.isHome && state !is UiState.Content) LocalUnderStatusBar.current else 0.dp
         Box(Modifier.fillMaxSize().padding(top = under)) { paneOf(tab) }
     }
+    // Every way to refresh (the pull, the account menu's row, F5 and Ctrl+R, the TV's menu, the screen
+    // reader's action) goes through one asked refresh per page (WP-40): a refresh already running is
+    // not started twice, and the status line says it runs, ended, or that Telegram asked to wait.
+    val homeAsk = rememberAskedRefresh(homeRefreshing)
+    val chatsAsk = rememberAskedRefresh(chatsRefreshing)
+    val askHome: () -> Unit = { homeAsk.ask(onRefreshHome) }
+    val askChats: () -> Unit = { chatsAsk.ask(onRefresh) }
     if (touch) {
         PhoneBrowse(
             refreshOf = { page ->
                 when {
-                    page.isHome -> onRefreshHome
-                    !page.listsVideos -> onRefresh
+                    page.isHome -> askHome
+                    !page.listsVideos -> askChats
                     else -> null
                 }
             },
-            refreshingOf = { page -> page.isHome && homeRefreshing },
+            refreshingOf = { page ->
+                when {
+                    page.isHome -> homeRefreshing
+                    !page.listsVideos -> chatsRefreshing
+                    else -> false
+                }
+            },
+            refreshStatusOf = { page ->
+                when {
+                    page.isHome -> homeAsk.status
+                    !page.listsVideos -> chatsAsk.status
+                    else -> WorkStatus.Idle
+                }
+            },
             tab = tab,
             account = (state as? UiState.Content)?.value?.account ?: account,
             pane = pane,
@@ -1116,6 +1142,20 @@ internal fun BrowseScreen(
             // Home runs up under the bar, its carousel's picture with it; every other page, and
             // Home while it loads, starts below the bar.
             val underBar = homeShown && state is UiState.Content
+            // The asked refresh's pill, where the connection's sits; never focusable (WP-40, LS-03).
+            WorkStatusPill(
+                status = when {
+                    tvSearchOpen -> WorkStatus.Idle
+                    tab.isHome -> homeAsk.status
+                    tab.onChatsPage -> chatsAsk.status
+                    else -> WorkStatus.Idle
+                },
+                asked = true,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(1f)
+                    .padding(bottom = 20.dp),
+            )
             val homeScrolled by TvBarSignals.homeScrolled.collectAsState()
             val barGround by androidx.compose.animation.core.animateFloatAsState(
                 if (underBar && homeScrolled) 1f else 0f,
@@ -1179,8 +1219,11 @@ internal fun BrowseScreen(
                     // unread counts, mutes and a newly appeared chat all arrive through TDLib's
                     // own updates, so the menu's Refresh is only Home's own (its rows, not the
                     // chat list); the chats, favourites and history tabs offer none any more.
+                    // A remote has no pull and no F5, so the menu's Refresh is how a TV asks (WP-40):
+                    // Home's rows and the chat list, with the pill below to say it runs.
                     tvSearchOpen -> null
-                    tab.isHome -> onRefreshHome
+                    tab.isHome -> askHome
+                    tab.onChatsPage -> askChats
                     else -> null
                 },
                 currentFocus = barFocus,

@@ -131,15 +131,23 @@ fun ChatsPage(
         state.chatSection
     }
 
-    Column(Modifier.fillMaxSize()) {
-        // The chat list keeps itself live on its own (HX44): titles, photos, order, unread counts,
-        // mutes and a newly appeared chat all arrive through TDLib's own updates, so there is no
-        // button for this any more. F5 and Ctrl+R still work, as Home's do, for anyone who reaches
-        // for them, and the flood-wait toast stays behind them.
-        RegisterRefresh(state) {
+    // F5, Ctrl+R and the account menu's Refresh are one asked refresh (WP-40): a second press while it
+    // runs is ignored, a flood wait is the line's countdown, and the line over the page's foot says it
+    // runs or ended (LS-20).
+    val refreshing by model.refreshing.collectAsState()
+    val asked = com.tmplayer.ui.components.rememberAskedRefresh(refreshing)
+    val refreshChats: () -> Unit = {
+        asked.ask {
             val waiting = model.refreshUnlessRateLimited()
             if (waiting > 0) toast(s.chatsRefreshWait(waiting))
         }
+    }
+    Box(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
+        // The chat list keeps itself live on its own (HX44): titles, photos, order, unread counts,
+        // mutes and a newly appeared chat all arrive through TDLib's own updates. F5 and Ctrl+R
+        // refresh it anyway, as Home's do, for anyone who reaches for them.
+        RegisterRefresh(state, refreshChats)
         // The page's name alone, at the start like every other page's: the chips under it
         // already say which slice of the list this is, and a line under the name said it again.
         PageHeader(
@@ -265,6 +273,12 @@ fun ChatsPage(
                 )
             }
         }
+    }
+    com.tmplayer.ui.components.AskedRefreshLine(
+        status = asked.status,
+        onRetry = refreshChats,
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+    )
     }
 }
 

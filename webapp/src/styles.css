@@ -1096,6 +1096,16 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .list-head .page-title { margin-bottom: 8px; min-width: 0; }
 .list-head .choose-chats { width: 40px; height: 40px; margin-bottom: 4px; }
+.list-head-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.list-head-actions .round-button { width: 40px; height: 40px; }
+.list-head-actions .choose-chats { margin-bottom: 0; }
+.home-head .refresh-button { width: 40px; height: 40px; flex: none; }
+/* The phone's pull (ui/AskedRefresh.tsx): the browser's own pull to reload must not take the same drag. */
+html[data-pull] { overscroll-behavior-y: contain; }
+.pull-indicator {
+  position: fixed; z-index: 6; top: calc(-24px + env(safe-area-inset-top)); left: 50%; width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--menu); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--fg); pointer-events: none;
+}
 .history-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px; }
 .history-tab {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-s);

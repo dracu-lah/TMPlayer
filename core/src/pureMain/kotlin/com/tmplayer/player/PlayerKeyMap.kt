@@ -285,11 +285,12 @@ object PlayerKeyMap {
     )
 
     /** What a key asks of the app around the player: the shell's keys, on a tablet or a Chromebook with a keyboard. */
-    enum class ShellKey { Search, Settings }
+    enum class ShellKey { Search, Settings, Refresh }
 
     /**
      * Ctrl+F or "/" is search and Ctrl+comma is Settings, as in every other app with a keyboard. Ctrl+A
-     * in grids and F5 refresh follow with their screens (WP-39, WP-40). The caller reads this only
+     * in grids follows with its screens (WP-39). F5 and Ctrl+R (Command+R on a Mac) refresh the
+     * page, as in a browser or a file manager (WP-40). The caller reads this only
      * where the focused control did not take the key (a search field keeps its "/").
      */
     fun shellKeyFor(press: Press, mac: Boolean = false): ShellKey? {
@@ -297,6 +298,8 @@ object PlayerKeyMap {
         return when {
             command && !press.alt && !press.shift && press.code == "KeyF" -> ShellKey.Search
             command && !press.alt && !press.shift && press.code == "Comma" -> ShellKey.Settings
+            command && !press.alt && !press.shift && press.code == "KeyR" -> ShellKey.Refresh
+            press.code == "F5" && !press.ctrl && !press.alt && !press.meta && !press.shift -> ShellKey.Refresh
             press.code == "Slash" && !press.ctrl && !press.alt && !press.meta && !press.shift -> ShellKey.Search
             else -> null
         }

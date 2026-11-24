@@ -161,6 +161,13 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         return
     }
     val stalled by model.stalled.collectAsState()
+    // F5, Ctrl+R, the account menu's Refresh and the stalled line's Refresh are one asked refresh
+    // (WP-40): a second press while it runs is ignored, and the line over the page's foot says it runs,
+    // ended or that Telegram asked to wait (LS-20).
+    val refreshing by model.refreshing.collectAsState()
+    val asked = com.tmplayer.ui.components.rememberAskedRefresh(refreshing)
+    val refreshHome: () -> Unit = { asked.ask { model.refreshInPlace() } }
+    Box(Modifier.fillMaxSize()) {
     // Offline (R4): the rows as an offline Home draws them, and the cards' greying.
     com.tmplayer.ui.browse.OfflineHomeScope(rows) { offlineRows ->
     HomeRowsView(
@@ -189,8 +196,14 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         onRowLeft = { row -> if (row is HomeRow.Chat) model.rowGone(row.chatId) },
         onArtWanted = model::requestArt,
         onLaterArtWanted = model::requestArt,
-        onRefresh = model::refreshInPlace,
+        onRefresh = refreshHome,
         seeAll = model::seeAll,
+    )
+    }
+    com.tmplayer.ui.components.AskedRefreshLine(
+        status = asked.status,
+        onRetry = refreshHome,
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
     )
     }
 }

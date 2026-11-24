@@ -18,6 +18,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import com.tmplayer.ui.components.TouchPullRefresh
+import com.tmplayer.data.WorkStatus
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
@@ -25,6 +29,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,11 +94,14 @@ internal fun PhoneBrowse(
     pane: @Composable (BrowseSection) -> Unit,
     /**
      * What pulling a page down does: refresh Home, or the chat list; null for a page with
-     * nothing to fetch again. A pull, not a button: a lone floating Refresh reads like a mistake.
+     * nothing to fetch again. The same refresh is the account menu's Refresh row, F5 and Ctrl+R, and
+     * the screen reader's "Refresh" action (WP-40); a lone floating button would read like a mistake.
      */
     refreshOf: (BrowseSection) -> (() -> Unit)? = { null },
     /** Whether that refresh is still fetching, so the spinner stays until it is done. */
     refreshingOf: (BrowseSection) -> Boolean = { false },
+    /** What the page's asked refresh is doing, for the status line under the title ([AskedRefresh]). */
+    refreshStatusOf: (BrowseSection) -> WorkStatus = { WorkStatus.Idle },
     countOf: (BrowseSection) -> Int,
     actions: (@Composable RowScope.() -> Unit)?,
     sections: List<BrowseSection>,
@@ -330,6 +338,7 @@ internal fun PhoneBrowse(
                     count = if (section.onChatsPage) 0 else countOf(section),
                     refresh = refreshOf(section),
                     refreshing = refreshingOf(section),
+                    refreshStatus = refreshStatusOf(section),
                     pane = pane,
                 )
             }
@@ -477,6 +486,8 @@ internal fun PhonePageFrame(
     refresh: (() -> Unit)?,
     /** Whether [refresh] is still fetching. */
     refreshing: Boolean = false,
+    /** What the asked refresh is doing: the line's words ("Updating…", "Up to date", Telegram's wait). */
+    refreshStatus: WorkStatus = WorkStatus.Idle,
     pane: @Composable (BrowseSection) -> Unit,
 ) {
     val s = LocalStrings.current
@@ -485,7 +496,17 @@ internal fun PhonePageFrame(
     Scaffold(
         // Home has no top bar to collapse: the behaviour's limit is never measured there, so it
         // would take every drag for itself and the page would not scroll.
-        modifier = if (pinned || section.isHome) Modifier else Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = (if (pinned || section.isHome) Modifier else Modifier.nestedScroll(scrollBehavior.nestedScrollConnection))
+            // TalkBack and Switch Access have no pull: the page offers Refresh as an action of its own (WP-40).
+            .then(
+                if (refresh == null) {
+                    Modifier
+                } else {
+                    Modifier.semantics {
+                        customActions = listOf(CustomAccessibilityAction(s.commonRefresh) { refresh(); true })
+                    }
+                },
+            ),
         topBar = {
             if (section.isHome) {
                 // No title: Home's featured carousel is the top of the page.
@@ -518,7 +539,8 @@ internal fun PhonePageFrame(
         val under = if (section.isHome) padding.calculateTopPadding() else 0.dp
         // The page's count under the title, where a phone's app bar puts a subtitle.
         androidx.compose.runtime.CompositionLocalProvider(LocalUnderStatusBar provides under) {
-        Column(Modifier.fillMaxSize().padding(framePadding)) {
+        Box(Modifier.fillMaxSize().padding(framePadding)) {
+        Column(Modifier.fillMaxSize()) {
             if (count > 0) {
                 Text(
                     countLabel(section, count),
@@ -561,6 +583,19 @@ internal fun PhonePageFrame(
                     },
                 ) { pane(section) }
             }
+        }
+        // The asked refresh's line floats over the page's top, so it never pushes a row; its own
+        // container keeps it legible over Home's carousel (WP-40, LS-02).
+        if (refresh != null && refreshStatus != WorkStatus.Idle) {
+            val retry = androidx.compose.runtime.rememberUpdatedState(refresh)
+            Box(Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top = under + 8.dp, start = 16.dp, end = 16.dp)) {
+                com.tmplayer.ui.components.AskedRefreshLine(
+                    status = refreshStatus,
+                    onRetry = { retry.value() },
+                    sendLogs = { com.tmplayer.ui.settings.SendLogsButton() },
+                )
+            }
+        }
         }
         }
     }

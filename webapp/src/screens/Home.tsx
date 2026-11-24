@@ -10,6 +10,8 @@ import { arrangeOrder, parseOrder } from '../ui/homeOrder'
 import { forgetGone } from '../goneVideos'
 import { scrollBehavior } from '../ui/motion'
 import { Icon } from '../ui/Icon'
+import { PullToRefresh, RefreshButton, useAskedRefresh } from '../ui/AskedRefresh'
+import { WorkStatusLine } from '../ui/WorkStatus'
 import { KeepPlaceCard } from './KeepPlaceCard'
 import { AskGate } from './cardAsk'
 import { createDwell } from '../ui/dwell'
@@ -59,6 +61,12 @@ export function Home() {
             if (abort === mine) setBusy(false)
         }
     }
+    // Refresh (WP-40): the button, a pull on a phone and coming back after 5 minutes hidden are one asked reload, quiet unless it
+    // runs long or fails; the rows on screen stay (the page is not unmounted), so the scroll stays.
+    const refresh = useAskedRefresh(async () => {
+        await load()
+        if (error()) throw error()
+    })
     // Asked again when the size limits, the stars, the added chats or Settings > Home change, as every list is.
     createEffect(on(() => [settings().sizeMin, settings().sizeMax, [...starredIds()].join(), watchedTick(), copiesTick(), addedMode(), [...(addedIds() ?? [])].join(), JSON.stringify(homeLayout())], load))
     // Lost on the way: asked again once the connection is back.
@@ -97,7 +105,10 @@ export function Home() {
                     <span class="home-brand" aria-hidden="true">TMPlayer</span>
                     <span class="visually-hidden">{t('browse.tab_home')}</span>
                 </h1>
+                <RefreshButton busy={refresh.busy()} onRefresh={refresh.ask} />
             </div>
+            <WorkStatusLine status={refresh.status()} onRetry={refresh.ask} />
+            <PullToRefresh onRefresh={refresh.ask} />
             <Show when={settings().carousel}>
                 <Show when={form() === 'tv'} fallback={<Hero rows={page()?.rows} />}>
                     <TvHero rows={page()?.rows} />
