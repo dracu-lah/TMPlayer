@@ -88,8 +88,8 @@ val appleVariant: Map<String, Map<String, List<Replacement>>> = mapOf(
             "                topBar = { FloatingPageTitle({ M3Text(titleOf(page!!)) }, pageScroll) },\n            ) { padding ->\n" becomes
                 "                topBar = { FloatingPageTitle({ M3Text(titleOf(page!!)) }, pageScroll) },\n" +
                 "                contentWindowInsets = WindowInsets.statusBars,\n            ) { padding ->\n",
-            "                topBar = { FloatingPageTitle({ M3Text(s.settingsTitle) }, listScroll) },\n            ) { padding ->\n" becomes
-                "                topBar = { FloatingPageTitle({ M3Text(s.settingsTitle) }, listScroll) },\n" +
+            "                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, listScroll) },\n            ) { padding ->\n" becomes
+                "                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, listScroll) },\n" +
                 "                contentWindowInsets = WindowInsets.statusBars,\n            ) { padding ->\n",
         ),
         // Home and the chat lists: the frame stops leaving the home indicator's strip under them,
