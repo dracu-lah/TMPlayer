@@ -92,6 +92,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import com.tmplayer.ui.components.liveMessage
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
@@ -527,6 +528,8 @@ fun SettingsScreen(
     var busy by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf<Prompt?>(null) }
     val backup = rememberBackupActions(onPlan = { prompt = Prompt.Restore(it) }, say = { toast(it) })
+    // A restore under way (WP-97): its row and the line at the top of the page say so, and no second one starts.
+    val restoring by com.tmplayer.data.RestoreRun.running.collectAsStateWithLifecycle()
     val saveLogs = rememberSaveLogs(say = { toast(it) })
     // Send to developer (L5): null in a build with no log inbox, so the row is not drawn.
     val sendToDeveloper = rememberSendToDeveloper()
@@ -900,7 +903,7 @@ fun SettingsScreen(
 
         // Whatever is currently running, at the top rather than below the last row: a viewer who
         // has just pressed a row is not looking past the end of the list.
-        (busy ?: s.settingsSigningOut.takeIf { signOutState.signingOut })?.let { message ->
+        (busy ?: s.backupRestoring.takeIf { restoring } ?: s.settingsSigningOut.takeIf { signOutState.signingOut })?.let { message ->
             item {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -1913,9 +1916,10 @@ fun SettingsScreen(
                 item {
                     ActionRow(
                         title = s.backupRestore,
-                        subtitle = s.backupRestoreDetail,
+                        subtitle = if (restoring) s.backupRestoring else s.backupRestoreDetail,
                         icon = TmIcons.Refresh,
-                        onClick = backup.restore,
+                        busy = s.backupRestoring.takeIf { restoring },
+                        onClick = { if (!restoring) backup.restore() },
                     )
                 }
             }
@@ -2119,6 +2123,7 @@ fun SettingsScreen(
                             title = com.tmplayer.data.SyncWords.action(resumeSyncStatus),
                             subtitle = com.tmplayer.data.SyncWords.status(resumeSyncStatus, resumeSyncAt, resumeSyncRunning),
                             icon = TmIcons.Refresh,
+                            busy = s.settingsResumeSyncSyncing.takeIf { resumeSyncRunning },
                             onClick = {
                                 when {
                                     resumeSyncRunning -> Unit
@@ -3567,17 +3572,25 @@ internal fun ActionRow(
     markSize: Dp = SettingIconChipSize,
     /** False for a line that is not a setting of its own (the Notifications card, WP-38): the search and SettingsMap do not know it. */
     searchable: Boolean = true,
+    /**
+     * Words for work under way for this row (a restore, a sync), or null: a spinner at its end, the words as
+     * its state for a screen reader, and its subtitle a live region so a change is spoken (WP-97). The row
+     * looks dimmed; the caller makes a press do nothing.
+     */
+    busy: String? = null,
     onClick: () -> Unit,
 ) {
     val iconTint = if (tint == Color.Unspecified) Tone.accent else tint
     FocusRow(
-        modifier = if (searchable) modifier.seekable(title) else modifier,
+        modifier = (if (searchable) modifier.seekable(title) else modifier)
+            .then(if (busy != null) Modifier.alpha(0.7f).semantics { stateDescription = busy } else Modifier),
         onClick = onClick,
+        trailing = if (busy != null) ({ Spinner(size = 18.dp, strokeWidth = 2.dp) }) else null,
         headline = {
             M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
         },
         supporting = {
-            M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis)
+            M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis, modifier = if (busy != null) Modifier.liveMessage() else Modifier)
         },
         leading = { if (mark != null) mark() else SettingIconChip(icon, tint = iconTint, service = service) },
     ) { focused ->
@@ -3597,7 +3610,13 @@ internal fun ActionRow(
                 color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = if (busy != null) Modifier.liveMessage() else Modifier,
             )
+        }
+        // The television's row has no trailing slot of its own: the spinner sits at its end.
+        if (busy != null) {
+            Spacer(Modifier.size(12.dp))
+            Spinner(size = 18.dp, strokeWidth = 2.dp)
         }
     }
 }

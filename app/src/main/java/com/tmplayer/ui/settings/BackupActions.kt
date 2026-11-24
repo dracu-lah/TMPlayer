@@ -17,6 +17,8 @@ import com.tmplayer.data.BackupRead
 import com.tmplayer.data.BackupService
 import com.tmplayer.data.BackupWords
 import com.tmplayer.data.RestorePlan
+import com.tmplayer.data.RestoreRun
+import com.tmplayer.platform.Background
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.i18n.L
@@ -128,10 +130,17 @@ internal fun rememberBackupActions(
             }
         },
         apply = { backup ->
-            scope.launch {
-                val done = runCatching { service.restore(backup) }
-                    .onFailure { Logger.w(TAG, "Restore failed", it) }.isSuccess
-                say(if (done) L.backupRestored else L.backupReadFailed)
+            // In the app's own scope, so a rotation or leaving Settings does not cut a restore short, and
+            // once at a time (RestoreRun): the confirm pressed twice merges the backup once.
+            Background.scope.launch {
+                val outcome = RestoreRun.run {
+                    withContext(Dispatchers.IO) { service.restore(backup) }
+                }
+                when (outcome) {
+                    RestoreRun.Outcome.Done -> say(L.backupRestored)
+                    RestoreRun.Outcome.Failed -> say(L.backupRestoreFailed)
+                    RestoreRun.Outcome.AlreadyRunning -> Unit
+                }
             }
         },
     )

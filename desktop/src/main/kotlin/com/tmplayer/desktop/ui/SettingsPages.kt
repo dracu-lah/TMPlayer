@@ -731,7 +731,9 @@ internal fun BackupRows(state: ShellState, version: String) {
             toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed)
         }
     }
-    Action(s.backupRestore, s.backupRestoreDetail, TmIcons.Refresh) {
+    // A restore under way (WP-97): the row says so and does nothing when pressed again.
+    val restoring by com.tmplayer.data.RestoreRun.running.collectAsState()
+    Action(s.backupRestore, if (restoring) s.backupRestoring else s.backupRestoreDetail, TmIcons.Refresh, enabled = !restoring) {
         scope.launch {
             val file = FilePicker.open(s.backupPickTitle, "json") ?: return@launch
             val text = withContext(Dispatchers.IO) {
@@ -761,9 +763,13 @@ internal fun BackupRows(state: ShellState, version: String) {
             destructive = false,
             onConfirm = {
                 restorePlan = null
-                scope.launch {
-                    val done = runCatching { backups.restore(plan.backup) }.isSuccess
-                    toast(if (done) s.backupRestored else s.backupReadFailed)
+                // Once at a time, off the window's thread, and the truth when it fails (RestoreRun).
+                com.tmplayer.platform.Background.scope.launch {
+                    when (com.tmplayer.data.RestoreRun.run { withContext(Dispatchers.IO) { backups.restore(plan.backup) } }) {
+                        com.tmplayer.data.RestoreRun.Outcome.Done -> toast(s.backupRestored)
+                        com.tmplayer.data.RestoreRun.Outcome.Failed -> toast(s.backupRestoreFailed)
+                        com.tmplayer.data.RestoreRun.Outcome.AlreadyRunning -> Unit
+                    }
                 }
             },
             onDismiss = { restorePlan = null },

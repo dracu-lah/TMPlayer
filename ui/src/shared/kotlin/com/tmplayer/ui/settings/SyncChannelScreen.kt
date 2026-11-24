@@ -57,6 +57,7 @@ import com.tmplayer.ui.onboarding.QuietButton
 import com.tmplayer.ui.onboarding.SetupButton
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
+import com.tmplayer.ui.components.liveMessage
 import kotlinx.coroutines.launch
 
 /**
@@ -91,6 +92,8 @@ class SyncChannelActions(
     val onShowOptions: () -> Unit = {},
     val onPick: (ChannelOption) -> Unit = {},
     val onUseSaved: () -> Unit = {},
+    /** Does the last press again, shown beside an error (WP-97); null leaves the button out. */
+    val onRetry: (() -> Unit)? = null,
 )
 
 /**
@@ -153,11 +156,15 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
     }
 
     val state = SyncChannelUiState(choice, block, oldCopy, asking, options, loading, busy, note, error)
+    // The last press that can be asked again, for Try again beside an error (WP-97).
+    var again by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun keep(action: () -> Unit): () -> Unit = { again = action; action() }
     val actions = SyncChannelActions(
         onClose = onClose,
         onAskCreate = { asking = true; note = null; error = null },
         onCancelCreate = { asking = false },
-        onCreate = {
+        onRetry = { again?.invoke() },
+        onCreate = keep {
             asking = false
             work {
                 val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
@@ -169,7 +176,7 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
                 }
             }
         },
-        onShowOptions = {
+        onShowOptions = keep {
             if (!loading) {
                 loading = true
                 error = null
@@ -189,17 +196,19 @@ fun SyncChannelScreen(settings: SettingsStore, onClose: () -> Unit, modifier: Mo
             }
         },
         onPick = { option ->
-            work {
-                val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
-                val myId = Td.myId()
-                if (session == null || myId == 0L) {
-                    error = s.settingsResumeSyncOffline
-                } else {
-                    told(SyncDestinations.choose(settings, TdChannelProbe(session.client), myId, option.chatId), fromCreate = false)
+            keep {
+                work {
+                    val session = Td.sessionFor(com.tmplayer.data.Accounts.stamp)
+                    val myId = Td.myId()
+                    if (session == null || myId == 0L) {
+                        error = s.settingsResumeSyncOffline
+                    } else {
+                        told(SyncDestinations.choose(settings, TdChannelProbe(session.client), myId, option.chatId), fromCreate = false)
+                    }
                 }
-            }
+            }()
         },
-        onUseSaved = {
+        onUseSaved = keep {
             work {
                 ResumeSync.changeDestination(settings, null)
                 note = s.syncchannelSwitchedSaved
@@ -303,8 +312,14 @@ fun SyncChannelContent(state: SyncChannelUiState, actions: SyncChannelActions, m
                     )
                 }
             }
-            state.note?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = Tone.accent) }
-            state.error?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = Tone.danger) }
+            // Spoken when they appear (WP-97), and an error offers the last press again.
+            state.note?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = Tone.accent, modifier = Modifier.liveMessage()) }
+            state.error?.let { failure ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(failure, style = MaterialTheme.typography.labelLarge, color = Tone.danger, modifier = Modifier.weight(1f, fill = false).liveMessage())
+                    actions.onRetry?.let { retry -> if (!state.busy) QuietButton(s.commonTryAgain, onClick = retry) }
+                }
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
