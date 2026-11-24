@@ -51,6 +51,9 @@ object HintIds {
     /** Device fact, not a hint: a Page or Channel key arrived once on this remote (WP-12, WP-75). */
     const val PAGE_KEY_ARRIVED = "page_key_arrived"
 
+    /** The television Settings' line that Page and Channel keys jump between sections, once such a key has arrived (WP-75). */
+    const val SETTINGS_PAGE_KEYS = "settings_page_keys"
+
     /** The tile's second line on the television: Hold OK or press Menu for options (WP-14). */
     const val TILE_OPTIONS = "tile_options"
 

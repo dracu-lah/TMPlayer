@@ -7,8 +7,12 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.GroupPlace
@@ -32,6 +36,18 @@ internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
     val collected = GroupCollector(this).apply(build).entries
     // The heading each row sits under, for the television's breadcrumb (WP-07): null above the first.
     var section: (@Composable () -> String)? = null
+    // The first row of every section, for the Page and Channel keys on a television (WP-75): the
+    // page's first row, then the first row after each section title.
+    val starts = mutableListOf<Int>()
+    var opening = true
+    collected.forEachIndexed { index, entry ->
+        if (entry.breaks) {
+            if (entry.section != null) opening = true
+        } else if (opening) {
+            starts += index
+            opening = false
+        }
+    }
     collected.forEachIndexed { index, entry ->
         if (entry.section != null) section = entry.section
         if (entry.breaks) {
@@ -39,11 +55,15 @@ internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
             return@forEachIndexed
         }
         val under = section
+        val sectionStart = starts.lastOrNull { it <= index } ?: index
+        val nextSection = starts.firstOrNull { it > index } ?: -1
+        val previousSection = starts.lastOrNull { it < sectionStart } ?: -1
         val place = GroupPlace(
             first = collected.getOrNull(index - 1)?.breaks ?: true,
             last = collected.getOrNull(index + 1)?.breaks ?: true,
         )
-        item(entry.key, entry.contentType) {
+        // A key of its own for a row with none: the pane finds the row again by it (WP-75).
+        item(entry.key ?: settingsRowKey(index), entry.contentType) {
             CompositionLocalProvider(LocalGroupPlace provides place) {
                 if (isTouch()) {
                     Box(
@@ -63,8 +83,18 @@ internal fun LazyListScope.settingsGroups(build: LazyListScope.() -> Unit) {
                         // from the focus callback and read only by the header, so a focus move
                         // composes the header and not the page.
                         val title = under?.invoke()
+                        val requester = remember { FocusRequester() }
+                        DisposableEffect(crumb, index) {
+                            crumb.attach(index, requester)
+                            onDispose { crumb.detach(index, requester) }
+                        }
                         Box(
-                            Modifier.onFocusChanged { if (it.hasFocus) crumb.section = title },
+                            Modifier.focusRequester(requester).onFocusChanged {
+                                if (it.hasFocus) {
+                                    crumb.section = title
+                                    crumb.rowFocused(index, sectionStart, nextSection, previousSection)
+                                }
+                            },
                             propagateMinConstraints = true,
                         ) {
                             entry.content(this@item)

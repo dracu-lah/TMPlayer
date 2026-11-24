@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,11 +64,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.DeviceForm
+import com.tmplayer.data.HintIds
 import com.tmplayer.data.SettingsMap
+import com.tmplayer.data.SettingsStore
+import com.tmplayer.ui.components.HintStyle
+import com.tmplayer.ui.components.LocalHintSlot
+import com.tmplayer.ui.components.OneTimeHint
+import com.tmplayer.ui.components.PageKeys
+import com.tmplayer.ui.components.ProvideHintSlot
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
@@ -127,6 +138,8 @@ internal fun TvSettingsPane(
      * window taking focus picks the first item it finds) goes to [entry] instead.
      */
     arrived: BooleanArray,
+    /** Where the Page and Channel keys' arrival is noted and the hint about them kept; null: no hint. */
+    hints: SettingsStore? = null,
     /** Quiet facts at the header's trailing end: the version line (WP-104). */
     headerEnd: @Composable () -> Unit = {},
     pane: @Composable () -> Unit,
@@ -148,6 +161,8 @@ internal fun TvSettingsPane(
     // after the screen's own handlers, so it is asked first.
     BackHandler(enabled = !railHasFocus) { onBackInPane() }
 
+    val scope = rememberCoroutineScope()
+    val jumping = remember { BooleanArray(1) }
     val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
     // The arrows in screen terms: the rail is on the leading side, so towards the pane is Right in
     // a left to right layout and Left in Arabic or Hebrew.
@@ -227,6 +242,25 @@ internal fun TvSettingsPane(
                     .weight(1f)
                     .fillMaxHeight()
                     .testTag(SETTINGS_PANE_TAG)
+                    // Page and Channel keys: section to section (WP-75).
+                    .onPreviewKeyEvent { event ->
+                        val dir = PageKeys.step(event.key)
+                        if (dir == 0 || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        // A jump on its way swallows the repeats of a held key (one section per press).
+                        if (jumping[0]) return@onPreviewKeyEvent true
+                        jumping[0] = true
+                        if (PageKeys.isPageOrChannel(event.key) && hints != null) {
+                            scope.launch { runCatching { hints.markHintSeen(HintIds.PAGE_KEY_ARRIVED) } }
+                        }
+                        scope.launch {
+                            try {
+                                breadcrumb.sectionJump(dir)
+                            } finally {
+                                jumping[0] = false
+                            }
+                        }
+                        true
+                    }
                     .focusProperties {
                         // In from the rail by an arrow: the page's first row, not the nearest one.
                         onEnter = {
@@ -240,8 +274,11 @@ internal fun TvSettingsPane(
                     .onFocusChanged { if (!it.hasFocus) detail.text = "" }
                     .focusGroup(),
             ) {
-                androidx.compose.runtime.CompositionLocalProvider(LocalSettingsDetail provides detail) {
-                    PaneFade(paneKey, Modifier.fillMaxWidth().weight(1f)) { pane() }
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    androidx.compose.runtime.CompositionLocalProvider(LocalSettingsDetail provides detail) {
+                        PaneFade(paneKey, Modifier.fillMaxSize()) { pane() }
+                    }
+                    if (hints != null) PageKeysHint(hints, visible = !railHasFocus, Modifier.align(Alignment.BottomCenter))
                 }
                 DetailStrip(detail)
             }
@@ -456,10 +493,155 @@ private fun DetailStrip(holder: SettingsDetailHolder) {
  * What the pinned header says the remote is under: the section title of the focused row. Written
  * from the rows' focus callbacks and read only by the header, so a focus move composes the header
  * alone. One per page shown, so a page never shows the last page's section.
+ *
+ * It is also the pane's map of the rows composed now (WP-75): each row of [settingsGroups] attaches
+ * its [FocusRequester] under its place in the page, so the remote can be put back on the row used
+ * last (focus memory) or on the first row of the next section (Page and Channel keys), scrolling
+ * the page to it first when it is not composed. Those fields are plain, never state: a focus move
+ * writes them without composing anything.
  */
 @Stable
 internal class SettingsBreadcrumb {
     var section: String? by mutableStateOf(null)
+
+    /** The page's list, set by the screen, so a jump can scroll it. */
+    var state: LazyListState? = null
+
+    /** Told the row (its place in the page) the remote moved onto, for the focus memory. */
+    var onRow: (Int) -> Unit = {}
+
+    private val rows = HashMap<Int, FocusRequester>()
+    private var at = -1
+    private var sectionStart = -1
+    private var nextSection = -1
+    private var previousSection = -1
+
+    internal fun attach(row: Int, requester: FocusRequester) {
+        rows[row] = requester
+    }
+
+    internal fun detach(row: Int, requester: FocusRequester) {
+        if (rows[row] === requester) rows.remove(row)
+    }
+
+    internal fun rowFocused(row: Int, sectionStart: Int, nextSection: Int, previousSection: Int) {
+        at = row
+        this.sectionStart = sectionStart
+        this.nextSection = nextSection
+        this.previousSection = previousSection
+        onRow(row)
+    }
+
+    /** Whether [row] is composed and takes the remote now. */
+    private fun take(row: Int): Boolean =
+        rows[row]?.let { runCatching { it.requestFocus() }.getOrDefault(false) } == true
+
+    /** The composed row nearest [row] that takes the remote (a row the page no longer has, a disabled one). */
+    private fun takeNearest(row: Int): Boolean =
+        rows.keys.sortedBy { kotlin.math.abs(it - row) }.any { take(it) }
+
+    /**
+     * Puts the remote on the row at place [row] of the page, scrolling to it when it is not composed
+     * yet; the nearest row that takes it when that one is gone. False only when no row took it.
+     */
+    suspend fun jumpTo(row: Int): Boolean {
+        repeat(EXACT_FRAMES) {
+            if (take(row)) return true
+            androidx.compose.runtime.withFrameNanos { }
+        }
+        val list = state
+        val base = list?.layoutInfo?.visibleItemsInfo?.firstNotNullOfOrNull { info ->
+            settingsRowIndex(info.key)?.let { info.index - it }
+        }
+        if (list != null && base != null) {
+            val total = list.layoutInfo.totalItemsCount
+            if (total > 0) runCatching { list.scrollToItem((base + row).coerceIn(0, total - 1)) }
+            repeat(EXACT_FRAMES) {
+                androidx.compose.runtime.withFrameNanos { }
+                if (take(row)) return true
+            }
+        }
+        return takeNearest(row)
+    }
+
+    /**
+     * Page Down, Channel Down and Fast forward ([direction] 1): the first row of the next section;
+     * the Up keys (-1): the first row of this section, then of the one before. False when there is
+     * nowhere to go (the last section, the first), so the key does nothing.
+     */
+    suspend fun sectionJump(direction: Int): Boolean {
+        val target = when {
+            direction > 0 -> nextSection
+            at != sectionStart -> sectionStart
+            else -> previousSection
+        }
+        if (target < 0) return false
+        return jumpTo(target)
+    }
+}
+
+/** The lazy item key of the row at place [index] in a page of [settingsGroups]. */
+internal fun settingsRowKey(index: Int): String = "$ROW_KEY_PREFIX$index"
+
+/** The place of the row a lazy item [key] is, or null for any other item. */
+internal fun settingsRowIndex(key: Any): Int? =
+    (key as? String)?.takeIf { it.startsWith(ROW_KEY_PREFIX) }?.removePrefix(ROW_KEY_PREFIX)?.toIntOrNull()
+
+private const val ROW_KEY_PREFIX = "settings-row-"
+private const val EXACT_FRAMES = 3
+
+/**
+ * The row the remote was on in each category, kept across a rotation or a process death (WP-75):
+ * Right from a rail item lands there again. Keyed by the page's name; a row the page no longer has
+ * falls back to the nearest one ([SettingsBreadcrumb.jumpTo]).
+ */
+internal class SettingsRowMemory(initial: Map<String, Int> = emptyMap()) {
+    private val rows = HashMap(initial)
+
+    fun get(page: SettingsPage): Int? = rows[page.name]
+
+    fun put(page: SettingsPage, row: Int) {
+        rows[page.name] = row
+    }
+
+    companion object {
+        val Saver = androidx.compose.runtime.saveable.Saver<SettingsRowMemory, List<String>>(
+            save = { memory -> memory.rows.map { "${it.key}=${it.value}" } },
+            restore = { saved ->
+                SettingsRowMemory(
+                    saved.mapNotNull { entry ->
+                        val row = entry.substringAfter('=', "").toIntOrNull() ?: return@mapNotNull null
+                        entry.substringBefore('=') to row
+                    }.toMap(),
+                )
+            },
+        )
+    }
+}
+
+/**
+ * The one-time line under the pane that says the Page and Channel keys jump between sections, only
+ * once such a key has arrived on this device (the registry's device fact, written by the first one
+ * in any long list or here), and only with the remote in the pane.
+ */
+@Composable
+private fun PageKeysHint(settings: SettingsStore, visible: Boolean, modifier: Modifier) {
+    val state by settings.hintState.collectAsState(initial = null)
+    val arrived = state?.seen(HintIds.PAGE_KEY_ARRIVED) == true
+    val label = LocalStrings.current.settingsPageKeysHint
+    val hint: @Composable () -> Unit = {
+        Box(modifier.padding(bottom = 8.dp)) {
+            OneTimeHint(
+                settings = settings,
+                id = HintIds.SETTINGS_PAGE_KEYS,
+                label = label,
+                visible = visible && arrived,
+                style = HintStyle.Bubble,
+            )
+        }
+    }
+    // Under the screen's own slot when it has one, so one hint per visit holds here too.
+    if (LocalHintSlot.current == null) ProvideHintSlot(hint) else hint()
 }
 
 /** Provided by the television's pane: [settingsGroups] rows report their section to it. Null elsewhere. */

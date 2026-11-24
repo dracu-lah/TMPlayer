@@ -587,6 +587,10 @@ fun SettingsScreen(
     val railFocus = remember { SettingsPage.entries.associateWith { FocusRequester() } }
     val tvArrived = remember { BooleanArray(1) }
     val breadcrumb = remember(page) { SettingsBreadcrumb() }
+    // The row the remote was on in each category (WP-75): Right from the rail lands on it again.
+    val rowMemory = rememberSaveable(saver = SettingsRowMemory.Saver) { SettingsRowMemory() }
+    // Whether the next page shown takes the remote to its remembered row rather than its first.
+    var restoreRow by remember { mutableStateOf(false) }
     // Whether the next page shown takes the remote into the pane (a row opened it, a deep link,
     // Right or OK on the rail) or leaves it on the rail (the pane following the rail). A first
     // arrival with a page asked for goes into it; without one the rail has the remote.
@@ -614,6 +618,8 @@ fun SettingsScreen(
     val syncChannelFocus = remember { FocusRequester() }
     // A fresh scroll position for every page opened.
     val pageState = remember(page) { LazyListState() }
+    breadcrumb.state = if (page == null) listState else pageState
+    breadcrumb.onRow = { row -> page?.let { rowMemory.put(it, row) } }
     // A Library row that removes itself hands the remote on in the list it is drawn in: the
     // category list (no page) or the page beside the rail (WP-06, WP-07).
     val handOnFrom: suspend (self: String, next: List<FocusRequester>, above: List<FocusRequester>) -> Unit =
@@ -739,6 +745,12 @@ fun SettingsScreen(
     // handler, so it is asked first.
     BackHandler(enabled = page == null && searchQuery.isNotEmpty()) { searchQuery = "" }
     val seek = remember { SettingsSeek() }
+    // The remote onto the row it was on last in [target], when there is one and the page is not
+    // being opened onto a row of its own (a search hit, a jump from Setup choices).
+    val enterRemembered: suspend (SettingsPage) -> Boolean = { target ->
+        val row = rowMemory.get(target)
+        row != null && seek.titles.isEmpty() && jumpTo == null && breadcrumb.jumpTo(row)
+    }
     val needs = SettingsNeeds(
         vlc = vlcShown,
         pictureInPicture = pipAvailable,
@@ -777,6 +789,8 @@ fun SettingsScreen(
             // The pane following the rail: the remote stays where it is.
             val intoPane = paneEntry
             paneEntry = false
+            val restore = restoreRow
+            restoreRow = false
             if (!intoPane) return@LaunchedEffect
             // A jump from Setup choices lands on its row instead (the effect below).
             if (jumpTo != null && open != SettingsPage.SetupChoices) return@LaunchedEffect
@@ -798,7 +812,8 @@ fun SettingsScreen(
             if (!openerFound) {
                 // A page whose landing row is not there gives the remote back to the rail
                 // rather than to nothing.
-                if (!landing.settle()) railFocus.getValue(open.railItem).settle()
+                val remembered = restore && enterRemembered(open)
+                if (!remembered && !landing.settle()) railFocus.getValue(open.railItem).settle()
                 // Focus asks to be brought into view with room to spare, which can push the
                 // notes at the top out of sight; once it has settled, the page goes back to its top.
                 withFrameNanos { }
@@ -2774,11 +2789,14 @@ fun SettingsScreen(
                 if (page?.railItem != target) {
                     cameFromStep = null
                     returnTo = null
+                    restoreRow = true
                     showPage(target)
                 } else {
                     // A pane scrolled down before Left has disposed its first row: bring the page back to
                     // the top and land there, and only then give up to the rail (F-05, never a dead end).
                     scope.launch {
+                        // The row used last in this category first (WP-75); the first row the first time.
+                        if (enterRemembered(shown)) return@launch
                         if (!landing.settle()) {
                             (if (page == null) listState else pageState).scrollToItem(0)
                             if (!landing.settle()) railFocus.getValue(target).settle()
@@ -2796,6 +2814,7 @@ fun SettingsScreen(
                 }
             },
             landing = landing,
+            hints = settings,
             entry = if (initialPage != null) landing else railFocus.getValue(shown.railItem),
             arrived = tvArrived,
             headerEnd = {

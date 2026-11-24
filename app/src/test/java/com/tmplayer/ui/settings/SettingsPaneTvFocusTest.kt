@@ -11,7 +11,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotSelected
@@ -215,6 +217,82 @@ class SettingsPaneTvFocusTest {
         settle()
         rail(SettingsPage.Playback).assertIsFocused()
         assertEquals("", strip())
+    }
+
+    /** The words of the row the remote is on. */
+    private fun focusedText(): String = rule.onNode(isFocused()).fetchSemanticsNode().config
+        .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString { it.text } ?: ""
+
+    @Test
+    fun `Right from a rail item lands on the row used last in that category (WP-75)`() {
+        show()
+        rail(SettingsPage.Playback).press(Key.DirectionRight)
+        settle()
+        val first = focusedText()
+        repeat(3) { rule.onNode(isFocused()).press(Key.DirectionDown) }
+        settle()
+        val fourth = focusedText()
+        assertTrue("three Down moved off the first row", fourth != first)
+        // Left, over to Subtitles and audio (the pane follows), in, and back out.
+        rule.onNode(isFocused()).press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Playback).assertIsFocused()
+        rail(SettingsPage.Playback).press(Key.DirectionDown)
+        settle()
+        rail(SettingsPage.Subtitles).press(Key.DirectionRight)
+        settle()
+        val subtitlesFirst = focusedText()
+        rule.onNode(isFocused()).press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Subtitles).press(Key.DirectionUp)
+        settle()
+        rail(SettingsPage.Playback).assertIsFocused()
+        // The first time into a category is its first row; the second time, the row left on.
+        rail(SettingsPage.Playback).press(Key.DirectionRight)
+        settle()
+        assertEquals(fourth, focusedText())
+        // Subtitles and audio, once more: the row it was left on, which was its first.
+        rule.onNode(isFocused()).press(Key.DirectionLeft)
+        settle()
+        rail(SettingsPage.Playback).press(Key.DirectionDown)
+        settle()
+        rail(SettingsPage.Subtitles).press(Key.DirectionRight)
+        settle()
+        assertEquals(subtitlesFirst, focusedText())
+    }
+
+    @Test
+    fun `Page Down jumps to the first row of the next section, Page Up back, and the hint waits for a Page key (WP-75)`() {
+        show()
+        val hint = "Page or Channel keys jump between sections"
+        rail(SettingsPage.Playback).press(Key.DirectionDown)
+        settle()
+        rail(SettingsPage.Subtitles).press(Key.DirectionRight)
+        settle()
+        val first = focusedText()
+        val firstSection = crumb()
+        rule.onAllNodesWithText(hint).assertCountEquals(0)
+        rule.onNode(isFocused()).press(Key.PageDown)
+        settle()
+        val second = focusedText()
+        assertTrue("Page Down moved the remote to another section's first row", second != first)
+        assertTrue("it is in another section: ${crumb()} after $firstSection", crumb() != firstSection)
+        // The key having arrived, the hint is allowed: once, in the pane.
+        rule.onAllNodesWithText(hint).assertCountEquals(1)
+        // Down one row and Page Up: this section's first row, which is where Page Down put the remote.
+        rule.onNode(isFocused()).press(Key.DirectionDown)
+        settle()
+        rule.onNode(isFocused()).press(Key.PageUp)
+        settle()
+        assertEquals(second, focusedText())
+        // Once more: the section before, whose first row is the page's first.
+        rule.onNode(isFocused()).press(Key.PageUp)
+        settle()
+        assertEquals(first, focusedText())
+        // Channel Down and Fast forward do the same as Page Down.
+        rule.onNode(isFocused()).press(Key.ChannelDown)
+        settle()
+        assertEquals(second, focusedText())
     }
 
     @Test
