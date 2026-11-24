@@ -65,7 +65,9 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -666,7 +668,7 @@ private fun MicOrb(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 .size(64.dp)
                 .clip(CircleShape)
                 .background(fill)
-                .clickable(interactionSource = interactions, indication = null, onClick = onClick),
+                .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(TmIcons.Mic, contentDescription = s.browseSearchByVoice, tint = if (focused) Tone.onFocusFill else Tone.text, modifier = Modifier.size(30.dp))
@@ -706,7 +708,9 @@ private fun TvPill(label: String, icon: ImageVector?, chosen: Boolean = false, p
             .height(48.dp)
             .clip(CircleShape)
             .background(fill)
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
+            // A filter that is on says so to a screen reader, not by its fill alone (WP-90).
+            .semantics { if (chosen && !plain) selected = true }
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -725,7 +729,7 @@ private fun ChatCard(chat: ChatSummary, reduced: Boolean, onClick: () -> Unit) {
     Column(
         Modifier
             .width(112.dp)
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

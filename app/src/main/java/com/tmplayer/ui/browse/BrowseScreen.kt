@@ -64,6 +64,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.traversalIndex
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Focus
 import com.tmplayer.data.SettingsStore
@@ -1166,6 +1168,8 @@ internal fun BrowseScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(top = if (underBar) 0.dp else TV_BAR_HEIGHT, end = if (homeShown) 0.dp else Tv.SafeH)
+                    // The bar is read first, then this page as one group (WP-90).
+                    .semantics { isTraversalGroup = true; traversalIndex = 0f }
                     // A held arrow from a header pill or a row would run down the whole page otherwise.
                     .dropStaleArrowRepeats()
                     // Up from Home's top row to the bar brings Home back to its top, the carousel whole.

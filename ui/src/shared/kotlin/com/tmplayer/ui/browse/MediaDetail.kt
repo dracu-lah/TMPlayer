@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -534,7 +535,15 @@ internal fun DetailFacts(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .then(if (remote) Modifier.focusRing(focused, shape).focusable(interactionSource = interactions) else Modifier)
+            .then(
+                if (remote) {
+                    // Read as one block by a screen reader: every fact and the synopsis in order (WP-90).
+                    Modifier.semantics(mergeDescendants = true) { role = Role.Button }
+                        .focusRing(focused, shape).focusable(interactionSource = interactions)
+                } else {
+                    Modifier
+                },
+            )
             .background(if (focused) Tone.surfaceHigh else Color.Transparent)
             .padding(vertical = 8.dp, horizontal = if (remote) 8.dp else 0.dp),
         verticalArrangement = Arrangement.spacedBy(if (large) 8.dp else 6.dp),

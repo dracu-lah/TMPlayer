@@ -63,7 +63,9 @@ fun Modifier.holdable(
     val held = remember { booleanArrayOf(false) }
 
     return this
-        .semantics {
+        // Merged (WP-90): a screen reader names the tile by what is in it (title, facts, progress),
+        // not as an empty button.
+        .semantics(mergeDescendants = true) {
             role = Role.Button
             onClick { onClick(); true }
             onLongClick { onHold(); true }

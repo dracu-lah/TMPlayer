@@ -43,6 +43,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -125,6 +126,8 @@ fun TvSearchField(
             .clickable(
                 interactionSource = interactions,
                 indication = null,
+                // A role for a screen reader (WP-90): the box opens the field, as a button does.
+                role = Role.Button,
             ) { editing = true }
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -83,7 +83,7 @@ export function Choices<T extends string | number>(props: { label: string; name:
             <For each={props.options}>
                 {(o) => (
                     <label classList={{ on: props.value === o.value }}>
-                        <input type="radio" name={props.name} checked={props.value === o.value} onChange={() => props.onPick(o.value)} />
+                        <input type="radio" name={props.name} aria-label={o.label} checked={props.value === o.value} onChange={() => props.onPick(o.value)} />
                         {o.label}
                     </label>
                 )}

@@ -66,7 +66,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -223,6 +225,8 @@ internal fun TvTopBar(
 
     Box(
         modifier
+            // A screen reader reads the bar first, then the page (WP-90): the page runs up under the bar on Home.
+            .semantics { isTraversalGroup = true; traversalIndex = -1f }
             .fillMaxWidth()
             .height(TV_BAR_HEIGHT)
             // Every other page starts below the bar and is clipped there; only Home runs up under
