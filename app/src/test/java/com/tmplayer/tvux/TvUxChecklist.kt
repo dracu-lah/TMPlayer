@@ -575,8 +575,10 @@ class TvUxChecklist(
                 current(node)?.let { if (!focus(it)) skipped += "${nameOf(it)}: refused the focus back after the neutral frame" }
             }
             if (skip == null) takeNeutral()
-            // A pinned header (Settings' breadcrumb) changes with the section the focus is in: no growth of the row.
-            val pinned = nodes(merged = false).filter { it.config.getOrNull(SemanticsProperties.TestTag) == com.tmplayer.ui.settings.SETTINGS_HEADER_TAG }.map { layoutRect(it) }
+            // A pinned header (Settings' breadcrumb) changes with the section the focus is in, and the detail strip
+            // under the pane (WP-74) says the focused row's sentence: neither is growth of the row.
+            val pinnedTags = setOf(com.tmplayer.ui.settings.SETTINGS_HEADER_TAG, com.tmplayer.ui.settings.SETTINGS_DETAIL_TAG)
+            val pinned = nodes(merged = false).filter { it.config.getOrNull(SemanticsProperties.TestTag) in pinnedTags }.map { layoutRect(it) }
             fun growthChecks() {
                 val drawn = drawnChange(baseline, focusedFrame, region, skipNow, pinned)
                 if (drawn != null) {
