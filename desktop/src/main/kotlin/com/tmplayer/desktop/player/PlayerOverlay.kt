@@ -570,22 +570,19 @@ internal fun BoxScope.PlayerOverlay(
                 )
             }
 
-            // Centre cluster.
-            Row(
-                Modifier.align(Alignment.Center).hoverReport(onHoverControls),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val previous = episodes.previous
-                val next = episodes.next
-                if (previous != null) {
-                    OverlayButton(TmIcons.SkipPrevious, s.playerPreviousEpisodeHint(s.playerPreviousUp(episodes.labelFor(previous))), { onEpisode(previous) }, size = 56, tonal = true)
-                }
-                PlayPauseButton(status, onTogglePlay)
-                if (next != null) {
-                    OverlayButton(TmIcons.SkipNext, s.playerNextEpisodeHint(s.playerNextUp(episodes.labelFor(next))), { onEpisode(next) }, size = 56, tonal = true)
-                }
-            }
+            // Centre cluster: five fixed slots, Play and Pause always on the middle of the picture.
+            val previous = episodes.previous
+            val next = episodes.next
+            PlayerTransport(
+                status = status,
+                previousHint = previous?.let { s.playerPreviousEpisodeHint(s.playerPreviousUp(episodes.labelFor(it))) },
+                nextHint = next?.let { s.playerNextEpisodeHint(s.playerNextUp(episodes.labelFor(it))) },
+                onPrevious = { previous?.let(onEpisode) },
+                onNext = { next?.let(onEpisode) },
+                onSkip = { deltaMs -> onMenuAction(MenuAction.Do(PlayerAction.SeekBy(deltaMs))) },
+                onTogglePlay = onTogglePlay,
+                modifier = Modifier.align(Alignment.Center).hoverReport(onHoverControls),
+            )
 
             // Bottom: times, bar, button row.
             Column(
@@ -2063,6 +2060,103 @@ internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, w
 
 /** The command key as this OS spells it in a hint: Cmd on a Mac, where [PlayerKeys] reads Cmd, Ctrl elsewhere. */
 private fun commandKey(s: Strings): String = if (OsInfo.isMac) s.keysCmd else s.keysCtrl
+
+/**
+ * The centre transport: [Previous episode] [Back 10] [Play or Pause] [Forward 10] [Next episode],
+ * five slots of fixed size, so Play and Pause stand on the middle of the picture whatever is
+ * missing: the first episode has no Previous, the last no Next, a single video neither, and each
+ * keeps its slot (empty: nothing to focus, nothing for a screen reader) rather than letting the
+ * row shrink and push Play off the middle. The skips take [PlayerKeys.SEEK_MEDIUM_MS], J and L.
+ */
+@Composable
+internal fun PlayerTransport(
+    status: PlaybackStatus,
+    previousHint: String?,
+    nextHint: String?,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onSkip: (Long) -> Unit,
+    onTogglePlay: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val s = LocalStrings.current
+    val step = PlayerKeys.SEEK_MEDIUM_MS
+    val seconds = (step / 1000).toInt()
+    Row(
+        modifier.testTag("transport"),
+        horizontalArrangement = Arrangement.spacedBy(TRANSPORT_GAP),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TransportSlot(previousHint != null) {
+            OverlayButton(TmIcons.SkipPrevious, previousHint.orEmpty(), onPrevious, size = TRANSPORT_SIDE, tonal = true, modifier = Modifier.testTag("previous-episode"))
+        }
+        SkipButton(forward = false, label = "${s.notifySeekBack(seconds)} (J)", seconds = seconds, modifier = Modifier.testTag("skip-back")) { onSkip(-step) }
+        PlayPauseButton(status, onTogglePlay)
+        SkipButton(forward = true, label = "${s.notifySeekForward(seconds)} (L)", seconds = seconds, modifier = Modifier.testTag("skip-forward")) { onSkip(step) }
+        TransportSlot(nextHint != null) {
+            OverlayButton(TmIcons.SkipNext, nextHint.orEmpty(), onNext, size = TRANSPORT_SIDE, tonal = true, modifier = Modifier.testTag("next-episode"))
+        }
+    }
+}
+
+/** One side slot of the transport: [content] when there is one, else the same room left empty. */
+@Composable
+private fun TransportSlot(present: Boolean, content: @Composable () -> Unit) {
+    Box(Modifier.size(TRANSPORT_SIDE.dp), contentAlignment = Alignment.Center) {
+        if (present) content()
+    }
+}
+
+/** A skip button: the arrow, the step in seconds under it, on the tonal disc like its neighbours. */
+@Composable
+private fun SkipButton(forward: Boolean, label: String, seconds: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+    Tip(label) {
+        Box(
+            modifier.size(TRANSPORT_SIDE.dp).clip(CircleShape)
+                .background(PlayerTonalButton)
+                .background(if (hovered) OverlayHover else Color.Transparent)
+                .overlayFocusRing(hover, CircleShape)
+                .hoverable(hover)
+                .clickable(interactionSource = hover, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // A round arrow turning back (or on), as every player draws its skip, with the step inside it.
+                androidx.compose.foundation.Canvas(Modifier.size(30.dp).graphicsLayer { scaleX = if (forward) -1f else 1f }) {
+                    val stroke = 2.dp.toPx()
+                    val r = size.minDimension / 2 - stroke - 1.dp.toPx()
+                    val c = center
+                    drawArc(
+                        Color.White, startAngle = -80f, sweepAngle = 320f, useCenter = false,
+                        topLeft = androidx.compose.ui.geometry.Offset(c.x - r, c.y - r),
+                        size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                    )
+                    // The head at the start of the arc, pointing the way it turns back.
+                    val a = Math.toRadians(-80.0)
+                    val tip = androidx.compose.ui.geometry.Offset(c.x + r * kotlin.math.cos(a).toFloat(), c.y + r * kotlin.math.sin(a).toFloat())
+                    val dir = androidx.compose.ui.geometry.Offset(kotlin.math.sin(a).toFloat(), -kotlin.math.cos(a).toFloat())
+                    val head = 5.dp.toPx()
+                    fun wing(deg: Double): androidx.compose.ui.geometry.Offset {
+                        val back = Math.atan2((-dir.y).toDouble(), (-dir.x).toDouble()) + Math.toRadians(deg)
+                        return androidx.compose.ui.geometry.Offset(tip.x + head * kotlin.math.cos(back).toFloat(), tip.y + head * kotlin.math.sin(back).toFloat())
+                    }
+                    for (w in listOf(wing(38.0), wing(-38.0))) {
+                        drawLine(Color.White, tip, w, strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    }
+                }
+                Text(seconds.toString(), color = Color.White, fontSize = 11.sp, lineHeight = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/** The transport's side buttons, in dp, and the gap between the five slots. */
+internal const val TRANSPORT_SIDE = 56
+private val TRANSPORT_GAP = 16.dp
 
 /**
  * The centre play and pause button. Its own change is the only answer to a pause or a resume:
