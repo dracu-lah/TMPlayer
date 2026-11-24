@@ -25,7 +25,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,12 +42,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import com.tmplayer.ui.i18n.LocalStrings
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
+import kotlinx.coroutines.delay
 
 /**
  * The sweep that every placeholder in one screen shares.
@@ -78,6 +89,45 @@ class Shimmer internal constructor(
             end = Offset(x + width, 0f),
         )
     }
+}
+
+/**
+ * What the placeholders under this point stand for ("Loading your chats…"): the scaffold that draws
+ * them ([UiState.Loading.label]) provides it, so each skeleton says what loads without every caller
+ * passing the words down. Null where nothing provides it; a skeleton then says the generic "Loading…".
+ */
+val LocalSkeletonLabel = compositionLocalOf<String?> { null }
+
+/**
+ * Makes a skeleton one thing a screen reader finds: [label] as its description and an indeterminate
+ * progress bar, so TalkBack and VoiceOver say what loads instead of walking over grey boxes.
+ */
+fun Modifier.skeletonSemantics(label: String): Modifier = semantics(mergeDescendants = true) {
+    contentDescription = label
+    progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+}
+
+/** An indeterminate progress bar for a screen reader, for a hand-drawn spinner (Material's own already has it). */
+fun Modifier.progressSemantics(): Modifier = semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
+
+/** [label] where a caller gave one, else what the scaffold above provides, else the generic word. */
+@Composable
+fun rememberSkeletonLabel(label: String? = null): String =
+    label ?: LocalSkeletonLabel.current ?: LocalStrings.current.commonLoading
+
+/**
+ * True once a skeleton for [key] has been up for [WorkLadder.LABEL_AFTER_MS] (one second), the
+ * moment its words are drawn: an answer faster than that needs none. One delayed effect per wait,
+ * restarted by a new [key]; nothing runs after it.
+ */
+@Composable
+fun rememberSkeletonLabelDue(key: Any?): Boolean {
+    var due by remember(key) { mutableStateOf(false) }
+    LaunchedEffect(key) {
+        delay(WorkLadder.LABEL_AFTER_MS)
+        due = true
+    }
+    return due
 }
 
 /**
@@ -146,11 +196,14 @@ fun ChatListSkeleton(
     modifier: Modifier = Modifier,
     /** Rows side by side: two on a television, whose list is two columns. */
     columns: Int = 1,
+    /** What loads, for a screen reader; the scaffold's own label where null (see [LocalSkeletonLabel]). */
+    label: String? = null,
 ) {
     val shimmer = rememberShimmer()
     val touch = isTouch()
+    val words = rememberSkeletonLabel(label)
 
-    BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds().skeletonSemantics(words)) {
         val start = if (touch) TOUCH_INSET else 28.dp
         val end = if (touch) TOUCH_INSET else 4.dp
         val top = if (touch) TOUCH_TOP else Tv.SafeV
@@ -228,11 +281,12 @@ fun ChatListSkeleton(
  * be given.
  */
 @Composable
-fun MediaGridSkeleton(modifier: Modifier = Modifier) {
+fun MediaGridSkeleton(modifier: Modifier = Modifier, label: String? = null) {
     val shimmer = rememberShimmer()
     val touch = isTouch()
+    val words = rememberSkeletonLabel(label)
 
-    BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds().skeletonSemantics(words)) {
         val edge = if (touch) TOUCH_INSET else Tv.SafeH
         // Carried in for the same reason: the nested lambdas cannot see the box's own scope.
         val inner = maxWidth - edge * 2
@@ -277,9 +331,16 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier) {
  * floated over the last row (user, 2026-10-23). [columns] and [gap] are the grid's own.
  */
 @Composable
-fun MediaGridSkeletonRow(columns: Int, gap: androidx.compose.ui.unit.Dp, dense: Boolean, modifier: Modifier = Modifier) {
+fun MediaGridSkeletonRow(
+    columns: Int,
+    gap: androidx.compose.ui.unit.Dp,
+    dense: Boolean,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+) {
     val shimmer = rememberShimmer()
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+    val words = rememberSkeletonLabel(label)
+    Row(modifier.fillMaxWidth().skeletonSemantics(words), horizontalArrangement = Arrangement.spacedBy(gap)) {
         repeat(columns.coerceAtLeast(1)) {
             if (dense) DenseTileSkeleton(shimmer, Modifier.weight(1f)) else MediaTileSkeleton(shimmer, Modifier.weight(1f))
         }

@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.Shimmer
 import com.tmplayer.ui.components.SkeletonBox
 import com.tmplayer.ui.components.rememberShimmer
+import com.tmplayer.ui.components.rememberSkeletonLabel
+import com.tmplayer.ui.components.skeletonSemantics
 import com.tmplayer.ui.theme.Avatar
 
 /**
@@ -68,15 +70,18 @@ internal fun VideoGridSkeleton(
     modifier: Modifier = Modifier,
     /** False for cards that write their name on the art (Continue watching): the facts line only. */
     nameBelow: Boolean = true,
+    /** What loads, for a screen reader; the page's own label (StateBox) where null. */
+    label: String? = null,
 ) {
     val shimmer = rememberShimmer()
+    val words = rememberSkeletonLabel(label)
     LazyVerticalGrid(
         columns = GridCells.Adaptive(cellWidth),
         contentPadding = PaddingValues(start = 24.dp, end = 32.dp, top = 8.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         userScrollEnabled = false,
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().skeletonSemantics(words),
     ) {
         items(SKELETON_CARDS) { index -> PosterSkeleton(shimmer, posters, index, nameBelow) }
     }
@@ -108,11 +113,12 @@ internal fun PosterSkeleton(shimmer: Shimmer, poster: Boolean, index: Int = 0, n
  * chat under it, with the star button's room at the end.
  */
 @Composable
-internal fun ChatListSkeleton(modifier: Modifier = Modifier) {
+internal fun ChatListSkeleton(modifier: Modifier = Modifier, label: String? = null) {
     val shimmer = rememberShimmer()
     val type = MaterialTheme.typography
+    val words = rememberSkeletonLabel(label)
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(end = 12.dp),
+        modifier = modifier.fillMaxSize().skeletonSemantics(words).padding(end = 12.dp),
         contentPadding = PaddingValues(horizontal = pageMargin() - 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
         userScrollEnabled = false,
@@ -137,10 +143,11 @@ internal fun ChatListSkeleton(modifier: Modifier = Modifier) {
 
 /** Two [ChatListSkeleton] rows, at the chat list's foot while its older chats are read. */
 @Composable
-internal fun MoreChatsSkeleton() {
+internal fun MoreChatsSkeleton(label: String? = null) {
     val shimmer = rememberShimmer()
     val type = MaterialTheme.typography
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    val words = rememberSkeletonLabel(label)
+    Column(Modifier.skeletonSemantics(words), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         repeat(2) { index ->
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -160,9 +167,10 @@ internal fun MoreChatsSkeleton() {
 
 /** The page header's line under the title while what it counts is still loading. */
 @Composable
-internal fun SubtitleSkeleton(modifier: Modifier = Modifier) {
+internal fun SubtitleSkeleton(modifier: Modifier = Modifier, label: String? = null) {
     val shimmer = rememberShimmer()
-    SkeletonText(shimmer, MaterialTheme.typography.bodyMedium, modifier.width(96.dp))
+    val words = rememberSkeletonLabel(label)
+    SkeletonText(shimmer, MaterialTheme.typography.bodyMedium, modifier.width(96.dp).skeletonSemantics(words))
 }
 
 /** Enough to fill a tall window; the grid draws only the ones that are in sight. */

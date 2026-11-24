@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import com.tmplayer.data.NameInitial
 import com.tmplayer.ui.theme.trackedFor
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,7 +65,10 @@ import com.tmplayer.ui.components.EmptyArt
 import com.tmplayer.ui.components.MediaArt
 import com.tmplayer.ui.components.NameArt
 import com.tmplayer.ui.components.NameArtTile
+import com.tmplayer.ui.components.LocalSkeletonLabel
 import com.tmplayer.ui.components.SlowAnswer
+import com.tmplayer.ui.components.liveMessage
+import com.tmplayer.ui.components.rememberSkeletonLabelDue
 import com.tmplayer.ui.components.StateAction
 import com.tmplayer.ui.components.UiState
 import androidx.compose.material3.SuggestionChip
@@ -95,8 +99,29 @@ fun <T> StateBox(
     when (state) {
         is UiState.Content -> content(state.value)
         is UiState.Loading -> if (skeleton != null) {
-            Box(Modifier.fillMaxSize()) {
-                skeleton()
+            // From a second on, one line says what loads, a third of the way down (below the first
+            // row); the skeleton itself says it to a screen reader (LocalSkeletonLabel).
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val labelTop = maxHeight / 3
+                CompositionLocalProvider(LocalSkeletonLabel provides state.label) { skeleton() }
+                if (rememberSkeletonLabelDue(state)) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = Tone.surfaceHigh,
+                        tonalElevation = 2.dp,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = labelTop, start = 24.dp, end = 24.dp).widthIn(max = 520.dp),
+                    ) {
+                        Text(
+                            state.label,
+                            color = Tone.muted,
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp).liveMessage(),
+                        )
+                    }
+                }
                 Column(
                     Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = footClearance(24.dp)).widthIn(max = 480.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,

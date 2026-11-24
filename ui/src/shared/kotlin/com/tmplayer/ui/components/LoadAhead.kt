@@ -118,7 +118,8 @@ fun PageFoot(
                 failure,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
-                modifier = Modifier.weight(1f, fill = false),
+                // Spoken as it appears: a next page that failed is otherwise silent to a screen reader.
+                modifier = Modifier.weight(1f, fill = false).liveMessage(),
             )
             OutlinedButton(onClick = onRetry) { Text(LocalStrings.current.commonTryAgain) }
         }

@@ -77,9 +77,16 @@ fun <T> StateScaffold(
     when (state) {
         is UiState.Loading -> if (loading != null) {
             // The skeleton keeps its shape; the slow line floats over its lower half, where the
-            // remote can reach it without the outline of the listing jumping about.
-            Box(Modifier.fillMaxSize()) {
-                loading()
+            // remote can reach it without the outline of the listing jumping about. From a second
+            // on, one line says what loads, a third of the way down: below the first row, so no
+            // row is hidden, and on a television, where the skeleton stands still, it is what
+            // tells a stalled page from one that is on its way.
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val labelTop = maxHeight / 3
+                androidx.compose.runtime.CompositionLocalProvider(LocalSkeletonLabel provides state.label) { loading() }
+                if (rememberSkeletonLabelDue(state)) {
+                    SkeletonLabel(state.label, Modifier.align(Alignment.TopCenter).padding(top = labelTop))
+                }
                 Column(
                     Modifier
                         .align(Alignment.BottomCenter)
@@ -171,6 +178,31 @@ private fun StatePage(touch: Boolean, content: @Composable () -> Unit) {
             Modifier.fillMaxSize().then(scroll).padding(horizontal = if (touch) PhonePad.Side else 72.dp),
             contentAlignment = Alignment.Center,
         ) { content() }
+    }
+}
+
+/**
+ * What a skeleton stands for, as one muted line on the raised surface the slow notice uses, spoken
+ * once as it appears ([liveMessage]). Takes no focus.
+ */
+@Composable
+fun SkeletonLabel(label: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .padding(horizontal = 24.dp)
+            .widthIn(max = 520.dp)
+            .floatingSurface()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Tone.muted,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.liveMessage(),
+        )
     }
 }
 
@@ -269,6 +301,21 @@ fun Spinner(size: Dp = 56.dp, color: Color = Color.Unspecified, strokeWidth: Dp 
         return
     }
 
+    // Reduce motion: the arc stands still, three quarters round, and the label under it carries
+    // the state. No infinite transition, so nothing repaints while the page waits.
+    if (rememberLessMotion()) {
+        Canvas(Modifier.size(size).progressSemantics()) {
+            drawArc(
+                color = color,
+                startAngle = STILL_START,
+                sweepAngle = STILL_SWEEP,
+                useCenter = false,
+                style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round),
+            )
+        }
+        return
+    }
+
     val transition = rememberInfiniteTransition(label = "spinner")
 
     val rotation by transition.animateFloat(
@@ -302,7 +349,7 @@ fun Spinner(size: Dp = 56.dp, color: Color = Color.Unspecified, strokeWidth: Dp 
         label = "tail",
     )
 
-    Canvas(Modifier.size(size)) {
+    Canvas(Modifier.size(size).progressSemantics()) {
         val start = rotation + tail * MAX_SWEEP
         val sweep = (head - tail) * MAX_SWEEP
         drawArc(
@@ -319,6 +366,10 @@ private const val ROTATION_MS = 1_332
 private const val SWEEP_MS = 1_332
 private const val MAX_SWEEP = 300f
 private const val MIN_SWEEP = 12f
+
+/** The still arc under Reduce motion: from twelve o'clock, 270 degrees round. */
+private const val STILL_START = -90f
+private const val STILL_SWEEP = 270f
 
 /**
  * A calm, final statement. No Retry button, because there is nothing to retry.
