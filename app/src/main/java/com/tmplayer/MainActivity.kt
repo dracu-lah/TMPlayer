@@ -1,5 +1,6 @@
 package com.tmplayer
 
+import com.tmplayer.ui.components.ToastKind
 import com.tmplayer.ui.components.TopMessageHost
 import androidx.compose.ui.zIndex
 import android.annotation.SuppressLint
@@ -933,7 +934,7 @@ private fun Root() {
     LaunchedEffect(inShell) {
         if (!inShell) return@LaunchedEffect
         val updated = runCatching { com.tmplayer.data.AfterUpdate.onLaunch(context) }.getOrNull() ?: return@LaunchedEffect
-        toast(com.tmplayer.i18n.L.updateUpdatedTo(version = updated))
+        toast(com.tmplayer.i18n.L.updateUpdatedTo(version = updated), ToastKind.Success)
     }
     var changelogQr by remember { mutableStateOf(false) }
 
@@ -1017,7 +1018,7 @@ private fun Root() {
     // A download finishing, said in the window too. A television shows apps like this one no
     // notification shade, so without this the end of a download would pass unremarked there.
     LaunchedEffect(Unit) {
-        AndroidTransferNotifier.completions.collect { title -> toast(s.mainDownloaded(title = title)) }
+        AndroidTransferNotifier.completions.collect { title -> toast(s.mainDownloaded(title = title), ToastKind.Success) }
     }
 
     // Half-watched entries that can no longer be turned into a card are swept once per launch.
@@ -3119,7 +3120,7 @@ private fun DeviceStruggleHint(settings: SettingsStore, inShell: Boolean) {
                 settings.markDeviceHintShown()
             }
         }
-        if (apply) toast(L.deviceApplied)
+        if (apply) toast(L.deviceApplied, ToastKind.Success)
     }
     val context = LocalContext.current
     if (FormFactor.isTv(context)) {

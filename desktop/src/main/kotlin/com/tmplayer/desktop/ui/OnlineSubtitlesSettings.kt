@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
@@ -117,7 +118,7 @@ internal fun OnlineSubtitlesGroup() {
                 scope.launch {
                     withContext(Dispatchers.IO) { online.purge() }
                     bytes = 0
-                    toast(s.onlineCacheCleared)
+                    toast(s.onlineCacheCleared, ToastKind.Success)
                 }
             },
         )
@@ -302,7 +303,7 @@ internal fun SubMakerDialog(onClose: () -> Unit) {
                 onClose()
             }
             OnlineSubtitles.SubMakerSet.Saved -> {
-                toast(s.submakerSettingsSaved)
+                toast(s.submakerSettingsSaved, ToastKind.Success)
                 onClose()
                 scope.launch {
                     val problem = online.checkSubMaker()

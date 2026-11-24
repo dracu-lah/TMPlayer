@@ -91,6 +91,7 @@ import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.HistoryTab
 import com.tmplayer.ui.browse.onChatsPage
 import com.tmplayer.ui.components.LocalBottomChrome
+import com.tmplayer.ui.components.toastFloor
 import com.tmplayer.ui.components.captionStyle
 import com.tmplayer.ui.components.pressScale
 import com.tmplayer.ui.i18n.LocalStrings
@@ -164,7 +165,8 @@ fun NavFrame(
                         state,
                         update,
                         account,
-                        Modifier.align(Alignment.BottomCenter),
+                        // The bar tells toasts where its top edge is, so they stand above it.
+                        Modifier.align(Alignment.BottomCenter).toastFloor(),
                         onPicturePlaced = { pictureX = it },
                         profile = profileList?.active,
                         accountFocus = accountFocus,

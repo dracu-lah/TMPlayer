@@ -111,6 +111,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.Account
 import com.tmplayer.ui.components.FloatingChrome
 import com.tmplayer.ui.components.LocalBottomChrome
+import com.tmplayer.ui.components.toastFloor
 import androidx.compose.ui.platform.testTag
 import com.tmplayer.ui.components.captionStyle
 import com.tmplayer.ui.components.scrimDismiss
@@ -465,7 +466,8 @@ internal fun TouchNavHost(
                     if (rail) {
                         barContent()
                     } else {
-                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                        // The bar (and the page's pill over it) tells toasts where its top edge is, so they stand above it.
+                        Column(Modifier.fillMaxWidth().toastFloor(), horizontalAlignment = Alignment.End) {
                             // The page's own buttons: a small pill at the end, over the bar, so the
                             // top of the screen holds nothing to press.
                             shown.actions?.let { actions -> ActionsPill(actions, Modifier.padding(end = 16.dp, bottom = BAR_GAP)) }
@@ -506,7 +508,7 @@ internal fun TouchNavHost(
                     exit = fadeOut(Motion.standard(if (reduced) 0 else Motion.Fast)),
                 ) {
                     val bannerDensity = LocalDensity.current
-                    Box(Modifier.onSizeChanged { bannerHeight = with(bannerDensity) { it.height.toDp() } }) { banner() }
+                    Box(Modifier.toastFloor().onSizeChanged { bannerHeight = with(bannerDensity) { it.height.toDp() } }) { banner() }
                 }
 
                 YouPopover(

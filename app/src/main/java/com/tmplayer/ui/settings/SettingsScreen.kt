@@ -1,5 +1,6 @@
 package com.tmplayer.ui.settings
 
+import com.tmplayer.ui.components.ToastKind
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.SettingsGroup
 import com.tmplayer.data.SettingsNeed
@@ -659,7 +660,7 @@ fun SettingsScreen(
         val clear = {
             historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
             // What was cleared lives on History, not here, so the line is the only sign.
-            toast(s.browseHistoryCleared)
+            toast(s.browseHistoryCleared, ToastKind.Success)
         }
         // The row goes with the lists: the remote moves on first, to the posters switch under it, or up.
         if (remoteHere) {
@@ -1774,7 +1775,7 @@ fun SettingsScreen(
                                     // The remote moves to Remember searches under it before the row goes.
                                     if (remoteHere) handOnFrom("forget_last_chat", listOf(rememberSearchesRow, chooseChatsRow), emptyList())
                                     settings.forgetLastChat()
-                                    toast(s.settingsForgotLastChat)
+                                    toast(s.settingsForgotLastChat, ToastKind.Success)
                                 }
                             },
                         )
@@ -2780,7 +2781,7 @@ fun SettingsScreen(
                         close()
                         scope.launch {
                             settings.removePin()
-                            toast(s.lockPinRemovedToast)
+                            toast(s.lockPinRemovedToast, ToastKind.Success)
                         }
                     }
                     PinFlow.Set, PinFlow.ChangeChoose, PinFlow.SetForKids -> {
@@ -2791,7 +2792,7 @@ fun SettingsScreen(
                                 settings.setKidsLock(true)
                                 if (appLock.kidsChats.isEmpty()) pickingKidsChats = true
                             }
-                            toast(s.lockPinSetToast)
+                            toast(s.lockPinSetToast, ToastKind.Success)
                         }
                     }
                 }
@@ -3040,7 +3041,7 @@ fun SettingsScreen(
                 askForgetAllLearnt = false
                 scope.launch {
                     settings.forgetAllLearntLanguages()
-                    toast(s.settingsLearntLanguagesForgetAllDone)
+                    toast(s.settingsLearntLanguagesForgetAllDone, ToastKind.Success)
                 }
             },
             onDismiss = { askForgetAllLearnt = false },
@@ -3134,7 +3135,7 @@ fun SettingsScreen(
                     val deleted = withContext(kotlinx.coroutines.NonCancellable) {
                         runCatching { com.tmplayer.data.ResumeSync.turnOffAndDelete(settings) }.getOrDefault(false)
                     }
-                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed)
+                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed, if (deleted) ToastKind.Success else ToastKind.Error)
                 }
             },
             onDismiss = { prompt = null },
@@ -3166,7 +3167,7 @@ fun SettingsScreen(
                     // under it, or the posters switch, or up to Choose chats.
                     if (remoteHere) handOnFrom("clear_favourites", listOf(clearHistoryRow, postersRow), listOf(chooseChatsRow))
                     settings.clearFavorites(allowedChats)
-                    toast(s.settingsFavouritesCleared(count))
+                    toast(s.settingsFavouritesCleared(count), ToastKind.Success)
                 }
             },
             onDismiss = { prompt = null },

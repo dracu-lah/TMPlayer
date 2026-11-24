@@ -1,5 +1,6 @@
 package com.tmplayer.ui.downloads
 
+import com.tmplayer.ui.components.ToastKind
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
 import com.tmplayer.ui.components.PageTiles
@@ -430,7 +431,7 @@ fun DownloadsScreen(
     }
     val openDownloadsFolder: (() -> Unit)? = downloadsFolder?.let { tree ->
         {
-            if (!com.tmplayer.data.OpenDownloadsFolder.open(context, tree)) toast(L.downloadsOpenFolderFailed)
+            if (!com.tmplayer.data.OpenDownloadsFolder.open(context, tree)) toast(L.downloadsOpenFolderFailed, ToastKind.Error)
         }
     }
     var explainingNoFolder by remember { mutableStateOf(false) }
@@ -621,7 +622,7 @@ fun DownloadsScreen(
                 return@launch
             }
             runCatching { context.startActivity(intent) }
-                .onFailure { toast(L.downloadsNoShareApp) }
+                .onFailure { toast(L.downloadsNoShareApp, ToastKind.Error) }
             leavePicking()
         }
     }
@@ -799,7 +800,7 @@ fun DownloadsScreen(
 
     fun delete(row: DownloadRow, done: () -> Unit = {}) {
         scope.launch {
-            if (!removeOne(row)) toast(L.downloadsDeleteFailed(file = row.title))
+            if (!removeOne(row)) toast(L.downloadsDeleteFailed(file = row.title), ToastKind.Error)
             refresh(history)
             done()
         }
@@ -929,7 +930,7 @@ fun DownloadsScreen(
     fun deleteMany(these: List<DownloadRow>) {
         scope.launch {
             val stuck = these.filterNot { removeOne(it) }
-            stuck.firstOrNull()?.let { toast(L.downloadsDeleteFailed(file = it.title)) }
+            stuck.firstOrNull()?.let { toast(L.downloadsDeleteFailed(file = it.title), ToastKind.Error) }
             leavePicking()
             refresh(history)
         }

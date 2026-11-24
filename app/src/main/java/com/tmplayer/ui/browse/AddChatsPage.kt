@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
@@ -32,7 +33,7 @@ internal fun AddChatsPage(
     // "3 chats added", as the picker closes: the viewer sees the save was heard before Home fills.
     val toast = rememberToast()
     val strings = LocalStrings.current
-    val said: (Int) -> Unit = { count -> toast(strings.pickerAddedCount(count)) }
+    val said: (Int) -> Unit = { count -> toast(strings.pickerAddedCount(count), ToastKind.Success) }
     if (DebugFakeChats.active) {
         // Debug only (HX76): 3,000 fake chats and their counts, to measure the TV picker on a long list.
         val fake: AddChatsViewModel = viewModel(

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -237,7 +238,7 @@ internal fun LearntLanguagesSetting(settings: SettingsStore, scope: CoroutineSco
                 askForgetAll = false
                 scope.launch {
                     settings.forgetAllLearntLanguages()
-                    toast(s.settingsLearntLanguagesForgetAllDone)
+                    toast(s.settingsLearntLanguagesForgetAllDone, ToastKind.Success)
                 }
             },
             onDismiss = { askForgetAll = false },

@@ -1,5 +1,6 @@
 package com.tmplayer.ui.settings
 
+import com.tmplayer.ui.components.ToastKind
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -141,14 +142,14 @@ fun rememberSendLogs(): () -> Unit {
                             .onFailure { Logger.w(TAG, "Logs not written to Download", it) }
                             .getOrNull()
                     }
-                    if (place != null) savedTo = place else toast(L.logsFailed)
+                    if (place != null) savedTo = place else toast(L.logsFailed, ToastKind.Error)
                 } else {
                     val file = withContext(Dispatchers.IO) {
                         runCatching { shareableLogFile(context, name) }
                             .onFailure { Logger.w(TAG, "Logs not written for sharing", it) }
                             .getOrNull()
                     }
-                    if (file == null || !shareLogFile(context, file)) toast(L.logsFailed)
+                    if (file == null || !shareLogFile(context, file)) toast(L.logsFailed, ToastKind.Error)
                 }
                 busy = false
             }

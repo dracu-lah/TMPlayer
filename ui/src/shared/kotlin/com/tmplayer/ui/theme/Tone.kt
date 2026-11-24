@@ -142,6 +142,11 @@ object Tone {
     val caution: Color
         @Composable @ReadOnlyComposable get() =
             if (LocalDarkTheme.current) Caution else Color(0xFF8A5300)
+
+    /** It worked: a saved, copied or up to date confirmation. Green, tuned for both themes. */
+    val success: Color
+        @Composable @ReadOnlyComposable get() =
+            if (LocalDarkTheme.current) Success else Color(0xFF1B7A43)
 }
 
 /** [Tone.onArt], as a constant for code that draws outside composition. */

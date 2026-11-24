@@ -45,3 +45,6 @@ internal class ToastQueue<T : Any> {
         return current
     }
 }
+
+/** The queue's name for a notice: its words, and an action (Undo) makes it a notice of its own so a plain one never replaces it. */
+internal fun toastKey(message: String, action: String?): String = if (action == null) message else "undo:$message"

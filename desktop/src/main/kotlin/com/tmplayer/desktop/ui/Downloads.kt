@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -573,7 +574,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.profileDo
             onConfirm = {
                 confirmUnlisted = null
                 scope.launch {
-                    if (!DownloadIndex.discard(file)) toast(s.downloadsDeleteFailed(file.name))
+                    if (!DownloadIndex.discard(file)) toast(s.downloadsDeleteFailed(file.name), ToastKind.Error)
                 }
             },
         )
@@ -851,7 +852,7 @@ internal fun DownloadToasts(state: ShellState) {
     val toast = rememberToast()
     val runner = state.downloads as? com.tmplayer.desktop.DesktopDownloadRunner ?: return
     LaunchedEffect(runner) {
-        runner.finished.collect { toast(s.downloadsFinished(it.title)) }
+        runner.finished.collect { toast(s.downloadsFinished(it.title), ToastKind.Success) }
     }
 }
 

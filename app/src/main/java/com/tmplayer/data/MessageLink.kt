@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.ui.components.ToastKind
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -31,6 +32,6 @@ object MessageLink {
         }
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         runCatching { clipboard?.setPrimaryClip(ClipData.newPlainText("Telegram link", link)) }
-        com.tmplayer.ui.components.showMessage(context, L.shareLinkCopied)
+        com.tmplayer.ui.components.showMessage(context, L.shareLinkCopied, ToastKind.Success)
     }
 }

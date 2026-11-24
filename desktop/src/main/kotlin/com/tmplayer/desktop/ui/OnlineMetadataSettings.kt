@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
@@ -125,7 +126,7 @@ internal fun OnlineMetadataGroup(toggleModifier: Modifier = Modifier) {
                 scope.launch {
                     withContext(Dispatchers.IO) { online.purge() }
                     bytes = 0
-                    toast(s.metadataCacheCleared)
+                    toast(s.metadataCacheCleared, ToastKind.Success)
                 }
             },
         )

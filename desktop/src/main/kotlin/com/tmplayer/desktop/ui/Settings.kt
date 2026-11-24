@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -610,7 +611,7 @@ private fun CategoryList(
     }
     com.tmplayer.ui.onboarding.DeviceFitSettingsCard(
         settings,
-        onApplied = { toast(s.deviceApplied) },
+        onApplied = { toast(s.deviceApplied, ToastKind.Success) },
         modifier = Modifier.padding(vertical = 8.dp),
     )
     SettingsColumn(Modifier.padding(top = 4.dp), dividerStart = SettingsDividerStart) {
@@ -835,7 +836,7 @@ private fun PinFlowPad(
     state: ShellState,
     appLock: AppLockSettings,
     scope: kotlinx.coroutines.CoroutineScope,
-    toast: (String) -> Unit,
+    toast: com.tmplayer.ui.components.Toaster,
     onNext: (DesktopPinFlow?) -> Unit,
     onKidsChats: () -> Unit,
 ) {
@@ -853,7 +854,7 @@ private fun PinFlowPad(
                     onNext(null)
                     scope.launch {
                         settings.removePin()
-                        toast(s.lockPinRemovedToast)
+                        toast(s.lockPinRemovedToast, ToastKind.Success)
                     }
                 }
                 DesktopPinFlow.Set, DesktopPinFlow.ChangeChoose, DesktopPinFlow.SetForKids -> {
@@ -864,7 +865,7 @@ private fun PinFlowPad(
                             settings.setKidsLock(true)
                             if (appLock.kidsChats.isEmpty()) onKidsChats()
                         }
-                        toast(s.lockPinSetToast)
+                        toast(s.lockPinSetToast, ToastKind.Success)
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import com.tmplayer.ui.settings.seekable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -225,7 +226,7 @@ internal fun StorageGroup(state: ShellState, jumps: Map<com.tmplayer.ui.onboardi
         scope.launch {
             val found = DownloadIndex.scan(settings)
             if (found.isEmpty()) {
-                toast(s.storageScanClean)
+                toast(s.storageScanClean, ToastKind.Success)
             } else {
                 toast(s.storageScanFound(found.size))
                 state.go(Destination.Downloads)

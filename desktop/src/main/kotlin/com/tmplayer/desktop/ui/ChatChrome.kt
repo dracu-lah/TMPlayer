@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.desktop.os.OsInfo
 import com.tmplayer.ui.components.FloatingBarIcon
+import com.tmplayer.ui.components.toastFloor
 import com.tmplayer.ui.components.FloatingChrome
 import com.tmplayer.ui.components.FloatingRoundButton
 import com.tmplayer.ui.i18n.LocalStrings
@@ -150,7 +151,8 @@ internal fun ChatBar(
     val command = if (OsInfo.isMac) "⌘" else "Ctrl+"
     BackHandler(enabled = searching) { onCloseSearch() }
     Column(
-        Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
+        // Toasts stand above this bar (and its recent searches): it reports its top edge.
+        Modifier.toastFloor().padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

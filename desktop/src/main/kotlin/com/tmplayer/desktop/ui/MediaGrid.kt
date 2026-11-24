@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import com.tmplayer.ui.browse.NeedsInternetCover
 import com.tmplayer.ui.browse.continueCardTitle
 import com.tmplayer.ui.browse.HistoryTab
@@ -1543,7 +1544,7 @@ internal fun TileMenu(
                     toast(s.commonNoLinks)
                 } else {
                     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(link), null)
-                    toast(s.commonLinkCopied)
+                    toast(s.commonLinkCopied, ToastKind.Success)
                 }
             }
         })

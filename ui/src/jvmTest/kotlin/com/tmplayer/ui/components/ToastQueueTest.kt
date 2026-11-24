@@ -53,4 +53,26 @@ class ToastQueueTest {
         assertNull(queue.current)
         assertEquals("B", queue.offer("b", "B").show!!.item)
     }
+
+    @Test
+    fun `an Undo notice and a plain one with the same words are two notices, and the same Undo again replaces`() {
+        assertTrue(toastKey("Chat hidden", null) != toastKey("Chat hidden", "Undo"))
+        val first = queue.offer(toastKey("Chat hidden", "Undo"), "A").show!!
+        val plain = queue.offer(toastKey("Chat hidden", null), "B")
+        assertNull("a plain notice waits for the Undo one, never cutting it off", plain.show)
+        assertSame(first, queue.current)
+        val again = queue.offer(toastKey("Chat hidden", "Undo"), "C")
+        assertTrue(again.replacesCurrent)
+        assertEquals("B", queue.waiting!!.item)
+    }
+
+    @Test
+    fun `the kind of a toast never changes which notice it is`() {
+        // The key is the words (and Undo); a Success and an Info with the same words are one notice.
+        val first = queue.offer(toastKey("Saved", null), "Success").show!!
+        val again = queue.offer(toastKey("Saved", null), "Info")
+        assertTrue(again.replacesCurrent)
+        assertEquals("Info", queue.current!!.item)
+        assertNull(queue.finished(first))
+    }
 }

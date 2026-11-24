@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +43,7 @@ internal fun LaunchAtLoginRow(login: LaunchAtLogin = remember { LaunchAtLogin.sy
         scope.launch {
             val result = withContext(Dispatchers.IO) { login.set(on) }
             state = result.state
-            if (!result.ok) toast(s.settingsLaunchAtLoginFailed)
+            if (!result.ok) toast(s.settingsLaunchAtLoginFailed, ToastKind.Error)
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -112,9 +113,9 @@ fun SendLogsActions(modifier: Modifier = Modifier) {
                     val file = SendLogs.save()
                     busy = false
                     if (file == null) {
-                        toast(L.logsFailed)
+                        toast(L.logsFailed, ToastKind.Error)
                     } else {
-                        toast(L.logsSavedTo(file.absolutePath))
+                        toast(L.logsSavedTo(file.absolutePath), ToastKind.Success)
                         OpenExternal.reveal(file)
                     }
                 }

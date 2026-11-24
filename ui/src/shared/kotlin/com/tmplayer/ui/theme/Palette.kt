@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.sp
 /** Amber: worth noticing, nothing has gone wrong. A newer version being out is the whole use. */
 val Caution = Color(0xFFF5A524)
 
+/** Green: it worked (a toast's tick). The light theme takes it several tones down, as [Caution]. */
+val Success = Color(0xFF3DD68C)
+
 /**
  * Red: something failed, or the press about to happen cannot be taken back.
  *

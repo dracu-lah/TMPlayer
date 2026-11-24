@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -426,7 +427,7 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
             scope.launch {
                 settings.forgetLastChat()
                 // The row goes away on success, so the toast is the only sign.
-                toast(s.settingsForgotLastChat)
+                toast(s.settingsForgotLastChat, ToastKind.Success)
             }
         }
     }
@@ -458,7 +459,7 @@ internal fun LibraryRows(state: ShellState, chatList: List<com.tmplayer.data.Cha
             scope.launch {
                 val count = favourites.size
                 settings.clearFavorites(allowedChats)
-                toast(s.settingsFavouritesCleared(count))
+                toast(s.settingsFavouritesCleared(count), ToastKind.Success)
             }
         }
     }
@@ -645,7 +646,7 @@ internal fun AccountRows(state: ShellState) {
                     val deleted = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                         runCatching { com.tmplayer.data.ResumeSync.turnOffAndDelete(settings) }.getOrDefault(false)
                     }
-                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed)
+                    toast(if (deleted) s.settingsResumeSyncDeleted else s.settingsResumeSyncDeleteFailed, if (deleted) ToastKind.Success else ToastKind.Error)
                 }
             }
         }
@@ -735,7 +736,7 @@ internal fun BackupRows(state: ShellState, version: String) {
         scope.launch {
             val file = FilePicker.save(s.backupSaveTitle, backups.fileName(), "json") ?: return@launch
             val saved = withContext(Dispatchers.IO) { runCatching { file.writeText(backups.export()) }.isSuccess }
-            toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed)
+            toast(if (saved) s.backupSavedTo(file.absolutePath) else s.backupFailed, if (saved) ToastKind.Success else ToastKind.Error)
         }
     }
     // A restore under way (WP-97): the row says so and does nothing when pressed again.
@@ -748,7 +749,7 @@ internal fun BackupRows(state: ShellState, version: String) {
                 runCatching { file.takeIf { it.length() <= 32L * 1024 * 1024 }?.readText() }.getOrNull()
             }
             if (text == null) {
-                toast(s.backupReadFailed)
+                toast(s.backupReadFailed, ToastKind.Error)
                 return@launch
             }
             when (val read = backups.read(text)) {
@@ -776,8 +777,8 @@ internal fun BackupRows(state: ShellState, version: String) {
                     work = { withContext(Dispatchers.IO) { backups.restore(plan.backup) } },
                 ) { outcome ->
                     when (outcome) {
-                        com.tmplayer.data.RestoreRun.Outcome.Done -> toast(s.backupRestored)
-                        com.tmplayer.data.RestoreRun.Outcome.Failed -> toast(s.backupRestoreFailed)
+                        com.tmplayer.data.RestoreRun.Outcome.Done -> toast(s.backupRestored, ToastKind.Success)
+                        com.tmplayer.data.RestoreRun.Outcome.Failed -> toast(s.backupRestoreFailed, ToastKind.Error)
                         com.tmplayer.data.RestoreRun.Outcome.AlreadyRunning -> Unit
                     }
                 }
@@ -851,7 +852,7 @@ internal fun TroubleshootingRows(state: ShellState) {
                     file.writeText(LogExport.report(desktopFeedbackFacts(), lines, known))
                 }.isSuccess
             }
-            toast(if (saved) s.logsSavedTo(file.absolutePath) else s.logsFailed)
+            toast(if (saved) s.logsSavedTo(file.absolutePath) else s.logsFailed, if (saved) ToastKind.Success else ToastKind.Error)
         }
     }
     // Developers only (see DevOptions): how the last chat's file names were read.
@@ -860,7 +861,7 @@ internal fun TroubleshootingRows(state: ShellState) {
             scope.launch {
                 val file = withContext(Dispatchers.IO) { runCatching { saveNameCheck() } }
                 file.onSuccess { toast(if (it == null) s.logsNameReportEmpty else s.logsNameReportSaved(it.absolutePath)) }
-                    .onFailure { toast(s.logsFailed) }
+                    .onFailure { toast(s.logsFailed, ToastKind.Error) }
             }
         }
     }
@@ -915,7 +916,7 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
                         toast(after.message)
                         Updates.dismiss()
                     }
-                    else -> toast(s.settingsUpToDate(version))
+                    else -> toast(s.settingsUpToDate(version), ToastKind.Success)
                 }
             }
         }

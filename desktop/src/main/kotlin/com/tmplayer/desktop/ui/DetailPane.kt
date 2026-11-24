@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -389,7 +390,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                     toast(s.commonNoLinks)
                 } else {
                     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(link), null)
-                    toast(s.commonLinkCopied)
+                    toast(s.commonLinkCopied, ToastKind.Success)
                 }
             }
             DetailAction.OpenChat -> chat?.let(state::openChat)
@@ -581,7 +582,8 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                 val kept = record
                 scope.launch {
                     if (kept != null) {
-                        toast(if (DownloadIndex.delete(state.settings, kept)) s.downloadsRemoved(item.title) else s.downloadsInUse)
+                        val removed = DownloadIndex.delete(state.settings, kept)
+                        toast(if (removed) s.downloadsRemoved(item.title) else s.downloadsInUse, if (removed) ToastKind.Success else ToastKind.Error)
                     }
                     close()
                 }

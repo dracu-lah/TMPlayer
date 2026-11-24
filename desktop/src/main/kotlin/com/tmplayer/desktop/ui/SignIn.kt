@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.components.ToastKind
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -159,9 +160,9 @@ fun SignInScreen(auth: AuthState) {
                     scope.launch {
                         val file = SendLogs.save()
                         if (file == null) {
-                            toast(L.logsFailed)
+                            toast(L.logsFailed, ToastKind.Error)
                         } else {
-                            toast(L.logsSavedTo(file.absolutePath))
+                            toast(L.logsSavedTo(file.absolutePath), ToastKind.Success)
                             com.tmplayer.desktop.os.OpenExternal.reveal(file)
                         }
                     }

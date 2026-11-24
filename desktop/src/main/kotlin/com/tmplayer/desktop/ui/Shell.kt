@@ -88,6 +88,7 @@ import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.onboarding.Setup
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.LocalToastHost
+import com.tmplayer.ui.components.ToastHost
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
@@ -278,13 +279,16 @@ fun DesktopShell(
                 com.tmplayer.ui.connect.ProxyScreenHost()
             }
             }
-                // At the foot, centred just over the floating bar or a chat's bar, as a desktop
-                // app's messages sit: the top of a window is Back, the chat's name and the window's
-                // own buttons, which a message there covered.
+                // At the foot, centred ToastLayout.Gap above the floating bar or a chat's bar, by
+                // the bar's measured top (ToastFloor), as a desktop app's messages sit: the top of
+                // a window is Back, the chat's name and the window's own buttons, which a message
+                // there covered. In the big-screen mode it also keeps the TV's 5 per cent margin.
                 // Only while the open profile's shell is what shows (HX88): never over its PIN or
                 // the picker. The flow's own lines wait until then.
                 if (shellShown) {
-                    TopMessageHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = maxOf(NavBarClearance, ChatBarClearance), start = 24.dp, end = 24.dp))
+                    val windowHeight = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height
+                    val safe = if (BigScreen.on) with(androidx.compose.ui.platform.LocalDensity.current) { (windowHeight * 0.05f).toDp() } else 0.dp
+                    ToastHost(toasts, safeBottom = safe)
                 }
             }
 
