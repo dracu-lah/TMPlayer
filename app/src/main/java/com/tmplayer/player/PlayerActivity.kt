@@ -2558,6 +2558,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         piecesNoticeShown = false
         // The remedy ladder starts afresh for this video, with what the device list says here (RL6).
         remedies.newVideo(com.tmplayer.data.KnownDevices.remediesFor(com.tmplayer.data.KnownDevices.builtIn, EngineDevice.facts(), mediaMime.ifBlank { null }), active = true)
+        // A scan of the video before is not this one's (PB2-15).
+        cancelScan()
     }
 
     /**
@@ -3094,6 +3096,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun moveToEngine(target: com.tmplayer.data.PlayerEngine, reason: EngineReason, status: String? = null) {
         val client = castClient ?: return
+        // A scan waiting on the old player must not land on the new one (PB2-15).
+        cancelScan()
         val carry = currentEngine()?.carry() ?: EngineCarry(positionMs = resumeMs, speed = playbackSpeed)
         Log.i(START_TAG, "Engine switch to ${target.key} ($reason) at ${carry.positionMs} ms, file $fileId")
         saveResumePosition()
@@ -3527,6 +3531,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         loopHandler.removeCallbacks(scanIdle)
         val to = remoteScan.commit() ?: return
         controls?.endScan()
+        // Asked again on landing: a sheet, a cast or a video that cannot seek may have come since (PB2-15).
+        if (refuseSeek() || castUp() || vlcEngine != null) return
         playing?.seekTo(to)
     }
 
@@ -4146,9 +4152,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (FormFactor.isTv(this)) return
-        controls?.setRotateAvailable(orientationHonoured())
+        // The corner window is a window shared with others: going in and out of it wrote Follow
+        // and then the viewer's choice again, which could turn a phone twice on the way out
+        // (PB2-13). It keeps the orientation it had; only a real change of the answer writes it.
+        if (inPictureInPicture || (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N && isInPictureInPictureMode)) return
+        val honoured = orientationHonoured()
+        controls?.setRotateAvailable(honoured)
+        if (honoured == lastHonoured) return
+        lastHonoured = honoured
         if (!locked) applyOrientation()
     }
+
+    /** What [orientationHonoured] said at the last configuration change, so only a change of it writes the orientation. */
+    private var lastHonoured: Boolean? = null
 
     /** The button: the next state along, applied and said out loud. */
     private fun cycleOrientation() {
@@ -6825,6 +6841,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // again before this screen was gone and stacked a second player that Back then landed on.
         if (handingOver) return
         handingOver = true
+        // A scan left waiting lands nowhere: the next video is another screen (PB2-15).
+        cancelScan()
         val started = runCatching {
             startActivity(
                 carryPlayAll(
@@ -8263,7 +8281,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         when (kind) {
             PipActions.Kind.Back -> skipBy(-Skip.BUTTON_MS)
             PipActions.Kind.Forward -> skipBy(Skip.BUTTON_MS)
-            PipActions.Kind.PlayPause -> playing?.let { if (it.isPlaying) it.pause() else it.play() }
+            // The row's own toggle (PB2-14): an ended video starts again, the pause bookkeeping holds,
+            // and a press while buffering pauses rather than calling play() on a player already asked to play.
+            PipActions.Kind.PlayPause -> togglePlayback()
         }
     }
 
@@ -8326,7 +8346,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         // Back, play or pause and forward, drawn by the window itself on Android 8 to 10 only.
-        PipActions.apply(builder, this, playing = playing?.isPlaying == true)
+        // Asked to play, buffering included, shows Pause: what a press of it would do (PB2-14).
+        PipActions.apply(builder, this, playing = playing?.let { it.playWhenReady && it.playbackState != Player.STATE_ENDED } == true)
         return builder.build()
     }
 
@@ -10988,8 +11009,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val availability = if (local != null) {
                 LocalFileAvailability.Complete
             } else {
+                // The cancellable form: the screen gone while it waits stops here, rather than
+                // building the sheet's buttons on a destroyed screen (PB2-19).
                 kotlinx.coroutines.withTimeoutOrNull(AVAILABILITY_WAIT_MS) {
-                    runCatching { Td.localFileAvailability(fileId) }.getOrDefault(LocalFileAvailability.Missing)
+                    com.tmplayer.data.runCatchingCancellable { Td.localFileAvailability(fileId) }.getOrDefault(LocalFileAvailability.Missing)
                 } ?: LocalFileAvailability.Missing
             }
             if (retryable) {
@@ -11001,7 +11024,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             }
             val downloaded = local?.length()
-                ?: runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+                ?: com.tmplayer.data.runCatchingCancellable { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
             val state = ExternalPlayer.readiness(availability, downloaded)
             if (state == ExternalPlayer.Readiness.Nothing) return@launch
             // Offered on the failure another app fixes, and left off the one it does not: a stream
