@@ -162,33 +162,44 @@ class PlayerEpisodes(
         val shape = RoundedCornerShape(topStart = Corner.ExtraLarge, bottomStart = Corner.ExtraLarge)
         // Outside the panel a tap closes it, as it does in the More panel.
         Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { close() } })
+        // A television overscans: the whole panel (its surface, so its cards and focus rings) sits inside
+        // the safe area, like the account's side sheet does (Tv.SafeH at the end, Tv.SafeV top and
+        // bottom). The scrim above still fills the screen. A tablet and a phone have no overscan.
+        val tvSafe = !touch
+        val endInset = if (tvSafe) Tv.SafeH else 0.dp
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .graphicsLayer { translationX = slide.value * size.width * (if (rtl) -1f else 1f) }
-                .width(width)
+                .width(width + endInset)
                 .fillMaxHeight()
-                .clip(shape)
-                .background(FloatingTone.sheet)
-                .border(floatingBorder(), shape)
-                // A tap on the panel's own blank space is not a tap outside it.
-                .pointerInput(Unit) { detectTapGestures { } }
-                .then(
-                    if (phone) {
-                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End))
-                    } else {
-                        Modifier.padding(vertical = if (touch) 0.dp else Tv.SafeV)
-                    },
-                )
-                .padding(start = 20.dp, end = if (touch) 8.dp else 16.dp, top = 12.dp),
+                .then(if (tvSafe) Modifier.padding(end = Tv.SafeH, top = Tv.SafeV, bottom = Tv.SafeV) else Modifier),
         ) {
-            EpisodesPanel(
-                state = state,
-                watch = watch,
-                actions = actions,
-                // A tablet and a phone keep their close button; a remote has Back.
-                trailing = { if (touch) CloseButton() },
-            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clip(if (tvSafe) RoundedCornerShape(Corner.ExtraLarge) else shape)
+                    .background(FloatingTone.sheet)
+                    .border(floatingBorder(), if (tvSafe) RoundedCornerShape(Corner.ExtraLarge) else shape)
+                    // A tap on the panel's own blank space is not a tap outside it.
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .then(
+                        if (phone) {
+                            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End))
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(start = 20.dp, end = if (touch) 8.dp else 16.dp, top = 12.dp),
+            ) {
+                EpisodesPanel(
+                    state = state,
+                    watch = watch,
+                    actions = actions,
+                    // A tablet and a phone keep their close button; a remote has Back.
+                    trailing = { if (touch) CloseButton() },
+                )
+            }
         }
     }
 

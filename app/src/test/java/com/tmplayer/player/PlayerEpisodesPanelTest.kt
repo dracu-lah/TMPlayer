@@ -216,6 +216,44 @@ class PlayerEpisodesPanelTest {
         idle()
     }
 
+    /**
+     * A television overscans: the panel's surface, its cards and the focused card's ring all lie inside
+     * the safe area (Tv.SafeH at the end, Tv.SafeV top and bottom), the panel keeps its 32 percent
+     * width, and the scrim (the dialog's window) still fills the screen.
+     */
+    private fun panelInsideSafeArea() {
+        open(tv = true, playing = items[299])
+        waitFocused("Episode 300")
+        val dialog = ShadowDialog.getLatestDialog()!!
+        val root = dialog.window!!.decorView
+        val density = dialog.context.resources.displayMetrics.density
+        val w = root.width.toFloat()
+        val h = root.height.toFloat()
+        assertTrue("the window fills the screen: ${root.width} x ${root.height}", w > 0 && h > 0)
+        val right = w - 48f * density + 1f
+        val top = 27f * density - 1f
+        val bottom = h - 27f * density + 1f
+        val focused = rule.onNode(isFocused()).fetchSemanticsNode().boundsInRoot
+        assertTrue("the focused card $focused is inside the safe area (right <= $right, $top..$bottom)", focused.right <= right && focused.top >= top && focused.bottom <= bottom)
+        val cards = rule.onAllNodes(hasText("Episode ", substring = true)).fetchSemanticsNodes()
+            .map { it.boundsInRoot }
+            .filter { it.width > 0f && it.height > 0f && it.left < w && it.top < h && it.bottom > 0f }
+        assertTrue("the panel shows cards", cards.isNotEmpty())
+        for (card in cards) {
+            assertTrue("a card $card lies right of the safe line $right", card.right <= right)
+        }
+        // The panel is a third of the width: its cards start at 55 percent of the width or later.
+        assertTrue("the panel is about 32 percent wide", cards.all { it.left >= w * 0.55f })
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
+    fun `the television's panel and a focused card stay inside the safe area at 960 by 540`() = panelInsideSafeArea()
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-television-night-mdpi")
+    fun `the television's panel and a focused card stay inside the safe area at 1920 by 1080`() = panelInsideSafeArea()
+
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `a frame of the television's panel`() {
