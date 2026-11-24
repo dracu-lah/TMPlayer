@@ -200,7 +200,7 @@ internal fun TvFeaturedCarousel(
         Crossfade(targetState = pick, animationSpec = if (Motion.television) androidx.compose.animation.core.snap() else Motion.standard(), label = "tvFeatured", modifier = Modifier.matchParentSize()) { shown ->
             // The heading's words over any picture: a fade from the top, deeper than the heading,
             // under the page's own words.
-            TvFeaturedArt(shown, chatTitle, watch, start = start, headerFade = headerFade)
+            TvFeaturedArt(shown, chatTitle, watch, start = start, headerFade = headerFade, roomy = tvHeroRoomy(height))
         }
 
         // What Play starts, worked out as the phone's page does.
@@ -350,7 +350,7 @@ private fun CarouselTurns(
 
 /** A page's picture, the fades that let its words read, and the name at its start. */
 @Composable
-private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, watch: SeriesWatch, start: Dp, headerFade: () -> Float) {
+private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, watch: SeriesWatch, start: Dp, headerFade: () -> Float, roomy: Boolean) {
     val s = LocalStrings.current
     val item = pick.item
     val leftSec = remember(pick, watch) { watch.leftSec(pick) }
@@ -395,7 +395,7 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, watch
                 .padding(start = start + HERO_START_EXTRA, bottom = PAGE_PAD + HERO_PILL_HEIGHT + TITLE_GAP)
                 // The room above, as padding would keep it, worked out as the column is measured.
                 .layout { measurable, constraints ->
-                    val top = (headerFade().toDp() + TITLE_TOP_GAP).roundToPx().coerceAtLeast(0)
+                    val top = (headerFade().toDp() + if (roomy) TITLE_TOP_GAP else TITLE_TOP_GAP_SHORT).roundToPx().coerceAtLeast(0)
                     val placeable = measurable.measure(constraints.offset(vertical = -top))
                     layout(constraints.constrainWidth(placeable.width), constraints.constrainHeight(placeable.height + top)) {
                         placeable.place(0, top)
@@ -414,7 +414,7 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, watch
             }
             // Ten-foot sizes: the marks at 24 dp (16 dp is a phone's), two lines for them so none is
             // clipped, three of the overview so the description is not cut after two.
-            FeaturedInfo(pick, meta, overviewLines = 3, scoreLogoHeight = 24.dp, scoreLines = 2, leftSec = leftSec)
+            FeaturedInfo(pick, meta, overviewLines = if (roomy) 3 else 2, scoreLogoHeight = 24.dp, scoreLines = if (roomy) 2 else 1, leftSec = leftSec)
         }
     }
 }
@@ -490,12 +490,32 @@ private fun TvFeaturedSkeleton(start: Dp, modifier: Modifier = Modifier) {
 }
 
 /**
- * How tall the carousel is on a television under its heading: room below for the first row's titles.
- * 328 dp, not 280: at 280 the logo, facts, two lines of marks and Play left room for two lines of
- * the overview, which Compose ellipsizes at on the Mi TV (HX55, 2026-11-03), so the third line had
- * no room.
+ * The most the carousel is under its heading on a television, and what it was before the hero was
+ * cut to about 55 percent of the window (user, 2026-11-25: Continue watching sat under a hero that
+ * took three quarters of the screen). 328 dp, not 280: at 280 the logo, facts, two lines of marks
+ * and Play left room for two lines of the overview, which Compose ellipsizes at on the Mi TV (HX55,
+ * 2026-11-03), so the third line had no room. A shorter hero ([tvFeaturedHeight]) shows two lines.
  */
 internal val TV_FEATURED_HEIGHT = 328.dp
+
+/** The least the carousel is under its heading: Play, the title or its logo, the facts and two lines of overview. */
+internal val TV_FEATURED_MIN_HEIGHT = 232.dp
+
+/** What share of the window the heading and the carousel together take: the hero is about 55 percent of the height. */
+internal const val TV_HERO_SHARE = 0.55f
+
+/**
+ * How tall the carousel is under its heading in a window [windowHeight] tall: the heading and the
+ * carousel together take [TV_HERO_SHARE] of it, between [TV_FEATURED_MIN_HEIGHT] and
+ * [TV_FEATURED_HEIGHT]. Worked out from the window alone, never measured, so it is the same in the
+ * first frame and after the pages arrive and the hero never jumps; the first row's title and its
+ * cards then stand whole under it instead of being covered.
+ */
+internal fun tvFeaturedHeight(windowHeight: Dp): Dp =
+    (windowHeight * TV_HERO_SHARE - TV_BAR_HEIGHT).coerceIn(TV_FEATURED_MIN_HEIGHT, TV_FEATURED_HEIGHT)
+
+/** Whether a hero this tall has room for three lines of overview, else it shows two. */
+internal fun tvHeroRoomy(height: Dp): Boolean = height >= TV_FEATURED_HEIGHT - 24.dp
 
 /** How long a page is up before the carousel moves on. */
 private const val ADVANCE_MS = 7_000
@@ -565,4 +585,7 @@ private val TV_LOGO_MAX_HEIGHT = 56.dp
 
 /** The least room between the TV top bar and the carousel's title block. */
 private val TITLE_TOP_GAP = 32.dp
+
+/** The same on the shorter hero, where every dp counts. */
+private val TITLE_TOP_GAP_SHORT = 12.dp
 

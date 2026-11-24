@@ -456,7 +456,7 @@ internal fun HomePane(
         ),
     ) {
         // Fixed from the window alone, so it is the same before and after the pages arrive.
-        val carouselHeight = if (touch) featuredHeight(maxWidth, maxHeight - under) + under else TV_FEATURED_HEIGHT
+        val carouselHeight = if (touch) featuredHeight(maxWidth, maxHeight - under) + under else tvFeaturedHeight(maxHeight)
         val carouselPx = with(density) { carouselHeight.roundToPx() }
         val underPx = with(density) { under.roundToPx() }
         // While the carousel's picture is under the status bar the bar's icons go light over it;
@@ -693,7 +693,7 @@ internal fun HomePane(
                     // video lands, as a television's rows end (user, 2026-10-28); a phone keeps it
                     // on the heading. On the heading it took a press of its own, Up or Right, and
                     // Up stopping there made going up two presses a row.
-                    val seeAllEnd = if (touch || seeAll == null) null else SeeAllEnd(seeAll, poster = row is HomeRow.Recent || row is HomeRow.Chat)
+                    val seeAllEnd = if (touch || seeAll == null) null else SeeAllEnd(seeAll, poster = row is HomeRow.Recent || row is HomeRow.Chat, label = title)
                     // This row's tiles, for the remote to be put back into: back from its See all
                     // page, or from the player.
                     val tilesFocus = remember { FocusRequester() }
@@ -1497,8 +1497,11 @@ private const val PLACEHOLDER_TILES = 5
 /** The TV button's own height, which every TV row heading takes so the rows space evenly. */
 private val TV_SEE_ALL_HEIGHT = 40.dp
 
-/** A television's See all at a row's end: what it opens, and its tile's size. */
-private data class SeeAllEnd(val onClick: () -> Unit, val width: Dp = 0.dp, val poster: Boolean = false)
+/**
+ * A television's See all at a row's end: what it opens, and its tile's size. [label] is the row's
+ * heading, written on the tile under "See all" and spoken with it, so the tile clearly belongs to its row.
+ */
+private data class SeeAllEnd(val onClick: () -> Unit, val width: Dp = 0.dp, val poster: Boolean = false, val label: String = "")
 
 private const val SEE_ALL_TILE = "see-all"
 
@@ -1512,7 +1515,7 @@ private const val SEE_ALL_TILE = "see-all"
 private fun SeeAllTile(end: SeeAllEnd) {
     val s = LocalStrings.current
     VideoTile(
-        title = s.homeSeeAll,
+        title = if (end.label.isBlank()) s.homeSeeAll else "${s.homeSeeAll}: ${end.label}",
         onClick = end.onClick,
         poster = end.poster,
         showTitle = false,
@@ -1534,6 +1537,16 @@ private fun SeeAllTile(end: SeeAllEnd) {
                 maxLines = 2,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            // The row it belongs to, small and muted under the words: "See all" alone could be any row's.
+            if (end.label.isNotBlank()) Text(
+                end.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = Tone.muted,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 2.dp),
             )
         }
     }
