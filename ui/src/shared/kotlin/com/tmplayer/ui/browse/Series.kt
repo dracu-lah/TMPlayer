@@ -238,6 +238,23 @@ fun interface SeasonDownloadRequest {
     fun copies(held: (MediaItem) -> Boolean): List<MediaItem>
 }
 
+/**
+ * Smart downloads' switch on a show's page (WP-84): [on] keeps the next unwatched episodes on the
+ * device, on Wi-Fi only; [onChange] flips it. The platform passes one only where its runner runs
+ * (a phone or a tablet today); null leaves the button out.
+ */
+class KeepNextSwitch(val on: Boolean, val onChange: (Boolean) -> Unit)
+
+/**
+ * Whether [series] has an unwatched episode after the furthest one watched, which the switch
+ * keeps: none, and the switch is drawn off and cannot be turned on (WP-84). Linear.
+ */
+fun keepNextHasNext(series: Series, finished: (MediaItem) -> Boolean): Boolean {
+    val episodes = series.episodes
+    val last = episodes.indexOfLast { it.watched(finished) }
+    return (last + 1 until episodes.size).any { !episodes[it].watched(finished) }
+}
+
 /** "2 seasons · 18 eps", the tile's second line. */
 @Composable
 fun seriesSummary(series: Series): String =
@@ -864,6 +881,8 @@ fun SeriesPanel(
      * viewer's other chats. Null leaves that button out of a missing episode's card.
      */
     onFindElsewhere: ((String) -> Unit)? = null,
+    /** "Keep the next 2 episodes" (WP-84); null leaves the button out. Hidden for a chat that restricts saving. */
+    keepNext: KeepNextSwitch? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -1215,6 +1234,22 @@ fun SeriesPanel(
                         },
                     )
                 }
+                // Smart downloads (WP-84): never for a chat that restricts saving; a show watched to
+                // its end draws it off, and it can still be turned off once on.
+                if (keepNext != null && series.episodes.any { it.item.canBeSaved }) {
+                    val left = keepNextHasNext(series, watch.finished)
+                    add(
+                        PageAction(
+                            s.downloadsKeepNext(count = com.tmplayer.data.KeepNextPlanner.DEFAULT_COUNT),
+                            TmIcons.Download,
+                            { keepNext.onChange(!keepNext.on) },
+                            enabled = keepNext.on || left,
+                            short = s.downloadsKeepNextShort,
+                            toggles = !keepNext.on,
+                            on = keepNext.on,
+                        ),
+                    )
+                }
                 if (bothDownloads) {
                     add(
                         PageAction(
@@ -1274,6 +1309,7 @@ fun SeriesPanel(
                                 action.label, action.icon, action.run,
                                 short = action.short ?: roundLabel(action.label, s),
                                 toggles = action.toggles,
+                                on = action.on,
                                 ghost = trailerGhost && action.label == s.metadataTrailer,
                                 waiting = trailerGhost && action.label == s.metadataTrailer && !extrasState.settled,
                                 progress = action.progress,
@@ -1292,6 +1328,7 @@ fun SeriesPanel(
                                 action.label, action.icon, action.run,
                                 short = action.short ?: roundLabel(action.label, s),
                                 toggles = action.toggles,
+                                on = action.on,
                                 ghost = trailerGhost && action.label == s.metadataTrailer,
                                 waiting = trailerGhost && action.label == s.metadataTrailer && !extrasState.settled,
                                 progress = action.progress,
@@ -1313,6 +1350,7 @@ fun SeriesPanel(
                                 action.label, action.icon, action.run,
                                 short = action.short ?: roundLabel(action.label, s),
                                 toggles = action.toggles,
+                                on = action.on,
                                 ghost = trailerGhost && action.label == s.metadataTrailer,
                                 waiting = trailerGhost && action.label == s.metadataTrailer && !extrasState.settled,
                                 progress = action.progress,
@@ -1991,6 +2029,8 @@ private data class PageAction(
     val short: String? = null,
     /** A switch: see [RoundAction]'s toggles. */
     val toggles: Boolean? = null,
+    /** A switch that is on: drawn held in ([RoundAction]'s on). */
+    val on: Boolean = false,
 )
 
 /** How long a pressed season download shows its empty ring while the queue has not shown it. */

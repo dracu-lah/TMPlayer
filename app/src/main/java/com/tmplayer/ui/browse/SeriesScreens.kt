@@ -163,8 +163,27 @@ internal fun SeriesOpened(
         onOpenChat = onOpenChat,
     )
     val onlyMine by remember(settings) { settings.seriesOnlyMine }.collectAsStateWithLifecycle(initialValue = false)
+    // Smart downloads (WP-84): on a phone or a tablet, where the runner runs ([KeepNextDownloads]);
+    // never on a television. Turned on, it says what it does and asks for a pass at once.
+    val keepShows by remember(settings) { settings.keepNextShows }.collectAsStateWithLifecycle(initialValue = emptySet())
+    val keepChat = whole.episodes.firstOrNull()?.item?.chatId
+    val keepNext = if (keepChat == null || !isTouch() || com.tmplayer.data.FormFactor.isTv(context)) {
+        null
+    } else {
+        val show = com.tmplayer.data.KeepNextShow(keepChat, whole.key)
+        KeepNextSwitch(on = show in keepShows) { on ->
+            scope.launch {
+                runCatching { settings.setKeepNext(show, on) }
+                if (on) {
+                    com.tmplayer.ui.components.showMessage(context, com.tmplayer.i18n.L.downloadsKeepNextDetail)
+                    KeepNextDownloads.ask()
+                }
+            }
+        }
+    }
     SeriesPage(
         whole, watch, onPlay, startOver, onDismiss, onLongClick.takeIf { isTouch() }, onDownload, chatTitle, downloadedIds, showActions,
+        keepNext = keepNext,
         onlyMine = onlyMine,
         onOnlyMine = { on -> scope.launch { settings.setSeriesOnlyMine(on) } },
         // The search page opens on the show and the episode's code, once this page has gone.
@@ -194,6 +213,7 @@ private fun SeriesPage(
     chatTitle: String?,
     downloadedIds: Set<String>,
     showActions: ShowActions,
+    keepNext: KeepNextSwitch?,
     onlyMine: Boolean,
     onOnlyMine: (Boolean) -> Unit,
     onFindElsewhere: (String) -> Unit,
@@ -223,6 +243,7 @@ private fun SeriesPage(
                 onlyMine = onlyMine,
                 onOnlyMine = onOnlyMine,
                 onFindElsewhere = onFindElsewhere,
+                keepNext = keepNext,
                 contentPadding = if (touch) {
                     PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
                 } else {

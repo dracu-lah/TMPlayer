@@ -152,4 +152,28 @@ class KeepNextRunnerTest {
         assertEquals(KeepNextShows.MAX_SHOWS, KeepNextShows.decode(KeepNextShows.encode(many)).size)
         assertEquals(emptySet<KeepNextShow>(), KeepNextShows.with(shows, KeepNextShow(42, "other"), on = false) - KeepNextShow(-100123, "harbour notes"))
     }
+
+    @Test
+    fun theRowSaysWhyWithTheNumbersAndARunningPassIsSeen() = runBlocking {
+        val show = KeepNextShow(-1, "show1")
+        fun report(plan: KeepNextPlanner.Plan) = KeepNextRunner.Report(show, "Show", plan, 0)
+        val bytes: (Long) -> String = { "${it}B" }
+        val item = item(-1, 2)
+        assertEquals(com.tmplayer.i18n.L.downloadsKeptWaitingWifi, KeepNextRunner.detail(report(KeepNextPlanner.Plan(skipped = listOf(KeepNextPlanner.Skip(item, KeepNextPlanner.Reason.WaitingForWifi)))), bytes))
+        val room = KeepNextRunner.detail(report(KeepNextPlanner.Plan(skipped = listOf(KeepNextPlanner.Skip(item, KeepNextPlanner.Reason.NoSpace, 300, 100)))), bytes)
+        assertTrue(room, room.contains("300B") && room.contains("100B"))
+        assertEquals(com.tmplayer.i18n.L.downloadsKeptReady(count = 2), KeepNextRunner.detail(report(KeepNextPlanner.Plan(queue = listOf(item, item))), bytes))
+        for (reason in KeepNextPlanner.Reason.entries) {
+            assertTrue(reason.name, KeepNextRunner.detail(report(KeepNextPlanner.Plan(skipped = listOf(KeepNextPlanner.Skip(item, reason)))), bytes).isNotBlank())
+        }
+        // The flag is up while a pass runs and down after.
+        val gate = CompletableDeferred<Unit>()
+        host.gate = gate
+        val pass = async { runner.pass() }
+        yield()
+        assertTrue(runner.running.value)
+        gate.complete(Unit)
+        pass.await()
+        assertTrue(!runner.running.value)
+    }
 }

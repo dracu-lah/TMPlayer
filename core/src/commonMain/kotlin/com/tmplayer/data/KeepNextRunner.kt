@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Smart downloads, the runner (WP-83): one pass over the shows with "Keep the next episodes" on,
@@ -69,7 +68,7 @@ class KeepNextRunner(private val host: Host) {
 
     data class Summary(val shows: Int = 0, val queued: Int = 0, val stopped: Stop? = null)
 
-    private val running = Mutex()
+    private val lock = Mutex()
 
     @kotlin.concurrent.Volatile
     private var pending = false
@@ -78,6 +77,11 @@ class KeepNextRunner(private val host: Host) {
 
     /** The last pass's outcome per show id ([KeepNextShow.id]), for the open profile. */
     val reports: StateFlow<Map<String, Report>> = _reports.asStateFlow()
+
+    private val _running = MutableStateFlow(false)
+
+    /** A pass runs now: the Downloads row's status line says so (WP-84, the work status line of WP-91). */
+    val running: StateFlow<Boolean> = _running.asStateFlow()
 
     /** The profile switched: what was said about the last one goes. */
     fun forget() {
@@ -90,10 +94,11 @@ class KeepNextRunner(private val host: Host) {
      * lost and two never run side by side.
      */
     suspend fun pass(): Summary? {
-        if (!running.tryLock()) {
+        if (!lock.tryLock()) {
             pending = true
             return null
         }
+        _running.value = true
         try {
             var summary: Summary
             var rounds = 0
@@ -104,7 +109,8 @@ class KeepNextRunner(private val host: Host) {
             } while (pending && summary.stopped == null && rounds < MAX_ROUNDS)
             return summary
         } finally {
-            running.unlock()
+            _running.value = false
+            lock.unlock()
         }
     }
 
@@ -198,6 +204,22 @@ class KeepNextRunner(private val host: Host) {
     }
 
     companion object {
+        /**
+         * The Downloads row's line for [report] (WP-84): why nothing more is kept, with the numbers,
+         * or that the next episodes are here or coming.
+         */
+        fun detail(report: Report, bytes: (Long) -> String): String {
+            val skip = report.plan.headline
+            return when (skip?.reason) {
+                null -> com.tmplayer.i18n.L.downloadsKeptReady(count = report.plan.kept.size + report.plan.queue.size)
+                KeepNextPlanner.Reason.WaitingForWifi -> com.tmplayer.i18n.L.downloadsKeptWaitingWifi
+                KeepNextPlanner.Reason.NoSpace -> com.tmplayer.i18n.L.downloadsKeptNoSpace(needed = bytes(skip.neededBytes), free = bytes(skip.freeBytes))
+                KeepNextPlanner.Reason.Restricted -> com.tmplayer.i18n.L.downloadsKeptRestricted
+                KeepNextPlanner.Reason.SizeUnknown -> com.tmplayer.i18n.L.downloadsKeptSizeUnknown
+                KeepNextPlanner.Reason.NothingNext -> com.tmplayer.i18n.L.downloadsKeptNothingNext
+            }
+        }
+
         const val MAX_SHOWS_PER_PASS = 20
         const val MAX_QUEUED_PER_PASS = 10
         const val MAX_FLOOD_WAIT_MS = 5 * 60_000L

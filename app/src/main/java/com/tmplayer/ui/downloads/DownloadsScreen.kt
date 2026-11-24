@@ -260,6 +260,12 @@ fun DownloadsScreen(
     // about until the file has landed. In the order the videos were asked for, which is the order
     // they will arrive in, so the list does not reshuffle itself as the figures move.
     val activeMap by OfflineDownloads.active.collectAsStateWithLifecycle()
+    // Smart downloads (WP-84): what each show's last pass said, and whether one runs now.
+    val keptReports by com.tmplayer.ui.browse.KeepNextDownloads.reports.collectAsStateWithLifecycle()
+    val keptRunning by com.tmplayer.ui.browse.KeepNextDownloads.running.collectAsStateWithLifecycle()
+    val keptShown = remember(keptReports, allowedChats) {
+        keptReports.values.filter { allowedChats?.contains(it.show.chatId) != false }.sortedBy { it.title.lowercase() }
+    }
     // Cards cancelled inside their Undo window ([cancelRow]) are already gone from the page.
     val cancelling = CancelWindow.shared
     val active = remember(activeMap, cancelling.pending) {
@@ -1165,6 +1171,8 @@ fun DownloadsScreen(
     }
     val pageBody: LazyListScope.() -> Unit = {
         item(key = "storage") { storageCard() }
+        // Kept for you (WP-84): one line a show with smart downloads on, saying what it keeps or why not.
+        if (keptShown.isNotEmpty() || keptRunning) item(key = "kept-for-you") { KeptForYou(keptShown, keptRunning) }
         // Only while something is on its way: a Downloading heading over nothing is a section to
         // read past on every visit.
         if (active.isNotEmpty()) {
@@ -1699,6 +1707,39 @@ private fun ShowHeading(title: String, detail: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * Smart downloads on this page (WP-84): the status line while a pass runs ([WorkStatusLine],
+ * quiet otherwise), then "Kept for {show}" for each show with the switch on, with why nothing more
+ * is kept (waiting for Wi-Fi, the room the next one needs and what is free) or that the next
+ * episodes are here or coming. Plain text, no focus stops: turning it off is on the show's page.
+ */
+@Composable
+internal fun KeptForYou(reports: List<com.tmplayer.data.KeepNextRunner.Report>, running: Boolean) {
+    Column(
+        Modifier.fillMaxWidth().padding(start = TEXT_EDGE, end = TEXT_EDGE, top = 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        com.tmplayer.ui.components.WorkStatusLine(
+            if (running) com.tmplayer.data.WorkStatus.Syncing(L.downloadsKeepNextChecking) else com.tmplayer.data.WorkStatus.Idle,
+        )
+        reports.forEach { report ->
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+                Text(
+                    L.downloadsKeptForYou(show = report.title),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    com.tmplayer.data.KeepNextRunner.detail(report) { Translator.messages.formatter.bytes(it) },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

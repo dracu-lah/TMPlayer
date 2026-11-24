@@ -401,6 +401,11 @@ internal object KeepNextDownloads {
     /** What each show's last pass said, for the Downloads row (WP-84); empty before the first pass. */
     val reports: StateFlow<Map<String, KeepNextRunner.Report>> get() = runner?.reports ?: empty
 
+    private val idle = MutableStateFlow(false)
+
+    /** A pass runs now, for the Downloads row's status line (WP-84). */
+    val running: StateFlow<Boolean> get() = runner?.running ?: idle
+
     /** Asks for a pass now (a show's switch turned on), folded into one already running. */
     private val asked = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
