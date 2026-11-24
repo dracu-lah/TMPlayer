@@ -96,9 +96,13 @@ export function Toaster() {
         now()
         const every = window.setInterval(now, 500)
         addEventListener('resize', now)
+        // The status pill coming or going is told by the page (data-status-pill), at once rather than at the next look.
+        const pill = new MutationObserver(() => queueMicrotask(now))
+        pill.observe(document.documentElement, { attributes: true, attributeFilter: ['data-status-pill'] })
         onCleanup(() => {
             clearInterval(every)
             removeEventListener('resize', now)
+            pill.disconnect()
         })
     })
     // A swipe away (sideways or down) or a press on the words dismisses it.
