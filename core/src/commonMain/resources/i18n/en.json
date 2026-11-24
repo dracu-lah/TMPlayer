@@ -4041,16 +4041,16 @@
     "using_saved": "Using Saved Messages."
   },
   "syncplace": {
-    "card_body": "TMPlayer keeps one small file in your own Saved Messages, so your phone, TV and computer remember where you stopped, your bookmarks and the titles you fixed. Nothing else is kept, and it stays in your own Telegram.",
+    "card_body": "TMPlayer saves one small file in your own Saved Messages, so your phone, TV and computer share where you stopped, your Watch later, favourites, bookmarks and the titles you fixed. Nothing else is saved, and it stays in your own Telegram.",
     "card_hint": "You can change this any time in Settings, Privacy and lock.",
     "card_no": "Not now",
-    "card_title": "Keep my place on all my devices?",
-    "card_yes": "Yes, keep it",
+    "card_title": "Sync your progress across devices?",
+    "card_yes": "Yes, sync it",
     "privacy": "Only TMPlayer's own data goes into one file in your own Saved Messages: where you stopped, what you watched, Watch later, favourites, bookmarks and titles you fixed, by their ids and a short title. Nothing else, and nothing leaves your Telegram.",
-    "started": "Your place is now kept on all your devices",
-    "switch": "Keep my place on all my devices",
-    "switch_off": "Off. Nothing is kept in Saved Messages",
-    "switch_on": "On. One file in your own Saved Messages"
+    "started": "Your progress now syncs across your devices",
+    "switch": "Sync across my devices",
+    "switch_off": "Off. Progress, Watch later and favourites stay on this device",
+    "switch_on": "On. Progress, Watch later and favourites sync through your Saved Messages"
   },
   "theme": {
     "black": "Black",

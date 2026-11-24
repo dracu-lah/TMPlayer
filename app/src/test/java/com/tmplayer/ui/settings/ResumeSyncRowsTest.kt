@@ -41,7 +41,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Keep my place on all my devices under Account (FQ12, moved from Library), on a phone and by
+ * Sync across my devices under Account (FQ12, moved from Library), on a phone and by
  * remote on a television: the switch is the one question, so it turns on at once with no second
  * dialog, Sync now and "Turn off and delete the sync file" show under it only while it is on, with
  * the last sync's line, and a file that could not be read turns Sync now into Replace the sync
@@ -54,7 +54,7 @@ class ResumeSyncRowsTest {
     private companion object {
         /** How long a store write may take on a slow runner before the test gives up. */
         const val WRITE_MS = 10_000L
-        const val SWITCH = "Keep my place on all my devices"
+        const val SWITCH = "Sync across my devices"
     }
 
     @get:Rule
@@ -115,7 +115,7 @@ class ResumeSyncRowsTest {
         rule.waitUntil(WRITE_MS) { runBlocking { settings.resumeSync.first() } }
         rule.waitForIdle()
         // No dialog stood in the way: the switch is on, the rows are there, and the question card is spent.
-        rule.onAllNodesWithText("Keep my place on all my devices?").assertCountEquals(0)
+        rule.onAllNodesWithText("Sync your progress across devices?").assertCountEquals(0)
         reveal(hasText("Sync now")); rule.onNodeWithText("Sync now").assertExists()
         reveal(hasText("Turn off and delete the sync file")); rule.onNodeWithText("Turn off and delete the sync file").assertExists()
         assertFalse(runBlocking { settings.keepPlaceCardPending.first() })

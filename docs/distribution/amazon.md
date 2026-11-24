@@ -48,7 +48,7 @@ Fire TV):
 >
 > Built for the remote: the whole app works with the D-pad, the Menu button opens the player menu, and rewind and fast forward work as you expect. Small badges show 4K, 1080p, HDR, Dolby Vision, Atmos or 5.1 where the file says so. If the picture stops while the sound goes on, TMPlayer tries another decoder or player by itself. Thumbnails while you scrub come from the part of the video already downloaded, and are switched off on devices with 1 GB of memory to keep playback smooth.
 >
-> Keep my place on all my devices: optional, off until you say yes. Where you stopped, what you watched, Watch later, favourites and bookmarks are kept in one small file in your own Saved Messages, so a TV, phone and computer agree.
+> Sync across my devices: optional, off until you say yes. Where you stopped, what you watched, Watch later, favourites and bookmarks are kept in one small file in your own Saved Messages, so a TV, phone and computer agree.
 >
 > Private by design: TMPlayer talks directly to Telegram from your device. There is no TMPlayer account and no server in between. No ads of its own and no analytics. Crash reports are sent only if you agree. Optional lookups for posters, subtitles and skip times send only a title or an id, never your videos or anything from Telegram.
 >

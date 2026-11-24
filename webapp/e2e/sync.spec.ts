@@ -43,7 +43,7 @@ test('the question is asked once, at the end of a Home that has rows, and "Not n
     await page.goto('/')
     await homeReady(page)
     await expect(card(page)).toBeVisible()
-    await expect(card(page).getByRole('heading', { name: 'Keep my place on all my devices?' })).toBeVisible()
+    await expect(card(page).getByRole('heading', { name: 'Sync your progress across devices?' })).toBeVisible()
     await expect(card(page)).toContainText('one small file in your own Saved Messages')
     await card(page).scrollIntoViewIfNeeded()
     await shot(page, info, 'home-card')
@@ -70,16 +70,16 @@ test('the card counts as shown when it first appears: leaving Home without answe
     expect(await cloud(page, key)).toEqual([])
 })
 
-test('"Yes, keep it" by the keyboard turns the sync on and sends one file, the account\'s own, edited in place after', async ({ context, page }, info) => {
+test('"Yes, sync it" by the keyboard turns the sync on and sends one file, the account\'s own, edited in place after', async ({ context, page }, info) => {
     const key = unique()
     await start(context, page, key)
     await page.goto('/')
     await expect(card(page)).toBeVisible()
-    const yes = card(page).getByRole('button', { name: 'Yes, keep it' })
+    const yes = card(page).getByRole('button', { name: 'Yes, sync it' })
     await yes.focus()
     await expect(yes).toBeFocused()
     await page.keyboard.press('Enter')
-    await expect(page.getByText('Your place is now kept on all your devices')).toBeVisible()
+    await expect(page.getByText('Your progress now syncs across your devices')).toBeVisible()
     await expect(card(page)).toHaveCount(0)
     await expect.poll(async () => (await cloud(page, key)).length, { timeout: 20_000 }).toBe(1)
     const [saved] = await cloud(page, key)
@@ -115,7 +115,7 @@ test('Settings, Privacy and lock: off by default and nothing sent; turning it on
     await expect(sw).toHaveAttribute('aria-checked', 'false')
     expect(await cloud(page, key)).toEqual([])
     await sw.click()
-    await dialog.getByRole('button', { name: 'Yes, keep it' }).click()
+    await dialog.getByRole('button', { name: 'Yes, sync it' }).click()
     await expect(sw).toHaveAttribute('aria-checked', 'true')
     await expect.poll(async () => (await cloud(page, key)).length, { timeout: 20_000 }).toBe(1)
     // Delete: the question names what goes, and the file is gone from Saved Messages with the switch.
@@ -142,7 +142,7 @@ test('another device\'s place is taken in: a video left part way on the phone is
     await page.goto('/')
     await homeReady(page)
     await expect(page.locator('.continue-card')).toHaveCount(0)
-    await card(page).getByRole('button', { name: 'Yes, keep it' }).click()
+    await card(page).getByRole('button', { name: 'Yes, sync it' }).click()
     await expect(page.locator('.continue-card').filter({ hasText: 'Native Clip' })).toBeVisible({ timeout: 20_000 })
     // The file the phone wrote is still the one message, with its place and the web's account.
     const list = await cloud(page, key)

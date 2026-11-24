@@ -99,7 +99,7 @@ security, About and help, Redo setup choices.
 | Open the last chat | `settings.open_last_chat` | `_named/_unnamed/_off` | `open_last_chat` | P T |
 | Forget the last chat | `settings.forget_last_chat` | `_detail` | `last_chat` | P T, while set |
 | Lists: Remember searches | `settings.remember_searches` | `_on/_off` | `remember_searches` | P T |
-| Account: Keep my place on all my devices | `syncplace.switch` | `syncplace.switch_on/_off`, the privacy line `syncplace.privacy` | `resume_sync` | P T D |
+| Account: Sync across my devices | `syncplace.switch` | `syncplace.switch_on/_off`, the privacy line `syncplace.privacy` | `resume_sync` | P T D |
 | Account: Sync now / Replace | `SyncWords.action` | `SyncWords.status` | sync bookkeeping | P T, while on |
 | Lists: Turn off and delete the sync file | `settings.resume_sync_delete` | `_detail` | sync file | P T, while on |
 | Lists: Chosen chats | `picker.row_title` | `chosenChatsDetail` | `added_chats`, `added_chats_mode` | P T |
@@ -305,7 +305,7 @@ row per platform already, in the same place; nothing to merge.
 | Default player | Playback |
 | Player engine | Playback (hidden without VLC) |
 | Pause downloads while playing | Downloads and storage |
-| Keep my place on all my devices | Privacy and lock (the Account page), Signed in |
+| Sync across my devices | Privacy and lock (the Account page), Signed in |
 | Find subtitles for me | Subtitles and audio, Online subtitles |
 | Keep detailed logs | Help and about, beside Save logs |
 | Playback test | Help and about, beside Save logs |

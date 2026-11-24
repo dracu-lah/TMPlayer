@@ -43,7 +43,7 @@ Save space or Keep video while streaming, and a Downloads tab with Free up space
 Home works offline: what is on your phone comes first.
 Series and anime pages with every season, and skip intro, recap and credits buttons.
 Badges for 4K, HDR, Dolby Vision and Atmos.
-Keep my place on all my devices, through your own Saved Messages.
+Sync across my devices, through your own Saved Messages.
 If the picture stops while the sound goes on, TMPlayer tries another decoder by itself.
 ```
 
@@ -59,7 +59,7 @@ two lines are enough.
 - Series and anime pages with every season, plus skip intro, recap and credits
 - Badges for 4K, 1080p, HDR, Dolby Vision, Atmos and 5.1
 - Another decoder or player tried by itself when the picture freezes
-- Keep my place on all my devices through your own Saved Messages
+- Sync across my devices through your own Saved Messages
 - Free and open source, no ads of its own, no analytics
 
 ## Support line (where a listing allows a link or a sentence)

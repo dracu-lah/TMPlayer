@@ -29,7 +29,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The desktop's "Keep my place on all my devices?" card (FQ12): its words, Tab reaching both buttons,
+ * The desktop's "Sync your progress across devices?" card (FQ12): its words, Tab reaching both buttons,
  * Enter pressing them, and a picture at 1280 wide and at the window's narrowest. With
  * TMPLAYER_SHOTS=<dir> the frames are written there as `desktop-keep-place-<width>.png`.
  */
@@ -41,10 +41,10 @@ class KeepPlaceCardTest {
         var yes = 0
         var no = 0
         setContent { TmMaterialTheme(dark = true) { KeepPlaceCard(onYes = { yes++ }, onNotNow = { no++ }, start = 16.dp, end = 16.dp) } }
-        onNodeWithText("Keep my place on all my devices?").assertExists()
+        onNodeWithText("Sync your progress across devices?").assertExists()
         onNodeWithText("one small file in your own Saved Messages", substring = true).assertExists()
         onRoot().performKeyInput { pressKey(Key.Tab) }
-        onNode(hasText("Yes, keep it") and hasClickAction()).assertIsFocused()
+        onNode(hasText("Yes, sync it") and hasClickAction()).assertIsFocused()
         onRoot().performKeyInput { pressKey(Key.Enter) }
         assertEquals(1, yes)
         // A pressed button lets go of focus (the card is about to go), so the next Tab starts from the

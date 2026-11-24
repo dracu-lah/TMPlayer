@@ -69,7 +69,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * Keep my place on all my devices and the backup before sign out (FQ12), on a phone and by remote
+ * Sync across my devices and the backup before sign out (FQ12), on a phone and by remote
  * on a television: the one question's card (its words, its two buttons, the remote reaching them,
  * what Yes and Not now do and that it is asked once), and the sign out dialog's tick (on by
  * default, reachable by remote, a failed backup shown with the way out and Back returning to the
@@ -82,7 +82,7 @@ class KeepPlaceTest {
 
     private companion object {
         const val WRITE_MS = 10_000L
-        const val TITLE = "Keep my place on all my devices?"
+        const val TITLE = "Sync your progress across devices?"
         const val TICK = "Save my settings backup to my Saved Messages first"
     }
 
@@ -176,11 +176,11 @@ class KeepPlaceTest {
         home(tv = false, yes = { yes++ }, no = { no++ })
         rule.onNodeWithText(TITLE).assertExists()
         rule.onNodeWithText("one small file in your own Saved Messages", substring = true).assertExists()
-        rule.onNodeWithText("Nothing else is kept", substring = true).assertExists()
+        rule.onNodeWithText("Nothing else is saved", substring = true).assertExists()
         rule.onNodeWithText("You can change this any time in Settings, Privacy and lock.").assertExists()
         shot("keep-place-card-phone-411.png")
         rule.onNode(hasText("Not now") and hasClickAction()).performScrollTo().performClick()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).performScrollTo().performClick()
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).performScrollTo().performClick()
         assertEquals(1, no)
         assertEquals(1, yes)
     }
@@ -189,7 +189,7 @@ class KeepPlaceTest {
     @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-night-xhdpi")
     fun `the card at the smallest width and a large font keeps both buttons on the screen`() {
         home(tv = false, fontScale = 1.5f)
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).performScrollTo().assertExists()
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).performScrollTo().assertExists()
         rule.onNode(hasText("Not now") and hasClickAction()).performScrollTo().assertExists()
         shot("keep-place-card-phone-320-font15.png")
     }
@@ -206,17 +206,17 @@ class KeepPlaceTest {
         shot("keep-place-card-tv-960.png")
         rule.runOnIdle { above.requestFocus() }
         rule.waitForIdle()
-        // Down from the last row lands on Yes, keep it; Right goes on to Not now; Left comes back.
+        // Down from the last row lands on Yes, sync it; Right goes on to Not now; Left comes back.
         rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).assertIsFocused()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).performKeyInput { pressKey(Key.DirectionRight) }
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).assertIsFocused()
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).performKeyInput { pressKey(Key.DirectionRight) }
         rule.waitForIdle()
         rule.onNode(hasText("Not now") and hasClickAction()).assertIsFocused()
         rule.onNode(hasText("Not now") and hasClickAction()).performKeyInput { pressKey(Key.DirectionLeft) }
         rule.waitForIdle()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).assertIsFocused()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).performKeyInput { pressKey(Key.Enter) }
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).assertIsFocused()
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).performKeyInput { pressKey(Key.Enter) }
         rule.waitForIdle()
         assertEquals(1, yes)
         assertEquals(0, no)
@@ -242,14 +242,14 @@ class KeepPlaceTest {
             }
         }
         tvKeys()
-        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText("Yes, keep it").fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText("Yes, sync it").fetchSemanticsNodes().isNotEmpty() }
         rule.runOnIdle { above.requestFocus() }
         rule.waitForIdle()
         rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         rule.waitForIdle()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).assertIsFocused()
-        rule.onNode(hasText("Yes, keep it") and hasClickAction()).performKeyInput { pressKey(Key.Enter) }
-        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText("Yes, keep it").fetchSemanticsNodes().isEmpty() }
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).assertIsFocused()
+        rule.onNode(hasText("Yes, sync it") and hasClickAction()).performKeyInput { pressKey(Key.Enter) }
+        rule.waitUntil(WRITE_MS) { rule.onAllNodesWithText("Yes, sync it").fetchSemanticsNodes().isEmpty() }
         rule.waitForIdle()
         rule.onNodeWithTag("last-row").assertIsFocused()
     }
@@ -301,7 +301,7 @@ class KeepPlaceTest {
         visits.state.yes()
         rule.waitUntil(WRITE_MS) { runBlocking { settings.resumeSyncNow() } }
         assertFalse(visits.state.visible)
-        assertEquals(listOf("Your place is now kept on all your devices"), visits.said)
+        assertEquals(listOf("Your progress now syncs across your devices"), visits.said)
         assertFalse(runBlocking { settings.keepPlaceCardPending.first() })
     }
 

@@ -137,7 +137,7 @@ export const faqLd = {
       "name": "What does the sync file in my Saved Messages hold?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Only if you say yes to Keep my place on all my devices: where you stopped, what you watched, Watch later, your favourite chats and lists, and, in the file's version 3, your bookmarks and the titles you corrected, each by its chat and message number with a short title. No chat names, file names or settings. It is one small file in your own Saved Messages, edited in place, and there is no TMPlayer server in between. Turn it off in Settings, or delete the file there too. The full list is on tmplayer.org/privacy."
+        "text": "Only if you say yes to Sync across my devices: where you stopped, what you watched, Watch later, your favourite chats and lists, and, in the file's version 3, your bookmarks and the titles you corrected, each by its chat and message number with a short title. No chat names, file names or settings. It is one small file in your own Saved Messages, edited in place, and there is no TMPlayer server in between. Turn it off in Settings, or delete the file there too. The full list is on tmplayer.org/privacy."
       }
     },
     {

@@ -80,7 +80,7 @@ web:history | focusRingInside | Watch later | WP-03 nothing on TV grows past its
 web:history | focusRingInside | Watched | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:history | focusRingInside | Your lists | WP-03 nothing on TV grows past its bounds
-web:home | focusRingInside | Yes, keep it | WP-03 nothing on TV grows past its bounds
+web:home | focusRingInside | Yes, sync it | WP-03 nothing on TV grows past its bounds
 web:home | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds
 web:search | focusRingInside | Search videos and chats | WP-03 nothing on TV grows past its bounds
 web:search | focusRingInside | *, open the account menu | WP-03 nothing on TV grows past its bounds

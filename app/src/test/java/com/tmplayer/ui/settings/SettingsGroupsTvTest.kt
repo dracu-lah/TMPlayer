@@ -182,7 +182,7 @@ class SettingsGroupsTvTest {
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-night-xhdpi")
     fun `Account reaches the devices, the sync rows and the profiles, Sign out last`() {
         show(SettingsPage.Accounts)
-        walk("Connected devices", "Keep my place on all my devices")
+        walk("Connected devices", "Sync across my devices")
     }
 
     @Test
