@@ -104,6 +104,9 @@ class PlayerControls(
 
     private val lockButton: ImageButton = root.findViewById(R.id.control_lock)
 
+    /** The lock in the phone's top bar, beside cast and More: shown while the row has no room for its own. */
+    private val topLockButton: ImageButton = root.findViewById(R.id.control_lock_top)
+
     /**
      * Back and forward beside play, on the phone and the television alike: the same buttons for a
      * thumb and a remote (a remote's Left and Right do the same jump over the bare picture, a
@@ -365,6 +368,7 @@ class PlayerControls(
             holdFocus(shapeButton)
         }
         wire(lockButton) { onLock() }
+        wire(topLockButton) { onLock() }
         wire(episodesButton) { onEpisodes() }
         wire(copyButton) { onCopies() }
         wire(nextEpisodeButton) { nextEpisodeToPlay?.let(onPlayEpisode) }
@@ -725,6 +729,19 @@ class PlayerControls(
     val shapeOnRow: Boolean get() = slotOf(shapeButton).visibility == View.VISIBLE
     val lockOnRow: Boolean get() = slotOf(lockButton).visibility == View.VISIBLE
 
+    /** True while the lock sits in the top bar (a phone whose row is too narrow for it). */
+    val lockInTopBar: Boolean get() = topLockButton.visibility == View.VISIBLE
+
+    /**
+     * Whether the screen orientation button shows (WP-37). Not on a television, and not where Android
+     * ignores what an app asks for (a tablet, a window shared with another app): a button that says
+     * "Landscape" and turns nothing is worse than none.
+     */
+    fun setRotateAvailable(available: Boolean) {
+        slotOf(rotate).visibility = if (!isTv && available) View.VISIBLE else View.GONE
+        row.requestLayout()
+    }
+
     /** False while the round buttons run past the room their scroll view has: the row did not fit. */
     val rowFits: Boolean
         get() = buttons.width <= buttonsScroll.width - buttonsScroll.paddingLeft - buttonsScroll.paddingRight
@@ -743,6 +760,7 @@ class PlayerControls(
     private fun fitRow() {
         if (isTv) {
             slotOf(shapeButton).visibility = View.VISIBLE
+            topLockButton.visibility = View.GONE
             return
         }
         val metrics = cluster.resources.displayMetrics
@@ -753,6 +771,8 @@ class PlayerControls(
             giveUp(step)
             if (step == LAST_ROW_STEP || rowNeeds() <= room) break
         }
+        // The lock has one home at a time: the row's, or (when the row had to give it up) the top bar's.
+        topLockButton.visibility = if (slotOf(lockButton).visibility == View.VISIBLE) View.GONE else View.VISIBLE
         // Measuring left each part at its natural size: the next pass sizes them for the row.
         row.requestLayout()
     }
@@ -908,6 +928,7 @@ class PlayerControls(
             R.id.control_speed to L.playerPlaybackSpeed,
             R.id.control_rotate to L.playerScreenOrientation,
             R.id.control_lock to L.playerLockScreen,
+            R.id.control_lock_top to L.playerLockScreen,
             R.id.control_tv_more to L.commonMore,
             R.id.control_tv_previous_episode to L.playerPreviousEpisode,
             R.id.control_tv_next_episode to L.playerNextEpisode,

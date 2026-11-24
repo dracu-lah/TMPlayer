@@ -59,4 +59,18 @@
     -->
     <dimen name="player_scrim_top">160dp</dimen>
     <dimen name="player_scrim_bottom">260dp</dimen>
+    <!--
+      The transport's sizes (WP-37): the play disc, its icon and spinner, the episode steps and the
+      seek buttons beside it, and the row's round buttons. A tablet (values-sw600dp) gets larger
+      ones for a hand held at arm's length; a television keeps these.
+    -->
+    <dimen name="player_play_size">72dp</dimen>
+    <dimen name="player_play_icon">40dp</dimen>
+    <dimen name="player_play_spinner">64dp</dimen>
+    <dimen name="player_step_size">56dp</dimen>
+    <dimen name="player_step_column">64dp</dimen>
+    <dimen name="player_seek_size">48dp</dimen>
+    <dimen name="player_row_button">48dp</dimen>
+    <!-- The elapsed and total time over the scrub bar. -->
+    <dimen name="player_times_size">13sp</dimen>
 </resources>

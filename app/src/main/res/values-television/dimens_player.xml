@@ -12,6 +12,7 @@
     <dimen name="player_title_size">26sp</dimen>
     <!-- Small text is 14sp on a television, the type floor (TvTypeScale); the phone keeps 13sp in values. -->
     <dimen name="player_text_small">14sp</dimen>
+    <dimen name="player_times_size">14sp</dimen>
     <!-- 5 percent of a 1080p screen: 48 dp across and 27 dp down (WP-05), the title safe area. -->
     <dimen name="player_safe_h">48dp</dimen>
     <dimen name="player_safe_v">27dp</dimen>

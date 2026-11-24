@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A television wider than 600dp: the phone's transport sizes and the television's own bar and text
+  sizes, which values-sw600dp would otherwise take over (smallest width outranks the television
+  qualifier).
+-->
+<resources>
+    <dimen name="player_play_size">72dp</dimen>
+    <dimen name="player_play_icon">40dp</dimen>
+    <dimen name="player_play_spinner">64dp</dimen>
+    <dimen name="player_step_size">56dp</dimen>
+    <dimen name="player_step_column">64dp</dimen>
+    <dimen name="player_seek_size">48dp</dimen>
+    <dimen name="player_row_button">48dp</dimen>
+    <dimen name="player_timebar_touch">26dp</dimen>
+    <dimen name="player_times_size">14sp</dimen>
+</resources>

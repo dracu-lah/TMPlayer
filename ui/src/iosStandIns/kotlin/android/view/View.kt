@@ -249,6 +249,7 @@ class MotionEvent private constructor(
         const val AXIS_HSCROLL = 10
         const val BUTTON_PRIMARY = 1
         const val TOOL_TYPE_FINGER = 1
+        const val TOOL_TYPE_STYLUS = 2
         const val TOOL_TYPE_MOUSE = 3
 
         fun obtain(other: MotionEvent): MotionEvent = MotionEvent(

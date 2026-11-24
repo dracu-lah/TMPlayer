@@ -46,5 +46,18 @@ enum class ScreenOrientation(val requested: Int) {
          * A portrait clip still turns, but that is the rare case.
          */
         val DEFAULT = Landscape
+
+        /**
+         * Whether Android does what an app asks for here (WP-37). Not on a television; not on a
+         * tablet or an unfolded foldable (smallest width 600 dp and up: Android 12L ignores the
+         * request in a window shared with another app, and Android 16 on any large screen for an
+         * app that targets it); not in a window shared with another app. Where it is not honoured
+         * the rotate button is hidden and the player follows the device ([Follow]).
+         */
+        fun honoured(tv: Boolean, smallestWidthDp: Int, multiWindow: Boolean): Boolean =
+            !tv && !multiWindow && smallestWidthDp < LARGE_SCREEN_DP
+
+        /** Smallest width from which Android treats a screen as a large one. */
+        const val LARGE_SCREEN_DP = 600
     }
 }

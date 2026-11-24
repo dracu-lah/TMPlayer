@@ -145,6 +145,20 @@
             android:tint="@color/player_control_icon"
             android:visibility="gone" />
 
+        <!-- The lock (WP-37), where a thumb finds it on an upright phone: the row only has room for it
+             when it is wide. Shown by PlayerControls while the row does not carry it. -->
+        <ImageButton
+            android:id="@+id/control_lock_top"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_control_button"
+            android:contentDescription="Lock the screen"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_lock"
+            android:tint="@color/player_control_icon"
+            android:visibility="gone" />
+
         <ImageButton
             android:id="@+id/control_more"
             android:layout_width="48dp"
@@ -187,7 +201,7 @@
         android:visibility="gone">
 
         <LinearLayout
-            android:layout_width="64dp"
+            android:layout_width="@dimen/player_step_column"
             android:layout_height="wrap_content"
             android:gravity="center_horizontal"
             android:orientation="vertical">
@@ -199,8 +213,8 @@
 
             <ImageButton
                 android:id="@+id/center_previous"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="@dimen/player_step_size"
+                android:layout_height="@dimen/player_step_size"
                 android:background="@drawable/bg_center_button"
                 android:contentDescription="Previous episode"
                 android:padding="14dp"
@@ -230,8 +244,8 @@
 
         <FrameLayout
             android:id="@+id/center_seek_back_frame"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="@dimen/player_seek_size"
+            android:layout_height="@dimen/player_seek_size"
             android:layout_marginStart="8dp"
             android:visibility="gone">
 
@@ -261,8 +275,8 @@
         <FrameLayout
             android:id="@+id/center_play_pause"
             android:accessibilityLiveRegion="polite"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
+            android:layout_width="@dimen/player_play_size"
+            android:layout_height="@dimen/player_play_size"
             android:layout_marginStart="8dp"
             android:layout_marginEnd="8dp"
             android:background="@drawable/bg_center_button"
@@ -272,15 +286,15 @@
 
             <com.tmplayer.player.PlayPauseIcon
                 android:id="@+id/center_play_icon"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="@dimen/player_play_icon"
+                android:layout_height="@dimen/player_play_icon"
                 android:layout_gravity="center"
                 android:importantForAccessibility="no" />
 
             <ProgressBar
                 android:id="@+id/center_buffering"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="@dimen/player_play_spinner"
+                android:layout_height="@dimen/player_play_spinner"
                 android:layout_gravity="center"
                 android:indeterminateTint="#FFFFFFFF"
                 android:visibility="gone" />
@@ -288,8 +302,8 @@
 
         <FrameLayout
             android:id="@+id/center_seek_forward_frame"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="@dimen/player_seek_size"
+            android:layout_height="@dimen/player_seek_size"
             android:layout_marginEnd="8dp"
             android:visibility="gone">
 
@@ -317,7 +331,7 @@
         </FrameLayout>
 
         <LinearLayout
-            android:layout_width="64dp"
+            android:layout_width="@dimen/player_step_column"
             android:layout_height="wrap_content"
             android:gravity="center_horizontal"
             android:orientation="vertical">
@@ -329,8 +343,8 @@
 
             <ImageButton
                 android:id="@+id/center_next"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="@dimen/player_step_size"
+                android:layout_height="@dimen/player_step_size"
                 android:background="@drawable/bg_center_button"
                 android:contentDescription="Next episode"
                 android:padding="14dp"
@@ -408,7 +422,7 @@
                 android:layout_weight="1"
                 android:gravity="center_vertical"
                 android:textColor="#B8FFFFFF"
-                android:textSize="@dimen/player_text_small" />
+                android:textSize="@dimen/player_times_size" />
 
             <TextView
                 android:id="@+id/times_duration"
@@ -421,7 +435,7 @@
                 android:gravity="center_vertical|end"
                 android:paddingStart="8dp"
                 android:textColor="#B8FFFFFF"
-                android:textSize="@dimen/player_text_small" />
+                android:textSize="@dimen/player_times_size" />
         </LinearLayout>
 
         <com.tmplayer.player.FineTimeBar
@@ -490,13 +504,13 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
                         android:gravity="center_horizontal"
-                        android:minWidth="48dp"
+                        android:minWidth="@dimen/player_row_button"
                         android:orientation="vertical">
 
                         <ImageButton
                             android:id="@+id/control_subtitles"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
+                            android:layout_width="@dimen/player_row_button"
+                            android:layout_height="@dimen/player_row_button"
                             android:background="@drawable/bg_control_button"
                             android:contentDescription="Subtitles"
                             android:nextFocusUp="@id/controls_timebar"
@@ -528,13 +542,13 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
                         android:gravity="center_horizontal"
-                        android:minWidth="48dp"
+                        android:minWidth="@dimen/player_row_button"
                         android:orientation="vertical">
 
                         <ImageButton
                             android:id="@+id/control_audio"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
+                            android:layout_width="@dimen/player_row_button"
+                            android:layout_height="@dimen/player_row_button"
                             android:background="@drawable/bg_control_button"
                             android:contentDescription="Audio"
                             android:nextFocusUp="@id/controls_timebar"
@@ -566,13 +580,13 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
                         android:gravity="center_horizontal"
-                        android:minWidth="48dp"
+                        android:minWidth="@dimen/player_row_button"
                         android:orientation="vertical">
 
                         <ImageButton
                             android:id="@+id/control_speed"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
+                            android:layout_width="@dimen/player_row_button"
+                            android:layout_height="@dimen/player_row_button"
                             android:background="@drawable/bg_control_button"
                             android:contentDescription="Playback speed"
                             android:nextFocusUp="@id/controls_timebar"
@@ -608,14 +622,14 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
                         android:gravity="center_horizontal"
-                        android:minWidth="48dp"
+                        android:minWidth="@dimen/player_row_button"
                         android:orientation="vertical"
                         android:visibility="gone">
 
                         <ImageButton
                             android:id="@+id/control_shape"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
+                            android:layout_width="@dimen/player_row_button"
+                            android:layout_height="@dimen/player_row_button"
                             android:background="@drawable/bg_control_button"
                             android:contentDescription="Picture shape"
                             android:nextFocusUp="@id/controls_timebar"
@@ -647,14 +661,14 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
                         android:gravity="center_horizontal"
-                        android:minWidth="48dp"
+                        android:minWidth="@dimen/player_row_button"
                         android:orientation="vertical"
                         android:visibility="gone">
 
                         <ImageButton
                             android:id="@+id/control_rotate"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
+                            android:layout_width="@dimen/player_row_button"
+                            android:layout_height="@dimen/player_row_button"
                             android:background="@drawable/bg_control_button"
                             android:contentDescription="Screen orientation"
                             android:nextFocusUp="@id/controls_timebar"
@@ -688,14 +702,14 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="4dp"
                         android:gravity="center_horizontal"
-                        android:minWidth="48dp"
+                        android:minWidth="@dimen/player_row_button"
                         android:orientation="vertical"
                         android:visibility="gone">
 
                         <ImageButton
                             android:id="@+id/control_lock"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
+                            android:layout_width="@dimen/player_row_button"
+                            android:layout_height="@dimen/player_row_button"
                             android:background="@drawable/bg_control_button"
                             android:contentDescription="Lock the screen"
                             android:padding="12dp"

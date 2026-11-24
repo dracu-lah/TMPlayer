@@ -30,6 +30,9 @@ object LockedKeys {
     /** How long a select key is held to unlock: long enough that a tap or a mash never does. */
     const val HOLD_MS = 2_000L
 
+    /** A finger on the unlock pill: a second, since a tap is too easy for a child's hand (WP-37). */
+    const val TOUCH_HOLD_MS = 1_000L
+
     fun kind(keyCode: Int): Kind = when (keyCode) {
         KeyEvent.KEYCODE_VOLUME_UP,
         KeyEvent.KEYCODE_VOLUME_DOWN,

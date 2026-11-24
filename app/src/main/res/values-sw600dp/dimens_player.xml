@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The player's chrome on a tablet or an unfolded foldable (WP-37, smallest width 600dp and up): the
+  transport sized for a thumb at the edge of a 10 inch screen. A television is often wider than
+  600dp and smallest width outranks the television qualifier, so values-sw600dp-television puts its
+  own sizes back.
+-->
+<resources>
+    <dimen name="player_play_size">88dp</dimen>
+    <dimen name="player_play_icon">48dp</dimen>
+    <dimen name="player_play_spinner">80dp</dimen>
+    <dimen name="player_step_size">64dp</dimen>
+    <dimen name="player_step_column">72dp</dimen>
+    <dimen name="player_seek_size">56dp</dimen>
+    <dimen name="player_row_button">56dp</dimen>
+    <dimen name="player_timebar_touch">56dp</dimen>
+    <dimen name="player_times_size">15sp</dimen>
+</resources>

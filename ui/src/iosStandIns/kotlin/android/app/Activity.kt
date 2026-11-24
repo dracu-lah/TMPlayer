@@ -34,6 +34,12 @@ open class Activity : ContextWrapper(null) {
 
     open fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {}
 
+    /** The window's size, orientation or fold changed and the activity handles it itself, Android's; the iOS shell does not call it. */
+    open fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
+
+    /** True while the window is shared with another app, Android's; iOS has no such mode. */
+    open val isInMultiWindowMode: Boolean get() = false
+
     /**
      * Picture in picture on iOS is Apple's player's (WP-31, [IosExternalPlayback]): the request that
      * keeps the system's automatic entry in step with playback goes to the engine, and this

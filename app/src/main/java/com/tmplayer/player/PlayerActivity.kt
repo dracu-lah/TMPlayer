@@ -2257,6 +2257,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         renderControlsTitle()
         renderOrientationButton()
+        controls?.setRotateAvailable(orientationHonoured())
         // When a track picker closes, focus falls off its fragment and the scrub bar catches it,
         // so the next D-pad press seeks instead of walking the row. Hand it back to the buttons.
         supportFragmentManager.addOnBackStackChangedListener {
@@ -3976,7 +3977,29 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun applyOrientation() {
         if (FormFactor.isTv(this)) return
-        requestedOrientation = orientation.requested
+        requestedOrientation = effectiveOrientation().requested
+    }
+
+    /**
+     * Whether Android does what the rotate button asks (WP-37): not on a tablet, an unfolded
+     * foldable or in a window shared with another app ([ScreenOrientation.honoured]).
+     */
+    private fun orientationHonoured(): Boolean = ScreenOrientation.honoured(
+        tv = FormFactor.isTv(this),
+        smallestWidthDp = resources.configuration.smallestScreenWidthDp,
+        multiWindow = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N && isInMultiWindowMode,
+    )
+
+    /** The viewer's choice where it is honoured, otherwise the device's own way ([ScreenOrientation.Follow]). */
+    private fun effectiveOrientation(): ScreenOrientation =
+        if (orientationHonoured()) orientation else ScreenOrientation.Follow
+
+    /** The rotate button comes and goes with the window: a fold, a split screen, a resize. */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (FormFactor.isTv(this)) return
+        controls?.setRotateAvailable(orientationHonoured())
+        if (!locked) applyOrientation()
     }
 
     /** The button: the next state along, applied and said out loud. */
@@ -9231,7 +9254,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lockedAt = android.os.SystemClock.uptimeMillis()
         controls?.hideAnimated()
         feedback?.clear()
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        // Held to the pair it is in, upright or sideways, but still turning end for end with the phone:
+        // SCREEN_ORIENTATION_LOCKED kept the very rotation it was in, so a phone then held the other
+        // way up (a lap, flat on a table) showed the picture upside down (WP-37).
+        requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         val root = findViewById<FrameLayout>(R.id.player_root)
         val tv = FormFactor.isTv(this)
         val shield = lockShield ?: FrameLayout(this).also { built ->
@@ -9269,7 +9299,27 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 isClickable = true
                 isFocusable = false
                 contentDescription = L.playerUnlock
+                // The click is the way for a reader (TalkBack's double tap), a mouse and a keyboard;
+                // a finger holds for a second with the progress bar filling, like the remote's OK.
                 setOnClickListener { unlockScreen() }
+                setOnTouchListener { _, event ->
+                    if (event.getToolType(0) != android.view.MotionEvent.TOOL_TYPE_FINGER &&
+                        event.getToolType(0) != android.view.MotionEvent.TOOL_TYPE_STYLUS
+                    ) {
+                        return@setOnTouchListener false
+                    }
+                    when (event.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                            if (unlockHeldKey == 0) startUnlockHold(TOUCH_UNLOCK_HOLD, holdMs = LockedKeys.TOUCH_HOLD_MS)
+                            true
+                        }
+                        android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                            if (unlockHeldKey == TOUCH_UNLOCK_HOLD) stopUnlockHold()
+                            true
+                        }
+                        else -> true
+                    }
+                }
             }
             built.addView(
                 pill,
@@ -9296,7 +9346,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /** The pill's words: a remote holds OK, a touch screen taps (a held Enter works there too). */
-    private fun unlockHint(): String = if (FormFactor.isTv(this)) L.playerHoldOkToUnlock else L.playerTapToUnlock
+    private fun unlockHint(): String = when {
+        FormFactor.isTv(this) -> L.playerHoldOkToUnlock
+        // A screen reader double taps; a finger holds a second (WP-37).
+        getSystemService(android.view.accessibility.AccessibilityManager::class.java)?.isTouchExplorationEnabled == true -> L.playerTapToUnlock
+        else -> L.playerHoldToUnlock
+    }
 
     private fun showUnlockPill() {
         val pill = unlockPill ?: return
@@ -9312,16 +9367,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * [heldMs] is how long it has been down already, when its first down was not the event that
      * started this.
      */
-    private fun startUnlockHold(keyCode: Int, heldMs: Long = 0L) {
+    private fun startUnlockHold(keyCode: Int, heldMs: Long = 0L, holdMs: Long = LockedKeys.HOLD_MS) {
         val pill = unlockPill ?: return
-        val already = heldMs.coerceIn(0L, LockedKeys.HOLD_MS)
-        val left = LockedKeys.HOLD_MS - already
+        val already = heldMs.coerceIn(0L, holdMs)
+        val left = holdMs - already
         unlockHeldKey = keyCode
         showUnlockPill()
         unlockText?.text = L.playerKeepHoldingToUnlock
         unlockProgress?.let { bar ->
             bar.visibility = View.VISIBLE
-            val from = (bar.max * already / LockedKeys.HOLD_MS).toInt()
+            val from = (bar.max * already / holdMs).toInt()
             bar.progress = from
             bar.tag = android.animation.ObjectAnimator.ofInt(bar, "progress", from, bar.max).apply {
                 duration = left
@@ -10059,7 +10114,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * measured width decides: side by side from 560dp, stacked with a smaller poster below that.
      */
     private fun sheetGoesSideways(): Boolean =
-        !FormFactor.isTv(this) && orientation == ScreenOrientation.Landscape
+        !FormFactor.isTv(this) && effectiveOrientation() == ScreenOrientation.Landscape
 
     private fun showStatus(message: String) {
         openingFilm = true
@@ -11424,6 +11479,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the unlock pill stays up after a tap on the locked screen. */
         private const val UNLOCK_PILL_MS = 2_500L
+
+        /** The pseudo key code of a finger held on the unlock pill (a real key is positive, none is 0). */
+        private const val TOUCH_UNLOCK_HOLD = -1
 
         private const val RESUME_TICK_MS = 10_000L
 
