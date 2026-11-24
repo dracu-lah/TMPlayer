@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.NonRestartableComposable
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -259,273 +261,358 @@ fun PlayerScreen(
     /** "Not enough space": close the player for Downloads with Free up space up. Null hides it. */
     onFreeUpSpace: (() -> Unit)? = null,
 ) {
-    // The profile this player was opened for (HX88): its resume saves are never another profile's.
-    val accountOwner = androidx.compose.runtime.remember { com.tmplayer.data.Accounts.stamp }
+    // Split so that no method grows past what the release build's ProGuard can write stack map
+    // frames for (HX1, as SeriesPanel and AddChatsScreen were): one method of about 2,400 lines
+    // and well over a hundred locals failed verifyReleaseClasses. PlayerUi is what the screen
+    // remembers, MediaUi, VideoUi and MessageUi what it remembers per media, per video and per
+    // message, PlayerSession its actions and what one composition reads (what the body's local
+    // functions captured), and the stages below, called in the order the body ran them, its
+    // effects and what it draws. Every stage is non-restartable, so a state read in any of them
+    // recomposes this screen as before.
     val s = LocalStrings.current
-    // One search for the Cast button per player session (FQ8), not one per reveal of the controls.
-    val castPresence = rememberCastBarPresence()
-    // What the TV is told the video is called, read when a cast loads it.
-    val castTitle = remember { arrayOf(com.tmplayer.desktop.cast.CastTitle("")) }
-    // mpv on this computer, or the TV while a cast is on (CP73): a video opened with a session up
-    // goes to the TV from the start.
-    // When libmpv cannot load (Windows blocked it), a stand-in whose reason the status sheet shows (HX36).
-    val engineBlocked = remember { arrayOfNulls<String>(1) }
-    val engine = remember {
-        val local = try {
-            engineFactory()
-        } catch (e: VideoEngineUnavailable) {
-            engineBlocked[0] = e.message ?: VideoEngineFailure.describe(e)
-            NoEngine(engineBlocked[0].orEmpty())
-        }
-        com.tmplayer.desktop.cast.SwitchingEngine(local).also { e ->
-            (com.tmplayer.desktop.cast.DesktopCast.state.value as? com.tmplayer.desktop.cast.DesktopCast.State.Connected)?.let { c ->
-                e.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(c.receiver) { castTitle[0] })
-            }
-        }
-    }
-    val desktop by prefs.state.collectAsState()
-    DisposableEffect(engine) { onDispose { engine.close() } }
-    LaunchedEffect(engine) { onEngine(engine) }
+    val ui = remember { PlayerUi(s.playerOpeningVideo, menuOpen, detailsOpen, onlineOpen, shortcutsOpen, episodesOpen, lockedAtStart) }
+    val held = remember(media) { MediaUi(media, startFromBeginning) }
+    val video = remember(held.current) { VideoUi(held.current, ui.keepRepeat, ui.skipSay) }
+    val message = rememberForMessage(held.current.item) { MessageUi() }
+    val session = PlayerSession(
+        ui, held, video, message, s, androidx.compose.ui.platform.LocalFocusManager.current,
+        settings, prefs, watched, bookmarks, onBack, fullscreen, onToggleFullscreen, onMiniPlayer, onToggleAlwaysOnTop,
+        onQuit, onPlayingItemChanged, onEngine, downloads, idleLimitMs, screenshotDir, engineFactory, backdrop,
+        loaderThumbnail, onlinePreset, onLockedChanged, onFreeUpSpace,
+    )
+    session.Gather()
+    session.Opening()
+    session.Ending()
+    session.Controls()
+    session.Body(modifier)
+    session.Refocus()
+}
 
-    val scope = rememberCoroutineScope()
-    val activeEngine by engine.activeFlow.collectAsState()
-    // Every update of the engine, the clock's four a second among them. Read in handlers, in the
-    // derived values below and by the small parts that draw the time, never in this body, so a
-    // tick of the clock recomposes the time label and the bar rather than the whole screen.
-    val liveStatus = activeEngine.state.collectAsState()
-    // The same status with the position and the buffer's end left as they were, which is what the
-    // body reads: it changes when something other than the clock does (SteadyStatus).
-    val status by remember(liveStatus) { derivedStateOf(SteadyStatus) { liveStatus.value } }
+/** What [PlayerScreen] remembers for as long as it is open. */
+private class PlayerUi(
+    opening: String,
+    menuOpen: String?,
+    detailsOpen: Boolean,
+    onlineOpen: Boolean,
+    shortcutsOpen: Boolean,
+    episodesOpen: Boolean,
+    lockedAtStart: Boolean,
+) {
+    // The profile this player was opened for (HX88): its resume saves are never another profile's.
+    val accountOwner = com.tmplayer.data.Accounts.stamp
+    // What the TV is told the video is called, read when a cast loads it.
+    val castTitle = arrayOf(com.tmplayer.desktop.cast.CastTitle(""))
+    // When libmpv cannot load (Windows blocked it), the reason the stand-in's status sheet shows (HX36).
+    val engineBlocked = arrayOfNulls<String>(1)
 
     // The free zoom over the picture shape (PictureZoom), and the size of the area the picture is
     // drawn in, which its pointer positions and its clamp are measured against.
-    var zoom by remember { mutableStateOf(PictureZoom.NONE) }
-    var videoBox by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    val tracks by activeEngine.tracks.collectAsState()
-    val castState by com.tmplayer.desktop.cast.DesktopCast.state.collectAsState()
+    var zoom by mutableStateOf(PictureZoom.NONE)
+    var videoBox by mutableStateOf(androidx.compose.ui.unit.IntSize.Zero)
 
-    var current by remember(media) { mutableStateOf(media) }
-    // Whether this video is being watched, for the downloads that step aside while one plays from
-    // the network (DownloadYield). A cast counts, as its engine reports playing too.
-    val watching = status.playing && !status.ended
-    LaunchedEffect(watching, current) {
-        val ids = listOf(current.item.fileId) + current.item.pieces.map { it.fileId }
-        com.tmplayer.data.StreamingPlays.setPlaying(ids, watching)
-    }
-    var ignoreSavedPosition by remember(media) { mutableStateOf(startFromBeginning) }
-    var attempt by remember { mutableIntStateOf(0) }
-    var phase by remember { mutableStateOf<Phase>(Phase.Loading(s.playerOpeningVideo)) }
-    // A failure once the video is playing (mpv lost the stream, a decoder gave up) ends in the error
-    // sheet too, with Try again, instead of a still picture and nothing said (HX10). The open's own
-    // failure is read where it opens.
-    LaunchedEffect(engine) {
-        engine.state.map { it.error }.collect { error ->
-            if (error != null && phase == Phase.Playing && engine.cast == null) {
-                phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
-            }
-        }
-    }
+    var attempt by mutableIntStateOf(0)
+    var phase by mutableStateOf<Phase>(Phase.Loading(opening))
     // The opening's start point and [StreamReads] when it began, for the loader's staged line.
-    var openingStartMs by remember { mutableStateOf(0L) }
-    val openingBytesAt = remember { longArrayOf(0L) }
-    var episodes by remember { mutableStateOf(Episodes()) }
+    var openingStartMs by mutableStateOf(0L)
+    val openingBytesAt = longArrayOf(0L)
+    var episodes by mutableStateOf(Episodes())
     // A fixed picture shape (16:9, 4:3...) picked in this player, which the next video keeps.
-    val heldShape = remember { arrayOfNulls<VideoScale>(1) }
-    // Every copy of the video playing that the player knows of: what the opening page handed over
-    // (CopyHandoff, possibly across chats) and, for an episode, its copies once the show is found.
-    val copies = remember(current.item.id, episodes) {
-        val here = current.item
-        val episode = episodes.series?.episodes?.firstOrNull { ep -> ep.copies.any { it.id == here.id } }
-        // The same file posted twice is one copy to switch to, not two.
-        com.tmplayer.data.VideoCopies.oneOfEachFile((CopyHandoff.copiesOf(here) + episode?.copies.orEmpty() + here).distinctBy { it.id }, here.id)
-    }
-    LaunchedEffect(current.item.id) {
-        val here = current.item
-        runCatching { settings.notePlayedQuality(copies.firstOrNull { it.id == here.id } ?: here) }
-    }
-    // The message as Telegram has it now (CP80): its lighter copies, start time and storyboard.
-    // The grid's item already carries them; one rebuilt from a record is read again.
-    // Kept per message through rememberForMessage, so the chat and message ids (longs) stay out of
-    // this function's own local slots: see rememberForMessage.
-    var post by rememberForMessage(current.item) { mutableStateOf<MediaItem?>(null) }
-    // The subtitle files posted in this video's chat (EG-F48), looked for once when the Subtitles menu
-    // first opens: one search, kept for the video, and nothing when offline or the kids lock leaves
-    // the chat out. The menu shows "In this chat" only when there are some.
-    var chatHits by rememberForMessage(current.item) { mutableStateOf(emptyList<com.tmplayer.player.ChatSubtitles.Hit>()) }
-    var chatAsked by rememberForMessage(current.item) { mutableStateOf(false) }
+    val heldShape = arrayOfNulls<VideoScale>(1)
     // The media handed on to a Telegram copy before it ever opened, whose leaving saves nothing.
-    val neverOpened = remember { arrayOfNulls<PlayerMedia>(1) }
-    LaunchedEffect(current.item.chatId, current.item.messageId) {
-        val here = current.item
-        if (!hasMessage(here) || !current.fromTelegram) return@LaunchedEffect
-        if (here.qualities.isNotEmpty() || here.storyboard != null) {
-            post = here
-            return@LaunchedEffect
-        }
-        post = runCatching {
-            com.tmplayer.data.Td.awaitAuthorizedSession()
-            com.tmplayer.data.Td.refreshMedia(here.chatId, here.messageId)
-        }.getOrNull()
-    }
-    val qualities = if (current.isDownload || current.item.isJoined) emptyList() else (post?.qualities ?: current.item.qualities)
-    // Telegram's storyboard (CP80): the timebar's hover pictures, where scrub pictures are on.
-    val scrubSetting by remember(settings) { settings.trickplay }.collectAsState(initial = true)
-    val scrubPictures = scrubSetting && com.tmplayer.data.Trickplay.PICTURES_SHOWN
-    val boardFiles = (post ?: current.item).storyboard
-    val storyboard = remember(boardFiles, scrubPictures) {
-        boardFiles?.takeIf { scrubPictures }?.let { files -> DesktopStoryboard(files, durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) }
-    }
-    // Fetched as the video opens, in the player's lifetime rather than the hover's, so the sprite
-    // is in by the time the pointer reaches the bar (a fetch from inside the hover was cancelled,
-    // and TDLib's download withdrawn, each time the pointer moved on).
-    LaunchedEffect(storyboard) { runCatching { storyboard?.warm() }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it } }
-    // The video's own frames for the hover where the storyboard has none: a second decoder over
-    // what is on the disk (see [PlaybackEngine.previewFrame]).
-    val frameSource = remember(current.item.id, scrubPictures) {
-        if (!scrubPictures) {
-            null
-        } else {
-            FrameSource(durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) { at ->
-                engine.previewFrame(at, FRAME_WIDTH_PX, FRAME_HEIGHT_PX)
-            }
-        }
-    }
-    val seekCover = remember(current.item.id) { SeekCover(current.item.thumbnailFileId, current.item.miniThumbnail) }
-    var resumedFrom by remember { mutableStateOf<Long?>(null) }
-    var autoplayNext by remember { mutableStateOf(true) }
-    var nextUpDismissed by remember { mutableStateOf(false) }
-    var nextUpShown by remember { mutableStateOf(false) }
-    var trackChoice by remember { mutableStateOf(TrackChoice()) }
-    var showRemaining by remember { mutableStateOf(false) }
-    var ignoreClicks by remember { mutableStateOf(false) }
+    val neverOpened = arrayOfNulls<PlayerMedia>(1)
+    var resumedFrom by mutableStateOf<Long?>(null)
+    var autoplayNext by mutableStateOf(true)
+    var nextUpDismissed by mutableStateOf(false)
+    var nextUpShown by mutableStateOf(false)
+    var trackChoice by mutableStateOf(TrackChoice())
+    var showRemaining by mutableStateOf(false)
+    var ignoreClicks by mutableStateOf(false)
     // Lock the screen ([PlayerLock]): whether it is on, when the Unlock button was last asked
     // for (it fades [PlayerLock.SHOW_MS] after), and the hold of Enter toward an unlock.
-    var screenLocked by remember { mutableStateOf(lockedAtStart) }
-    var unlockWanted by remember { mutableLongStateOf(if (lockedAtStart) System.nanoTime() else 0L) }
-    var showUnlock by remember { mutableStateOf(lockedAtStart) }
-    var unlockHold by remember { mutableStateOf<Job?>(null) }
-    var tdlibVersion by remember { mutableStateOf<String?>(null) }
+    var screenLocked by mutableStateOf(lockedAtStart)
+    var unlockWanted by mutableLongStateOf(if (lockedAtStart) System.nanoTime() else 0L)
+    var showUnlock by mutableStateOf(lockedAtStart)
+    var unlockHold by mutableStateOf<Job?>(null)
+    var tdlibVersion by mutableStateOf<String?>(null)
 
-    var controlsUp by remember { mutableStateOf(true) }
-    var activity by remember { mutableLongStateOf(0L) }
-    var overControls by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) }) }
-    // The files are looked for the first time the menu opens on Subtitles or the main page that leads there.
-    val subtitleMenuOpen = menu?.page == MenuPage.Subtitles || menu?.page == MenuPage.Main
-    LaunchedEffect(subtitleMenuOpen, current.item.chatId, current.item.messageId) {
-        val here = current.item
-        if (!subtitleMenuOpen || chatAsked || !hasMessage(here) || !current.fromTelegram) return@LaunchedEffect
-        chatAsked = true
-        chatHits = try {
-            (com.tmplayer.data.ChatSubtitleFinder.shared.find(
-                here.chatId, here.messageId, here.fileName.ifBlank { here.title }, here.caption,
-                OnlineSubtitles.languagesFor(null),
-            ) as? com.tmplayer.data.ChatSubtitleFound.Hits)?.hits.orEmpty()
-        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
-            emptyList()
-        }
-    }
-    var showDetails by remember { mutableStateOf(detailsOpen) }
-    var showOnline by remember { mutableStateOf(onlineOpen) }
+    var controlsUp by mutableStateOf(true)
+    var activity by mutableLongStateOf(0L)
+    var overControls by mutableStateOf(false)
+    var menu by mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) })
+    var showDetails by mutableStateOf(detailsOpen)
+    var showOnline by mutableStateOf(onlineOpen)
     // Which search the online panel runs: OpenSubtitles and SubDL, or MSone.
-    var onlineMsone by remember { mutableStateOf(false) }
-    var onlineSubMaker by remember { mutableStateOf(false) }
+    var onlineMsone by mutableStateOf(false)
+    var onlineSubMaker by mutableStateOf(false)
     // The video SubMaker translations were started for, so they end with it (leaving the player or another video).
-    var translatingVideo by remember { mutableStateOf<String?>(null) }
-    var showShortcuts by remember { mutableStateOf(shortcutsOpen) }
-    var showEpisodes by remember { mutableStateOf(episodesOpen) }
-    var flash by remember { mutableStateOf<Flash?>(null) }
-    var seekRun by remember { mutableStateOf(0L to 0L) } // (accumulated ms, last at)
-    val downloaded by current.downloaded.collectAsState()
-    val savable by current.savable.collectAsState()
-    // The Watched list as it stands, for which way the menu's mark line reads.
-    val watchedKeys by remember(watched) { watched?.watched ?: flowOf(emptyMap()) }
-        .collectAsState(initial = emptyMap())
+    var translatingVideo by mutableStateOf<String?>(null)
+    var showShortcuts by mutableStateOf(shortcutsOpen)
+    var showEpisodes by mutableStateOf(episodesOpen)
+    var flash by mutableStateOf<Flash?>(null)
+    var seekRun by mutableStateOf(0L to 0L) // (accumulated ms, last at)
     // Videos marked watched from this player. Their position is forgotten on the way out rather
     // than saved, or leaving would put them straight back into Continue watching (as on Android).
-    val markedHere = remember { mutableSetOf<String>() }
+    val markedHere = mutableSetOf<String>()
     // Videos already put on the Watched list for being left past 90 %, so leaving the same one
     // twice (switching away, then closing) marks it once.
-    val watchedHere = remember { mutableSetOf<String>() }
-    // Where this video's intro, recap and credits are, from the online lookups, and the ones
-    // already skipped (by start), which do not offer themselves again in this playback. Both
-    // belong to the video playing: an episode switch starts with none until its own answer.
-    var skips by remember(current) { mutableStateOf(emptyList<SkipSegment>()) }
-    var skipped by remember(current) { mutableStateOf(emptySet<Long>()) }
+    val watchedHere = mutableSetOf<String>()
     // Chapters, the online lists and the viewer's marks merged, with the per kind choice and the
-    // countdown; and what the pill shows now, which the loop below keeps current.
-    val skipSay = remember { arrayOf<(String) -> Unit>({}) }
-    val skipCtl = remember(current) { SkipController { skipSay[0](it) }.also { it.start(current.item) } }
-    var skipOffer by remember(current) { mutableStateOf<SkipOffer?>(null) }
-    var introMarking by remember(current) { mutableStateOf(false) }
-    // A-B repeat, for the video playing only: a new video starts with none.
-    var abLoop by remember(current) { mutableStateOf<AbLoop?>(null) }
+    // countdown: what the controller says goes over the picture.
+    val skipSay = arrayOf<(String) -> Unit>({})
     // Repeat this video (EG-F52): lasts for the video it was switched on for; "Keep repeat on"
     // carries it to the next ([com.tmplayer.data.RepeatVideo.repeats]). Excludes the A-B repeat.
-    var keepRepeat by remember { mutableStateOf(false) }
-    var repeatVideo by remember(current) { mutableStateOf(com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)) }
+    var keepRepeat by mutableStateOf(false)
 
     // "Still watching?" and the sleep timer (CP07). The counts live for the whole player session,
     // so they carry across the episodes autoplay moves on to, and any input starts them again.
-    var autoplayedInARow by remember { mutableIntStateOf(0) }
-    var idleMs by remember { mutableLongStateOf(0L) }
-    var sleepAt by remember { mutableLongStateOf(0L) }
-    var sleepAtTheEnd by remember { mutableStateOf(false) }
-    var heldDownloads by remember { mutableStateOf(emptyList<Int>()) }
+    var autoplayedInARow by mutableIntStateOf(0)
+    var idleMs by mutableLongStateOf(0L)
+    var sleepAt by mutableLongStateOf(0L)
+    var sleepAtTheEnd by mutableStateOf(false)
+    var heldDownloads by mutableStateOf(emptyList<Int>())
     // Where Keep watching opens the video again, past the saved resume point and its rules.
-    var reopenAt by remember { mutableStateOf<Long?>(null) }
+    var reopenAt by mutableStateOf<Long?>(null)
 
-    val focus = remember { FocusRequester() }
+    val focus = FocusRequester()
     // Whether the keys are on the player itself rather than on one of its controls: in the
     // big-screen mode a remote walks into the controls with Up and Down (plan 8.7).
-    var keysOnPlayer by remember { mutableStateOf(true) }
+    var keysOnPlayer by mutableStateOf(true)
     // Tab has walked focus into the controls: Space, Enter and the arrows are then the focused
     // control's, not the player's (WP-47). A click or a refocus ends it, so a control the mouse
     // pressed never takes the seek keys from the picture.
-    var navByKeyboard by remember { mutableStateOf(false) }
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val item = current.item
+    var navByKeyboard by mutableStateOf(false)
+    // The note dialog: for a new bookmark at a position, or for one already made.
+    var notePrompt by mutableStateOf<NotePrompt?>(null)
+    // The "Go to a time" dialog ({cmd}+G).
+    var timePrompt by mutableStateOf(false)
+    // "Add to a list" (HX43): the video as it was when the line was chosen, so the picker keeps
+    // naming the one it was opened for even if the next episode starts under it.
+    var listPicking by mutableStateOf<com.tmplayer.data.WatchLaterRecord?>(null)
+    // The speed to go back to when a hold ends; null while no hold has changed it.
+    var speedBeforeHold by mutableStateOf<Float?>(null)
+    // The resume after a pause lets the controls go sooner when they were down before it (PauseControls).
+    var quickHide by mutableStateOf(false)
+    // Whether Compose's focus is on the picture or inside it, where [PlayerSession.playerKey] hears the keys itself.
+    var focusInside by mutableStateOf(false)
+    val wheelStepper = WheelStepper()
+}
+
+/** What [PlayerScreen] remembers for the media it was handed, which the player moves on from. */
+private class MediaUi(media: PlayerMedia, startFromBeginning: Boolean) {
+    var current by mutableStateOf(media)
+    var ignoreSavedPosition by mutableStateOf(startFromBeginning)
+}
+
+/** What [PlayerScreen] remembers for the video playing: a new video starts with none of it. */
+private class VideoUi(current: PlayerMedia, keepRepeat: Boolean, skipSay: Array<(String) -> Unit>) {
+    // Where this video's intro, recap and credits are, from the online lookups, and the ones
+    // already skipped (by start), which do not offer themselves again in this playback. Both
+    // belong to the video playing: an episode switch starts with none until its own answer.
+    var skips by mutableStateOf(emptyList<SkipSegment>())
+    var skipped by mutableStateOf(emptySet<Long>())
+    // Chapters, the online lists and the viewer's marks merged, with the per kind choice and the
+    // countdown; and what the pill shows now, which the loop in Ending keeps current.
+    val skipCtl = SkipController { skipSay[0](it) }.also { it.start(current.item) }
+    var skipOffer by mutableStateOf<SkipOffer?>(null)
+    var introMarking by mutableStateOf(false)
+    // A-B repeat, for the video playing only: a new video starts with none.
+    var abLoop by mutableStateOf<AbLoop?>(null)
+    var repeatVideo by mutableStateOf(com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat))
+    // "Back to 12:34" after a long jump, for the video playing only. See [SeekUndo].
+    val seekUndo = SeekUndo()
+    var undoOffer by mutableStateOf<SeekUndo.Offer?>(null)
+}
+
+/** What [PlayerScreen] remembers per message, kept through [rememberForMessage]. */
+private class MessageUi {
+    // The message as Telegram has it now (CP80): its lighter copies, start time and storyboard.
+    // The grid's item already carries them; one rebuilt from a record is read again.
+    var post by mutableStateOf<MediaItem?>(null)
+    // The subtitle files posted in this video's chat (EG-F48), looked for once when the Subtitles menu
+    // first opens: one search, kept for the video, and nothing when offline or the kids lock leaves
+    // the chat out. The menu shows "In this chat" only when there are some.
+    var chatHits by mutableStateOf(emptyList<com.tmplayer.player.ChatSubtitles.Hit>())
+    var chatAsked by mutableStateOf(false)
     // "This video only" for the subtitle look (WP-29): this video keeps a look of its own.
-    var styleThisVideo by remember(item.chatId, item.messageId) { mutableStateOf(false) }
-    DisposableEffect(item.fileId) {
-        onDispose {
-            translatingVideo?.let { video -> OnlineSubtitles.current?.let { it.translations.cancelVideo(it.translationPrefix(video)) } }
-            translatingVideo = null
-        }
-    }
-    val seriesKey = remember(item) { seriesKeyOf(item) }
-    // Where a speed picked for this video is remembered, and read back from. See [SpeedMemory].
-    val speedScopes = remember(item, seriesKey) { SpeedMemory.scopesOf(item, seriesKey) }
-    val progressMap by remember(settings) { settings.watchProgress }.collectAsState(initial = emptyMap())
+    var styleThisVideo by mutableStateOf(false)
+}
+
+/**
+ * One composition of [PlayerScreen]: the screen's parameters, its remembered states under the names
+ * the body gave them, the values that composition read, and every action of the screen. A new one
+ * each composition, as the body's local functions were, so an action sees what its composition saw;
+ * the stages fill in what they compute as they run, before anything calls on it.
+ */
+private class PlayerSession(
+    val ui: PlayerUi,
+    val held: MediaUi,
+    val video: VideoUi,
+    val message: MessageUi,
+    val s: com.tmplayer.i18n.Messages,
+    val focusManager: androidx.compose.ui.focus.FocusManager,
+    val settings: SettingsStore,
+    val prefs: DesktopPrefs,
+    val watched: WatchedStore?,
+    val bookmarks: BookmarkStore?,
+    val onBack: () -> Unit,
+    val fullscreen: Boolean,
+    val onToggleFullscreen: () -> Unit,
+    val onMiniPlayer: (() -> Unit)?,
+    val onToggleAlwaysOnTop: (() -> Unit)?,
+    val onQuit: (() -> Unit)?,
+    val onPlayingItemChanged: (MediaItem) -> Unit,
+    val onEngine: (PlaybackEngine) -> Unit,
+    val downloads: DownloadRunner?,
+    val idleLimitMs: Long,
+    val screenshotDir: () -> java.io.File,
+    val engineFactory: () -> PlaybackEngine,
+    val backdrop: Color,
+    val loaderThumbnail: androidx.compose.ui.graphics.ImageBitmap?,
+    val onlinePreset: com.tmplayer.online.SearchResult?,
+    val onLockedChanged: (Boolean) -> Unit,
+    val onFreeUpSpace: (() -> Unit)?,
+) {
+    // ---- remembered for the whole screen (PlayerUi) ----------------------------------------------
+    val accountOwner = ui.accountOwner
+    val castTitle = ui.castTitle
+    val engineBlocked = ui.engineBlocked
+    var zoom by ui::zoom
+    var videoBox by ui::videoBox
+    var attempt by ui::attempt
+    var phase by ui::phase
+    var openingStartMs by ui::openingStartMs
+    val openingBytesAt = ui.openingBytesAt
+    var episodes by ui::episodes
+    val heldShape = ui.heldShape
+    val neverOpened = ui.neverOpened
+    var resumedFrom by ui::resumedFrom
+    var autoplayNext by ui::autoplayNext
+    var nextUpDismissed by ui::nextUpDismissed
+    var nextUpShown by ui::nextUpShown
+    var trackChoice by ui::trackChoice
+    var showRemaining by ui::showRemaining
+    var ignoreClicks by ui::ignoreClicks
+    var screenLocked by ui::screenLocked
+    var unlockWanted by ui::unlockWanted
+    var showUnlock by ui::showUnlock
+    var unlockHold by ui::unlockHold
+    var tdlibVersion by ui::tdlibVersion
+    var controlsUp by ui::controlsUp
+    var activity by ui::activity
+    var overControls by ui::overControls
+    var menu by ui::menu
+    var showDetails by ui::showDetails
+    var showOnline by ui::showOnline
+    var onlineMsone by ui::onlineMsone
+    var onlineSubMaker by ui::onlineSubMaker
+    var translatingVideo by ui::translatingVideo
+    var showShortcuts by ui::showShortcuts
+    var showEpisodes by ui::showEpisodes
+    var flash by ui::flash
+    var seekRun by ui::seekRun
+    val markedHere = ui.markedHere
+    val watchedHere = ui.watchedHere
+    val skipSay = ui.skipSay
+    var keepRepeat by ui::keepRepeat
+    var autoplayedInARow by ui::autoplayedInARow
+    var idleMs by ui::idleMs
+    var sleepAt by ui::sleepAt
+    var sleepAtTheEnd by ui::sleepAtTheEnd
+    var heldDownloads by ui::heldDownloads
+    var reopenAt by ui::reopenAt
+    val focus = ui.focus
+    var keysOnPlayer by ui::keysOnPlayer
+    var navByKeyboard by ui::navByKeyboard
+    var notePrompt by ui::notePrompt
+    var timePrompt by ui::timePrompt
+    var listPicking by ui::listPicking
+    var speedBeforeHold by ui::speedBeforeHold
+    var quickHide by ui::quickHide
+    var focusInside by ui::focusInside
+    val wheelStepper = ui.wheelStepper
+
+    // ---- remembered per media, per video and per message ------------------------------------------
+    var current by held::current
+    var ignoreSavedPosition by held::ignoreSavedPosition
+    var skips by video::skips
+    var skipped by video::skipped
+    val skipCtl = video.skipCtl
+    var skipOffer by video::skipOffer
+    var introMarking by video::introMarking
+    var abLoop by video::abLoop
+    var repeatVideo by video::repeatVideo
+    val seekUndo = video.seekUndo
+    var undoOffer by video::undoOffer
+    var post by message::post
+    var chatHits by message::chatHits
+    var chatAsked by message::chatAsked
+    var styleThisVideo by message::styleThisVideo
+
+    // ---- read once per composition, as the body's own vals were ---------------------------------
+    val item = current.item
     // This video's bookmarks, for the menu's list and the ticks on the timebar. A file with no
     // message behind it (the dev harness) has nothing to key them by, so it has none.
     val marksOn = bookmarks != null && hasMessage(item)
-    val marks by remember(bookmarks, item.chatId, item.messageId) {
-        if (bookmarks != null && hasMessage(item)) bookmarks.bookmarks(item.chatId, item.messageId) else flowOf(emptyList())
-    }.collectAsState(initial = emptyList())
-    // The note dialog: for a new bookmark at a position, or for one already made.
-    var notePrompt by remember { mutableStateOf<NotePrompt?>(null) }
-    // "Back to 12:34" after a long jump, for the video playing only. See [SeekUndo].
-    val seekUndo = remember(current) { SeekUndo() }
-    var undoOffer by remember(current) { mutableStateOf<SeekUndo.Offer?>(null) }
-    // The "Go to a time" dialog ({cmd}+G).
-    var timePrompt by remember { mutableStateOf(false) }
-    // "Add to a list" (HX43): the video as it was when the line was chosen, so the picker keeps
-    // naming the one it was opened for even if the next episode starts under it.
-    var listPicking by remember { mutableStateOf<com.tmplayer.data.WatchLaterRecord?>(null) }
-    LaunchedEffect(undoOffer) {
-        val offer = undoOffer ?: return@LaunchedEffect
-        delay((offer.untilMs - System.currentTimeMillis()).coerceAtLeast(0))
-        undoOffer = seekUndo.current(System.currentTimeMillis())
-    }
+    val next = episodes.next
+    // The segment the pill offers to skip. Credits that run to the end are the next-up card's
+    // when there is a next episode, so they get no pill of their own; without one, the pill
+    // skips to the end like any other. Never while the card is up, which has the same corner.
+    // Derived from the live position (the loop in Ending), so the body hears of it as a pill
+    // comes and goes only.
+    val activeSkip = skipOffer?.segment
+    val mac = com.tmplayer.desktop.os.OsInfo.isMac
 
+    // ---- filled in by the stages, in the order they run -----------------------------------------
+    // One search for the Cast button per player session (FQ8), not one per reveal of the controls.
+    lateinit var castPresence: CastBarPresence
+    lateinit var engine: com.tmplayer.desktop.cast.SwitchingEngine
+    lateinit var desktopState: androidx.compose.runtime.State<com.tmplayer.desktop.DesktopSettings>
+    val desktop get() = desktopState.value
+    lateinit var scope: CoroutineScope
+    lateinit var activeEngineState: androidx.compose.runtime.State<PlaybackEngine>
+    val activeEngine get() = activeEngineState.value
+    // Every update of the engine, the clock's four a second among them (see Gather).
+    lateinit var liveStatus: androidx.compose.runtime.State<PlaybackStatus>
+    lateinit var statusState: androidx.compose.runtime.State<PlaybackStatus>
+    val status get() = statusState.value
+    lateinit var tracksState: androidx.compose.runtime.State<List<MediaTrack>>
+    val tracks get() = tracksState.value
+    lateinit var castStateState: androidx.compose.runtime.State<com.tmplayer.desktop.cast.DesktopCast.State>
+    val castState get() = castStateState.value
+    lateinit var copies: List<MediaItem>
+    lateinit var qualities: List<com.tmplayer.data.TelegramQuality>
+    var storyboard: DesktopStoryboard? = null
+    var frameSource: FrameSource? = null
+    lateinit var seekCover: SeekCover
+    lateinit var downloadedState: androidx.compose.runtime.State<Float?>
+    val downloaded get() = downloadedState.value
+    lateinit var savableState: androidx.compose.runtime.State<Boolean>
+    val savable get() = savableState.value
+    lateinit var watchedKeysState: androidx.compose.runtime.State<Map<String, WatchedRecord>>
+    val watchedKeys get() = watchedKeysState.value
+    lateinit var seriesKey: String
+    lateinit var speedScopes: SpeedMemory.Scopes
+    lateinit var progressMapState: androidx.compose.runtime.State<Map<String, com.tmplayer.data.WatchPoint>>
+    val progressMap get() = progressMapState.value
+    lateinit var marksState: androidx.compose.runtime.State<List<Bookmark>>
+    val marks get() = marksState.value
+    var nextUpVisible = false
+    lateinit var nextUpSecondsState: androidx.compose.runtime.State<Int>
+    val nextUpSeconds get() = nextUpSecondsState.value
+    lateinit var holdSpeedState: androidx.compose.runtime.State<Float>
+    val holdSpeed get() = holdSpeedState.value
+    var showControls = false
+    lateinit var dispatchNowState: androidx.compose.runtime.State<(PlayerAction) -> Unit>
+    val dispatchNow get() = dispatchNowState.value
+    lateinit var wheelSeeksNowState: androidx.compose.runtime.State<Boolean>
+    val wheelSeeksNow get() = wheelSeeksNowState.value
+    lateinit var playerKeyNowState: androidx.compose.runtime.State<(androidx.compose.ui.input.key.KeyEvent) -> Boolean>
+    val playerKeyNow get() = playerKeyNowState.value
+
+    // ---- actions, as the body declared them -----------------------------------------------------
     fun showFlash(kind: Flash.Kind, text: String = "") {
         flash = Flash(kind, text, System.nanoTime())
     }
-    skipSay[0] = { showFlash(Flash.Kind.Text, it) }
 
     // ---- free zoom ---------------------------------------------------------------------------
     // Ctrl+wheel around the pointer (a Windows touchpad's pinch arrives as exactly that), Alt+=
@@ -605,24 +692,6 @@ fun PlayerScreen(
         showFlash(Flash.Kind.Text, SeekMath.clock(back))
     }
 
-    // ---- open, resume, episodes --------------------------------------------------------------
-
-    // The skip times, asked once per video and not again on a retry. With lookups off this
-    // returns at once with nothing, and no request leaves the machine.
-    LaunchedEffect(current) {
-        skips = try {
-            current.skipTimes()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Logger.w("PlayerScreen", "Skip times lookup failed", e)
-            emptyList()
-        }
-        skipCtl.online(skips)
-    }
-    // The file's own chapters are the first and best source: free, exact, and offline.
-    LaunchedEffect(skipCtl, status.chapters) { skipCtl.chapters(status.chapters) }
-
     /**
      * HX25: the online subtitle picked for this video before comes back by itself, and "Off" does
      * too. The kept file first, a download again only when it is gone and nothing forbids it (the
@@ -655,212 +724,6 @@ fun PlayerScreen(
                 throw e
             } catch (e: Exception) {
                 com.tmplayer.platform.JobFailures.handle("restoreSubtitle", e)
-            }
-        }
-    }
-
-    LaunchedEffect(current, attempt) {
-        // No video engine: nothing to open, and Try again says the same until the app restarts.
-        engineBlocked[0]?.let {
-            phase = Phase.Failed(it)
-            return@LaunchedEffect
-        }
-        phase = Phase.Loading(if (item.chatId != 0L) s.playerConnectingTelegram else s.playerOpeningVideo)
-        openingBytesAt[0] = StreamReads.delivered.get()
-        openingStartMs = 0L
-        // Telegram's own lighter copy (CP80), chosen before anything is opened: the one asked for
-        // on the detail page or the copies menu, else one the line measured on this run carries
-        // when it is too slow for the upload. Never for a download or an upload already here.
-        if (attempt == 0 && reopenAt == null && current.fromTelegram && hasMessage(item) && item.playingQuality == 0 && !item.isJoined) {
-            val wish = QualityWish.take(item.chatId, item.messageId)
-            if (wish != 0) {
-                val fresh = kotlinx.coroutines.withTimeoutOrNull(POST_READ_MS) {
-                    post ?: runCatching { com.tmplayer.data.Td.awaitAuthorizedSession(); com.tmplayer.data.Td.refreshMedia(item.chatId, item.messageId) }.getOrNull()?.also { post = it }
-                }
-                val choice = when {
-                    fresh == null || fresh.qualities.isEmpty() -> null
-                    wish != null -> fresh.qualities.firstOrNull { it.height == wish }?.let { TelegramQualities.Choice(it, TelegramQualities.Why.SlowLine) to false }
-                    com.tmplayer.desktop.DownloadIndex.fileFor(settings, item.chatId, item.messageId) != null -> null
-                    runCatching { com.tmplayer.data.Td.localDownloadedBytes(item.fileId) }.getOrDefault(0L) > 0 -> null
-                    else -> TelegramQualities.choose(fresh.copy(fileId = item.fileId, sizeBytes = item.sizeBytes.takeIf { it > 0 } ?: fresh.sizeBytes), saveData = false, lineBytesPerSec = com.tmplayer.player.LineSpeed.recent())?.let { it to true }
-                }
-                if (choice != null && fresh != null) {
-                    val (picked, automatic) = choice
-                    val upload = item.copy(qualities = fresh.qualities, storyboard = fresh.storyboard, startSec = fresh.startSec)
-                    if (automatic) showFlash(Flash.Kind.Text, s.playerLighterPickedSlow(TelegramQualities.label(picked.quality.height)))
-                    neverOpened[0] = current
-                    current = current.episode(TelegramQualities.withQuality(upload, picked.quality))
-                    return@LaunchedEffect
-                }
-            }
-        }
-        nextUpDismissed = false
-        nextUpShown = false
-        resumedFrom = null
-        // The head and the index on their way while the settings below are read, for a stream
-        // reached any way (the next episode, a reopen) ([com.tmplayer.player.StreamWarmup]).
-        val openStartedAt = System.currentTimeMillis()
-        if (current.fromTelegram && !item.isJoined && item.fileId > 0) {
-            launch {
-                if (com.tmplayer.desktop.DownloadIndex.fileFor(settings, item.chatId, item.messageId) == null) {
-                    // From the saved place too, as the opening below reads it, unless Start over.
-                    com.tmplayer.player.StreamWarmup.warm(
-                        item,
-                        if (ignoreSavedPosition) null else ({ settings.resumeStartFor(TelegramQualities.upload(item)) }),
-                    )
-                }
-            }
-        }
-        launch {
-            // What the file says of itself straight away, for the title; the chat's answer, then
-            // the providers' episode names where lookups are on.
-            episodes = Episodes(current = EpisodeNeighbours.tagOf(item))
-            val found = runCatching { current.episodes() }.getOrDefault(episodes)
-            episodes = found
-            val named = runCatching {
-                kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
-            }.getOrDefault(found)
-            if (named != found) episodes = named
-        }
-        launch { tdlibVersion = current.tdlibVersion() }
-        // A Play all or Shuffle run goes on whatever Autoplay says (WP-32); the menu's switch still stops it.
-        autoplayNext = current.playsAll || runCatching { settings.autoplayNextNow() }.getOrDefault(true)
-        keepRepeat = runCatching { settings.keepRepeatNow() }.getOrDefault(false)
-        repeatVideo = com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)
-        showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)
-        // A saved position opens a few seconds early, as Settings has it ([ResumeRewind]); Keep
-        // watching reopens exactly where the file stopped, and a bookmark chosen on the detail
-        // page opens the video at its moment, once.
-        val start = reopenAt ?: BookmarkJump.take(item.chatId, item.messageId) ?: if (ignoreSavedPosition) {
-            // Start over forgets the old place: a short watch from here leaves a saved one alone.
-            runCatching { settings.clearResumePosition(item.chatId, item.messageId, item) }
-            0L
-        } else runCatching {
-            // Resume across devices, when on: the other devices' places in first, briefly.
-            com.tmplayer.data.ResumeSync.pullFor(settings)
-            // Whichever copy of the video was played last: a switch of quality carries on.
-            settings.resumeStartFor(TelegramQualities.upload(item))
-                // Never watched here: the moment the poster chose to start at (CP80), if any.
-                .takeIf { it > 0 }
-                ?: PostStart.startMs(linkSec = 0, savedMs = 0, postSec = (post ?: item).startSec, durationSec = item.durationSec)
-        }.getOrDefault(0L)
-        val reopening = reopenAt != null
-        reopenAt = null
-        openingStartMs = start
-        trackChoice = runCatching { settings.trackChoice(seriesKey) }.getOrDefault(TrackChoice())
-        // A resumed video goes back to the tracks and speed it was playing with. See [ResumeState].
-        val resumed = if (start > 0 && hasMessage(item)) {
-            runCatching { settings.resumeRecord(item.chatId, item.messageId)?.state }.getOrNull()
-        } else {
-            null
-        }
-        // Offsets are remembered per message; a file on disk (the dev harness) starts in step.
-        val delays = if (hasMessage(item)) {
-            runCatching { settings.syncDelays(item.chatId, item.messageId) }.getOrDefault(SyncDelays())
-        } else {
-            SyncDelays()
-        }
-        // The file's saved tracks, then the series, then Settings, then the file's own defaults.
-        val trackPlan = TrackRules.plan(
-            resumed,
-            trackChoice,
-            runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences()),
-            Translator.messages.tag,
-        )
-        val ownLook = if (hasMessage(item)) runCatching { settings.videoSubtitleStyle(item.chatId, item.messageId) }.getOrNull() else null
-        styleThisVideo = ownLook != null
-        val prefs = OpenPrefs(
-            audioLanguage = trackPlan.audioLanguage,
-            audioMore = trackPlan.audioMore,
-            subtitles = trackPlan.subtitles,
-            // Its own speed, else the series' or course's, else the chat's or topic's: [SpeedMemory].
-            speed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }
-                .getOrDefault(resumed?.speed ?: PlaybackSpeed.DEFAULT)
-                .coerceIn(SeekMath.MIN_SPEED, SeekMath.MAX_SPEED),
-            // A fixed shape chosen in this player carries to the next episode; a new player starts
-            // from the last of Original, Fill and Stretch (HX16).
-            scale = heldShape[0] ?: runCatching { VideoScale.remembered(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit),
-            downmix = prefs.now.downmix,
-            volume = prefs.now.volume,
-            muted = prefs.now.muted,
-            volumeBoost = runCatching { settings.volumeBoostNow() }.getOrDefault(false),
-            nightMode = runCatching { settings.nightModeNow() }.getOrDefault(false),
-            hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
-            subtitleStyle = ownLook ?: runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
-            delays = delays,
-            resume = resumed,
-        )
-        // A slow open (the whole video downloading first) says what it is waiting on; Back on the
-        // loading screen cancels it.
-        val preparing = launch { current.preparing.collect { text -> if (text != null) phase = Phase.Loading(text) } }
-        val data = try {
-            current.open()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Logger.w("PlayerScreen", "Could not open ${item.title}", e)
-            phase = Phase.Failed(e.message ?: s.playerOpenFailed, noRoom = e is com.tmplayer.desktop.NotEnoughRoom)
-            return@LaunchedEffect
-        } finally {
-            preparing.cancel()
-        }
-        phase = Phase.Loading(if (start > 0) s.playerResumingFrom(SeekMath.clock(start)) else s.playerOpeningVideo)
-        Logger.i("PlayerStart", "open to media ready ${System.currentTimeMillis() - openStartedAt} ms (file ${item.fileId}, resume $start ms)")
-        launch {
-            // The first moment mpv is playing rather than buffering: the desktop's "first frame".
-            val playing = kotlinx.coroutines.withTimeoutOrNull(120_000) {
-                engine.state.first { it.opened && !it.buffering && it.error == null }
-            }
-            if (playing != null) Logger.i("PlayerStart", "open to playing ${System.currentTimeMillis() - openStartedAt} ms (file ${item.fileId})")
-        }
-        // Every file opens whole; the engine puts mpv's own zoom back as it opens.
-        zoom = PictureZoom.NONE
-        // What the file declares goes to the badges on its details page once mpv lists its tracks.
-        // Not for Telegram's lighter copy, whose picture is not the upload the page is about.
-        if (item.playingQuality == 0) engine.probeFor(item.id)
-        engine.open(data, start, prefs)
-        val error = engine.state.value.error
-        // On a TV the casting panel says what went wrong, with Play here beside it.
-        if (error != null && engine.cast == null) {
-            phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
-            return@LaunchedEffect
-        }
-        ignoreSavedPosition = false
-        // Keep watching opens the file again, and a fresh open has no loop in mpv.
-        abLoop?.takeIf { it.complete }?.let(engine::setAbLoop)
-        phase = Phase.Playing
-        restoreRememberedSubtitle(item)
-        // A video whose pieces stop at a gap says so as it starts.
-        current.notice?.let { showFlash(Flash.Kind.Text, it) }
-        // A file named as 3D says how to watch it, once, unless 3D is on already: never turned
-        // on by itself, since without glasses the picture is two pictures or tinted.
-        if (current.notice == null && !engine.state.value.stereo.on &&
-            Stereo3d.detect(listOf(item.title, item.fileName, item.caption).joinToString(" ")) != null
-        ) {
-            showFlash(Flash.Kind.Text, s.playerStereoFound)
-        }
-        if (start > 0 && !reopening) resumedFrom = start
-        onPlayingItemChanged(item)
-        refocus()
-    }
-
-    // Casting (CP73): a session coming up moves the video to the TV at the place it had reached,
-    // and the session ending (Stop casting, or Play here after the TV was lost) brings it back.
-    LaunchedEffect(castState) {
-        val cs = castState
-        val casting = engine.cast
-        when {
-            cs is com.tmplayer.desktop.cast.DesktopCast.State.Connected && casting?.receiver !== cs.receiver -> {
-                val at = engine.state.value.takeIf { it.opened }?.positionMs
-                engine.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(cs.receiver) { castTitle[0] }, tellReceiver = false)
-                if (at != null) reopenAt = at
-                attempt++
-            }
-            (cs is com.tmplayer.desktop.cast.DesktopCast.State.Idle) && casting != null -> {
-                val at = casting.positionMs.takeIf { casting.state.value.opened || it > 0 }
-                engine.switchTo(engine.local, tellReceiver = false)
-                if (at != null) reopenAt = at
-                attempt++
             }
         }
     }
@@ -936,32 +799,6 @@ fun PlayerScreen(
         }
     }
 
-    // Declared after the engine's own, so it is disposed first, while the engine still knows
-    // where the old video was.
-    DisposableEffect(current) {
-        val leaving = current
-        onDispose {
-            // One handed straight on to a copy of Telegram's before it opened never played, and
-            // the engine's place is still the video before it.
-            if (leaving !== neverOpened[0]) saveResume(leaving, engine.state.value, leaving = true)
-            leaving.release()
-        }
-    }
-
-    LaunchedEffect(current) {
-        while (true) {
-            delay(RESUME_TICK_MS)
-            if (engine.state.value.playing && phase == Phase.Playing) saveResume(current, engine.state.value)
-        }
-    }
-
-    // A pause is a natural place to stop for the night: written now, since the heartbeat above
-    // only beats while playing. Not the pause that comes with the end, which the end handles.
-    LaunchedEffect(current, status.playing) {
-        val s = engine.state.value
-        if (!s.playing && !s.ended && s.opened && phase == Phase.Playing) saveResume(current, s)
-    }
-
     fun switchTo(next: MediaItem) {
         saveResume(current, engine.state.value, leaving = true)
         current = current.episode(next)
@@ -1001,16 +838,6 @@ fun PlayerScreen(
         switchTo(next)
     }
 
-    /** "Play Telegram's 480p" on the sheet that says nothing is arriving: the next copy down. */
-    val lighter: com.tmplayer.data.TelegramQuality? = run {
-        val here = current.item
-        val source = post ?: here
-        if (qualities.isEmpty()) null else TelegramQualities.lighter(here.copy(qualities = source.qualities))
-    }
-
-    val lighterAction: Pair<String, () -> Unit>? = lighter?.let { q ->
-        s.playerLighter(TelegramQualities.label(q.height)) to { switchQuality(q.height) }
-    }
 
     /** [switchTo] for an episode nobody asked for, counted towards "Still watching?". */
     fun autoplay(next: MediaItem) {
@@ -1066,83 +893,6 @@ fun PlayerScreen(
             }
         }
         refocus()
-    }
-
-    // The end: the next episode after a countdown, or the last frame with a way to watch again.
-    LaunchedEffect(status.ended) {
-        if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
-        // Repeat this video: again from the start, not watched,
-        // no next-up and no count towards "Still watching?". A sleep timer for the end wins.
-        if (com.tmplayer.data.RepeatVideo.replaysAtEnd(current.item, keepRepeat, sleepAtTheEnd)) {
-            engine.seekToExact(0)
-            engine.play()
-            return@LaunchedEffect
-        }
-        if (sleepAtTheEnd && repeatVideo) {
-            com.tmplayer.data.RepeatVideo.set(false)
-            repeatVideo = false
-        }
-        if (current.incomplete) {
-            // Only up to a missing piece: said again, nothing marked, nothing played next.
-            current.notice?.let { showFlash(Flash.Kind.Text, it) }
-            phase = Phase.Finished
-            return@LaunchedEffect
-        }
-        recordWatched(current, status.durationMs, manual = false)
-        runCatching { settings.clearResumePosition(item.chatId, item.messageId) }
-        val next = episodes.next
-        val autoplays = next != null && autoplayNext && !nextUpDismissed
-        if (sleepAtTheEnd) {
-            sleepAtTheEnd = false
-            askStillWatching(s.playerStillSleepEnded, next.takeIf { autoplays }, ended = true)
-            return@LaunchedEffect
-        }
-        if (next == null || !autoplays) {
-            phase = Phase.Finished
-            return@LaunchedEffect
-        }
-        if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
-            askStillWatching(s.playerStillAutoplayLimit(StillWatching.AUTOPLAY_LIMIT), next, ended = true)
-            return@LaunchedEffect
-        }
-        // The card already counted the last half minute down; a second countdown would be a wait for nothing.
-        if (nextUpShown) {
-            autoplay(next)
-            return@LaunchedEffect
-        }
-        for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
-            phase = Phase.Countdown(next, second)
-            delay(1_000)
-            // Cancel and Play now on the sheet end the countdown: the end has not changed, so
-            // nothing else stops this loop from bringing it back and moving on regardless.
-            if (phase != Phase.Countdown(next, second)) return@LaunchedEffect
-        }
-        autoplay(next)
-    }
-
-    // The sleep timer running out, and two hours of playback without a press. Idle time is
-    // counted while playing only, so a video left paused overnight does not ask in the morning.
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(STILL_WATCHING_TICK_MS)
-            if (phase is Phase.StillWatching) continue
-            if (sleepAt > 0 && System.currentTimeMillis() >= sleepAt) {
-                sleepAt = 0L
-                askStillWatching(s.playerStillSleepPaused, next = null, ended = phase == Phase.Finished)
-                continue
-            }
-            if (phase == Phase.Playing && engine.state.value.playing) {
-                idleMs += STILL_WATCHING_TICK_MS
-                if (idleMs >= idleLimitMs) {
-                    idleMs = 0L
-                    askStillWatching(
-                        if (idleLimitMs == StillWatching.IDLE_LIMIT_MS) s.playerStillIdleTwoHours else s.playerStillIdle,
-                        next = null,
-                        ended = false,
-                    )
-                }
-            }
-        }
     }
 
     /** What the menu says about a running sleep timer, or null when there is none. */
@@ -1211,80 +961,12 @@ fun PlayerScreen(
         playerScope.launch { runCatching { settings.setNightMode(on) } }
     }
 
-    val next = episodes.next
-    // The card comes up in the last half minute, or where the closing credits begin when the skip
-    // times know that and it is earlier: once the credits roll, the next episode is the offer.
-    val creditsAt = SkipSegments.creditsStart(skips, status.durationMs)
-    val nextUpLead = maxOf(NEXT_UP_LEAD_MS, creditsAt?.let { status.durationMs - it } ?: 0L)
-    // What the clock decides, each derived from the live position so the body hears of it only
-    // when the answer changes, not on every tick.
-    val nearEnd by remember(liveStatus, nextUpLead) {
-        derivedStateOf { liveStatus.value.let { it.durationMs - it.positionMs } in 1..nextUpLead }
-    }
-    val pastLead by remember(liveStatus, nextUpLead) {
-        derivedStateOf { liveStatus.value.let { it.durationMs - it.positionMs } > nextUpLead }
-    }
-    val nextUpVisible = phase == Phase.Playing && next != null && autoplayNext && !nextUpDismissed && !repeatVideo &&
-        status.durationMs > 0 && nearEnd
-    LaunchedEffect(nextUpVisible) { if (nextUpVisible) nextUpShown = true }
-    LaunchedEffect(pastLead) { if (pastLead) nextUpShown = false }
-    // Credits timed to start well before the last half minute: the card counts [CREDITS_COUNTDOWN_MS]
-    // down from where they begin and then moves on, rather than counting through every name.
-    val earlyCredits = creditsAt != null && status.durationMs - creditsAt > NEXT_UP_LEAD_MS
-    // The countdown in whole seconds, the unit the card shows, so it changes once a second.
-    val nextUpSeconds by remember(liveStatus, earlyCredits, creditsAt) {
-        derivedStateOf {
-            val now = liveStatus.value
-            val inMs = if (earlyCredits) creditsAt!! + CREDITS_COUNTDOWN_MS - now.positionMs else now.durationMs - now.positionMs
-            if (inMs <= 0) 0 else ((inMs + 999) / 1000).toInt()
-        }
-    }
-    LaunchedEffect(earlyCredits && nextUpVisible && nextUpSeconds <= 0) {
-        if (!(earlyCredits && nextUpVisible && nextUpSeconds <= 0) || next == null) return@LaunchedEffect
-        recordWatched(current, status.durationMs, manual = false)
-        runCatching { settings.clearResumePosition(item.chatId, item.messageId) }
-        if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
-            askStillWatching(s.playerStillAutoplayLimit(StillWatching.AUTOPLAY_LIMIT), next, ended = true)
-        } else {
-            autoplay(next)
-        }
-    }
-
-    // The segment the pill offers to skip. Credits that run to the end are the next-up card's
-    // when there is a next episode, so they get no pill of their own; without one, the pill
-    // skips to the end like any other. Never while the card is up, which has the same corner.
-    // Derived from the live position, so the body hears of it as a pill comes and goes only.
-    val activeSkip = skipOffer?.segment
-
     /** The pill, or G: past the segment, which is then left alone for the rest of this playback. */
     fun skipSegment() {
         val segment = activeSkip ?: return
         skipped = skipped + segment.startMs
         skipOffer = null
         jumpTo(segment.target(status.durationMs))
-    }
-    // A few times a second, from the live position: what the pill offers (a button, or the count of a
-    // stretch set to skip by itself), and the jump when the count runs out. Only the answer reaches
-    // the body, so a position tick that changes nothing redraws nothing.
-    val skipSuppressed by rememberUpdatedState(phase != Phase.Playing || nextUpVisible)
-    val skipCardCovers by rememberUpdatedState(next != null)
-    val skipNow by rememberUpdatedState(::skipSegment)
-    LaunchedEffect(skipCtl) {
-        while (true) {
-            delay(SKIP_TICK_MS)
-            val live = liveStatus.value
-            val offer = if (skipSuppressed || live.durationMs <= 0) {
-                null
-            } else {
-                skipCtl.offer(live.positionMs, live.durationMs, live.playing, System.nanoTime() / 1_000_000L, skipped, skipCardCovers)
-            }
-            if (offer is SkipOffer.Fire) {
-                skipOffer = offer
-                skipNow()
-            } else if (offer != skipOffer) {
-                skipOffer = offer
-            }
-        }
     }
 
     /** Cancel on the countdown: this stretch stays a plain button. */
@@ -1297,62 +979,6 @@ fun PlayerScreen(
         if (!skipCtl.canMark) return
         skipCtl.markTap(liveStatus.value.positionMs, status.durationMs)
         introMarking = skipCtl.introMarking
-    }
-
-    // The subtitle look is one setting for every video: a change in Settings (or in the subtitle
-    // menu, which writes the same setting) reaches the video playing now.
-    LaunchedEffect(engine, settings) {
-        settings.subtitleStyle.collect { style ->
-            // A video with a look of its own (WP-29 "This video only") does not follow the shared one.
-            if (!styleThisVideo && style != engine.state.value.subtitleStyle) engine.setSubtitleStyle(style)
-        }
-    }
-
-    // ---- controls and cursor -----------------------------------------------------------------
-
-    val menusOpen = menu != null || showShortcuts
-    // "Hide the controls after" is the phone's setting, shared: zero keeps them up while playing.
-    // The big screen gets the television's own default until the viewer chooses (WP-47).
-    val bigScreenNow = com.tmplayer.desktop.ui.BigScreen.on
-    val hideAfterMs by remember(settings, bigScreenNow) { settings.touchPrefs.map { it.timeoutFor(bigScreenNow) } }
-        .collectAsState(initial = TouchPrefs().timeoutFor(bigScreenNow))
-    // The phone's "Hold to speed up", shared with it: 0 is off.
-    val holdSpeed by remember(settings) { settings.touchPrefs.map { it.holdSpeed } }
-        .collectAsState(initial = TouchPrefs.HOLD_DEFAULT)
-    // The speed to go back to when a hold ends; null while no hold has changed it.
-    var speedBeforeHold by remember { mutableStateOf<Float?>(null) }
-    // A pause, from anywhere (a click, a key, a media key or the system's media controls), puts
-    // the controls up for as long as it lasts; the resume keeps them up for the button to turn back
-    // into pause, then lets them go, sooner when they were down before the pause (PauseControls).
-    var wasPlaying by remember { mutableStateOf(status.playing) }
-    var downBeforePause by remember { mutableStateOf(false) }
-    var quickHide by remember { mutableStateOf(false) }
-    LaunchedEffect(status.playing) {
-        if (status.playing == wasPlaying) return@LaunchedEffect
-        wasPlaying = status.playing
-        if (!status.playing) {
-            downBeforePause = !controlsUp
-            quickHide = false
-        } else {
-            quickHide = downBeforePause
-            downBeforePause = false
-        }
-        controlsUp = true
-        activity = System.nanoTime()
-    }
-    LaunchedEffect(activity, status.playing, menusOpen, overControls, phase, hideAfterMs) {
-        if (!status.playing || menusOpen || overControls || phase != Phase.Playing) return@LaunchedEffect
-        val after = PauseControls.hideAfterResumeMs(hideAfterMs, quickHide)
-        if (after <= 0L) return@LaunchedEffect
-        delay(after)
-        controlsUp = false
-    }
-    val showControls = phase == Phase.Playing && !screenLocked && (controlsUp || !status.playing || menusOpen)
-
-    // The controls going away under a remote that was on one of them: the keys go back to the
-    // picture, or they would reach nothing until a click.
-    LaunchedEffect(showControls) {
-        if (!showControls && !keysOnPlayer && com.tmplayer.desktop.ui.BigScreen.on) refocus()
     }
 
     fun poke() {
@@ -1759,10 +1385,6 @@ fun PlayerScreen(
         }
     }
 
-    val dispatchNow by rememberUpdatedState(::dispatch)
-    val wheelSeeksNow by rememberUpdatedState(desktop.wheelSeeks)
-    val wheelStepper = remember { WheelStepper() }
-
     fun loadSubtitle(path: String) {
         if (phase != Phase.Playing) return
         val name = java.io.File(path).name
@@ -1798,7 +1420,6 @@ fun PlayerScreen(
             }
         }
     }
-    val mac = com.tmplayer.desktop.os.OsInfo.isMac
 
     // ---- lock the screen ---------------------------------------------------------------------
 
@@ -1847,16 +1468,6 @@ fun PlayerScreen(
             unlockWanted = System.nanoTime()
         }
     }
-
-    // The Unlock button: up on each move, click or key, and gone a moment after the last, but
-    // never while Enter is held toward an unlock.
-    LaunchedEffect(screenLocked, unlockWanted, unlockHold) {
-        showUnlock = screenLocked
-        if (!screenLocked || unlockHold != null) return@LaunchedEffect
-        delay(PlayerLock.SHOW_MS)
-        showUnlock = false
-    }
-    LaunchedEffect(screenLocked) { onLockedChanged(screenLocked) }
 
     /**
      * The player's keys, whichever way they come: through the picture's own focus, or from the
@@ -1964,9 +1575,1319 @@ fun PlayerScreen(
         dispatchNow(action)
         return true
     }
-    val playerKeyNow by rememberUpdatedState(::playerKey)
-    // Whether Compose's focus is on the picture or inside it, where [playerKey] hears the keys itself.
-    var focusInside by remember { mutableStateOf(false) }
+
+    // Going in or out of fullscreen remaps the window, and some window systems hand it back
+    // without focus inside it: take the keyboard again once the change has settled.
+    // Not while a sheet or a menu is up: those hold the keyboard themselves, some for typing.
+    fun keysBack() {
+        if (!showEpisodes && !showShortcuts && !showDetails && !showOnline && notePrompt == null && !timePrompt && listPicking == null && menu == null) refocus()
+    }
+
+    /** A line picked in the menu or the side panel (the overlay's onMenuAction). */
+    fun menuAction(action: MenuAction) {
+        noteInput()
+        when (action) {
+            is MenuAction.Do -> dispatch(action.action)
+            is MenuAction.Track -> selectTrack(action.type, action.track)
+            is MenuAction.Speed -> setSpeed(action.speed)
+            is MenuAction.Shape -> setScale(action.scale)
+            MenuAction.RotatePicture -> rotatePicture()
+            MenuAction.ToggleDownmix -> {
+                val on = !status.downmix
+                engine.setDownmix(on)
+                prefs.update { it.copy(downmix = on) }
+                showFlash(Flash.Kind.Text, if (on) s.playerDownmixOn else s.playerDownmixOff)
+            }
+            MenuAction.ToggleSoftwareDecoding -> {
+                // mpv applies hwdec in place; kept as the setting, as the downmix is.
+                val on = !status.softwareDecoding
+                engine.setSoftwareDecoding(on)
+                // Kept and said only when the engine took it (PB2-20).
+                if (engine.state.value.softwareDecoding == on) {
+                    prefs.update { it.copy(softwareDecoding = on) }
+                    showFlash(Flash.Kind.Text, if (on) s.playerDecoderSoftwareNow else s.playerDecoderHardwareNow)
+                } else {
+                    showFlash(Flash.Kind.Text, s.playerDecoderSwitchFailed)
+                }
+            }
+            MenuAction.ReportStutter -> {
+                val facts = engine.stutterFacts(com.tmplayer.desktop.BuildInfo.VERSION)
+                showFlash(Flash.Kind.Text, s.playerStutterMarkedDesktop)
+                if (facts != null) {
+                    playerScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            com.tmplayer.platform.Logger.i("Player", DesktopStutter.line(facts))
+                            com.tmplayer.desktop.DesktopCrashReports.reportStutter(facts)
+                        }
+                    }
+                }
+            }
+            MenuAction.ToggleVolumeBoost -> toggleVolumeBoost()
+            MenuAction.ToggleNightMode -> toggleNightMode()
+            MenuAction.ToggleRepeatVideo -> toggleRepeatVideo()
+            is MenuAction.Stereo -> setStereo(action.stereo)
+            is MenuAction.Sleep -> setSleepTimer(action.minutes)
+            is MenuAction.Chapter -> {
+                jumpTo(action.startMs)
+                // Named from the sorted marks: mpv's own order could name another chapter (PB-08).
+                val marks = Chapters.inside(status.chapters, status.durationMs)
+                val index = Chapters.at(marks, action.startMs)
+                if (index >= 0) showFlash(Flash.Kind.Text, Chapters.label(marks, index))
+            }
+            is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
+            is MenuAction.AudioDelay -> stepAudioDelay(action.direction)
+            is MenuAction.SubtitleLook -> setSubtitleStyle(action.style)
+            is MenuAction.SubtitleThisVideo -> setSubtitleThisVideo(action.on)
+            MenuAction.StartOver -> startOver()
+            MenuAction.LockScreen -> lockScreen()
+            MenuAction.ToggleIgnoreClicks -> {
+                ignoreClicks = !ignoreClicks
+                showFlash(Flash.Kind.Text, if (ignoreClicks) s.playerClicksIgnored else s.playerClicksWork)
+            }
+            MenuAction.CopyLink -> copyLink()
+            is MenuAction.SwitchCopy -> switchCopy(action.copy)
+            is MenuAction.SwitchQuality -> switchQuality(action.height)
+            MenuAction.Download -> showFlash(Flash.Kind.Text, current.download())
+            MenuAction.OpenElsewhere -> openElsewhere()
+            MenuAction.Details -> showDetails = true
+            MenuAction.Shortcuts -> showShortcuts = true
+            MenuAction.ToggleWatched -> toggleWatched()
+            MenuAction.AddToList -> if (hasMessage(item)) {
+                listPicking = com.tmplayer.data.WatchLaterRecord.of(item, current.chatTitle, System.currentTimeMillis())
+            }
+            MenuAction.SearchOnline -> {
+                onlineMsone = false
+                onlineSubMaker = false
+                showOnline = true
+            }
+            MenuAction.SearchMsone -> {
+                onlineMsone = true
+                onlineSubMaker = false
+                showOnline = true
+            }
+            MenuAction.SearchSubMaker -> {
+                onlineMsone = false
+                onlineSubMaker = true
+                showOnline = true
+            }
+            is MenuAction.ChatSubtitle -> scope.launch {
+                val here = current.item
+                showFlash(Flash.Kind.Text, L.onlineDownloading)
+                val loaded = try {
+                    com.tmplayer.data.ChatSubtitleLoad.load(
+                        com.tmplayer.data.LiveChatSubtitleCalls, here.chatId, action.hit, here.fileName.ifBlank { here.title },
+                        here.caption, java.util.Locale.getDefault().language,
+                    )
+                } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
+                    com.tmplayer.data.ChatSubtitleLoaded.Refused(L.onlineNoticeUnreadable)
+                }
+                when (loaded) {
+                    is com.tmplayer.data.ChatSubtitleLoaded.Refused -> {
+                        showFlash(Flash.Kind.Text, loaded.reason)
+                        if (loaded.reason == L.tracksInChatGone) {
+                            chatHits = chatHits - action.hit
+                            com.tmplayer.data.ChatSubtitleFinder.shared.forget(here.chatId, here.messageId)
+                        }
+                    }
+                    is com.tmplayer.data.ChatSubtitleLoaded.Ready -> {
+                        // mpv reads all five formats itself, a MicroDVD sub included.
+                        val file = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                            com.tmplayer.data.ChatSubtitleLoad.write(java.io.File(com.tmplayer.desktop.DesktopPaths.cacheDir, "chat-subtitles"), here.chatId, action.hit, loaded)
+                        }
+                        if (file != null) OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(here))
+                        if (file != null && engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(loaded.label))
+                        else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(loaded.label))
+                    }
+                }
+            }
+            MenuAction.LoadSubtitleFile -> scope.launch {
+                com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())
+                    ?.let { loadSubtitle(it.path) }
+                refocus()
+            }
+            MenuAction.AddBookmark -> addBookmark()
+            is MenuAction.JumpTo -> {
+                jumpTo(action.bookmark.positionMs)
+                showFlash(Flash.Kind.Text, SeekMath.clock(action.bookmark.positionMs))
+            }
+            is MenuAction.EditBookmark -> notePrompt = NotePrompt(action.bookmark.chatId, action.bookmark.messageId, action.bookmark.positionMs, action.bookmark)
+            is MenuAction.DeleteBookmark -> deleteBookmark(action.bookmark)
+        }
+    }
+
+    // ---- the callbacks the drawing hands its parts, as the body wrote them inline ---------------
+
+    fun closeEpisodes() {
+        showEpisodes = false
+        refocus()
+    }
+
+    fun closeMenu() {
+        menu = null
+        refocus()
+    }
+
+    fun openEpisodes() {
+        menu = null
+        showEpisodes = true
+    }
+
+    fun toggleRemaining() {
+        showRemaining = !showRemaining
+        val value = showRemaining
+        playerScope.launch { runCatching { settings.updateTouchPrefs { it.copy(showRemaining = value) } } }
+    }
+
+    /** A hold on the picture: the phone's "Hold to speed up", and the speed before it back on letting go. */
+    fun hold(on: Boolean) {
+        if (on && !ignoreClicks && holdSpeed > 0f && status.playing && speedBeforeHold == null) {
+            // Not remembered as the series' speed, as a pick in the speed menu is.
+            speedBeforeHold = status.speed
+            engine.setSpeed(holdSpeed)
+            showFlash(Flash.Kind.Text, "${TouchPrefs.holdLabel(holdSpeed)}  \u25B6\u25B6")
+        } else if (!on) {
+            speedBeforeHold?.let { engine.setSpeed(it) }
+            speedBeforeHold = null
+        }
+    }
+
+    suspend fun onlineTarget(): SubtitleTarget {
+        // The details' ids let MSone be searched exactly; a slow lookup only leaves the title.
+        val ids = kotlinx.coroutines.withTimeoutOrNull(3_000) {
+            kotlinx.coroutines.withContext(Dispatchers.IO) { OnlineMetadata.current?.idsFor(item) }
+        } ?: com.tmplayer.online.VideoIds()
+        return SubtitleTarget(
+            fileName = item.fileName.ifBlank { item.title },
+            sizeBytes = item.sizeBytes,
+            hash = current.onlineHash(),
+            caption = item.caption.ifBlank { null },
+            languages = OnlineSubtitles.languagesFor(null),
+            imdb = ids.imdb,
+            tmdb = ids.tmdb,
+            durationMs = engine.state.value.durationMs.takeIf { it > 0 },
+        )
+    }
+
+    fun translateOnline(hit: com.tmplayer.online.SubtitleHit, wanted: SubtitleTarget): Boolean {
+        val online = OnlineSubtitles.current
+        translatingVideo = wanted.videoKey
+        val started = online?.translate(wanted.videoKey, hit, wanted.durationMs) { file, final ->
+            scope.launch {
+                // The same file reloads the one track in place; the finished file is another name.
+                if (engine.replaceSubtitle(file.absolutePath) && final) {
+                    OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(item), hit, file)
+                    showFlash(Flash.Kind.Text, L.submakerDone(hit.translateTo))
+                }
+            }
+        } == true
+        if (started) showFlash(Flash.Kind.Text, L.submakerStarted(hit.translateTo))
+        return started
+    }
+
+    fun loadOnline(file: java.io.File, label: String) {
+        if (engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(label))
+        else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(label))
+    }
+
+    fun pickSubtitleFile() {
+        showOnline = false
+        scope.launch {
+            com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())
+                ?.let { loadSubtitle(it.path) }
+            refocus()
+        }
+    }
+
+    fun detailRows(datacenter: Int?): List<Pair<String, String>> = buildList {
+        addAll(engine.details())
+        add(s.playerSpeed to SeekMath.speedLabel(engine.state.value.speed))
+        if (item.sizeBytes > 0) add(s.playerDetailsLabelFile to com.tmplayer.player.StreamStats.formatBytes(item.sizeBytes))
+        datacenter?.let { add(s.playerDetailsLabelDatacenter to "DC $it") }
+        downloaded?.let {
+            val label = if (current.isDownload) s.playerDetailsLabelDownloaded else s.playerDetailsLabelCached
+            add(label to s.messages.formatter.percent(it.toDouble()))
+        }
+        add("TDLib" to (tdlibVersion ?: if (item.chatId != 0L) s.playerDetailsUnknown else s.playerDetailsNotUsed))
+    }
+
+    fun retryOpening() {
+        scope.launch { runCatching { com.tmplayer.data.Td.retryConnecting() } }
+        attempt++
+        refocus()
+    }
+
+    fun downloadFirst() {
+        current.download()
+        onBack()
+    }
+
+    fun openingSignals(): com.tmplayer.player.OpeningProgress.Signals {
+        val st = engine.state.value
+        val it = current.item
+        return com.tmplayer.player.OpeningProgress.Signals(
+            readBytes = StreamReads.delivered.get() - openingBytesAt[0],
+            onDisk = (downloaded ?: 0f) >= 1f || !current.fromTelegram,
+            opened = st.opened,
+            bufferedMs = if (st.opened) (st.bufferedMs - st.positionMs).coerceAtLeast(0) else -1L,
+            bufferTargetMs = MPV_START_BUFFER_MS,
+            bytesPerSec = if (it.durationSec > 0) it.sizeBytes / it.durationSec else 0L,
+        )
+    }
+
+    fun retryStall() {
+        // The connections reopened and the stream asked for again from where it stands.
+        scope.launch { runCatching { com.tmplayer.data.Td.retryConnecting() } }
+        engine.seekToExact(liveStatus.value.positionMs)
+        refocus()
+    }
+
+    fun retry() {
+        attempt++
+        refocus()
+    }
+
+    fun watchAgain() {
+        if (engine.state.value.opened) {
+            phase = Phase.Playing
+            engine.seekTo(0)
+            engine.play()
+        } else {
+            // "Still watching?" stopped the engine at the end (the sleep timer), and
+            // a stopped engine has no file left to seek in: open it again from the start.
+            reopenAt = 0L
+            attempt++
+        }
+        refocus()
+    }
+
+    fun cancelNext() {
+        phase = Phase.Finished
+        refocus()
+    }
+
+    fun setAutoplay(on: Boolean) {
+        autoplayNext = on
+        playerScope.launch { runCatching { settings.setAutoplayNext(on) } }
+    }
+
+    // ---- what the body drew, in its order -------------------------------------------------------
+    // Each part reads this composition's values, and hands its own parts callbacks that go through
+    // [latest], the newest session: a callback that captured nothing but remembered states before
+    // the split is again one object from one composition to the next, so a part whose values have
+    // not changed is skipped as it was (a mouse move recomposes the screen, not the whole overlay).
+
+    /** The picture, or the casting panel, and the clicks, holds and drags on it. */
+    @Composable
+    @NonRestartableComposable
+    fun BoxScope.PictureLayer(latest: androidx.compose.runtime.State<PlayerSession>) {
+        val p by latest
+        // A resized window, another picture size or shape: the zoom stays, its move held inside.
+        LaunchedEffect(videoBox, status.videoWidth, status.videoHeight, status.scale) {
+            if (zoom.zoomed) applyZoom(zoom, say = false)
+        }
+        val casting = activeEngine as? com.tmplayer.desktop.cast.CastPlaybackEngine
+        if (casting == null) {
+            (engine.local as? MpvPlaybackEngine)?.let { MpvMediampPlayerSurface(it.player, Modifier.fillMaxSize()) }
+        } else {
+            CastingPanel(casting, status, onPlayHere = { p.playHere() })
+        }
+
+        VideoGestures(
+            onClick = {
+                if (!p.ignoreClicks) p.togglePlay()
+                p.refocus()
+            },
+            onDoubleClick = { if (!p.ignoreClicks) p.onToggleFullscreen() },
+            onRightClick = { at -> p.menu = if (p.menu?.panel == true) null else MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
+            onMouseBack = onBack,
+            scope = scope,
+            canPan = { p.zoom.zoomed && p.zoomAllowed() },
+            onPan = { delta -> p.zoomFrame()?.let { frame -> p.applyZoom(p.zoom.panBy(delta.x, delta.y, frame), say = false) } },
+            onHold = { on -> p.hold(on) },
+        )
+    }
+
+    /** The controls: the bar, the title, the buttons and their menus. */
+    @Composable
+    @NonRestartableComposable
+    fun BoxScope.OverlayLayer(latest: androidx.compose.runtime.State<PlayerSession>, title: String, subtitle: String) {
+        val p by latest
+        val liveStatus = liveStatus
+        val castPresence = castPresence
+        CompositionLocalProvider(
+            LocalPlayerCopies provides PlayerCopies(copies, current.item.id, qualities, current.item.playingQuality),
+            LocalChatSubtitles provides chatHits,
+            LocalStoryboard provides storyboard,
+            LocalFrameSource provides frameSource,
+            LocalSeekCover provides seekCover,
+        ) { PlayerOverlay(
+            visible = showControls,
+            status = status,
+            positionMs = { liveStatus.value.positionMs },
+            bufferedMs = { liveStatus.value.bufferedMs },
+            title = title,
+            subtitle = subtitle,
+            episodes = episodes,
+            tracks = tracks,
+            downloaded = downloaded,
+            isDownload = current.isDownload,
+            showRemaining = showRemaining,
+            fullscreen = fullscreen,
+            menu = menu,
+            ignoreClicks = ignoreClicks,
+            miniPlayerAvailable = onMiniPlayer != null,
+            alwaysOnTopAvailable = onToggleAlwaysOnTop != null,
+            fromTelegram = current.fromTelegram,
+            savable = savable,
+            addToList = watched != null && current.fromTelegram && hasMessage(item),
+            subtitleThisVideo = if (hasMessage(item)) styleThisVideo else null,
+            watchedLabel = if (watched != null && current.fromTelegram && hasMessage(item)) {
+                WatchedWords.markLabel(SettingsStore.progressKey(item.chatId, item.messageId) in watchedKeys)
+            } else {
+                null
+            },
+            onHoverControls = { p.overControls = it },
+            onBack = onBack,
+            onTogglePlay = { p.togglePlay() },
+            onSeekBy = { p.dispatch(PlayerAction.SeekBy(it)) },
+            onSeekTo = { p.jumpTo(it) },
+            onEpisode = { p.switchTo(it) },
+            onToggleRemaining = { p.toggleRemaining() },
+            onVolume = { p.setVolume(it) },
+            onToggleMute = { p.toggleMute() },
+            onToggleFullscreen = onToggleFullscreen,
+            onMiniPlayer = { p.dispatch(PlayerAction.MiniPlayer) },
+            onOpenMenu = { p.menu = it },
+            onCloseMenu = { p.closeMenu() },
+            sleepTimer = sleepTimerDetail(),
+            loop = abLoop,
+            repeatVideo = repeatVideo,
+            markIntro = if (skipCtl.canMark) (if (introMarking) s.playerMarkIntroEnd else s.playerMarkIntro) else null,
+            bookmarks = if (marksOn) marks else null,
+            onMenuAction = { action -> p.menuAction(action) },
+            onEpisodes = if (episodes.series != null) {
+                { p.openEpisodes() }
+            } else {
+                null
+            },
+            castButton = { CastButton(castPresence) },
+            subtitlesButton = com.tmplayer.cast.CAST_SUBTITLES || activeEngine !is com.tmplayer.desktop.cast.CastPlaybackEngine,
+        ) }
+    }
+
+    /** The flash, and the notices, pills, chips and cards that come and go over the picture. */
+    @Composable
+    @NonRestartableComposable
+    fun BoxScope.CardsLayer(latest: androidx.compose.runtime.State<PlayerSession>) {
+        val p by latest
+        val next = next
+        FeedbackLayer(
+            flash = flash,
+            spinner = phase == Phase.Playing && status.buffering && !showControls,
+            chip = if (phase == Phase.Playing && status.buffering && !showControls) s.playerBuffering else null,
+        )
+
+        // A button that goes away as it is clicked takes the keyboard with it, so each of
+        // these hands the keys back to the player, as the skip pill does.
+        resumedFrom?.let { from ->
+            ResumeNotice(
+                from = from,
+                lifted = showControls,
+                onStartOver = {
+                    p.startOver()
+                    p.refocus()
+                },
+                onTimeout = { p.resumedFrom = null },
+            )
+        }
+
+        activeSkip?.let { segment ->
+            val counting = skipOffer as? SkipOffer.Counting
+            SkipPill(
+                segment = segment,
+                lifted = showControls,
+                secondsLeft = counting?.secondsLeft,
+                onCancel = {
+                    p.cancelAutoSkip()
+                    p.refocus()
+                },
+                onSkip = {
+                    p.skipSegment()
+                    p.refocus()
+                },
+            )
+        }
+
+        // Not while the screen is locked: nothing under the shield takes a click.
+        undoOffer?.takeIf { phase == Phase.Playing && !screenLocked }?.let { offer ->
+            key(offer.backToMs) {
+                UndoSeekChip(backToMs = offer.backToMs, lifted = showControls, onUndo = {
+                    p.undoSeek()
+                    p.refocus()
+                })
+            }
+        }
+
+        if (nextUpVisible && next != null) {
+            NextUpCard(
+                label = episodes.labelFor(next),
+                secondsLeft = nextUpSeconds,
+                lifted = showControls,
+                onPlayNow = {
+                    p.switchTo(next)
+                    p.refocus()
+                },
+                onHide = {
+                    p.nextUpDismissed = true
+                    p.refocus()
+                },
+            )
+        }
+    }
+
+    /** The online subtitles, Playback details, the loader, the stall and the status sheet. */
+    @Composable
+    @NonRestartableComposable
+    fun BoxScope.SheetsLayer(latest: androidx.compose.runtime.State<PlayerSession>, title: String, subtitle: String) {
+        val p by latest
+        val liveStatus = liveStatus
+        val ui = ui
+        /** "Play Telegram's 480p" on the sheet that says nothing is arriving: the next copy down. */
+        val lighter: com.tmplayer.data.TelegramQuality? = run {
+            val here = current.item
+            val source = post ?: here
+            if (qualities.isEmpty()) null else TelegramQualities.lighter(here.copy(qualities = source.qualities))
+        }
+
+        val lighterAction: Pair<String, () -> Unit>? = lighter?.let { q ->
+            s.playerLighter(TelegramQualities.label(q.height)) to { p.switchQuality(q.height) }
+        }
+
+        if (showOnline) {
+            OnlineSubtitlesPanel(
+                target = { p.onlineTarget() },
+                onTranslate = { hit, wanted -> p.translateOnline(hit, wanted) },
+                onLoaded = { file, label -> p.loadOnline(file, label) },
+                onClose = {
+                    p.showOnline = false
+                    p.refocus()
+                },
+                onPicked = { hit, file ->
+                    OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(p.item), hit, file)
+                },
+                onPickFile = { p.pickSubtitleFile() },
+                msone = onlineMsone,
+                submaker = onlineSubMaker,
+                preset = onlinePreset,
+            )
+        }
+
+        // The Telegram datacenter the file is kept in (EG-F61): read from its remote id when the
+        // details are opened, a local call; nothing for a local file or an id that does not say.
+        var datacenter by remember(item.fileId) { mutableStateOf<Int?>(null) }
+        LaunchedEffect(showDetails, item.fileId) {
+            if (showDetails && item.fileId > 0 && item.chatId != 0L && datacenter == null) {
+                datacenter = runCatching { com.tmplayer.data.Td.remoteDatacenter(item.fileId) }.getOrNull()
+            }
+        }
+        if (showDetails) {
+            DetailsPanel(
+                rows = { p.detailRows(datacenter) },
+                onClose = {
+                    p.showDetails = false
+                    p.refocus()
+                },
+            )
+        }
+
+        LoaderSheet(
+            phase = phase,
+            item = current.item,
+            downloaded = downloaded,
+            bufferedMs = { liveStatus.value.let { (it.bufferedMs - it.positionMs).coerceAtLeast(0) } },
+            isDownload = current.isDownload,
+            onBack = onBack,
+            thumbnailOverride = loaderThumbnail,
+            // Nothing arriving: the connections reopened and the file opened again.
+            onRetry = { p.retryOpening() },
+            // Kept in the queue, which carries on once the player lets go of the file.
+            onDownloadFirst = if (savable && !current.isDownload) {
+                { p.downloadFirst() }
+            } else {
+                null
+            },
+            lighter = lighterAction,
+            startMs = openingStartMs,
+            // What the opening measures: mpv's reads, whether it has opened, its cache ahead.
+            signals = { p.openingSignals() },
+        )
+
+        // A stall while playing that runs on says why, with the opening's three ways on.
+        PlaybackStall(
+            buffering = phase == Phase.Playing && status.buffering && !status.seekPending,
+            bufferedMs = { liveStatus.value.bufferedMs },
+            downloaded = downloaded,
+            onRetry = { p.retryStall() },
+            onDownloadFirst = if (savable && !current.isDownload) {
+                { p.downloadFirst() }
+            } else {
+                null
+            },
+            onBack = onBack,
+            lighter = lighterAction,
+        )
+
+        StatusSheet(
+            phase = phase,
+            title = title,
+            subtitle = subtitle,
+            onRetry = { p.retry() },
+            onBack = onBack,
+            onFreeUpSpace = onFreeUpSpace,
+            onWatchAgain = { p.watchAgain() },
+            onPlayNext = {
+                p.switchTo(it)
+                p.refocus()
+            },
+            onCancelNext = { p.cancelNext() },
+            onKeepWatching = { (p.phase as? Phase.StillWatching)?.let { p.keepWatching(it) } },
+            nextLabel = { ui.episodes.labelFor(it) },
+        )
+    }
+
+    /** The episode list, the dialogs, the "?" sheet and, over everything, the lock's shield. */
+    @Composable
+    @NonRestartableComposable
+    fun BoxScope.DialogsLayer(latest: androidx.compose.runtime.State<PlayerSession>) {
+        val p by latest
+        val series = episodes.series
+        if (showEpisodes && series != null) {
+            val watch = remember(progressMap, watchedKeys) {
+                com.tmplayer.ui.browse.SeriesWatch(
+                    point = { progressMap[SettingsStore.progressKey(it.chatId, it.messageId)] },
+                    finished = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedKeys },
+                )
+            }
+            EpisodesSheet(
+                state = com.tmplayer.ui.player.EpisodesState(
+                    series = series,
+                    playing = item,
+                    previous = episodes.previous,
+                    previousLabel = episodes.previous?.let { s.playerPreviousUp(episodes.labelFor(it)) },
+                    next = episodes.next,
+                    nextLabel = episodes.next?.let { s.playerNextUp(episodes.labelFor(it)) },
+                    previousCode = episodes.previousTag?.code,
+                    nextCode = episodes.nextTag?.code,
+                    autoplay = autoplayNext,
+                ),
+                watch = watch,
+                actions = com.tmplayer.ui.player.EpisodesActions(
+                    onPlay = { target ->
+                        p.closeEpisodes()
+                        if (target.id != p.item.id) p.switchTo(target)
+                    },
+                    onToggleWatched = { p.toggleWatchedOf(it) },
+                    onAutoplay = { on -> p.setAutoplay(on) },
+                ),
+                onClose = { p.closeEpisodes() },
+            )
+        }
+
+        notePrompt?.let { prompt ->
+            BookmarkNoteDialog(
+                prompt = prompt,
+                onSave = { note ->
+                    p.notePrompt = null
+                    p.saveNote(prompt, note)
+                    p.refocus()
+                },
+                onDismiss = {
+                    p.notePrompt = null
+                    p.refocus()
+                },
+            )
+        }
+
+        listPicking?.let { record ->
+            // Nothing to write to without the store: the line is not offered then, so this stays shut.
+            watched?.let { store ->
+                com.tmplayer.ui.browse.ListPickerDialog(
+                    record = record,
+                    lists = store.lists,
+                    onMessage = { line -> p.showFlash(Flash.Kind.Text, line) },
+                    onDismiss = {
+                        p.listPicking = null
+                        p.refocus()
+                    },
+                )
+            }
+        }
+
+        if (timePrompt) {
+            GoToTimeDialog(
+                durationMs = status.durationMs,
+                positionMs = liveStatus.value.positionMs,
+                onGo = { target ->
+                    p.timePrompt = false
+                    p.jumpTo(target)
+                    p.showFlash(Flash.Kind.Text, SeekMath.clock(target))
+                    p.refocus()
+                },
+                onDismiss = {
+                    p.timePrompt = false
+                    p.refocus()
+                },
+            )
+        }
+
+        if (showShortcuts) {
+            ShortcutSheet(
+                onClose = {
+                    p.showShortcuts = false
+                    p.refocus()
+                },
+                mac = mac,
+                wheelSeeks = desktop.wheelSeeks,
+            )
+        }
+
+        // Over everything, the controls and the skip and next-up cards included.
+        if (screenLocked) {
+            LockShield(
+                showUnlock = showUnlock,
+                holding = unlockHold != null,
+                onWake = {
+                    p.noteInput()
+                    p.unlockWanted = System.nanoTime()
+                },
+                onUnlock = { p.unlockScreen() },
+            )
+        }
+    }
+}
+
+/** The screen's first states and effects, in the order the body always ran them (HX1 split). */
+@Composable
+@NonRestartableComposable
+private fun PlayerSession.Gather() {
+    // One search for the Cast button per player session (FQ8), not one per reveal of the controls.
+    castPresence = rememberCastBarPresence()
+    // mpv on this computer, or the TV while a cast is on (CP73): a video opened with a session up
+    // goes to the TV from the start.
+    // When libmpv cannot load (Windows blocked it), a stand-in whose reason the status sheet shows (HX36).
+    engine = remember {
+        val local = try {
+            engineFactory()
+        } catch (e: VideoEngineUnavailable) {
+            engineBlocked[0] = e.message ?: VideoEngineFailure.describe(e)
+            NoEngine(engineBlocked[0].orEmpty())
+        }
+        com.tmplayer.desktop.cast.SwitchingEngine(local).also { e ->
+            (com.tmplayer.desktop.cast.DesktopCast.state.value as? com.tmplayer.desktop.cast.DesktopCast.State.Connected)?.let { c ->
+                e.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(c.receiver) { castTitle[0] })
+            }
+        }
+    }
+    desktopState = prefs.state.collectAsState()
+    DisposableEffect(engine) { onDispose { engine.close() } }
+    LaunchedEffect(engine) { onEngine(engine) }
+
+    scope = rememberCoroutineScope()
+    activeEngineState = engine.activeFlow.collectAsState()
+    // Every update of the engine, the clock's four a second among them. Read in handlers, in the
+    // derived values below and by the small parts that draw the time, never in this body, so a
+    // tick of the clock recomposes the time label and the bar rather than the whole screen.
+    liveStatus = activeEngine.state.collectAsState()
+    // The same status with the position and the buffer's end left as they were, which is what the
+    // body reads: it changes when something other than the clock does (SteadyStatus).
+    statusState = remember(liveStatus) { derivedStateOf(SteadyStatus) { liveStatus.value } }
+
+    tracksState = activeEngine.tracks.collectAsState()
+    castStateState = com.tmplayer.desktop.cast.DesktopCast.state.collectAsState()
+
+    // Whether this video is being watched, for the downloads that step aside while one plays from
+    // the network (DownloadYield). A cast counts, as its engine reports playing too.
+    val watching = status.playing && !status.ended
+    LaunchedEffect(watching, current) {
+        val ids = listOf(current.item.fileId) + current.item.pieces.map { it.fileId }
+        com.tmplayer.data.StreamingPlays.setPlaying(ids, watching)
+    }
+    // A failure once the video is playing (mpv lost the stream, a decoder gave up) ends in the error
+    // sheet too, with Try again, instead of a still picture and nothing said (HX10). The open's own
+    // failure is read where it opens.
+    LaunchedEffect(engine) {
+        engine.state.map { it.error }.collect { error ->
+            if (error != null && phase == Phase.Playing && engine.cast == null) {
+                phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
+            }
+        }
+    }
+    // Every copy of the video playing that the player knows of: what the opening page handed over
+    // (CopyHandoff, possibly across chats) and, for an episode, its copies once the show is found.
+    copies = remember(current.item.id, episodes) {
+        val here = current.item
+        val episode = episodes.series?.episodes?.firstOrNull { ep -> ep.copies.any { it.id == here.id } }
+        // The same file posted twice is one copy to switch to, not two.
+        com.tmplayer.data.VideoCopies.oneOfEachFile((CopyHandoff.copiesOf(here) + episode?.copies.orEmpty() + here).distinctBy { it.id }, here.id)
+    }
+    LaunchedEffect(current.item.id) {
+        val here = current.item
+        runCatching { settings.notePlayedQuality(copies.firstOrNull { it.id == here.id } ?: here) }
+    }
+    LaunchedEffect(current.item.chatId, current.item.messageId) {
+        val here = current.item
+        if (!hasMessage(here) || !current.fromTelegram) return@LaunchedEffect
+        if (here.qualities.isNotEmpty() || here.storyboard != null) {
+            post = here
+            return@LaunchedEffect
+        }
+        post = runCatching {
+            com.tmplayer.data.Td.awaitAuthorizedSession()
+            com.tmplayer.data.Td.refreshMedia(here.chatId, here.messageId)
+        }.getOrNull()
+    }
+    qualities = if (current.isDownload || current.item.isJoined) emptyList() else (post?.qualities ?: current.item.qualities)
+    // Telegram's storyboard (CP80): the timebar's hover pictures, where scrub pictures are on.
+    val scrubSetting by remember(settings) { settings.trickplay }.collectAsState(initial = true)
+    val scrubPictures = scrubSetting && com.tmplayer.data.Trickplay.PICTURES_SHOWN
+    val boardFiles = (post ?: current.item).storyboard
+    storyboard = remember(boardFiles, scrubPictures) {
+        boardFiles?.takeIf { scrubPictures }?.let { files -> DesktopStoryboard(files, durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) }
+    }
+    // Fetched as the video opens, in the player's lifetime rather than the hover's, so the sprite
+    // is in by the time the pointer reaches the bar (a fetch from inside the hover was cancelled,
+    // and TDLib's download withdrawn, each time the pointer moved on).
+    LaunchedEffect(storyboard) { runCatching { storyboard?.warm() }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it } }
+    // The video's own frames for the hover where the storyboard has none: a second decoder over
+    // what is on the disk (see [PlaybackEngine.previewFrame]).
+    frameSource = remember(current.item.id, scrubPictures) {
+        if (!scrubPictures) {
+            null
+        } else {
+            FrameSource(durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) { at ->
+                engine.previewFrame(at, FRAME_WIDTH_PX, FRAME_HEIGHT_PX)
+            }
+        }
+    }
+    seekCover = remember(current.item.id) { SeekCover(current.item.thumbnailFileId, current.item.miniThumbnail) }
+    // The files are looked for the first time the menu opens on Subtitles or the main page that leads there.
+    val subtitleMenuOpen = menu?.page == MenuPage.Subtitles || menu?.page == MenuPage.Main
+    LaunchedEffect(subtitleMenuOpen, current.item.chatId, current.item.messageId) {
+        val here = current.item
+        if (!subtitleMenuOpen || chatAsked || !hasMessage(here) || !current.fromTelegram) return@LaunchedEffect
+        chatAsked = true
+        chatHits = try {
+            (com.tmplayer.data.ChatSubtitleFinder.shared.find(
+                here.chatId, here.messageId, here.fileName.ifBlank { here.title }, here.caption,
+                OnlineSubtitles.languagesFor(null),
+            ) as? com.tmplayer.data.ChatSubtitleFound.Hits)?.hits.orEmpty()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
+            emptyList()
+        }
+    }
+    downloadedState = current.downloaded.collectAsState()
+    savableState = current.savable.collectAsState()
+    // The Watched list as it stands, for which way the menu's mark line reads.
+    watchedKeysState = remember(watched) { watched?.watched ?: flowOf(emptyMap()) }
+        .collectAsState(initial = emptyMap())
+    DisposableEffect(item.fileId) {
+        onDispose {
+            translatingVideo?.let { video -> OnlineSubtitles.current?.let { it.translations.cancelVideo(it.translationPrefix(video)) } }
+            translatingVideo = null
+        }
+    }
+    seriesKey = remember(item) { seriesKeyOf(item) }
+    // Where a speed picked for this video is remembered, and read back from. See [SpeedMemory].
+    speedScopes = remember(item, seriesKey) { SpeedMemory.scopesOf(item, seriesKey) }
+    progressMapState = remember(settings) { settings.watchProgress }.collectAsState(initial = emptyMap())
+    // This video's bookmarks, for the menu's list and the ticks on the timebar. A file with no
+    // message behind it (the dev harness) has nothing to key them by, so it has none.
+    marksState = remember(bookmarks, item.chatId, item.messageId) {
+        if (bookmarks != null && hasMessage(item)) bookmarks.bookmarks(item.chatId, item.messageId) else flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+    LaunchedEffect(undoOffer) {
+        val offer = undoOffer ?: return@LaunchedEffect
+        delay((offer.untilMs - System.currentTimeMillis()).coerceAtLeast(0))
+        undoOffer = seekUndo.current(System.currentTimeMillis())
+    }
+    skipSay[0] = { showFlash(Flash.Kind.Text, it) }
+}
+
+/** The skip times, the opening, casting and the resume writes (HX1 split, same order). */
+@Composable
+@NonRestartableComposable
+private fun PlayerSession.Opening() {
+    // ---- open, resume, episodes --------------------------------------------------------------
+
+    // The skip times, asked once per video and not again on a retry. With lookups off this
+    // returns at once with nothing, and no request leaves the machine.
+    LaunchedEffect(current) {
+        skips = try {
+            current.skipTimes()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w("PlayerScreen", "Skip times lookup failed", e)
+            emptyList()
+        }
+        skipCtl.online(skips)
+    }
+    // The file's own chapters are the first and best source: free, exact, and offline.
+    LaunchedEffect(skipCtl, status.chapters) { skipCtl.chapters(status.chapters) }
+
+    LaunchedEffect(current, attempt) {
+        // No video engine: nothing to open, and Try again says the same until the app restarts.
+        engineBlocked[0]?.let {
+            phase = Phase.Failed(it)
+            return@LaunchedEffect
+        }
+        phase = Phase.Loading(if (item.chatId != 0L) s.playerConnectingTelegram else s.playerOpeningVideo)
+        openingBytesAt[0] = StreamReads.delivered.get()
+        openingStartMs = 0L
+        // Telegram's own lighter copy (CP80), chosen before anything is opened: the one asked for
+        // on the detail page or the copies menu, else one the line measured on this run carries
+        // when it is too slow for the upload. Never for a download or an upload already here.
+        if (attempt == 0 && reopenAt == null && current.fromTelegram && hasMessage(item) && item.playingQuality == 0 && !item.isJoined) {
+            val wish = QualityWish.take(item.chatId, item.messageId)
+            if (wish != 0) {
+                val fresh = kotlinx.coroutines.withTimeoutOrNull(POST_READ_MS) {
+                    post ?: runCatching { com.tmplayer.data.Td.awaitAuthorizedSession(); com.tmplayer.data.Td.refreshMedia(item.chatId, item.messageId) }.getOrNull()?.also { post = it }
+                }
+                val choice = when {
+                    fresh == null || fresh.qualities.isEmpty() -> null
+                    wish != null -> fresh.qualities.firstOrNull { it.height == wish }?.let { TelegramQualities.Choice(it, TelegramQualities.Why.SlowLine) to false }
+                    com.tmplayer.desktop.DownloadIndex.fileFor(settings, item.chatId, item.messageId) != null -> null
+                    runCatching { com.tmplayer.data.Td.localDownloadedBytes(item.fileId) }.getOrDefault(0L) > 0 -> null
+                    else -> TelegramQualities.choose(fresh.copy(fileId = item.fileId, sizeBytes = item.sizeBytes.takeIf { it > 0 } ?: fresh.sizeBytes), saveData = false, lineBytesPerSec = com.tmplayer.player.LineSpeed.recent())?.let { it to true }
+                }
+                if (choice != null && fresh != null) {
+                    val (picked, automatic) = choice
+                    val upload = item.copy(qualities = fresh.qualities, storyboard = fresh.storyboard, startSec = fresh.startSec)
+                    if (automatic) showFlash(Flash.Kind.Text, s.playerLighterPickedSlow(TelegramQualities.label(picked.quality.height)))
+                    neverOpened[0] = current
+                    current = current.episode(TelegramQualities.withQuality(upload, picked.quality))
+                    return@LaunchedEffect
+                }
+            }
+        }
+        nextUpDismissed = false
+        nextUpShown = false
+        resumedFrom = null
+        // The head and the index on their way while the settings below are read, for a stream
+        // reached any way (the next episode, a reopen) ([com.tmplayer.player.StreamWarmup]).
+        val openStartedAt = System.currentTimeMillis()
+        if (current.fromTelegram && !item.isJoined && item.fileId > 0) {
+            launch {
+                if (com.tmplayer.desktop.DownloadIndex.fileFor(settings, item.chatId, item.messageId) == null) {
+                    // From the saved place too, as the opening below reads it, unless Start over.
+                    com.tmplayer.player.StreamWarmup.warm(
+                        item,
+                        if (ignoreSavedPosition) null else ({ settings.resumeStartFor(TelegramQualities.upload(item)) }),
+                    )
+                }
+            }
+        }
+        launch {
+            // What the file says of itself straight away, for the title; the chat's answer, then
+            // the providers' episode names where lookups are on.
+            episodes = Episodes(current = EpisodeNeighbours.tagOf(item))
+            val found = runCatching { current.episodes() }.getOrDefault(episodes)
+            episodes = found
+            val named = runCatching {
+                kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
+            }.getOrDefault(found)
+            if (named != found) episodes = named
+        }
+        launch { tdlibVersion = current.tdlibVersion() }
+        // A Play all or Shuffle run goes on whatever Autoplay says (WP-32); the menu's switch still stops it.
+        autoplayNext = current.playsAll || runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+        keepRepeat = runCatching { settings.keepRepeatNow() }.getOrDefault(false)
+        repeatVideo = com.tmplayer.data.RepeatVideo.repeats(current.item, keepRepeat)
+        showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)
+        // A saved position opens a few seconds early, as Settings has it ([ResumeRewind]); Keep
+        // watching reopens exactly where the file stopped, and a bookmark chosen on the detail
+        // page opens the video at its moment, once.
+        val start = reopenAt ?: BookmarkJump.take(item.chatId, item.messageId) ?: if (ignoreSavedPosition) {
+            // Start over forgets the old place: a short watch from here leaves a saved one alone.
+            runCatching { settings.clearResumePosition(item.chatId, item.messageId, item) }
+            0L
+        } else runCatching {
+            // Resume across devices, when on: the other devices' places in first, briefly.
+            com.tmplayer.data.ResumeSync.pullFor(settings)
+            // Whichever copy of the video was played last: a switch of quality carries on.
+            settings.resumeStartFor(TelegramQualities.upload(item))
+                // Never watched here: the moment the poster chose to start at (CP80), if any.
+                .takeIf { it > 0 }
+                ?: PostStart.startMs(linkSec = 0, savedMs = 0, postSec = (post ?: item).startSec, durationSec = item.durationSec)
+        }.getOrDefault(0L)
+        val reopening = reopenAt != null
+        reopenAt = null
+        openingStartMs = start
+        trackChoice = runCatching { settings.trackChoice(seriesKey) }.getOrDefault(TrackChoice())
+        // A resumed video goes back to the tracks and speed it was playing with. See [ResumeState].
+        val resumed = if (start > 0 && hasMessage(item)) {
+            runCatching { settings.resumeRecord(item.chatId, item.messageId)?.state }.getOrNull()
+        } else {
+            null
+        }
+        // Offsets are remembered per message; a file on disk (the dev harness) starts in step.
+        val delays = if (hasMessage(item)) {
+            runCatching { settings.syncDelays(item.chatId, item.messageId) }.getOrDefault(SyncDelays())
+        } else {
+            SyncDelays()
+        }
+        // The file's saved tracks, then the series, then Settings, then the file's own defaults.
+        val trackPlan = TrackRules.plan(
+            resumed,
+            trackChoice,
+            runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences()),
+            Translator.messages.tag,
+        )
+        val ownLook = if (hasMessage(item)) runCatching { settings.videoSubtitleStyle(item.chatId, item.messageId) }.getOrNull() else null
+        styleThisVideo = ownLook != null
+        val prefs = OpenPrefs(
+            audioLanguage = trackPlan.audioLanguage,
+            audioMore = trackPlan.audioMore,
+            subtitles = trackPlan.subtitles,
+            // Its own speed, else the series' or course's, else the chat's or topic's: [SpeedMemory].
+            speed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }
+                .getOrDefault(resumed?.speed ?: PlaybackSpeed.DEFAULT)
+                .coerceIn(SeekMath.MIN_SPEED, SeekMath.MAX_SPEED),
+            // A fixed shape chosen in this player carries to the next episode; a new player starts
+            // from the last of Original, Fill and Stretch (HX16).
+            scale = heldShape[0] ?: runCatching { VideoScale.remembered(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit),
+            downmix = prefs.now.downmix,
+            volume = prefs.now.volume,
+            muted = prefs.now.muted,
+            volumeBoost = runCatching { settings.volumeBoostNow() }.getOrDefault(false),
+            nightMode = runCatching { settings.nightModeNow() }.getOrDefault(false),
+            hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
+            subtitleStyle = ownLook ?: runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
+            delays = delays,
+            resume = resumed,
+        )
+        // A slow open (the whole video downloading first) says what it is waiting on; Back on the
+        // loading screen cancels it.
+        val preparing = launch { current.preparing.collect { text -> if (text != null) phase = Phase.Loading(text) } }
+        val data = try {
+            current.open()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w("PlayerScreen", "Could not open ${item.title}", e)
+            phase = Phase.Failed(e.message ?: s.playerOpenFailed, noRoom = e is com.tmplayer.desktop.NotEnoughRoom)
+            return@LaunchedEffect
+        } finally {
+            preparing.cancel()
+        }
+        phase = Phase.Loading(if (start > 0) s.playerResumingFrom(SeekMath.clock(start)) else s.playerOpeningVideo)
+        Logger.i("PlayerStart", "open to media ready ${System.currentTimeMillis() - openStartedAt} ms (file ${item.fileId}, resume $start ms)")
+        launch {
+            // The first moment mpv is playing rather than buffering: the desktop's "first frame".
+            val playing = kotlinx.coroutines.withTimeoutOrNull(120_000) {
+                engine.state.first { it.opened && !it.buffering && it.error == null }
+            }
+            if (playing != null) Logger.i("PlayerStart", "open to playing ${System.currentTimeMillis() - openStartedAt} ms (file ${item.fileId})")
+        }
+        // Every file opens whole; the engine puts mpv's own zoom back as it opens.
+        zoom = PictureZoom.NONE
+        // What the file declares goes to the badges on its details page once mpv lists its tracks.
+        // Not for Telegram's lighter copy, whose picture is not the upload the page is about.
+        if (item.playingQuality == 0) engine.probeFor(item.id)
+        engine.open(data, start, prefs)
+        val error = engine.state.value.error
+        // On a TV the casting panel says what went wrong, with Play here beside it.
+        if (error != null && engine.cast == null) {
+            phase = Phase.Failed(error, format = engine.state.value.failedFormat, details = engine.state.value.failedDetails)
+            return@LaunchedEffect
+        }
+        ignoreSavedPosition = false
+        // Keep watching opens the file again, and a fresh open has no loop in mpv.
+        abLoop?.takeIf { it.complete }?.let(engine::setAbLoop)
+        phase = Phase.Playing
+        restoreRememberedSubtitle(item)
+        // A video whose pieces stop at a gap says so as it starts.
+        current.notice?.let { showFlash(Flash.Kind.Text, it) }
+        // A file named as 3D says how to watch it, once, unless 3D is on already: never turned
+        // on by itself, since without glasses the picture is two pictures or tinted.
+        if (current.notice == null && !engine.state.value.stereo.on &&
+            Stereo3d.detect(listOf(item.title, item.fileName, item.caption).joinToString(" ")) != null
+        ) {
+            showFlash(Flash.Kind.Text, s.playerStereoFound)
+        }
+        if (start > 0 && !reopening) resumedFrom = start
+        onPlayingItemChanged(item)
+        refocus()
+    }
+
+    // Casting (CP73): a session coming up moves the video to the TV at the place it had reached,
+    // and the session ending (Stop casting, or Play here after the TV was lost) brings it back.
+    LaunchedEffect(castState) {
+        val cs = castState
+        val casting = engine.cast
+        when {
+            cs is com.tmplayer.desktop.cast.DesktopCast.State.Connected && casting?.receiver !== cs.receiver -> {
+                val at = engine.state.value.takeIf { it.opened }?.positionMs
+                engine.switchTo(com.tmplayer.desktop.cast.CastPlaybackEngine(cs.receiver) { castTitle[0] }, tellReceiver = false)
+                if (at != null) reopenAt = at
+                attempt++
+            }
+            (cs is com.tmplayer.desktop.cast.DesktopCast.State.Idle) && casting != null -> {
+                val at = casting.positionMs.takeIf { casting.state.value.opened || it > 0 }
+                engine.switchTo(engine.local, tellReceiver = false)
+                if (at != null) reopenAt = at
+                attempt++
+            }
+        }
+    }
+
+    // Declared after the engine's own, so it is disposed first, while the engine still knows
+    // where the old video was.
+    DisposableEffect(current) {
+        val leaving = current
+        onDispose {
+            // One handed straight on to a copy of Telegram's before it opened never played, and
+            // the engine's place is still the video before it.
+            if (leaving !== neverOpened[0]) saveResume(leaving, engine.state.value, leaving = true)
+            leaving.release()
+        }
+    }
+
+    LaunchedEffect(current) {
+        while (true) {
+            delay(RESUME_TICK_MS)
+            if (engine.state.value.playing && phase == Phase.Playing) saveResume(current, engine.state.value)
+        }
+    }
+
+    // A pause is a natural place to stop for the night: written now, since the heartbeat above
+    // only beats while playing. Not the pause that comes with the end, which the end handles.
+    LaunchedEffect(current, status.playing) {
+        val s = engine.state.value
+        if (!s.playing && !s.ended && s.opened && phase == Phase.Playing) saveResume(current, s)
+    }
+}
+
+/** The end, "Still watching?", the next-up card and the skip pill (HX1 split, same order). */
+@Composable
+@NonRestartableComposable
+private fun PlayerSession.Ending() {
+    // The end: the next episode after a countdown, or the last frame with a way to watch again.
+    LaunchedEffect(status.ended) {
+        if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
+        // Repeat this video: again from the start, not watched,
+        // no next-up and no count towards "Still watching?". A sleep timer for the end wins.
+        if (com.tmplayer.data.RepeatVideo.replaysAtEnd(current.item, keepRepeat, sleepAtTheEnd)) {
+            engine.seekToExact(0)
+            engine.play()
+            return@LaunchedEffect
+        }
+        if (sleepAtTheEnd && repeatVideo) {
+            com.tmplayer.data.RepeatVideo.set(false)
+            repeatVideo = false
+        }
+        if (current.incomplete) {
+            // Only up to a missing piece: said again, nothing marked, nothing played next.
+            current.notice?.let { showFlash(Flash.Kind.Text, it) }
+            phase = Phase.Finished
+            return@LaunchedEffect
+        }
+        recordWatched(current, status.durationMs, manual = false)
+        runCatching { settings.clearResumePosition(item.chatId, item.messageId) }
+        val next = episodes.next
+        val autoplays = next != null && autoplayNext && !nextUpDismissed
+        if (sleepAtTheEnd) {
+            sleepAtTheEnd = false
+            askStillWatching(s.playerStillSleepEnded, next.takeIf { autoplays }, ended = true)
+            return@LaunchedEffect
+        }
+        if (next == null || !autoplays) {
+            phase = Phase.Finished
+            return@LaunchedEffect
+        }
+        if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
+            askStillWatching(s.playerStillAutoplayLimit(StillWatching.AUTOPLAY_LIMIT), next, ended = true)
+            return@LaunchedEffect
+        }
+        // The card already counted the last half minute down; a second countdown would be a wait for nothing.
+        if (nextUpShown) {
+            autoplay(next)
+            return@LaunchedEffect
+        }
+        for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
+            phase = Phase.Countdown(next, second)
+            delay(1_000)
+            // Cancel and Play now on the sheet end the countdown: the end has not changed, so
+            // nothing else stops this loop from bringing it back and moving on regardless.
+            if (phase != Phase.Countdown(next, second)) return@LaunchedEffect
+        }
+        autoplay(next)
+    }
+
+    // The sleep timer running out, and two hours of playback without a press. Idle time is
+    // counted while playing only, so a video left paused overnight does not ask in the morning.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(STILL_WATCHING_TICK_MS)
+            if (phase is Phase.StillWatching) continue
+            if (sleepAt > 0 && System.currentTimeMillis() >= sleepAt) {
+                sleepAt = 0L
+                askStillWatching(s.playerStillSleepPaused, next = null, ended = phase == Phase.Finished)
+                continue
+            }
+            if (phase == Phase.Playing && engine.state.value.playing) {
+                idleMs += STILL_WATCHING_TICK_MS
+                if (idleMs >= idleLimitMs) {
+                    idleMs = 0L
+                    askStillWatching(
+                        if (idleLimitMs == StillWatching.IDLE_LIMIT_MS) s.playerStillIdleTwoHours else s.playerStillIdle,
+                        next = null,
+                        ended = false,
+                    )
+                }
+            }
+        }
+    }
+
+    // The card comes up in the last half minute, or where the closing credits begin when the skip
+    // times know that and it is earlier: once the credits roll, the next episode is the offer.
+    val creditsAt = SkipSegments.creditsStart(skips, status.durationMs)
+    val nextUpLead = maxOf(NEXT_UP_LEAD_MS, creditsAt?.let { status.durationMs - it } ?: 0L)
+    // What the clock decides, each derived from the live position so the body hears of it only
+    // when the answer changes, not on every tick.
+    val nearEnd by remember(liveStatus, nextUpLead) {
+        derivedStateOf { liveStatus.value.let { it.durationMs - it.positionMs } in 1..nextUpLead }
+    }
+    val pastLead by remember(liveStatus, nextUpLead) {
+        derivedStateOf { liveStatus.value.let { it.durationMs - it.positionMs } > nextUpLead }
+    }
+    nextUpVisible = phase == Phase.Playing && next != null && autoplayNext && !nextUpDismissed && !repeatVideo &&
+        status.durationMs > 0 && nearEnd
+    LaunchedEffect(nextUpVisible) { if (nextUpVisible) nextUpShown = true }
+    LaunchedEffect(pastLead) { if (pastLead) nextUpShown = false }
+    // Credits timed to start well before the last half minute: the card counts [CREDITS_COUNTDOWN_MS]
+    // down from where they begin and then moves on, rather than counting through every name.
+    val earlyCredits = creditsAt != null && status.durationMs - creditsAt > NEXT_UP_LEAD_MS
+    // The countdown in whole seconds, the unit the card shows, so it changes once a second.
+    nextUpSecondsState = remember(liveStatus, earlyCredits, creditsAt) {
+        derivedStateOf {
+            val now = liveStatus.value
+            val inMs = if (earlyCredits) creditsAt!! + CREDITS_COUNTDOWN_MS - now.positionMs else now.durationMs - now.positionMs
+            if (inMs <= 0) 0 else ((inMs + 999) / 1000).toInt()
+        }
+    }
+    LaunchedEffect(earlyCredits && nextUpVisible && nextUpSeconds <= 0) {
+        if (!(earlyCredits && nextUpVisible && nextUpSeconds <= 0) || next == null) return@LaunchedEffect
+        recordWatched(current, status.durationMs, manual = false)
+        runCatching { settings.clearResumePosition(item.chatId, item.messageId) }
+        if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
+            askStillWatching(s.playerStillAutoplayLimit(StillWatching.AUTOPLAY_LIMIT), next, ended = true)
+        } else {
+            autoplay(next)
+        }
+    }
+
+    // A few times a second, from the live position: what the pill offers (a button, or the count of a
+    // stretch set to skip by itself), and the jump when the count runs out. Only the answer reaches
+    // the body, so a position tick that changes nothing redraws nothing.
+    val skipSuppressed by rememberUpdatedState(phase != Phase.Playing || nextUpVisible)
+    val skipCardCovers by rememberUpdatedState(next != null)
+    val skipNow by rememberUpdatedState(this::skipSegment)
+    LaunchedEffect(skipCtl) {
+        while (true) {
+            delay(SKIP_TICK_MS)
+            val live = liveStatus.value
+            val offer = if (skipSuppressed || live.durationMs <= 0) {
+                null
+            } else {
+                skipCtl.offer(live.positionMs, live.durationMs, live.playing, System.nanoTime() / 1_000_000L, skipped, skipCardCovers)
+            }
+            if (offer is SkipOffer.Fire) {
+                skipOffer = offer
+                skipNow()
+            } else if (offer != skipOffer) {
+                skipOffer = offer
+            }
+        }
+    }
+
+    // The subtitle look is one setting for every video: a change in Settings (or in the subtitle
+    // menu, which writes the same setting) reaches the video playing now.
+    LaunchedEffect(engine, settings) {
+        settings.subtitleStyle.collect { style ->
+            // A video with a look of its own (WP-29 "This video only") does not follow the shared one.
+            if (!styleThisVideo && style != engine.state.value.subtitleStyle) engine.setSubtitleStyle(style)
+        }
+    }
+}
+
+/** The controls coming and going, the lock's button and the keyboard's route (HX1 split, same order). */
+@Composable
+@NonRestartableComposable
+private fun PlayerSession.Controls() {
+    // ---- controls and cursor -----------------------------------------------------------------
+
+    val menusOpen = menu != null || showShortcuts
+    // "Hide the controls after" is the phone's setting, shared: zero keeps them up while playing.
+    // The big screen gets the television's own default until the viewer chooses (WP-47).
+    val bigScreenNow = com.tmplayer.desktop.ui.BigScreen.on
+    val hideAfterMs by remember(settings, bigScreenNow) { settings.touchPrefs.map { it.timeoutFor(bigScreenNow) } }
+        .collectAsState(initial = TouchPrefs().timeoutFor(bigScreenNow))
+    // The phone's "Hold to speed up", shared with it: 0 is off.
+    holdSpeedState = remember(settings) { settings.touchPrefs.map { it.holdSpeed } }
+        .collectAsState(initial = TouchPrefs.HOLD_DEFAULT)
+    // A pause, from anywhere (a click, a key, a media key or the system's media controls), puts
+    // the controls up for as long as it lasts; the resume keeps them up for the button to turn back
+    // into pause, then lets them go, sooner when they were down before the pause (PauseControls).
+    var wasPlaying by remember { mutableStateOf(status.playing) }
+    var downBeforePause by remember { mutableStateOf(false) }
+    LaunchedEffect(status.playing) {
+        if (status.playing == wasPlaying) return@LaunchedEffect
+        wasPlaying = status.playing
+        if (!status.playing) {
+            downBeforePause = !controlsUp
+            quickHide = false
+        } else {
+            quickHide = downBeforePause
+            downBeforePause = false
+        }
+        controlsUp = true
+        activity = System.nanoTime()
+    }
+    LaunchedEffect(activity, status.playing, menusOpen, overControls, phase, hideAfterMs) {
+        if (!status.playing || menusOpen || overControls || phase != Phase.Playing) return@LaunchedEffect
+        val after = PauseControls.hideAfterResumeMs(hideAfterMs, quickHide)
+        if (after <= 0L) return@LaunchedEffect
+        delay(after)
+        controlsUp = false
+    }
+    showControls = phase == Phase.Playing && !screenLocked && (controlsUp || !status.playing || menusOpen)
+
+    // The controls going away under a remote that was on one of them: the keys go back to the
+    // picture, or they would reach nothing until a click.
+    LaunchedEffect(showControls) {
+        if (!showControls && !keysOnPlayer && com.tmplayer.desktop.ui.BigScreen.on) refocus()
+    }
+
+    dispatchNowState = rememberUpdatedState(this::dispatch)
+    wheelSeeksNowState = rememberUpdatedState(desktop.wheelSeeks)
+
+    // The Unlock button: up on each move, click or key, and gone a moment after the last, but
+    // never while Enter is held toward an unlock.
+    LaunchedEffect(screenLocked, unlockWanted, unlockHold) {
+        showUnlock = screenLocked
+        if (!screenLocked || unlockHold != null) return@LaunchedEffect
+        delay(PlayerLock.SHOW_MS)
+        showUnlock = false
+    }
+    LaunchedEffect(screenLocked) { onLockedChanged(screenLocked) }
+    playerKeyNowState = rememberUpdatedState(this::playerKey)
     // A sheet or a menu that takes typing or holds the keyboard itself: the window leaves its keys alone.
     val typingUp = notePrompt != null || timePrompt || showOnline || menu != null || listPicking != null
     val typingUpNow by rememberUpdatedState(typingUp)
@@ -1982,9 +2903,17 @@ fun PlayerScreen(
         PlayerKeyRoute.open(route)
         onDispose { PlayerKeyRoute.close(route) }
     }
+}
 
+/** What the player draws: the picture, the controls and every card, sheet and dialog over them (HX1 split). */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+@NonRestartableComposable
+private fun PlayerSession.Body(modifier: Modifier) {
     // ---- layout ------------------------------------------------------------------------------
 
+    // The newest session, for the callbacks the parts are handed (see PictureLayer and the rest).
+    val latest = rememberUpdatedState(this)
     PlayerTheme {
         Box(
             modifier
@@ -2034,43 +2963,10 @@ fun PlayerScreen(
                         PointerIcon.Default
                     },
                 )
-                .subtitleDropTarget(onDrop = ::loadSubtitle, onRefused = { showFlash(Flash.Kind.Text, it) })
+                .subtitleDropTarget(onDrop = this::loadSubtitle, onRefused = { showFlash(Flash.Kind.Text, it) })
                 .onSizeChanged { videoBox = it },
         ) {
-            // A resized window, another picture size or shape: the zoom stays, its move held inside.
-            LaunchedEffect(videoBox, status.videoWidth, status.videoHeight, status.scale) {
-                if (zoom.zoomed) applyZoom(zoom, say = false)
-            }
-            val casting = activeEngine as? com.tmplayer.desktop.cast.CastPlaybackEngine
-            if (casting == null) {
-                (engine.local as? MpvPlaybackEngine)?.let { MpvMediampPlayerSurface(it.player, Modifier.fillMaxSize()) }
-            } else {
-                CastingPanel(casting, status, onPlayHere = ::playHere)
-            }
-
-            VideoGestures(
-                onClick = {
-                    if (!ignoreClicks) togglePlay()
-                    refocus()
-                },
-                onDoubleClick = { if (!ignoreClicks) onToggleFullscreen() },
-                onRightClick = { at -> menu = if (menu?.panel == true) null else MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
-                onMouseBack = onBack,
-                scope = scope,
-                canPan = { zoom.zoomed && zoomAllowed() },
-                onPan = { delta -> zoomFrame()?.let { frame -> applyZoom(zoom.panBy(delta.x, delta.y, frame), say = false) } },
-                onHold = { on ->
-                    if (on && !ignoreClicks && holdSpeed > 0f && status.playing && speedBeforeHold == null) {
-                        // Not remembered as the series' speed, as a pick in the speed menu is.
-                        speedBeforeHold = status.speed
-                        engine.setSpeed(holdSpeed)
-                        showFlash(Flash.Kind.Text, "${TouchPrefs.holdLabel(holdSpeed)}  \u25B6\u25B6")
-                    } else if (!on) {
-                        speedBeforeHold?.let { engine.setSpeed(it) }
-                        speedBeforeHold = null
-                    }
-                },
-            )
+            PictureLayer(latest)
 
             // The show's name, with the episode under it ("S01E04  ·  The Lighthouse") and the chat.
             val parsed = remember(item) { SeriesShelf.episodeOf(item) }
@@ -2097,577 +2993,21 @@ fun PlayerScreen(
                     )
                 }
             }
-            CompositionLocalProvider(
-                LocalPlayerCopies provides PlayerCopies(copies, current.item.id, qualities, current.item.playingQuality),
-                LocalChatSubtitles provides chatHits,
-                LocalStoryboard provides storyboard,
-                LocalFrameSource provides frameSource,
-                LocalSeekCover provides seekCover,
-            ) { PlayerOverlay(
-                visible = showControls,
-                status = status,
-                positionMs = { liveStatus.value.positionMs },
-                bufferedMs = { liveStatus.value.bufferedMs },
-                title = title,
-                subtitle = subtitle,
-                episodes = episodes,
-                tracks = tracks,
-                downloaded = downloaded,
-                isDownload = current.isDownload,
-                showRemaining = showRemaining,
-                fullscreen = fullscreen,
-                menu = menu,
-                ignoreClicks = ignoreClicks,
-                miniPlayerAvailable = onMiniPlayer != null,
-                alwaysOnTopAvailable = onToggleAlwaysOnTop != null,
-                fromTelegram = current.fromTelegram,
-                savable = savable,
-                addToList = watched != null && current.fromTelegram && hasMessage(item),
-                subtitleThisVideo = if (hasMessage(item)) styleThisVideo else null,
-                watchedLabel = if (watched != null && current.fromTelegram && hasMessage(item)) {
-                    WatchedWords.markLabel(SettingsStore.progressKey(item.chatId, item.messageId) in watchedKeys)
-                } else {
-                    null
-                },
-                onHoverControls = { overControls = it },
-                onBack = onBack,
-                onTogglePlay = ::togglePlay,
-                onSeekBy = { dispatch(PlayerAction.SeekBy(it)) },
-                onSeekTo = ::jumpTo,
-                onEpisode = ::switchTo,
-                onToggleRemaining = {
-                    showRemaining = !showRemaining
-                    val value = showRemaining
-                    playerScope.launch { runCatching { settings.updateTouchPrefs { it.copy(showRemaining = value) } } }
-                },
-                onVolume = ::setVolume,
-                onToggleMute = ::toggleMute,
-                onToggleFullscreen = onToggleFullscreen,
-                onMiniPlayer = { dispatch(PlayerAction.MiniPlayer) },
-                onOpenMenu = { menu = it },
-                onCloseMenu = {
-                    menu = null
-                    refocus()
-                },
-                sleepTimer = sleepTimerDetail(),
-                loop = abLoop,
-                repeatVideo = repeatVideo,
-                markIntro = if (skipCtl.canMark) (if (introMarking) s.playerMarkIntroEnd else s.playerMarkIntro) else null,
-                bookmarks = if (marksOn) marks else null,
-                onMenuAction = { action ->
-                    noteInput()
-                    when (action) {
-                        is MenuAction.Do -> dispatch(action.action)
-                        is MenuAction.Track -> selectTrack(action.type, action.track)
-                        is MenuAction.Speed -> setSpeed(action.speed)
-                        is MenuAction.Shape -> setScale(action.scale)
-                        MenuAction.RotatePicture -> rotatePicture()
-                        MenuAction.ToggleDownmix -> {
-                            val on = !status.downmix
-                            engine.setDownmix(on)
-                            prefs.update { it.copy(downmix = on) }
-                            showFlash(Flash.Kind.Text, if (on) s.playerDownmixOn else s.playerDownmixOff)
-                        }
-                        MenuAction.ToggleSoftwareDecoding -> {
-                            // mpv applies hwdec in place; kept as the setting, as the downmix is.
-                            val on = !status.softwareDecoding
-                            engine.setSoftwareDecoding(on)
-                            // Kept and said only when the engine took it (PB2-20).
-                            if (engine.state.value.softwareDecoding == on) {
-                                prefs.update { it.copy(softwareDecoding = on) }
-                                showFlash(Flash.Kind.Text, if (on) s.playerDecoderSoftwareNow else s.playerDecoderHardwareNow)
-                            } else {
-                                showFlash(Flash.Kind.Text, s.playerDecoderSwitchFailed)
-                            }
-                        }
-                        MenuAction.ReportStutter -> {
-                            val facts = engine.stutterFacts(com.tmplayer.desktop.BuildInfo.VERSION)
-                            showFlash(Flash.Kind.Text, s.playerStutterMarkedDesktop)
-                            if (facts != null) {
-                                playerScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    runCatching {
-                                        com.tmplayer.platform.Logger.i("Player", DesktopStutter.line(facts))
-                                        com.tmplayer.desktop.DesktopCrashReports.reportStutter(facts)
-                                    }
-                                }
-                            }
-                        }
-                        MenuAction.ToggleVolumeBoost -> toggleVolumeBoost()
-                        MenuAction.ToggleNightMode -> toggleNightMode()
-                        MenuAction.ToggleRepeatVideo -> toggleRepeatVideo()
-                        is MenuAction.Stereo -> setStereo(action.stereo)
-                        is MenuAction.Sleep -> setSleepTimer(action.minutes)
-                        is MenuAction.Chapter -> {
-                            jumpTo(action.startMs)
-                            // Named from the sorted marks: mpv's own order could name another chapter (PB-08).
-                            val marks = Chapters.inside(status.chapters, status.durationMs)
-                            val index = Chapters.at(marks, action.startMs)
-                            if (index >= 0) showFlash(Flash.Kind.Text, Chapters.label(marks, index))
-                        }
-                        is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
-                        is MenuAction.AudioDelay -> stepAudioDelay(action.direction)
-                        is MenuAction.SubtitleLook -> setSubtitleStyle(action.style)
-                        is MenuAction.SubtitleThisVideo -> setSubtitleThisVideo(action.on)
-                        MenuAction.StartOver -> startOver()
-                        MenuAction.LockScreen -> lockScreen()
-                        MenuAction.ToggleIgnoreClicks -> {
-                            ignoreClicks = !ignoreClicks
-                            showFlash(Flash.Kind.Text, if (ignoreClicks) s.playerClicksIgnored else s.playerClicksWork)
-                        }
-                        MenuAction.CopyLink -> copyLink()
-                        is MenuAction.SwitchCopy -> switchCopy(action.copy)
-                        is MenuAction.SwitchQuality -> switchQuality(action.height)
-                        MenuAction.Download -> showFlash(Flash.Kind.Text, current.download())
-                        MenuAction.OpenElsewhere -> openElsewhere()
-                        MenuAction.Details -> showDetails = true
-                        MenuAction.Shortcuts -> showShortcuts = true
-                        MenuAction.ToggleWatched -> toggleWatched()
-                        MenuAction.AddToList -> if (hasMessage(item)) {
-                            listPicking = com.tmplayer.data.WatchLaterRecord.of(item, current.chatTitle, System.currentTimeMillis())
-                        }
-                        MenuAction.SearchOnline -> {
-                            onlineMsone = false
-                            onlineSubMaker = false
-                            showOnline = true
-                        }
-                        MenuAction.SearchMsone -> {
-                            onlineMsone = true
-                            onlineSubMaker = false
-                            showOnline = true
-                        }
-                        MenuAction.SearchSubMaker -> {
-                            onlineMsone = false
-                            onlineSubMaker = true
-                            showOnline = true
-                        }
-                        is MenuAction.ChatSubtitle -> scope.launch {
-                            val here = current.item
-                            showFlash(Flash.Kind.Text, L.onlineDownloading)
-                            val loaded = try {
-                                com.tmplayer.data.ChatSubtitleLoad.load(
-                                    com.tmplayer.data.LiveChatSubtitleCalls, here.chatId, action.hit, here.fileName.ifBlank { here.title },
-                                    here.caption, java.util.Locale.getDefault().language,
-                                )
-                            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                com.tmplayer.platform.JobFailures.handle("chatSubtitles", e)
-                                com.tmplayer.data.ChatSubtitleLoaded.Refused(L.onlineNoticeUnreadable)
-                            }
-                            when (loaded) {
-                                is com.tmplayer.data.ChatSubtitleLoaded.Refused -> {
-                                    showFlash(Flash.Kind.Text, loaded.reason)
-                                    if (loaded.reason == L.tracksInChatGone) {
-                                        chatHits = chatHits - action.hit
-                                        com.tmplayer.data.ChatSubtitleFinder.shared.forget(here.chatId, here.messageId)
-                                    }
-                                }
-                                is com.tmplayer.data.ChatSubtitleLoaded.Ready -> {
-                                    // mpv reads all five formats itself, a MicroDVD sub included.
-                                    val file = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                                        com.tmplayer.data.ChatSubtitleLoad.write(java.io.File(com.tmplayer.desktop.DesktopPaths.cacheDir, "chat-subtitles"), here.chatId, action.hit, loaded)
-                                    }
-                                    if (file != null) OnlineSubtitles.current?.forgetPick(com.tmplayer.online.SubtitlePicks.keysOf(here))
-                                    if (file != null && engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(loaded.label))
-                                    else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(loaded.label))
-                                }
-                            }
-                        }
-                        MenuAction.LoadSubtitleFile -> scope.launch {
-                            com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())
-                                ?.let { loadSubtitle(it.path) }
-                            refocus()
-                        }
-                        MenuAction.AddBookmark -> addBookmark()
-                        is MenuAction.JumpTo -> {
-                            jumpTo(action.bookmark.positionMs)
-                            showFlash(Flash.Kind.Text, SeekMath.clock(action.bookmark.positionMs))
-                        }
-                        is MenuAction.EditBookmark -> notePrompt = NotePrompt(action.bookmark.chatId, action.bookmark.messageId, action.bookmark.positionMs, action.bookmark)
-                        is MenuAction.DeleteBookmark -> deleteBookmark(action.bookmark)
-                    }
-                },
-                onEpisodes = if (episodes.series != null) {
-                    {
-                        menu = null
-                        showEpisodes = true
-                    }
-                } else {
-                    null
-                },
-                castButton = { CastButton(castPresence) },
-                subtitlesButton = com.tmplayer.cast.CAST_SUBTITLES || activeEngine !is com.tmplayer.desktop.cast.CastPlaybackEngine,
-            ) }
 
-            FeedbackLayer(
-                flash = flash,
-                spinner = phase == Phase.Playing && status.buffering && !showControls,
-                chip = if (phase == Phase.Playing && status.buffering && !showControls) s.playerBuffering else null,
-            )
-
-            // A button that goes away as it is clicked takes the keyboard with it, so each of
-            // these hands the keys back to the player, as the skip pill does.
-            resumedFrom?.let { from ->
-                ResumeNotice(
-                    from = from,
-                    lifted = showControls,
-                    onStartOver = {
-                        startOver()
-                        refocus()
-                    },
-                    onTimeout = { resumedFrom = null },
-                )
-            }
-
-            activeSkip?.let { segment ->
-                val counting = skipOffer as? SkipOffer.Counting
-                SkipPill(
-                    segment = segment,
-                    lifted = showControls,
-                    secondsLeft = counting?.secondsLeft,
-                    onCancel = {
-                        cancelAutoSkip()
-                        refocus()
-                    },
-                    onSkip = {
-                        skipSegment()
-                        refocus()
-                    },
-                )
-            }
-
-            // Not while the screen is locked: nothing under the shield takes a click.
-            undoOffer?.takeIf { phase == Phase.Playing && !screenLocked }?.let { offer ->
-                key(offer.backToMs) {
-                    UndoSeekChip(backToMs = offer.backToMs, lifted = showControls, onUndo = {
-                        undoSeek()
-                        refocus()
-                    })
-                }
-            }
-
-            if (nextUpVisible && next != null) {
-                NextUpCard(
-                    label = episodes.labelFor(next),
-                    secondsLeft = nextUpSeconds,
-                    lifted = showControls,
-                    onPlayNow = {
-                        switchTo(next)
-                        refocus()
-                    },
-                    onHide = {
-                        nextUpDismissed = true
-                        refocus()
-                    },
-                )
-            }
-
-            if (showOnline) {
-                OnlineSubtitlesPanel(
-                    target = {
-                        // The details' ids let MSone be searched exactly; a slow lookup only leaves the title.
-                        val ids = kotlinx.coroutines.withTimeoutOrNull(3_000) {
-                            kotlinx.coroutines.withContext(Dispatchers.IO) { OnlineMetadata.current?.idsFor(item) }
-                        } ?: com.tmplayer.online.VideoIds()
-                        SubtitleTarget(
-                            fileName = item.fileName.ifBlank { item.title },
-                            sizeBytes = item.sizeBytes,
-                            hash = current.onlineHash(),
-                            caption = item.caption.ifBlank { null },
-                            languages = OnlineSubtitles.languagesFor(null),
-                            imdb = ids.imdb,
-                            tmdb = ids.tmdb,
-                            durationMs = engine.state.value.durationMs.takeIf { it > 0 },
-                        )
-                    },
-                    onTranslate = { hit, wanted ->
-                        val online = OnlineSubtitles.current
-                        translatingVideo = wanted.videoKey
-                        val started = online?.translate(wanted.videoKey, hit, wanted.durationMs) { file, final ->
-                            scope.launch {
-                                // The same file reloads the one track in place; the finished file is another name.
-                                if (engine.replaceSubtitle(file.absolutePath) && final) {
-                                    OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(item), hit, file)
-                                    showFlash(Flash.Kind.Text, L.submakerDone(hit.translateTo))
-                                }
-                            }
-                        } == true
-                        if (started) showFlash(Flash.Kind.Text, L.submakerStarted(hit.translateTo))
-                        started
-                    },
-                    onLoaded = { file, label ->
-                        if (engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(label))
-                        else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(label))
-                    },
-                    onClose = {
-                        showOnline = false
-                        refocus()
-                    },
-                    onPicked = { hit, file ->
-                        OnlineSubtitles.current?.rememberPick(com.tmplayer.online.SubtitlePicks.keysOf(item), hit, file)
-                    },
-                    onPickFile = {
-                        showOnline = false
-                        scope.launch {
-                            com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())
-                                ?.let { loadSubtitle(it.path) }
-                            refocus()
-                        }
-                    },
-                    msone = onlineMsone,
-                    submaker = onlineSubMaker,
-                    preset = onlinePreset,
-                )
-            }
-
-            // The Telegram datacenter the file is kept in (EG-F61): read from its remote id when the
-            // details are opened, a local call; nothing for a local file or an id that does not say.
-            var datacenter by remember(item.fileId) { mutableStateOf<Int?>(null) }
-            LaunchedEffect(showDetails, item.fileId) {
-                if (showDetails && item.fileId > 0 && item.chatId != 0L && datacenter == null) {
-                    datacenter = runCatching { com.tmplayer.data.Td.remoteDatacenter(item.fileId) }.getOrNull()
-                }
-            }
-            if (showDetails) {
-                DetailsPanel(
-                    rows = {
-                        buildList {
-                            addAll(engine.details())
-                            add(s.playerSpeed to SeekMath.speedLabel(engine.state.value.speed))
-                            if (item.sizeBytes > 0) add(s.playerDetailsLabelFile to com.tmplayer.player.StreamStats.formatBytes(item.sizeBytes))
-                            datacenter?.let { add(s.playerDetailsLabelDatacenter to "DC $it") }
-                            downloaded?.let {
-                                val label = if (current.isDownload) s.playerDetailsLabelDownloaded else s.playerDetailsLabelCached
-                                add(label to s.messages.formatter.percent(it.toDouble()))
-                            }
-                            add("TDLib" to (tdlibVersion ?: if (item.chatId != 0L) s.playerDetailsUnknown else s.playerDetailsNotUsed))
-                        }
-                    },
-                    onClose = {
-                        showDetails = false
-                        refocus()
-                    },
-                )
-            }
-
-            LoaderSheet(
-                phase = phase,
-                item = current.item,
-                downloaded = downloaded,
-                bufferedMs = { liveStatus.value.let { (it.bufferedMs - it.positionMs).coerceAtLeast(0) } },
-                isDownload = current.isDownload,
-                onBack = onBack,
-                thumbnailOverride = loaderThumbnail,
-                // Nothing arriving: the connections reopened and the file opened again.
-                onRetry = {
-                    scope.launch { runCatching { com.tmplayer.data.Td.retryConnecting() } }
-                    attempt++
-                    refocus()
-                },
-                // Kept in the queue, which carries on once the player lets go of the file.
-                onDownloadFirst = if (savable && !current.isDownload) {
-                    {
-                        current.download()
-                        onBack()
-                    }
-                } else {
-                    null
-                },
-                lighter = lighterAction,
-                startMs = openingStartMs,
-                // What the opening measures: mpv's reads, whether it has opened, its cache ahead.
-                signals = {
-                    val st = engine.state.value
-                    val it = current.item
-                    com.tmplayer.player.OpeningProgress.Signals(
-                        readBytes = StreamReads.delivered.get() - openingBytesAt[0],
-                        onDisk = (downloaded ?: 0f) >= 1f || !current.fromTelegram,
-                        opened = st.opened,
-                        bufferedMs = if (st.opened) (st.bufferedMs - st.positionMs).coerceAtLeast(0) else -1L,
-                        bufferTargetMs = MPV_START_BUFFER_MS,
-                        bytesPerSec = if (it.durationSec > 0) it.sizeBytes / it.durationSec else 0L,
-                    )
-                },
-            )
-
-            // A stall while playing that runs on says why, with the opening's three ways on.
-            PlaybackStall(
-                buffering = phase == Phase.Playing && status.buffering && !status.seekPending,
-                bufferedMs = { liveStatus.value.bufferedMs },
-                downloaded = downloaded,
-                onRetry = {
-                    // The connections reopened and the stream asked for again from where it stands.
-                    scope.launch { runCatching { com.tmplayer.data.Td.retryConnecting() } }
-                    engine.seekToExact(liveStatus.value.positionMs)
-                    refocus()
-                },
-                onDownloadFirst = if (savable && !current.isDownload) {
-                    {
-                        current.download()
-                        onBack()
-                    }
-                } else {
-                    null
-                },
-                onBack = onBack,
-                lighter = lighterAction,
-            )
-
-            StatusSheet(
-                phase = phase,
-                title = title,
-                subtitle = subtitle,
-                onRetry = {
-                    attempt++
-                    refocus()
-                },
-                onBack = onBack,
-                onFreeUpSpace = onFreeUpSpace,
-                onWatchAgain = {
-                    if (engine.state.value.opened) {
-                        phase = Phase.Playing
-                        engine.seekTo(0)
-                        engine.play()
-                    } else {
-                        // "Still watching?" stopped the engine at the end (the sleep timer), and
-                        // a stopped engine has no file left to seek in: open it again from the start.
-                        reopenAt = 0L
-                        attempt++
-                    }
-                    refocus()
-                },
-                onPlayNext = {
-                    switchTo(it)
-                    refocus()
-                },
-                onCancelNext = {
-                    phase = Phase.Finished
-                    refocus()
-                },
-                onKeepWatching = { (phase as? Phase.StillWatching)?.let(::keepWatching) },
-                nextLabel = { episodes.labelFor(it) },
-            )
-
-            val series = episodes.series
-            if (showEpisodes && series != null) {
-                val watch = remember(progressMap, watchedKeys) {
-                    com.tmplayer.ui.browse.SeriesWatch(
-                        point = { progressMap[SettingsStore.progressKey(it.chatId, it.messageId)] },
-                        finished = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedKeys },
-                    )
-                }
-                fun closeEpisodes() {
-                    showEpisodes = false
-                    refocus()
-                }
-                EpisodesSheet(
-                    state = com.tmplayer.ui.player.EpisodesState(
-                        series = series,
-                        playing = item,
-                        previous = episodes.previous,
-                        previousLabel = episodes.previous?.let { s.playerPreviousUp(episodes.labelFor(it)) },
-                        next = episodes.next,
-                        nextLabel = episodes.next?.let { s.playerNextUp(episodes.labelFor(it)) },
-                        previousCode = episodes.previousTag?.code,
-                        nextCode = episodes.nextTag?.code,
-                        autoplay = autoplayNext,
-                    ),
-                    watch = watch,
-                    actions = com.tmplayer.ui.player.EpisodesActions(
-                        onPlay = { target ->
-                            closeEpisodes()
-                            if (target.id != item.id) switchTo(target)
-                        },
-                        onToggleWatched = ::toggleWatchedOf,
-                        onAutoplay = { on ->
-                            autoplayNext = on
-                            playerScope.launch { runCatching { settings.setAutoplayNext(on) } }
-                        },
-                    ),
-                    onClose = ::closeEpisodes,
-                )
-            }
-
-            notePrompt?.let { prompt ->
-                BookmarkNoteDialog(
-                    prompt = prompt,
-                    onSave = { note ->
-                        notePrompt = null
-                        saveNote(prompt, note)
-                        refocus()
-                    },
-                    onDismiss = {
-                        notePrompt = null
-                        refocus()
-                    },
-                )
-            }
-
-            listPicking?.let { record ->
-                // Nothing to write to without the store: the line is not offered then, so this stays shut.
-                watched?.let { store ->
-                    com.tmplayer.ui.browse.ListPickerDialog(
-                        record = record,
-                        lists = store.lists,
-                        onMessage = { line -> showFlash(Flash.Kind.Text, line) },
-                        onDismiss = {
-                            listPicking = null
-                            refocus()
-                        },
-                    )
-                }
-            }
-
-            if (timePrompt) {
-                GoToTimeDialog(
-                    durationMs = status.durationMs,
-                    positionMs = liveStatus.value.positionMs,
-                    onGo = { target ->
-                        timePrompt = false
-                        jumpTo(target)
-                        showFlash(Flash.Kind.Text, SeekMath.clock(target))
-                        refocus()
-                    },
-                    onDismiss = {
-                        timePrompt = false
-                        refocus()
-                    },
-                )
-            }
-
-            if (showShortcuts) {
-                ShortcutSheet(
-                    onClose = {
-                        showShortcuts = false
-                        refocus()
-                    },
-                    mac = mac,
-                    wheelSeeks = desktop.wheelSeeks,
-                )
-            }
-
-            // Over everything, the controls and the skip and next-up cards included.
-            if (screenLocked) {
-                LockShield(
-                    showUnlock = showUnlock,
-                    holding = unlockHold != null,
-                    onWake = {
-                        noteInput()
-                        unlockWanted = System.nanoTime()
-                    },
-                    onUnlock = ::unlockScreen,
-                )
-            }
+            OverlayLayer(latest, title, subtitle)
+            CardsLayer(latest)
+            SheetsLayer(latest, title, subtitle)
+            DialogsLayer(latest)
         }
     }
+}
 
+/** The keyboard back on the picture after a fullscreen change or a return to the window (HX1 split). */
+@Composable
+@NonRestartableComposable
+private fun PlayerSession.Refocus() {
     LaunchedEffect(Unit) { refocus() }
-    // Going in or out of fullscreen remaps the window, and some window systems hand it back
-    // without focus inside it: take the keyboard again once the change has settled.
-    // Not while a sheet or a menu is up: those hold the keyboard themselves, some for typing.
-    fun keysBack() {
-        if (!showEpisodes && !showShortcuts && !showDetails && !showOnline && notePrompt == null && !timePrompt && listPicking == null && menu == null) refocus()
-    }
+    // Going in or out of fullscreen, or back in the window: see keysBack.
     LaunchedEffect(fullscreen) {
         delay(FULLSCREEN_SETTLE_MS)
         keysBack()
@@ -2686,8 +3026,8 @@ private const val FULLSCREEN_SETTLE_MS = 300L
 internal fun hasMessage(item: MediaItem): Boolean = item.chatId != 0L && item.messageId != 0L
 
 /**
- * remember(item.chatId, item.messageId) in a frame of its own. PlayerScreen has well over a hundred
- * local slots, and ProGuard, which computes the release build's stack map frames again, tracks
+ * remember(item.chatId, item.messageId) in a frame of its own. PlayerScreen had well over a hundred
+ * local slots before it was split into stages, and ProGuard, which computes the release build's stack map frames again, tracks
  * liveness for the first 64 only: three such remembers in a row put their longs in slots 71 to 75,
  * the compiler reused 72 for the next pair, and ProGuard still wrote 71 as a long, so the release
  * PlayerScreenKt failed the verifier and the player could not open (verifyReleaseClasses, as HX1
