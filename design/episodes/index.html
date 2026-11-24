@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Episode cards and the player's list (W15)</title>
+<style>
+  :root { color-scheme: dark; --bg: #0e1013; --fg: #e6e8ea; --muted: #9aa1a8; --line: #2a2f35; --accent: #5ac8fa; }
+  body { margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 40px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  p, li { color: var(--muted); max-width: 80ch; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); color: var(--muted); }
+  th { color: var(--fg); }
+  td:first-child { color: var(--fg); white-space: nowrap; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+  img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .phone img { width: 260px; }
+  .wide img { width: 560px; }
+  .half img { width: 520px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Episode cards and the player's episode list</h1>
+<p>W15, 2026-11-25. The user asked, "in all of the devices the way multiple episodes cards are shown is a bit small ... do this change only if needed". The review came first; the verdicts, then the frames.</p>
+
+<h2>Verdict per platform (before)</h2>
+<table>
+<tr><th>Platform</th><th>Show page</th><th>Player's list</th><th>Verdict</th></tr>
+<tr><td>Android phone</td><td>16:9 picture 128 dp (31 percent of 411 dp); "S2 E1" line, title, facts with size, 2 line synopsis: up to 5 text lines beside a small picture</td><td>The same row, full screen window</td><td>Small and text heavy: changed</td></tr>
+<tr><td>Tablet, foldable, desktop (shared Compose)</td><td>208 dp picture, 2 to 3 columns from 1232 dp; same long facts line</td><td>Desktop: a 1040 dp centred dialog with a choices column</td><td>Picture small for the card: changed</td></tr>
+<tr><td>Android TV</td><td>176 dp picture (18 percent of 960 dp), 5 text lines</td><td>1100 dp centred panel</td><td>Text outweighs the picture: changed</td></tr>
+<tr><td>Web (phone, desktop, TV)</td><td>Text only rows: held episodes had no picture at all (only the missing ones had a still)</td><td>Text only buttons, file names as titles, centred dialog</td><td>No imagery: changed</td></tr>
+<tr><td>iOS</td><td colspan="2">Shares <code>EpisodeRow</code>, <code>EpisodesPanel</code> and <code>PlayerEpisodes</code> with Android</td><td>Follows the Android change (not built here: needs the Mac)</td></tr>
+</table>
+
+<h2>What changed</h2>
+<ul>
+<li>One card (<code>EpisodeRow</code>): 16:9 picture about 40 percent of a phone card (136 to 220 dp), 264 dp on a TV, 256 dp in a large window. Code pill top start, watched tick top end, progress along the foot, one line title, then running time and state (Watched, Stopped at, Up next, Playing), the air day only on a TV or in a large window, the synopsis (2 lines) only on the show page. No file name, no file size.</li>
+<li>Player list: phone upright is a <code>PhoneSheet</code> bottom sheet (82 percent high, season chips stay at the top, the playing episode scrolled to and tinted); TV, tablet and phone on its side get a panel at the end (32 percent of the width, 340 to 480 dp, slides in 200 ms, none under reduced motion, Back closes it, the remote stays inside); desktop the same panel (380 to 520 dp) with arrow keys, Esc and the wheel. The playing card alone shows its synopsis.</li>
+<li>Web: <code>HeldStill</code> (Telegram thumbnail, TMDB still over it, number placeholder, code pill, tick, progress), loaded when near the screen; the player's list is a panel at the end from 600 px and a bottom sheet under it.</li>
+</ul>
+
+<h2>Android: the show page's cards</h2>
+<div class="row phone">
+<figure><img src="android/show-page-phone-411.png" alt="Phone 411 dp"><figcaption>Phone 411 dp</figcaption></figure>
+<figure><img src="android/cards-phone-360.png" alt="Phone 360 dp"><figcaption>Phone 360 dp, 8 cards</figcaption></figure>
+<figure><img src="android/cards-phone-411.png" alt="Phone 411 dp cards"><figcaption>Phone 411 dp, 8 cards</figcaption></figure>
+</div>
+<div class="row wide">
+<figure><img src="android/show-page-tv-960.png" alt="TV 960x540"><figcaption>TV 960 x 540</figcaption></figure>
+<figure><img src="android/cards-tv-1920.png" alt="TV 1920x1080"><figcaption>TV 1920 x 1080</figcaption></figure>
+<figure><img src="android/show-page-tablet-1280.png" alt="Large window"><figcaption>Large window 1280 dp</figcaption></figure>
+</div>
+
+<h2>Android: the player's panel</h2>
+<div class="row wide">
+<figure><img src="android/player-panel-tv.png" alt="TV panel"><figcaption>TV 960 x 540: panel at the end, episode 300 of 500 playing, focused and in view</figcaption></figure>
+</div>
+
+<h2>Desktop: the player's panel</h2>
+<div class="row half">
+<figure><img src="desktop/player-episodes-sheet.png" alt="Desktop 1280"><figcaption>1280 x 720</figcaption></figure>
+<figure><img src="desktop/player-episodes-sheet-1920.png" alt="Desktop 1920"><figcaption>1920 x 1080 (stops at 520 dp)</figcaption></figure>
+<figure><img src="desktop/player-episodes-sheet-rtl.png" alt="Right to left"><figcaption>Right to left</figcaption></figure>
+</div>
+
+<h2>Web</h2>
+<div class="row">
+<figure class="phone"><img src="web/show-phone-390.png" alt="Web show page phone" style="width:260px"><figcaption>Show page, 390 px</figcaption></figure>
+<figure class="phone"><img src="web/player-episodes-phone-390.png" alt="Web player sheet" style="width:260px"><figcaption>Player sheet, 390 px</figcaption></figure>
+<figure class="half"><img src="web/show-desktop-1280.png" alt="Web show page desktop" style="width:480px"><figcaption>Show page, 1280 px</figcaption></figure>
+<figure class="half"><img src="web/player-episodes-desktop-1280.png" alt="Web player panel" style="width:480px"><figcaption>Player panel, 1280 px</figcaption></figure>
+</div>
+
+<h2>Not done, on purpose</h2>
+<ul>
+<li>Synopsis on the focused card of a list: a card that grows on focus makes a D-pad walk jump. The show page keeps its 2 line clamp, the player's list shows it for the playing card only.</li>
+<li>The web player's list has no TMDB stills (Telegram's thumbnail only).</li>
+<li>A cover with no thumbnail shows its large number and the code pill together.</li>
+<li>No device pass (phone, TV, emulator); iOS compile not run on Linux.</li>
+</ul>
+</main>
+</body>
+</html>
