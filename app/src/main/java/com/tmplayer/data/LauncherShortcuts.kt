@@ -70,6 +70,7 @@ object LauncherShortcuts {
      */
     fun removeLastChat(context: Context) {
         if (!supported()) return
+        // profile-notifications: this only removes and relabels, so it names nothing and runs whenever the chat must go
         runCatching {
             val manager = context.getSystemService(ShortcutManager::class.java) ?: return
             unnameLastChat(context, manager)
@@ -79,6 +80,7 @@ object LauncherShortcuts {
 
     /** Every copy of the last chat's shortcut, pinned ones too, as "Last chat" that only opens the app. */
     private fun unnameLastChat(context: Context, manager: ShortcutManager) {
+        // profile-notifications: relabels to the generic "Last chat" first, so no name stays on a pinned copy
         runCatching { manager.updateShortcuts(listOf(build(context, ID_LAST_CHAT, L.chatsLastShortcut, R.mipmap.ic_launcher) { })) }
     }
 
@@ -105,6 +107,7 @@ object LauncherShortcuts {
     fun publish(context: Context, lastChatId: Long, lastChatTitle: String?, hidden: Boolean) {
         if (!supported()) return
         runCatching {
+            // profile-notifications: planIds leaves the last chat out while [hidden] (hiddenFor, one rule with the widget's)
             val manager = context.getSystemService(ShortcutManager::class.java) ?: return
             val ids = planIds(hidden, lastChatId, lastChatTitle)
             // A pinned copy outlives the dynamic list: it loses the chat's name with it (SEC2-03).
@@ -124,8 +127,10 @@ object LauncherShortcuts {
         }
     }
 
+    // profile-notifications: builds only what planIds lists, which has no chat while hidden
     private fun build(context: Context, id: String, label: String, icon: Int, extras: (Intent) -> Unit): ShortcutInfo {
         val intent = Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN).also(extras)
+        // profile-notifications: same as build above, the plan decides what is built
         return ShortcutInfo.Builder(context, id)
             .setShortLabel(label)
             .setLongLabel(label)
