@@ -743,8 +743,11 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
     override fun setSoftwareDecoding(on: Boolean) {
         // mpv's hwdec is a runtime property: the decoder is opened again in place.
-        runCatching { handle.setPropertyString("hwdec", OpenPrefs.hwdecFor(on)) }
-        _state.update { it.copy(softwareDecoding = on) }
+        // Said as switched only when mpv took it (PB2-20): the menu's tick and the flash follow the state.
+        val ok = runCatching { handle.setPropertyString("hwdec", OpenPrefs.hwdecFor(on)) }
+            .onFailure { Logger.w(TAG, "hwdec not applied", it) }
+            .isSuccess
+        if (ok) _state.update { it.copy(softwareDecoding = on) }
     }
 
     override fun stutterFacts(appVersion: String): com.tmplayer.data.StutterReport.Facts? =

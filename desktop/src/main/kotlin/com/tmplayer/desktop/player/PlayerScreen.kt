@@ -2142,8 +2142,13 @@ fun PlayerScreen(
                             // mpv applies hwdec in place; kept as the setting, as the downmix is.
                             val on = !status.softwareDecoding
                             engine.setSoftwareDecoding(on)
-                            prefs.update { it.copy(softwareDecoding = on) }
-                            showFlash(Flash.Kind.Text, if (on) s.playerDecoderSoftwareNow else s.playerDecoderHardwareNow)
+                            // Kept and said only when the engine took it (PB2-20).
+                            if (engine.state.value.softwareDecoding == on) {
+                                prefs.update { it.copy(softwareDecoding = on) }
+                                showFlash(Flash.Kind.Text, if (on) s.playerDecoderSoftwareNow else s.playerDecoderHardwareNow)
+                            } else {
+                                showFlash(Flash.Kind.Text, s.playerDecoderSwitchFailed)
+                            }
                         }
                         MenuAction.ReportStutter -> {
                             val facts = engine.stutterFacts(com.tmplayer.desktop.BuildInfo.VERSION)

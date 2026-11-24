@@ -77,6 +77,22 @@ class DecoderMenuTest {
         assertEquals(0, onAllNodesWithText(L.playerReportStutter).fetchSemanticsNodes().size)
     }
 
+    /** PB2-20: a hwdec mpv refused leaves the state, the tick and the setting as they were, and says so. */
+    @Test
+    fun aRefusedSoftwareSwitchIsNotSaidOrKept() {
+        val root = if (java.io.File("src/main/kotlin").exists()) java.io.File(".") else java.io.File("desktop")
+        val mpv = java.io.File(root, "src/main/kotlin/com/tmplayer/desktop/player/MpvPlaybackEngine.kt").readText()
+            .substringAfter("override fun setSoftwareDecoding(on: Boolean) {").substringBefore("\n    }\n")
+        assertTrue(".isSuccess" in mpv)
+        assertTrue("if (ok) _state.update { it.copy(softwareDecoding = on) }" in mpv)
+        val screen = java.io.File(root, "src/main/kotlin/com/tmplayer/desktop/player/PlayerScreen.kt").readText()
+            .substringAfter("MenuAction.ToggleSoftwareDecoding -> {").substringBefore("MenuAction.ReportStutter ->")
+        val check = screen.indexOf("if (engine.state.value.softwareDecoding == on) {")
+        assertTrue("the setting is written only after the check", check in 1 until screen.indexOf("prefs.update"))
+        assertTrue("s.playerDecoderSwitchFailed" in screen)
+        assertTrue(L.playerDecoderSwitchFailed.isNotBlank())
+    }
+
     @Test
     fun theSwitchingEngineHandsTheSwitchToTheEnginePlaying() {
         val local = RecordingEngine()

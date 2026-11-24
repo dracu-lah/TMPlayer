@@ -2214,6 +2214,7 @@
     "decoder_software_hdr": "Playing with the device's decoder. HDR shows as SDR with the software one",
     "decoder_software_now": "Playing with the software decoder",
     "decoder_software_slow": "Playing with the device's decoder. The software one may not keep up with this video here",
+    "decoder_switch_failed": "Couldn't switch the decoder. It stays as it was",
     "delay": "Delay",
     "details": "Playback details",
     "details_audio_codec": "Audio codec: {codec}",
