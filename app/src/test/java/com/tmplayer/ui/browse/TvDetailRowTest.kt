@@ -115,6 +115,9 @@ class TvDetailRowTest {
             org.robolectric.util.ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, true),
         )
         rule.waitForIdle()
+        // The page holds its first frame up to 200 ms for the caches (rememberFirstPaint): past it the actions are there.
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
 
         rule.onNode(named("Play")).requestFocus()
         rule.onNode(named("Play")).assertIsFocused()
