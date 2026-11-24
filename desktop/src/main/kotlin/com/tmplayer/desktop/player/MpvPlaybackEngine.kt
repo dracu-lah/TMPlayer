@@ -407,11 +407,11 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         val h = handle
         runCatching {
             // mpv compares these as written, so every spelling a file might use: `ja,jpn`.
-            h.setPropertyString("alang", TrackLanguages.spellings(prefs.audioLanguage).joinToString(","))
+            h.setPropertyString("alang", (listOfNotNull(prefs.audioLanguage) + prefs.audioMore).flatMap(TrackLanguages::spellings).distinct().joinToString(","))
             val subtitles = prefs.subtitles
             h.setPropertyString(
                 "slang",
-                TrackLanguages.spellings((subtitles as? SubtitlePlan.On)?.language).joinToString(","),
+                (subtitles as? SubtitlePlan.On)?.languages.orEmpty().flatMap(TrackLanguages::spellings).distinct().joinToString(","),
             )
             // Off and "only when the audio is foreign" start with none; [pickSubtitles] puts a
             // forced track or the foreign audio's subtitles on once the tracks are listed.

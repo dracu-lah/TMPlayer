@@ -2529,8 +2529,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setTrackPreferences(value: TrackPreferences) {
         prefs.edit {
-            value.audioLanguage?.let { code -> it[PREFERRED_AUDIO] = code } ?: it.remove(PREFERRED_AUDIO)
-            value.subtitleKey.ifEmpty { null }?.let { key -> it[PREFERRED_SUBTITLE] = key } ?: it.remove(PREFERRED_SUBTITLE)
+            // The ordered lists are the codes joined with a comma; a list of one is the single code it always was.
+            value.audioStored.ifEmpty { null }?.let { text -> it[PREFERRED_AUDIO] = text } ?: it.remove(PREFERRED_AUDIO)
+            value.subtitleStored.ifEmpty { null }?.let { text -> it[PREFERRED_SUBTITLE] = text } ?: it.remove(PREFERRED_SUBTITLE)
             it[SUBTITLE_MODE] = value.mode.key
         }
     }

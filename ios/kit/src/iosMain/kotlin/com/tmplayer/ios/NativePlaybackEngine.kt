@@ -113,8 +113,8 @@ internal class NativePlaybackEngine(private val engine: VideoEngine) : PlaybackE
                 softwareDecoding = prefs.hwdec == OpenPrefs.HWDEC_SOFTWARE,
                 subtitleDelayMs = prefs.delays.subtitleMs,
                 audioDelayMs = prefs.delays.audioMs,
-                audioLanguages = TrackLanguages.spellings(prefs.audioLanguage),
-                subtitleLanguages = TrackLanguages.spellings((subtitles as? SubtitlePlan.On)?.language),
+                audioLanguages = (listOfNotNull(prefs.audioLanguage) + prefs.audioMore).flatMap(TrackLanguages::spellings).distinct(),
+                subtitleLanguages = (subtitles as? SubtitlePlan.On)?.languages.orEmpty().flatMap(TrackLanguages::spellings).distinct(),
                 // Off and "only when the audio is foreign" start with none; the pick below may turn some on.
                 subtitlesOff = subtitles is SubtitlePlan.Off || subtitles is SubtitlePlan.IfForeignAudio,
                 readAheadSeconds = readAhead?.maxBufferMs?.div(1000) ?: 0,
@@ -131,7 +131,7 @@ internal class NativePlaybackEngine(private val engine: VideoEngine) : PlaybackE
         engine.setSubtitleStyle(prefs.subtitleStyle)
         if (prefs.nightMode) engine.setNightMode(true)
         if (_state.value.stereo.on) engine.setStereo3d(_state.value.stereo)
-        pickAudio(prefs.audioLanguage)
+        pickAudio(listOfNotNull(prefs.audioLanguage) + prefs.audioMore)
         pickSubtitles(subtitles)
         prefs.resume?.let(::restoreTracks)
     }
@@ -400,11 +400,15 @@ internal class NativePlaybackEngine(private val engine: VideoEngine) : PlaybackE
 
     // The tracks a video opens with: the same picks as the desktop's open, on any engine.
 
-    private fun pickAudio(language: String?) {
-        if (language == null) return
+    /** The soundtrack in the first of [languages] the file has (Settings' ordered list), first match winning. */
+    private fun pickAudio(languages: List<String>) {
         val audio = _tracks.value.filter { it.type == TrackType.Audio }
-        if (audio.any { it.selected && TrackLanguages.same(language, it.language) }) return
-        audio.firstOrNull { TrackLanguages.same(language, it.language) }?.let { selectTrack(TrackType.Audio, it.id) }
+        for (language in languages) {
+            if (audio.any { it.selected && TrackLanguages.same(language, it.language) }) return
+            val track = audio.firstOrNull { TrackLanguages.same(language, it.language) } ?: continue
+            selectTrack(TrackType.Audio, track.id)
+            return
+        }
     }
 
     private fun pickSubtitles(plan: SubtitlePlan) {

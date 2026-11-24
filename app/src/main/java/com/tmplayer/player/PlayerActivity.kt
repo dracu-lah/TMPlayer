@@ -4762,9 +4762,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 )
                 // What this series was last watched with, so episode two opens in the language and
                 // with the captions episode one ended in; else the language Settings ask for.
-                .setPreferredTextLanguage((subtitles as? SubtitlePlan.On)?.language)
+                .setPreferredTextLanguages(*((subtitles as? SubtitlePlan.On)?.languages.orEmpty().toTypedArray()))
                 .setSelectUndeterminedTextLanguage(false)
-                .setPreferredAudioLanguage(plan.audioLanguage)
+                .setPreferredAudioLanguages(*plan.audioLanguages.toTypedArray())
                 .setTunnelingEnabled(tunneling.tunneled)
                 .build()
         }

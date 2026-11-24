@@ -38,7 +38,14 @@ enum class SubtitleMode(val key: String, private val labelText: () -> String, pr
  * The app-wide languages from Settings: what a video opens with when neither the file's own saved
  * tracks nor the series it belongs to say otherwise.
  *
- * Languages are kept normalised ([TrackLanguages.normalise]); null is "Automatic".
+ * Each of the two is an ordered list, the first match winning: the file's soundtrack or subtitle in
+ * the first language of the list that it has. [audioLanguage] is the head of the audio list and
+ * [audioMore] the rest (the same for subtitles), so a list of one is exactly the single choice
+ * these settings were before, stored the same way: a code, or codes joined with a comma
+ * ([LanguageOrder]). An old stored code therefore is a list of one, and nothing needs migrating.
+ *
+ * Languages are kept normalised ([TrackLanguages.normalise]) and never twice; an empty list is
+ * "Automatic".
  */
 data class TrackPreferences(
     val audioLanguage: String? = null,
@@ -46,31 +53,108 @@ data class TrackPreferences(
     /** "Off" picked as the subtitle language: never on by themselves, whatever [mode] says. */
     val subtitlesOff: Boolean = false,
     val mode: SubtitleMode = SubtitleMode.AsTheVideoSays,
+    /** The audio languages after [audioLanguage], in order. */
+    val audioMore: List<String> = emptyList(),
+    /** The subtitle languages after [subtitleLanguage], in order. */
+    val subtitleMore: List<String> = emptyList(),
 ) {
-    /** The stored form of the subtitle language row: empty for Automatic, [OFF], or a code. */
+    /** The audio languages, in order; empty for Automatic. */
+    val audioLanguages: List<String> get() = listOfNotNull(audioLanguage) + audioMore
+
+    /** The subtitle languages, in order; empty for Automatic and for Off. */
+    val subtitleLanguages: List<String> get() = listOfNotNull(subtitleLanguage) + subtitleMore
+
+    /**
+     * The first subtitle language as the stored key says it: empty for Automatic, [OFF], or a code.
+     * What a single language is wanted for (the external player's subtitle file) reads this.
+     */
     val subtitleKey: String get() = if (subtitlesOff) OFF else subtitleLanguage.orEmpty()
 
+    /** The stored form of the audio row: the codes joined with a comma, empty for Automatic. */
+    val audioStored: String get() = LanguageOrder.store(audioLanguages)
+
+    /** The stored form of the subtitle row: [OFF], the codes joined with a comma, or empty for Automatic. */
+    val subtitleStored: String get() = if (subtitlesOff) OFF else LanguageOrder.store(subtitleLanguages)
+
+    /** These preferences with the audio languages set to [languages] (cleaned: normalised, never twice, at most [LanguageOrder.MAX]). */
+    fun withAudioLanguages(languages: List<String>): TrackPreferences {
+        val list = LanguageOrder.clean(languages)
+        return copy(audioLanguage = list.firstOrNull(), audioMore = list.drop(1))
+    }
+
+    /** These preferences with the subtitle languages set to [languages]; a list turns Off off. */
+    fun withSubtitleLanguages(languages: List<String>): TrackPreferences {
+        val list = LanguageOrder.clean(languages)
+        return copy(subtitleLanguage = list.firstOrNull(), subtitleMore = list.drop(1), subtitlesOff = false)
+    }
+
     /** What the audio row says is set, on every platform. */
-    val audioSummary: String get() = audioLanguage?.let(TrackLanguages::name) ?: L.settingsAudioLanguageAuto
+    val audioSummary: String
+        get() = audioLanguages.takeIf { it.isNotEmpty() }?.joinToString(", ", transform = TrackLanguages::name) ?: L.settingsAudioLanguageAuto
 
     /** What the subtitle language row says is set. */
     val subtitleSummary: String
         get() = when {
             subtitlesOff -> L.settingsSubtitleLanguageOff
-            subtitleLanguage != null -> TrackLanguages.name(subtitleLanguage)
+            subtitleLanguages.isNotEmpty() -> subtitleLanguages.joinToString(", ", transform = TrackLanguages::name)
             else -> L.settingsSubtitleLanguageAuto
         }
 
     companion object {
         const val OFF = "off"
 
-        /** Reads the three stored values back, anything unreadable falling back to Automatic. */
-        fun from(audio: String?, subtitle: String?, mode: String?) = TrackPreferences(
-            audioLanguage = TrackLanguages.normalise(audio),
-            subtitleLanguage = subtitle?.takeIf { it != OFF }?.let(TrackLanguages::normalise),
-            subtitlesOff = subtitle == OFF,
-            mode = SubtitleMode.from(mode),
-        )
+        /** Reads the three stored values back, anything unreadable (an entry or the whole value) falling back to Automatic. */
+        fun from(audio: String?, subtitle: String?, mode: String?): TrackPreferences {
+            val audioList = LanguageOrder.parse(audio)
+            val subtitleList = if (subtitle == OFF) emptyList() else LanguageOrder.parse(subtitle)
+            return TrackPreferences(
+                audioLanguage = audioList.firstOrNull(),
+                audioMore = audioList.drop(1),
+                subtitleLanguage = subtitleList.firstOrNull(),
+                subtitleMore = subtitleList.drop(1),
+                subtitlesOff = subtitle == OFF,
+                mode = SubtitleMode.from(mode),
+            )
+        }
+    }
+}
+
+/**
+ * The ordered language lists of [TrackPreferences], as one pure set of rules every platform edits
+ * them with: add (a language already there is refused), remove, move one place, and the stored form
+ * (codes joined with a comma, so a list of one is the single code it always was).
+ */
+object LanguageOrder {
+    /** More than every language the pickers offer, so the cap only ever stops a damaged value. */
+    const val MAX = 50
+
+    /** [codes] normalised, with the undetermined and the unreadable skipped, each language once, at most [MAX]. */
+    fun clean(codes: List<String?>): List<String> =
+        codes.mapNotNull(TrackLanguages::normalise).distinct().take(MAX)
+
+    /** A stored value as a list: entries split on a comma, garbage skipped, a missing or absurdly long value empty. */
+    fun parse(stored: String?): List<String> {
+        val text = stored?.takeIf { it.length <= MAX * 16 } ?: return emptyList()
+        return clean(text.split(','))
+    }
+
+    fun store(languages: List<String>): String = languages.joinToString(",")
+
+    /** [language] at the end, or the list as it was when it is already there, unreadable, or the list is full. */
+    fun add(list: List<String>, language: String): List<String> {
+        val code = TrackLanguages.normalise(language) ?: return list
+        return if (code in list || list.size >= MAX) list else list + code
+    }
+
+    fun remove(list: List<String>, language: String): List<String> = list.filter { it != language }
+
+    /** [language] moved [by] places (negative is towards the front), held inside the list. */
+    fun move(list: List<String>, language: String, by: Int): List<String> {
+        val from = list.indexOf(language)
+        if (from < 0 || by == 0) return list
+        val to = (from + by).coerceIn(0, list.lastIndex)
+        if (to == from) return list
+        return list.toMutableList().also { it.add(to, it.removeAt(from)) }
     }
 }
 
@@ -86,10 +170,16 @@ sealed interface SubtitlePlan {
      * On, in [language] where the file has it. [fallBack] takes the file's default or first track
      * when it does not; without it the file's own pick stands.
      */
-    data class On(val language: String?, val fallBack: Boolean = false) : SubtitlePlan
+    data class On(val language: String?, val fallBack: Boolean = false, val more: List<String> = emptyList()) : SubtitlePlan {
+        /** The languages to look for, first match winning. */
+        val languages: List<String> get() = listOfNotNull(language) + more
+    }
 
     /** On in [language] when the soundtrack is in none of [viewerLanguages], off otherwise. */
-    data class IfForeignAudio(val language: String?, val viewerLanguages: Set<String>) : SubtitlePlan
+    data class IfForeignAudio(val language: String?, val viewerLanguages: Set<String>, val more: List<String> = emptyList()) : SubtitlePlan {
+        /** The languages to look for, first match winning. */
+        val languages: List<String> get() = listOfNotNull(language) + more
+    }
 
     /** Whatever the file marks as its default. */
     data object FileDefault : SubtitlePlan
@@ -101,7 +191,12 @@ data class TrackPlan(
     val audioSource: TrackSource,
     val subtitles: SubtitlePlan,
     val subtitleSource: TrackSource,
-)
+    /** The audio languages after [audioLanguage], in order: only Settings has more than one. */
+    val audioMore: List<String> = emptyList(),
+) {
+    /** The audio languages to look for, first match winning. */
+    val audioLanguages: List<String> get() = listOfNotNull(audioLanguage) + audioMore
+}
 
 /** One subtitle track as the pick sees it. */
 data class SubtitleTrackInfo(val language: String?, val isDefault: Boolean = false, val forced: Boolean = false)
@@ -145,19 +240,23 @@ object TrackRules {
             }
             else -> settingsPlan(prefs, uiLanguage) to TrackSource.Settings
         }
-        return TrackPlan(audio, audioSource, subtitles, subtitleSource)
+        val audioMore = if (audioSource == TrackSource.Settings) prefs.audioMore else emptyList()
+        return TrackPlan(audio, audioSource, subtitles, subtitleSource, audioMore)
     }
 
     private fun settingsPlan(prefs: TrackPreferences, uiLanguage: String): SubtitlePlan {
         if (prefs.subtitlesOff) return SubtitlePlan.Off()
         val wanted = prefs.subtitleLanguage ?: TrackLanguages.normalise(uiLanguage)
+        // The viewer's own languages, in the order they chose them; the app's language when they chose none.
+        val more = prefs.subtitleMore
         return when (prefs.mode) {
             SubtitleMode.AsTheVideoSays -> SubtitlePlan.FileDefault
             SubtitleMode.OffUnlessChosen -> SubtitlePlan.Off(allowForced = true)
-            SubtitleMode.Always -> SubtitlePlan.On(wanted, fallBack = true)
+            SubtitleMode.Always -> SubtitlePlan.On(wanted, fallBack = true, more = more)
             SubtitleMode.ForeignAudio -> SubtitlePlan.IfForeignAudio(
                 wanted,
-                listOfNotNull(prefs.subtitleLanguage, TrackLanguages.normalise(uiLanguage)).toSet(),
+                (prefs.subtitleLanguages + listOfNotNull(TrackLanguages.normalise(uiLanguage))).toSet(),
+                more,
             )
         }
     }
@@ -171,7 +270,7 @@ object TrackRules {
         return when (plan) {
             SubtitlePlan.FileDefault -> SubtitlePick.Leave
             is SubtitlePlan.Off -> if (plan.allowForced) forcedFor(audioLanguage, tracks) else SubtitlePick.None
-            is SubtitlePlan.On -> inLanguage(plan.language, tracks)?.let(SubtitlePick::Track)
+            is SubtitlePlan.On -> inLanguages(plan.languages, tracks)?.let(SubtitlePick::Track)
                 ?: if (plan.fallBack) fallBack(tracks) else SubtitlePick.Leave
             is SubtitlePlan.IfForeignAudio -> {
                 val audio = TrackLanguages.normalise(audioLanguage)
@@ -180,11 +279,15 @@ object TrackRules {
                 if (audio == null || audio in plan.viewerLanguages) {
                     forcedFor(audioLanguage, tracks)
                 } else {
-                    inLanguage(plan.language, tracks)?.let(SubtitlePick::Track) ?: fallBack(tracks)
+                    inLanguages(plan.languages, tracks)?.let(SubtitlePick::Track) ?: fallBack(tracks)
                 }
             }
         }
     }
+
+    /** The track in the first of [languages] that the file has: the viewer's order, first match wins. */
+    private fun inLanguages(languages: List<String>, tracks: List<SubtitleTrackInfo>): Int? =
+        languages.firstNotNullOfOrNull { inLanguage(it, tracks) }
 
     private fun inLanguage(language: String?, tracks: List<SubtitleTrackInfo>): Int? {
         language ?: return null

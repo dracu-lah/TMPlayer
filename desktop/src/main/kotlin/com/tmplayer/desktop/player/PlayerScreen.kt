@@ -766,6 +766,7 @@ fun PlayerScreen(
         )
         val prefs = OpenPrefs(
             audioLanguage = trackPlan.audioLanguage,
+            audioMore = trackPlan.audioMore,
             subtitles = trackPlan.subtitles,
             // Its own speed, else the series' or course's, else the chat's or topic's: [SpeedMemory].
             speed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }

@@ -69,6 +69,100 @@ class TrackPreferencesTest {
         assertEquals(SubtitleMode.AsTheVideoSays, off.mode)
     }
 
+    // ---- ordered lists (WP-80) --------------------------------------------------------------
+
+    @Test
+    fun `an old single stored code is a list of one and is stored the same way again`() {
+        val prefs = TrackPreferences.from("jpn", "eng", null)
+        assertEquals(listOf("ja"), prefs.audioLanguages)
+        assertEquals(listOf("en"), prefs.subtitleLanguages)
+        assertEquals("ja", prefs.audioStored)
+        assertEquals("en", prefs.subtitleStored)
+        // Nothing stored is Automatic, and Off is stored as it was.
+        assertEquals(emptyList<String>(), TrackPreferences.from(null, null, null).audioLanguages)
+        assertEquals("", TrackPreferences().audioStored)
+        assertEquals(TrackPreferences.OFF, TrackPreferences.from(null, TrackPreferences.OFF, null).subtitleStored)
+    }
+
+    @Test
+    fun `a stored list reads back in order, each language once, garbage skipped`() {
+        val prefs = TrackPreferences.from("jpn, ko,ja,,Klingonish,12,eng", "und,ml,mal", null)
+        assertEquals(listOf("ja", "ko", "en"), prefs.audioLanguages)
+        assertEquals("ja", prefs.audioLanguage)
+        assertEquals(listOf("ko", "en"), prefs.audioMore)
+        assertEquals(listOf("ml"), prefs.subtitleLanguages)
+        assertEquals("ja,ko,en", prefs.audioStored)
+        // A list that is all garbage, or far too long to be real, is Automatic.
+        assertEquals(emptyList<String>(), TrackPreferences.from("x,12,,und", null, null).audioLanguages)
+        assertEquals(emptyList<String>(), TrackPreferences.from("en,".repeat(5_000), null, null).audioLanguages)
+    }
+
+    @Test
+    fun `the list is capped, never has a language twice, and add refuses a repeat`() {
+        val many = (0 until 200).map { i -> "${'a' + i % 26}${'a' + (i / 26) % 26}" }
+        assertTrue(LanguageOrder.clean(many).size <= LanguageOrder.MAX)
+        assertEquals(listOf("ja", "en"), LanguageOrder.clean(listOf("jpn", "ja", "eng", "en-US")))
+        assertEquals(listOf("ja"), LanguageOrder.add(listOf("ja"), "jpn"))
+        assertEquals(listOf("ja", "en"), LanguageOrder.add(listOf("ja"), "eng"))
+        assertEquals(listOf("ja"), LanguageOrder.add(listOf("ja"), "und"))
+        val full = LanguageOrder.clean(many)
+        assertEquals(full, LanguageOrder.add(full, "zz"))
+    }
+
+    @Test
+    fun `a language moves one place at a time and stays inside the list`() {
+        val list = listOf("ja", "ko", "en")
+        assertEquals(listOf("ko", "ja", "en"), LanguageOrder.move(list, "ko", -1))
+        assertEquals(listOf("ja", "en", "ko"), LanguageOrder.move(list, "ko", 1))
+        assertEquals(list, LanguageOrder.move(list, "ja", -1))
+        assertEquals(list, LanguageOrder.move(list, "en", 1))
+        assertEquals(list, LanguageOrder.move(list, "de", 1))
+        assertEquals(listOf("ja", "en"), LanguageOrder.remove(list, "ko"))
+    }
+
+    @Test
+    fun `settings audio takes the first language and carries the rest for the player`() {
+        val prefs = TrackPreferences().withAudioLanguages(listOf("ja", "ko", "ja"))
+        val plan = TrackRules.plan(null, TrackChoice(), prefs, "en")
+        assertEquals("ja", plan.audioLanguage)
+        assertEquals(listOf("ja", "ko"), plan.audioLanguages)
+        // The series' or the file's own language is a single one, whatever Settings hold.
+        val series = TrackRules.plan(null, TrackChoice(audioLanguage = "kor"), prefs, "en")
+        assertEquals(listOf("ko"), series.audioLanguages)
+        // An empty list falls back to the file's own default.
+        assertEquals(emptyList<String>(), TrackRules.plan(null, TrackChoice(), TrackPreferences(), "en").audioLanguages)
+    }
+
+    @Test
+    fun `the first subtitle language the file has wins, in the viewer's order`() {
+        val prefs = TrackPreferences(mode = SubtitleMode.Always).withSubtitleLanguages(listOf("ko", "en", "ml"))
+        val plan = TrackRules.plan(null, TrackChoice(), prefs, "de").subtitles
+        assertEquals(SubtitlePlan.On("ko", fallBack = true, more = listOf("en", "ml")), plan)
+        // The file has English and Malayalam: English is the first of the list it has, though Malayalam is the default.
+        assertEquals(SubtitlePick.Track(1), TrackRules.pickSubtitle(plan, null, tracks))
+        // Only the later language is there: it is taken. None of them: the file's default track (always falls back).
+        assertEquals(SubtitlePick.Track(0), TrackRules.pickSubtitle(plan, null, tracks.drop(2)))
+        assertEquals(SubtitlePick.Track(2), TrackRules.pickSubtitle(SubtitlePlan.On("ko", fallBack = true, more = listOf("fr")), null, tracks))
+        assertEquals(SubtitlePick.Leave, TrackRules.pickSubtitle(SubtitlePlan.On("ko", more = listOf("fr")), null, tracks))
+    }
+
+    @Test
+    fun `foreign audio counts every language in the list as yours`() {
+        val prefs = TrackPreferences(mode = SubtitleMode.ForeignAudio).withSubtitleLanguages(listOf("ml", "ta"))
+        val plan = TrackRules.plan(null, TrackChoice(), prefs, "en").subtitles as SubtitlePlan.IfForeignAudio
+        assertEquals(setOf("ml", "ta", "en"), plan.viewerLanguages)
+        assertEquals(listOf("ml", "ta"), plan.languages)
+    }
+
+    @Test
+    fun `off beats the list and a list turns off off`() {
+        val off = TrackPreferences(subtitlesOff = true)
+        assertEquals(TrackPreferences.OFF, off.subtitleStored)
+        assertEquals("ko", off.withSubtitleLanguages(listOf("ko")).subtitleStored)
+        assertFalse(off.withSubtitleLanguages(listOf("ko")).subtitlesOff)
+        assertEquals(emptyList<String>(), off.subtitleLanguages)
+    }
+
     @Test
     fun `the choices include the app languages and the common ones, once each`() {
         val choices = TrackLanguages.choices()

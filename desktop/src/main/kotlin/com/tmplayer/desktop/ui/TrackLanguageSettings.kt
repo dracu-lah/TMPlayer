@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.player.LanguageOrder
 import com.tmplayer.player.SubtitleMode
 import com.tmplayer.player.TrackLanguages
 import com.tmplayer.player.TrackPreferences
@@ -42,28 +44,31 @@ import kotlinx.coroutines.launch
 internal class MenuChoice(val label: String, val detail: String?, val selected: Boolean, val pick: () -> Unit)
 
 /**
- * The preferred audio language row, for the Playback page. Each of these rows drops its choices
- * down from its end when it is pressed, as a desktop picks one value from a list; the phone and
- * the TV open a sheet for the same thing.
+ * The preferred audio languages, for the Playback page: an ordered list, the first match winning
+ * ([LanguageOrder]). The row drops down Automatic and the languages not yet in the list (each pick
+ * adds one at the end); under it every chosen language is a row of its own with Move up, Move down
+ * and Remove, all reached by Tab and Enter as well as the pointer.
  */
 @Composable
 internal fun AudioLanguageSetting(settings: SettingsStore, prefs: TrackPreferences, scope: CoroutineScope) {
     val s = LocalStrings.current
     val languages = remember(s.messages.tag) { TrackLanguages.choices() }
     fun save(next: TrackPreferences) = scope.launch { settings.setTrackPreferences(next) }
+    val order = prefs.audioLanguages
     ChoiceSetting(
         s.settingsAudioLanguage,
         s.settingsTrackLanguagesNote,
         TmIcons.Audio,
-        prefs.audioLanguage?.let(TrackLanguages::name) ?: s.settingsLanguageAutomatic,
-        listOf(MenuChoice(s.settingsLanguageAutomatic, s.settingsAudioLanguageAuto, prefs.audioLanguage == null) { save(prefs.copy(audioLanguage = null)) }) +
-            languages.map { code ->
-                MenuChoice(TrackLanguages.name(code), null, prefs.audioLanguage == code) { save(prefs.copy(audioLanguage = code)) }
+        if (order.isEmpty()) s.settingsLanguageAutomatic else prefs.audioSummary,
+        listOf(MenuChoice(s.settingsLanguageAutomatic, s.settingsAudioLanguageAuto, order.isEmpty()) { save(prefs.withAudioLanguages(emptyList())) }) +
+            languages.filter { it !in order }.map { code ->
+                MenuChoice(TrackLanguages.name(code), s.tracksAddLanguage, false) { save(prefs.withAudioLanguages(LanguageOrder.add(order, code))) }
             },
     )
+    OrderedLanguageRows(order) { save(prefs.withAudioLanguages(it)) }
 }
 
-/** When subtitles come on by themselves, and in which language, for the Subtitles page. */
+/** When subtitles come on by themselves, and in which languages, for the Subtitles page. */
 @Composable
 internal fun SubtitleLanguageSettings(settings: SettingsStore, prefs: TrackPreferences, scope: CoroutineScope) {
     val s = LocalStrings.current
@@ -76,7 +81,8 @@ internal fun SubtitleLanguageSettings(settings: SettingsStore, prefs: TrackPrefe
         prefs.mode.label,
         SubtitleMode.entries.map { mode -> MenuChoice(mode.label, mode.detail, prefs.mode == mode) { save(prefs.copy(mode = mode)) } },
     )
-    val auto = prefs.subtitleLanguage == null && !prefs.subtitlesOff
+    val order = prefs.subtitleLanguages
+    val auto = order.isEmpty() && !prefs.subtitlesOff
     val detail = when {
         prefs.subtitlesOff -> s.settingsSubtitleLanguageOff
         auto -> s.settingsSubtitleLanguageAuto
@@ -93,17 +99,43 @@ internal fun SubtitleLanguageSettings(settings: SettingsStore, prefs: TrackPrefe
         },
         listOf(
             MenuChoice(s.settingsLanguageAutomatic, s.settingsSubtitleLanguageAuto, auto) {
-                save(prefs.copy(subtitleLanguage = null, subtitlesOff = false))
+                save(prefs.withSubtitleLanguages(emptyList()))
             },
             MenuChoice(s.commonOff, s.settingsSubtitleLanguageOff, prefs.subtitlesOff) {
-                save(prefs.copy(subtitleLanguage = null, subtitlesOff = true))
+                save(prefs.withSubtitleLanguages(emptyList()).copy(subtitlesOff = true))
             },
-        ) + languages.map { code ->
-            MenuChoice(TrackLanguages.name(code), null, !prefs.subtitlesOff && prefs.subtitleLanguage == code) {
-                save(prefs.copy(subtitleLanguage = code, subtitlesOff = false))
+        ) + languages.filter { it !in order }.map { code ->
+            MenuChoice(TrackLanguages.name(code), s.tracksAddLanguage, false) {
+                save(prefs.withSubtitleLanguages(LanguageOrder.add(order, code)))
             }
         },
     )
+    OrderedLanguageRows(order) { save(prefs.withSubtitleLanguages(it)) }
+}
+
+/**
+ * The chosen languages as rows in their order: the position in the detail, and Move up, Move down
+ * and Remove at the row's end. Nothing is drawn for an empty list.
+ */
+@Composable
+private fun OrderedLanguageRows(order: List<String>, change: (List<String>) -> Unit) {
+    val s = LocalStrings.current
+    order.forEachIndexed { at, code ->
+        val name = TrackLanguages.name(code)
+        Setting(name, "${s.tracksLanguageOrder}: ${at + 1} / ${order.size}", icon = TmIcons.Language) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { change(LanguageOrder.move(order, code, -1)) }, enabled = at > 0) {
+                    Icon(TmIcons.ChevronUp, contentDescription = "${s.tracksMoveUp}: $name", modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = { change(LanguageOrder.move(order, code, 1)) }, enabled = at < order.size - 1) {
+                    Icon(TmIcons.ChevronDown, contentDescription = "${s.tracksMoveDown}: $name", modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = { change(LanguageOrder.remove(order, code)) }) {
+                    Icon(TmIcons.Close, contentDescription = "${s.commonRemove}: $name", modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
 }
 
 /**

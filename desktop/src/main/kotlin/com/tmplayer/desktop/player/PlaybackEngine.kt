@@ -151,6 +151,8 @@ interface PlaybackEngine {
 data class OpenPrefs(
     /** The soundtrack's language, from [com.tmplayer.player.TrackRules.plan]; null for the file's. */
     val audioLanguage: String? = null,
+    /** The soundtrack languages after [audioLanguage], in order (Settings' ordered list); first match wins. */
+    val audioMore: List<String> = emptyList(),
     /** What to do about subtitles, decided the same way. */
     val subtitles: SubtitlePlan = SubtitlePlan.FileDefault,
     val speed: Float = 1f,

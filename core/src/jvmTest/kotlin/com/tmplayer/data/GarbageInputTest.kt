@@ -428,6 +428,17 @@ class GarbageInputTest {
     fun textParsersNeverThrow() {
         for (text in texts) {
             survive("UpdateFeed.parseFeed", text) { UpdateFeed.parseFeed(text) }
+            // The ordered language lists (WP-80): a stored value with garbage entries, absurd length or none at all.
+            survive("TrackPreferences.from ordered lists", text) {
+                val prefs = com.tmplayer.player.TrackPreferences.from(text, text + ",en,," + text, text)
+                prefs.audioLanguages
+                prefs.subtitleLanguages
+                prefs.audioStored
+                prefs.subtitleStored
+                com.tmplayer.player.LanguageOrder.parse(text.repeat(40))
+                com.tmplayer.player.LanguageOrder.move(com.tmplayer.player.LanguageOrder.parse(text), text, text.length - 3)
+                com.tmplayer.player.LanguageOrder.add(emptyList(), text)
+            }
             survive("ChatSearch.spellings", text) {
                 ChatSearch.spellings(text)
                 ChatSearch.matches(text, text)
