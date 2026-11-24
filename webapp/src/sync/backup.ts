@@ -46,8 +46,35 @@ export interface BackupParts {
     recentSearches?: string[]
 }
 
+/** What the writer is told: `accountTag` is `accountTagOf` the signed in account ('' when unknown). */
+export interface BackupOut {
+    now: number
+    appVersion: string
+    accountTag: string
+}
+
+const TAG = /^[0-9a-f]{16}$/
+
+/**
+ * A short tag for the Telegram account a file was made for (SEC2-10): enough to warn when another
+ * account restores it, without writing the user id, a stable handle for the account, into a file the
+ * viewer may mail or upload. '' for no account.
+ */
+export async function accountTagOf(id: number): Promise<string> {
+    if (!Number.isFinite(id) || id === 0) return ''
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`tmplayer-backup:${id}`)))
+    return [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Whether a file says it was made for another Telegram account than `account`: by its tag, or by the user id a file from before SEC2-10 holds. */
+export async function otherAccount(read: { account: number | null; accountTag: string | null }, account: number): Promise<boolean> {
+    if (account === 0) return false
+    if (read.accountTag !== null) return read.accountTag !== (await accountTagOf(account))
+    return read.account !== null && read.account !== 0 && read.account !== account
+}
+
 /** The file's JSON, as `Backups.encode` writes it. */
-export function toBackupJson(p: BackupParts, o: { now: number; appVersion: string; account: number }): Json {
+export function toBackupJson(p: BackupParts, o: BackupOut): Json {
     const { doc } = p
     const hasLists = p.lists.lists.length > 0 || p.lists.lines.length > 0
     return {
@@ -55,8 +82,8 @@ export function toBackupJson(p: BackupParts, o: { now: number; appVersion: strin
         version: hasLists ? BACKUP_VERSION : LISTLESS_VERSION,
         createdAt: o.now,
         app: o.appVersion,
-        // Not the apps' own field: it names the Telegram account the file was made for, so another one is warned (the apps ignore it).
-        account: o.account,
+        // Not the apps' own field: a tag of the Telegram account the file was made for, so another one is warned (the apps ignore it).
+        ...(TAG.test(o.accountTag) ? { accountTag: o.accountTag } : {}),
         settings: {},
         metadata: {},
         favourites: [...doc.favourites.keys()].sort((a, b) => a - b),
@@ -70,7 +97,7 @@ export function toBackupJson(p: BackupParts, o: { now: number; appVersion: strin
     }
 }
 
-export const backupText = (p: BackupParts, o: { now: number; appVersion: string; account: number }) => JSON.stringify(toBackupJson(p, o), null, 2)
+export const backupText = (p: BackupParts, o: BackupOut) => JSON.stringify(toBackupJson(p, o), null, 2)
 
 /** `tmplayer-backup-2026-11-24.json`: the date of the device's own clock. */
 export function backupFileName(now: number): string {
@@ -80,7 +107,8 @@ export function backupFileName(now: number): string {
 }
 
 export type BackupRead =
-    | { kind: 'ok'; doc: SyncDoc; searches: string[]; createdAt: number; app: string; account: number | null; lists: unknown }
+    /** `account`: the user id a file from before SEC2-10 holds; `accountTag`: what a newer one holds instead. */
+    | { kind: 'ok'; doc: SyncDoc; searches: string[]; createdAt: number; app: string; account: number | null; accountTag: string | null; lists: unknown }
     | { kind: 'tooNew'; version: number }
     | { kind: 'notBackup' }
     | { kind: 'tooBig' }
@@ -146,5 +174,5 @@ export function decodeBackup(text: string): BackupRead {
         .map((s) => s.trim().slice(0, 200))
         .filter(Boolean)
         .slice(0, MAX_SEARCHES)
-    return { kind: 'ok', doc, searches, createdAt, app: str(root.app, 40), account: int(root.account), lists: lists ?? undefined }
+    return { kind: 'ok', doc, searches, createdAt, app: str(root.app, 40), account: int(root.account), accountTag: typeof root.accountTag === 'string' && TAG.test(root.accountTag) ? root.accountTag : null, lists: lists ?? undefined }
 }

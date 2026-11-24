@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { BACKUP_FORMAT, BACKUP_VERSION, MAX_BACKUP_BYTES, backupFileName, backupText, decodeBackup } from './backup.ts'
+import { BACKUP_FORMAT, BACKUP_VERSION, MAX_BACKUP_BYTES, accountTagOf, backupFileName, backupText, decodeBackup, otherAccount } from './backup.ts'
 import { emptyDoc, tdlibMessageId } from './format.ts'
 import { emptyLists } from '../ui/lists.ts'
 
-const OUT = { now: Date.UTC(2026, 10, 24, 12), appVersion: 'web', account: 42 }
+const OUT = { now: Date.UTC(2026, 10, 24, 12), appVersion: 'web', accountTag: '0123456789abcdef' }
 
 function held() {
     const doc = emptyDoc(42)
@@ -28,7 +28,8 @@ test('a file this module writes reads back with every list', () => {
     assert.deepEqual([...read.doc.favourites.keys()], [-100])
     assert.equal(read.doc.bookmarks[0]!.note, 'here')
     assert.deepEqual(read.searches, ['harbour'])
-    assert.equal(read.account, 42)
+    assert.equal(read.accountTag, '0123456789abcdef')
+    assert.equal(read.account, null)
 })
 
 test('the file says the apps own names, a list-less file is version 1, one with lists version 2', () => {
@@ -126,4 +127,25 @@ test('huge arrays are capped, not walked', () => {
 
 test('the file name is the date', () => {
     assert.match(backupFileName(Date.UTC(2026, 10, 24, 12)), /^tmplayer-backup-2026-11-2[345]\.json$/)
+})
+
+test('the file names the account by a tag, never by its Telegram user id (SEC2-10)', async () => {
+    const tag = await accountTagOf(424242)
+    assert.match(tag, /^[0-9a-f]{16}$/)
+    assert.equal(tag, await accountTagOf(424242))
+    assert.notEqual(tag, await accountTagOf(424243))
+    assert.equal(await accountTagOf(0), '')
+    const text = backupText({ doc: held(), lists: emptyLists() }, { ...OUT, accountTag: tag })
+    assert.doesNotMatch(text, /424242/)
+    assert.equal('account' in JSON.parse(text), false)
+    const read = decodeBackup(text)
+    assert.equal(read.kind, 'ok')
+    if (read.kind !== 'ok') return
+    assert.equal(await otherAccount(read, 424242), false)
+    assert.equal(await otherAccount(read, 7), true)
+    // A file from before the tag still warns by its user id; a file that names no account never does.
+    assert.equal(await otherAccount({ account: 424242, accountTag: null }, 7), true)
+    assert.equal(await otherAccount({ account: 424242, accountTag: null }, 424242), false)
+    assert.equal(await otherAccount({ account: null, accountTag: null }, 7), false)
+    assert.equal(await otherAccount(read, 0), false)
 })

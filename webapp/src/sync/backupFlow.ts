@@ -6,7 +6,7 @@ import { api } from '../tg/rpc'
 import { me } from '../session'
 import { applyCount, apply, emptyDoc, merge, type SyncApply } from './format'
 import { applyLocal, collect, noBase } from './local'
-import { backupFileName, backupText, decodeBackup, type BackupRead } from './backup'
+import { accountTagOf, backupFileName, backupText, decodeBackup, otherAccount, type BackupRead } from './backup'
 import { fromFile, missingLines } from './listsFile'
 import { localLists, localWriter } from './index'
 import { settings } from '../store'
@@ -21,7 +21,7 @@ export async function backupNow(now = Date.now()): Promise<{ name: string; text:
     const account = me()?.id ?? 0
     const lists = await localLists()
     const doc = collect(lists, noBase(), emptyDoc(account), account, now, 'web')
-    const text = backupText({ doc, lists: lists.named ?? emptyLists(), recentSearches: recentSearches() }, { now, appVersion: 'web', account })
+    const text = backupText({ doc, lists: lists.named ?? emptyLists(), recentSearches: recentSearches() }, { now, appVersion: 'web', accountTag: await accountTagOf(account) })
     return { name: backupFileName(now), text }
 }
 
@@ -64,7 +64,7 @@ export async function planRestore(text: string, now = Date.now()): Promise<Resto
     const have = new Set(recentSearches().map((s) => s.toLowerCase()))
     const searches = settings().rememberSearches ? read.searches.filter((s) => !have.has(s.toLowerCase())).slice(0, Math.max(0, 10 - recentSearches().length)).length : 0
     const listsNew = lines > 0 || fromFile(read.lists).lists.some((l) => !namedListsDoc().lists.some((m) => m.id === l.id))
-    return { read, change, lines, searches, otherAccount: read.account !== null && read.account !== 0 && account !== 0 && read.account !== account, nothing: applyCount(change) === 0 && !listsNew && searches === 0 }
+    return { read, change, lines, searches, otherAccount: await otherAccount(read, account), nothing: applyCount(change) === 0 && !listsNew && searches === 0 }
 }
 
 /** Writes the plan into the stores. Returns how many places and lines changed. */
