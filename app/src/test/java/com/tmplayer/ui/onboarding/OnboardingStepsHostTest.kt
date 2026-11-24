@@ -95,7 +95,7 @@ class OnboardingStepsHostTest {
     private var drew = false
 
     private fun show() {
-        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store) } }
+        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store, lockRead = true, locked = false) } }
         // The store answers on its own thread: the step is up once it has.
         rule.waitUntil(5_000) { drew }
         rule.waitForIdle()
@@ -111,10 +111,31 @@ class OnboardingStepsHostTest {
         }
     }
 
+    /** A due step with the lock unread, or the app locked, draws nothing at all and asks nothing, yet holds the shell (true). */
+    private fun heldBack(lockRead: Boolean, locked: Boolean) {
+        firstRun()
+        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store, lockRead = lockRead, locked = locked) } }
+        // The store answers on its own thread: the step is due once it has, and then it is held, not drawn.
+        rule.waitUntil(5_000) { drew }
+        rule.waitForIdle()
+        assertTrue("a due step holds the shell back", drew)
+        assertEquals("nothing is drawn", 0, rule.onAllNodes(hasText(L.onboardingNotificationsTitle)).fetchSemanticsNodes().size)
+        assertEquals("no Skip button either", 0, rule.onAllNodes(hasText(L.setupSkip)).fetchSemanticsNodes().size)
+        assertEquals(0, asks)
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun aLockNotYetReadDrawsNothingAndNeverFailsOpen() = heldBack(lockRead = false, locked = false)
+
+    @Test
+    @Config(sdk = [33])
+    fun aLockedAppDrawsNoStep() = heldBack(lockRead = true, locked = true)
+
     @Test
     @Config(sdk = [33])
     fun nothingIsShownOrAskedForAnInstallThatWasOnlyUpdated() {
-        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store) } }
+        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store, lockRead = true, locked = false) } }
         rule.waitForIdle()
         assertFalse(drew)
         assertEquals(0, asks)
@@ -248,7 +269,7 @@ class OnboardingStepsHostTest {
         SupportReminder.enabled = false
         firstRun()
         runBlocking { store.markOnboardingStep(Step.Notifications, Outcome.Skipped) }
-        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store) } }
+        rule.setContent { TMPlayerTheme { drew = OnboardingStepsHost(store, lockRead = true, locked = false) } }
         rule.waitForIdle()
         assertFalse(drew)
     }

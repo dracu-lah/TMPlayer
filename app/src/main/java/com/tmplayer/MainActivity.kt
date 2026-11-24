@@ -2053,7 +2053,14 @@ private fun Root() {
         // (Android 13 or later, a phone or tablet) and supporting TMPlayer. Each has a Skip, each is
         // shown once, and none is armed for an install that was only updated. After the app lock,
         // so nothing is drawn while the app is locked.
-        if (com.tmplayer.ui.onboarding.OnboardingStepsHost(settings)) return@Box
+        if (com.tmplayer.ui.onboarding.OnboardingStepsHost(
+                settings,
+                lockRead = appLock != null,
+                locked = appLock?.let { it.onOpen && !appUnlocked } ?: true,
+            )
+        ) {
+            return@Box
+        }
 
         // Anywhere but Settings and its own pages (About, Add chats) locks Settings again: Downloads
         // too, so its bar's Sign out asks the PIN, as a new visit does (SEC-03).

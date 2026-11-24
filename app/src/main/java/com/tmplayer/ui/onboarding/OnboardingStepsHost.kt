@@ -34,9 +34,14 @@ import kotlinx.coroutines.launch
  * coming back from there is read on resume, and granted notifications end the step by themselves.
  * Skip and Back end a step as skipped. Every outcome is stored, so a restart, a rotation or a
  * second launch resumes at the right step and never repeats one.
+ *
+ * Nothing is drawn while the app lock is unread ([lockRead] false) or the app is [locked]: a step
+ * that is due waits (this still returns true, so the shell shows nothing else either) and never
+ * shows for a frame before the lock state is known. There is no default for either, so a caller
+ * cannot fail open by leaving them out.
  */
 @Composable
-fun OnboardingStepsHost(settings: SettingsStore): Boolean {
+fun OnboardingStepsHost(settings: SettingsStore, lockRead: Boolean, locked: Boolean): Boolean {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tv = remember { FormFactor.isTv(context) }
@@ -65,6 +70,8 @@ fun OnboardingStepsHost(settings: SettingsStore): Boolean {
         supportOffered = android && SupportReminder.enabled,
     )
     val step = OnboardingSteps.next(state, inputs) ?: return false
+    // A lock not yet read waits, and a locked app shows nothing: never fails open (SEC).
+    if (!lockRead || locked) return true
     val position = OnboardingSteps.applicable(inputs).let { all ->
         StepOf(all.indexOf(step) + 1, all.size)
     }
