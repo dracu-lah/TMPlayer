@@ -93,6 +93,14 @@ export function useGestures(d: GestureDeps) {
         clearTimeout(rippleTimer)
         rippleTimer = window.setTimeout(() => setRipple(null), RUN_MS + 300)
     }
+    /** The same figure for a seek a key made through the stepper (seekStepper.ts): its own running total, from the matching side. */
+    const rippleFor = (side: 'left' | 'right', total: number) => {
+        const w = c.root.clientWidth
+        setRipple({ side, total: Math.round(Math.abs(total)), x: w * (side === 'right' ? 0.85 : 0.15), y: c.root.clientHeight / 2, n: (ripple()?.n ?? 0) + 1 })
+        runUntil = performance.now() + RUN_MS
+        clearTimeout(rippleTimer)
+        rippleTimer = window.setTimeout(() => setRipple(null), RUN_MS + 300)
+    }
     /** The TV's Left and Right over the bare picture: the jump from the matching side. */
     const jumpRemote = (forward: boolean) => {
         const w = c.root.clientWidth
@@ -330,5 +338,5 @@ export function useGestures(d: GestureDeps) {
         if (touches.size) return
         pic.setZoom((z) => settled(z, pic.zoomFrame()))
     }
-    return { hold, ripple, level, scrub, jump, jumpRemote, seekFlash, onWheel, onDown, onMove, onUp, onCancel, onGesture, onGestureEnd }
+    return { hold, ripple, level, scrub, jump, jumpRemote, rippleFor, seekFlash, onWheel, onDown, onMove, onUp, onCancel, onGesture, onGestureEnd }
 }

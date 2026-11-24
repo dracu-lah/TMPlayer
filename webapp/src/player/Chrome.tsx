@@ -219,6 +219,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     // One stepper for a held seek key (seekStepper.ts): the TV's Left and Right, the arrows over the picture and on the bar.
     // One write of currentTime per step, the picture shows the running total, and a screen reader is told once in a while.
     const stepper = new SeekStepper()
+    // The TV shows the jump's figure (set once the gestures exist, below); a keyboard shows the note.
+    let showRipple: (side: 'left' | 'right', total: number) => void = () => {}
     const [said, setSaid] = createSignal('')
     const stepRemote = (forward: boolean, repeat: boolean) => {
         const r = stepper.press({ forward, repeat, now: performance.now(), baseSec: tv() ? 10 : 5, durationSec: duration() })
@@ -226,7 +228,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         seekBy(r.by)
         peekAt(v.currentTime)
         const text = `${r.total > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: Math.round(Math.abs(r.total)) })}`
-        showNote({ text, side: r.by > 0 ? 'right' : 'left', quiet: true })
+        if (tv()) showRipple(r.by > 0 ? 'right' : 'left', r.total)
+        else showNote({ text, side: r.by > 0 ? 'right' : 'left', quiet: true })
         if (r.announce) setSaid(`${text}, ${clock(v.currentTime)}`)
     }
     // How long a frame lasts in this video, from the frames the browser shows; 1/30 where it cannot say (Safari before 15.4).
@@ -574,6 +577,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         queueMicrotask(() => focusIt(opener?.isConnected ? opener : c.root))
     }
     const gestures = useGestures({ c, pic, tv, phone, plain, locked, sheet, duration, flash, seekBy, seekTo, setVol, togglePlay, toggleFullscreen, toggle, show })
+    showRipple = gestures.rippleFor
     const { hold, ripple, level, scrub, jumpRemote, onGesture, onGestureEnd, onDown, onMove, onUp, onCancel, onWheel } = gestures
 
     // ---- what the row offers ---------------------------------------------------------------
