@@ -114,7 +114,8 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await press(page, 'ArrowUp')
+            // The page's Refresh button (WP-40) is the first stop above the cards, the bar the next.
+            await press(page, 'ArrowUp', 2)
             await press(page, 'ArrowRight')
             await press(page, 'Enter')
             await expect(page).toHaveURL(/\/chats$/)
@@ -227,7 +228,8 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await press(page, 'ArrowUp')
+            // The page's Refresh button (WP-40) is the first stop above the cards, the bar the next.
+            await press(page, 'ArrowUp', 2)
             await press(page, 'ArrowRight')
             await press(page, 'Enter')
             await expect(page).toHaveURL(/\/chats$/)
@@ -306,7 +308,8 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await press(page, 'ArrowUp')
+            // The page's Refresh button (WP-40) is the first stop above the cards, the bar the next.
+            await press(page, 'ArrowUp', 2)
             await press(page, 'ArrowLeft', 3)
             await press(page, 'Enter')
             // OK on the picture opens the account's menu (WP-02); Settings is its row, one Down from the buttons.
@@ -354,7 +357,8 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await press(page, 'ArrowUp')
+            // The page's Refresh button (WP-40) is the first stop above the cards, the bar the next.
+            await press(page, 'ArrowUp', 2)
             await press(page, 'ArrowLeft', 3)
             await expect.poll(() => focused(page)).toContain('tv-picture')
             await press(page, 'Enter')
@@ -384,7 +388,8 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await press(page, 'ArrowUp')
+            // The page's Refresh button (WP-40) is the first stop above the cards, the bar the next.
+            await press(page, 'ArrowUp', 2)
             await press(page, 'ArrowLeft', 3)
             await expect.poll(() => focused(page)).toContain('tv-picture')
             await press(page, 'Enter')
@@ -678,7 +683,8 @@ for (const size of [
             await fakeCase(context, 'mid')
             await page.goto('/')
             await expect.poll(() => focused(page)).toContain('card|/video/')
-            await press(page, 'ArrowUp')
+            // The page's Refresh button (WP-40) is the first stop above the cards, the bar the next.
+            await press(page, 'ArrowUp', 2)
             await press(page, 'ArrowRight')
             await press(page, 'Enter')
             await expect.poll(() => focused(page)).toBe('tv-tab|/chats')
