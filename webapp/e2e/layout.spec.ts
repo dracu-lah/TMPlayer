@@ -58,7 +58,7 @@ test('the Settings choice wins, survives a reload and is set before the page run
     const html = page.locator('html')
     await expect(page.getByRole('radio', { name: 'Desktop' })).toBeChecked()
     await expect(page.getByRole('radio', { name: 'Phone' })).toHaveCount(0)
-    await expect(page.getByRole('radio', { name: 'Auto' })).toHaveCount(0)
+    await expect(page.getByRole('radio', { name: 'Auto', exact: true })).toHaveCount(0)
     // Each form draws Settings in its own way (the TV's one long page, a list of pages elsewhere), so the choice is pressed, not checked: the radio is a new one by the time the form has changed.
     // A press can land on the old radio while the page redraws for the last choice, so a press is tried again until the form follows.
     const choose = (name: string) =>
@@ -106,7 +106,7 @@ test('?tv=1 and ?tv=0 in the address choose TV and Desktop, Settings leaves Layo
 
 test('a phone always has the phone layout: no choice in Settings, and a choice saved before is passed over', async ({ browser, browserName }) => {
     test.skip(browserName !== 'chromium', 'pointer overrides are Chromium only')
-    const context = await browser.newContext({ userAgent: IPHONE, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+    const context = await browser.newContext({ userAgent: IPHONE, viewport: { width: 390, height: 844 }, screen: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
     await context.addInitScript(() => localStorage.setItem('tmplayer-layout', 'tv'))
     const page = await context.newPage()
     await page.goto('/settings/appearance')

@@ -262,7 +262,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                     }
                 >
                     <div class="hero-art" aria-hidden="true">
-                        <For each={layers()}>{(l) => <HeroPicture tile={l.tile} />}</For>
+                        <For each={layers()}>{(l, i) => <HeroPicture tile={l.tile} first={i() === 0 && !seenOne} />}</For>
                         <div class="hero-fade" />
                     </div>
                     <For each={layers()}>
@@ -317,7 +317,13 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
 }
 
 /** One page's picture: the title's wide picture, the light copy at once and the full one after it; the cover until then. */
-function HeroPicture(props: { tile: Tile }) {
+/** The first hero picture of the page is what Largest Contentful Paint measures: it asks to be fetched first (WP-62). */
+let seenOne = false
+
+function HeroPicture(props: { tile: Tile; first?: boolean }) {
+    // Only the very first one, never the slides that follow it.
+    const eager = !!props.first
+    if (eager) seenOne = true
     const [src, setSrc] = createSignal<string | null>(null)
     createEffect(() => {
         const ask = askOf(props.tile.item)
@@ -332,7 +338,7 @@ function HeroPicture(props: { tile: Tile }) {
                     {(url) => (
                         <>
                             <img class="hero-fill" src={url} alt="" decoding="async" draggable={false} />
-                            <img class="hero-frame" src={url} alt="" decoding="async" draggable={false} />
+                            <img class="hero-frame" src={url} alt="" decoding="async" draggable={false} {...(eager ? { fetchpriority: 'high' } : {})} />
                         </>
                     )}
                 </For>

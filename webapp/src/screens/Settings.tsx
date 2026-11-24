@@ -6,7 +6,7 @@ import { rowDomId, SettingsSearch, showingResults, useRowTarget } from './Settin
 import { settings } from '../store'
 import { back, me } from '../session'
 import { language, languageName, t } from '../i18n'
-import { form, layout, layoutFixed } from '../form'
+import { form, layout, layoutFixed, tabletClass } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
 import { Initial } from '../ui/PageBar'
 import { installed, installPrompt, iosBrowser } from '../install'
@@ -49,6 +49,7 @@ const PAGE_ICONS = Object.fromEntries(PAGES.map((p) => [p.id, p.icon])) as Recor
 function rowContext(): RowContext {
     return {
         form: form(),
+        tablet: tabletClass(),
         layoutFixed: layoutFixed(),
         msone: msoneOn(),
         sync: syncOn(),
@@ -239,7 +240,7 @@ function Appearance() {
                     <h3 class="set-block-title" id="theme-label">{t('settings.theme')}</h3>
                     <ThemeChoices />
                 </div>
-                <Show when={form() !== 'phone' && !layoutFixed()}>
+                <Show when={(form() !== 'phone' || tabletClass()) && !layoutFixed()}>
                     <div class="set-block" id={rowDomId('layout')}>
                         <h3 class="set-block-title" id="layout-label">{t('settings.layout')}</h3>
                         <LayoutChoices />

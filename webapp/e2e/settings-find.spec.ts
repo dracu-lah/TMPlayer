@@ -13,7 +13,8 @@ const ar = catalog('ar')
 const SHOTS = new URL('../../design/web-gaps/WB20/', import.meta.url).pathname
 
 const IN = {
-    phone: { viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true },
+    // The screen of a phone, not the default tablet-sized one: a tablet is offered the Layout choice (WP-62).
+    phone: { viewport: { width: 393, height: 852 }, screen: { width: 393, height: 852 }, hasTouch: true, isMobile: true },
     desktop: { viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false },
     tv: { viewport: { width: 1920, height: 1080 }, hasTouch: false, isMobile: false },
 }

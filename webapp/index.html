@@ -17,6 +17,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="TMPlayer">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- default: the status bar takes the page's own theme-color (the two metas above, which Settings > Theme keeps in step), never a fixed black bar over a light page. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <style>
     html,body{margin:0;height:100%;background:#0c0e10;color:#f2f4f5}
     #boot{display:grid;place-items:center;min-height:100vh;min-height:100dvh}
@@ -39,7 +42,7 @@
     try{if(u)sessionStorage.setItem('tmplayer-layout-fixed','1')}catch(e){}
     try{if(u)localStorage.setItem('tmplayer-layout',u[1]==='1'?'tv':'desktop');s=localStorage.getItem('tmplayer-layout')}catch(e){if(u)s=u[1]==='1'?'tv':'desktop'}
     f=/Web0S|webOS|Tizen|SMART-TV|SmartTV|\bAFT|CrKey|HbbTV|Android.*\bTV\b/i.test(navigator.userAgent)||(/Android/i.test(navigator.userAgent)&&navigator.maxTouchPoints===0)?'tv':(m('(pointer: coarse)')&&m('(hover: none)')&&Math.min(innerWidth,innerHeight)<840)?'phone':'desktop';
-    if(f!=='phone'&&(s==='desktop'||s==='tv'))f=s;
+    if((f!=='phone'||(m('(pointer: coarse)')&&Math.min(screen.width,screen.height)>=600&&Math.min(innerWidth,innerHeight)>=500))&&(s==='desktop'||s==='tv'))f=s;
     d.dataset.form=f})()
   </script>
   <style>#old{max-width:420px;margin:0 auto;padding:48px 16px;font:16px/24px system-ui,sans-serif;text-align:center}#old a{color:#4fb3ff}</style>

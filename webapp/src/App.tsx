@@ -26,6 +26,7 @@ import { applyUpdate, inAppIos, updateReady } from './install'
 import { InAppCard } from './screens/signin/InAppCard'
 import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
+import { saveData } from './ui/saveData'
 import { focusTarget, pageName, pageTitle } from './ui/pageTitle'
 import { PAGE_TITLES, pageFor } from './ui/settingsMap'
 
@@ -164,7 +165,8 @@ function Shell(props: ParentProps) {
             navigate(gated() ? toGate(to) : to, { replace: true, state: entryState() })
         }
         // Fetched ahead only: one that fails now (offline) is fetched again when its page opens.
-        if (user) idle(() => later.forEach((load) => load().catch(() => {})))
+        // The other pages are fetched ahead when the line has room; on Save-Data each is fetched when it opens (ui/saveData.ts).
+        if (user && !saveData()) idle(() => later.forEach((load) => load().catch(() => {})))
         // Resume on your other devices: what was kept is read, and a sync follows if the viewer turned it on.
         if (user) openSync()
     })

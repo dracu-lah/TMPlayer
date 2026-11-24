@@ -10,6 +10,8 @@ function form(layout: 'phone' | 'desktop', width: number, height: number) {
     return {
         ...devices['Desktop Chrome'],
         viewport: { width, height },
+        // The screen of a phone is a phone's: a tablet screen would offer Settings' Layout choice (WP-62).
+        screen: layout === 'phone' ? { width, height } : undefined,
         hasTouch: layout === 'phone',
         isMobile: layout === 'phone',
         launchOptions: { executablePath: process.env.CHROMIUM_PATH || undefined },

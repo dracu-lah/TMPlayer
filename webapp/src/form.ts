@@ -6,6 +6,7 @@
 // in the inline script, before this module runs, and fixes it for the tab (layoutFixed). A resize or a rotation changes the form live, except while a
 // video plays, when the change waits until the player closes.
 import { createSignal } from 'solid-js'
+import { isTablet } from './ui/tablet'
 
 export type Form = 'phone' | 'desktop' | 'tv'
 /** The choice Settings offers off a phone. */
@@ -44,6 +45,14 @@ export function layoutFixed(): boolean {
     }
 }
 
+/**
+ * A touch device with a tablet's screen (its short side 600 px or more, whatever the window is now): an
+ * iPad in Split View or a foldable half open gets the phone layout while the window is narrow, and
+ * Settings then offers it the choice (WP-62), kept over the narrow window.
+ */
+export const tabletClass = (): boolean =>
+    isTablet(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches, typeof screen === 'undefined' ? 0 : screen.width, typeof screen === 'undefined' ? 0 : screen.height)
+
 /** The stored choice, or null for none (an old 'phone' choice counts as none). */
 export function savedLayout(): Layout | null {
     try {
@@ -53,11 +62,15 @@ export function savedLayout(): Layout | null {
     return null
 }
 
+/** A window narrower than this (an iPad's Slide Over is 320) is the phone's whatever the choice: the desktop layout does not fit it. */
+const TABLET_WINDOW = 500
+
 const [saved, setSaved] = createSignal<Layout | null>(savedLayout())
 
 function resolve(): Form {
     const d = detect()
-    return d === 'phone' ? d : saved() ?? d
+    // A phone is always the phone layout; a tablet in a narrow window is one until it picks another (WP-62).
+    return d === 'phone' && !(tabletClass() && Math.min(innerWidth, innerHeight) >= TABLET_WINDOW) ? d : saved() ?? d
 }
 
 const [form, setForm] = createSignal<Form>((document.documentElement.dataset.form as Form | undefined) ?? resolve())
@@ -79,6 +92,15 @@ export function setLayout(next: Layout) {
     setSaved(next)
     try {
         localStorage.setItem(LAYOUT_KEY, next)
+    } catch {}
+    apply()
+}
+
+/** Settings > Layout, Automatic: the stored choice goes and the window decides again. */
+export function clearLayout() {
+    setSaved(null)
+    try {
+        localStorage.removeItem(LAYOUT_KEY)
     } catch {}
     apply()
 }

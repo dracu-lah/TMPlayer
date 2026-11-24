@@ -22,7 +22,10 @@ self.addEventListener('install', (event) => {
     event.waitUntil(
         (async () => {
             const cache = await caches.open(CACHE)
-            await cache.addAll(SHELL.map((path) => new Request(path, { cache: 'reload' })))
+            // Save-Data or a 2g line (ui/saveData.ts): the first page only; the rest is kept as it is first fetched (fromCache).
+            const conn = self.navigator && self.navigator.connection
+            const lean = !!conn && (conn.saveData === true || conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g')
+            await cache.addAll((lean ? SHELL.filter((path) => path === '/') : SHELL).map((path) => new Request(path, { cache: 'reload' })))
             if (await oldAppWasHere()) await self.skipWaiting()
         })(),
     )

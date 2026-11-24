@@ -1,7 +1,7 @@
 import { addedIds, addedMode, settings, setSetting, type Theme } from '../../store'
 import { rowDomId } from '../SettingsFind'
 import { t } from '../../i18n'
-import { layout, setLayout, type Layout } from '../../form'
+import { clearLayout, layout, savedLayout, setLayout, tabletClass, type Layout } from '../../form'
 import { Choices } from '../../ui/SettingsParts'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
@@ -26,17 +26,17 @@ export function ThemeChoices() {
     )
 }
 
-/** The layout's choices, labelled by the heading `layout-label`, and the line that says what Desktop is. */
+/** The layout's choices, labelled by the heading `layout-label`, and the line that says what Desktop is. A tablet also has Automatic: the window decides again. */
 export function LayoutChoices() {
+    const options = () => {
+        const base = LAYOUTS.map((v) => ({ value: v as Layout | 'auto', label: t(`settings.layout_${v}`) }))
+        return tabletClass() ? [{ value: 'auto' as Layout | 'auto', label: t('interface.layout_auto') }, ...base] : base
+    }
+    // Automatic is picked while the choice is not stored.
+    const value = (): Layout | 'auto' => (tabletClass() && savedLayout() === null ? 'auto' : layout())
     return (
         <>
-            <Choices
-                label="layout-label"
-                name="layout"
-                options={LAYOUTS.map((v) => ({ value: v, label: t(`settings.layout_${v}`) }))}
-                value={layout()}
-                onPick={setLayout}
-            />
+            <Choices label="layout-label" name="layout" options={options()} value={value()} onPick={(v) => (v === 'auto' ? clearLayout() : setLayout(v))} />
             <p class="muted small">{t('settings.layout_detail_desktop')}</p>
         </>
     )

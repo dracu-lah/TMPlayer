@@ -1426,6 +1426,10 @@ html[data-motion="reduce"] .title-logo-skeleton, html[data-motion="reduce"] .tit
 button.primary.danger:disabled { opacity: .4; }
 /* The long press menu of a history card. */
 .card { -webkit-touch-callout: none; }
+/* iOS's link preview menu fights the app's own long press menu on a card, a chat row, a continue card and the hero (WP-62). */
+a.card, .card a, .chat-row, a.chat-row, .strip a, .hero a, .hero-art, .vgrid a { -webkit-touch-callout: none; }
+/* A fast second tap on a stepper, a chip or a star is two taps, never iOS's double tap zoom; pinch zoom stays (WP-62). */
+a, button, summary, [role=button], [role=switch], label, input[type=radio], input[type=checkbox] { touch-action: manipulation; }
 .card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 1rem; width: 100%; }
 .card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 0.8125rem; }
 .card-menu a.menu-row { text-decoration: none; box-sizing: border-box; }

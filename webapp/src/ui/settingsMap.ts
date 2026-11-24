@@ -35,6 +35,8 @@ export interface RowContext {
     form: 'phone' | 'desktop' | 'tv'
     /** The address fixed the layout (a TV wrapper): Settings leaves Layout out. */
     layoutFixed: boolean
+    /** A touch device with a tablet's screen: Layout is offered even while the window is narrow enough for the phone's. */
+    tablet?: boolean
     /** The hidden MSone flag. */
     msone: boolean
     /** Resume on your other devices is on. */
@@ -67,7 +69,7 @@ const always = () => true
 /** Every row the web's Settings draws on a phone or a desktop, by page in the order the page draws them. */
 const defs: MapRow[] = [
     { id: 'theme', page: 'appearance', core: true, title: 'settings.theme' },
-    { id: 'layout', page: 'appearance', core: true, title: 'settings.layout', shown: (c) => c.form !== 'phone' && !c.layoutFixed },
+    { id: 'layout', page: 'appearance', core: false, title: 'settings.layout', shown: (c) => (c.form !== 'phone' || !!c.tablet) && !c.layoutFixed },
     { id: 'language', page: 'appearance', core: true, title: 'settings.language' },
     { id: 'reduce_motion', page: 'appearance', core: false, title: 'settings.reduce_motion', details: ['settings.reduce_motion_on', 'settings.reduce_motion_off'] },
     { id: 'high_contrast', page: 'appearance', core: true, title: 'settings.high_contrast', details: ['settings.high_contrast_detail'] },

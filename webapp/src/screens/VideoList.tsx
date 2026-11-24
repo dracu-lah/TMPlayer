@@ -102,10 +102,10 @@ function CardArt(props: { thumb: string | null; cover?: string | null; title: st
                 <Icon icon={PlayCircleIcon} size={56} />
             </span>
             <Show when={src() && !isPromoCover(props.cover)}>
-                <img class="card-thumb" src={src()!} alt="" decoding="async" />
+                <img class="card-thumb" src={src()!} alt="" decoding="async" width="320" height="180" />
             </Show>
             <Show when={picture()}>
-                <img class="card-poster" src={picture()!} alt="" decoding="async" />
+                <img class="card-poster" src={picture()!} alt="" decoding="async" width="300" height="450" />
             </Show>
             {/* The resolution pill (FormatBadge on a poster tile): 720p and up, only when known; text, not a control. */}
             <Show when={props.tile}>
