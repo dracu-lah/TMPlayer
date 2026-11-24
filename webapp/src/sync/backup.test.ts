@@ -4,7 +4,7 @@ import { BACKUP_FORMAT, BACKUP_VERSION, MAX_BACKUP_BYTES, accountTagOf, backupFi
 import { emptyDoc, tdlibMessageId } from './format.ts'
 import { emptyLists } from '../ui/lists.ts'
 
-const OUT = { now: Date.UTC(2026, 10, 24, 12), appVersion: 'web', accountTag: '0123456789abcdef' }
+const OUT = { now: Date.UTC(2026, 10, 24, 12), appVersion: 'web', accountTag: '0123456789abcdef:1a2b' }
 
 function held() {
     const doc = emptyDoc(42)
@@ -28,7 +28,7 @@ test('a file this module writes reads back with every list', () => {
     assert.deepEqual([...read.doc.favourites.keys()], [-100])
     assert.equal(read.doc.bookmarks[0]!.note, 'here')
     assert.deepEqual(read.searches, ['harbour'])
-    assert.equal(read.accountTag, '0123456789abcdef')
+    assert.equal(read.accountTag, '0123456789abcdef:1a2b')
     assert.equal(read.account, null)
 })
 
@@ -129,11 +129,13 @@ test('the file name is the date', () => {
     assert.match(backupFileName(Date.UTC(2026, 10, 24, 12)), /^tmplayer-backup-2026-11-2[345]\.json$/)
 })
 
-test('the file names the account by a tag, never by its Telegram user id (SEC2-10)', async () => {
+test('the file names the account by a salted 16 bit tag, never by its Telegram user id (SEC2-10)', async () => {
     const tag = await accountTagOf(424242)
-    assert.match(tag, /^[0-9a-f]{16}$/)
-    assert.equal(tag, await accountTagOf(424242))
-    assert.notEqual(tag, await accountTagOf(424243))
+    assert.match(tag, /^[0-9a-f]{16}:[0-9a-f]{4}$/)
+    // A salt of its own per file: two files of one account do not match each other.
+    assert.notEqual(tag, await accountTagOf(424242))
+    const salt = tag.slice(0, 16)
+    assert.equal(tag, await accountTagOf(424242, salt))
     assert.equal(await accountTagOf(0), '')
     const text = backupText({ doc: held(), lists: emptyLists() }, { ...OUT, accountTag: tag })
     assert.doesNotMatch(text, /424242/)
@@ -142,10 +144,27 @@ test('the file names the account by a tag, never by its Telegram user id (SEC2-1
     assert.equal(read.kind, 'ok')
     if (read.kind !== 'ok') return
     assert.equal(await otherAccount(read, 424242), false)
-    assert.equal(await otherAccount(read, 7), true)
+    let warned = 0
+    for (let id = 1; id <= 200; id++) if (await otherAccount(read, id)) warned++
+    assert.ok(warned >= 198, `another account is warned (${warned} of 200)`)
+    // Trying every id does not name the account: many others fit the same tag.
+    let fit = 0
+    for (let id = 1_000_000; id < 1_400_000 && fit < 2; id++) if ((await accountTagOf(id, salt)) === tag) fit++
+    assert.equal(fit, 2)
     // A file from before the tag still warns by its user id; a file that names no account never does.
+    const old = JSON.parse(text)
+    delete old.accountTag
+    old.account = 424242
+    const oldRead = decodeBackup(JSON.stringify(old))
+    assert.equal(oldRead.kind, 'ok')
+    if (oldRead.kind !== 'ok') return
+    assert.equal(oldRead.doc.resume.length, 1)
+    assert.equal(await otherAccount(oldRead, 7), true)
     assert.equal(await otherAccount({ account: 424242, accountTag: null }, 7), true)
     assert.equal(await otherAccount({ account: 424242, accountTag: null }, 424242), false)
     assert.equal(await otherAccount({ account: null, accountTag: null }, 7), false)
     assert.equal(await otherAccount(read, 0), false)
+    // A malformed tag is not read: the file restores as one that names no account.
+    const bad = decodeBackup(text.replace(tag, 'zz'))
+    assert.equal(bad.kind === 'ok' && bad.accountTag, null)
 })

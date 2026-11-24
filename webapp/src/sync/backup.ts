@@ -53,23 +53,31 @@ export interface BackupOut {
     accountTag: string
 }
 
-const TAG = /^[0-9a-f]{16}$/
+/** `<salt>:<check>`: 16 hex of random salt, 4 hex of check. */
+const TAG = /^([0-9a-f]{16}):([0-9a-f]{4})$/
+
+const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 
 /**
- * A short tag for the Telegram account a file was made for (SEC2-10): enough to warn when another
- * account restores it, without writing the user id, a stable handle for the account, into a file the
- * viewer may mail or upload. '' for no account.
+ * A tag for the Telegram account a file was made for (SEC2-10): enough to warn when another account
+ * restores it, without naming the account. A plain hash of the user id would not do: the ids are few
+ * enough to try them all. So the tag is a random salt of its own and only 16 bits of
+ * SHA-256(salt, id): trying every id leaves tens of thousands that fit, so the file does not say which
+ * account it is, and another account is warned 65,535 times in 65,536. The apps write and read no
+ * such field (core's Backups ignores it), so the file restores the same there. '' for no account.
  */
-export async function accountTagOf(id: number): Promise<string> {
+export async function accountTagOf(id: number, salt?: string): Promise<string> {
     if (!Number.isFinite(id) || id === 0) return ''
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`tmplayer-backup:${id}`)))
-    return [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    const s = salt ?? hex(crypto.getRandomValues(new Uint8Array(8)))
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`tmplayer-backup:${s}:${id}`)))
+    return `${s}:${hex(digest.slice(0, 2))}`
 }
 
 /** Whether a file says it was made for another Telegram account than `account`: by its tag, or by the user id a file from before SEC2-10 holds. */
 export async function otherAccount(read: { account: number | null; accountTag: string | null }, account: number): Promise<boolean> {
     if (account === 0) return false
-    if (read.accountTag !== null) return read.accountTag !== (await accountTagOf(account))
+    const salt = read.accountTag === null ? null : TAG.exec(read.accountTag)?.[1]
+    if (salt) return read.accountTag !== (await accountTagOf(account, salt))
     return read.account !== null && read.account !== 0 && read.account !== account
 }
 
