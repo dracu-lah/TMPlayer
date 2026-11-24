@@ -6,13 +6,23 @@ import { size } from '../VideoList'
 import { checkKept, install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../../install'
 import { cacheSizes, clearCaches } from '../../cacheBounds'
 import { rowDomId } from '../SettingsFind'
+import { BackupBlock } from './Backup'
+import { SafariClearsRow } from '../SafariClearsCard'
 
 export function StoragePage() {
     return (
         <>
             <Install />
+            <Show when={iosBrowser && !installed()}>
+                <div class="set-card set-blocks">
+                    <SafariClearsRow />
+                </div>
+            </Show>
             <div class="set-card set-blocks">
                 <StorageBlock />
+            </div>
+            <div class="set-card set-blocks">
+                <BackupBlock />
             </div>
         </>
     )

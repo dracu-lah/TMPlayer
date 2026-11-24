@@ -18,12 +18,14 @@ import {
     kvRead,
     kvWrite,
     laterList,
+    namedListsDoc,
     onListsChanged,
     resumes,
     syncDropLater,
     syncDropResume,
     syncDropStar,
     syncDropWatched,
+    syncMergeLists,
     syncPicks,
     syncPutLater,
     syncPutPick,
@@ -131,6 +133,7 @@ async function lists(): Promise<Lists> {
         // A whole show saved is the apps' own line (its key is theirs): only single videos travel.
         later: later.filter((l) => !l.show).map((l) => ({ chatId: l.item.chatId, messageId: l.item.messageId, time: l.time, title: l.item.title, size: l.item.size, duration: l.item.duration })),
         stars: stars.map((s) => ({ chatId: s.chatId, time: s.time })),
+        named: namedListsDoc(),
         picks: picks.map((p) => ({ chatId: p.chatId, messageId: p.messageId, text: p.text, at: p.at })),
         titles,
         tombs,
@@ -150,7 +153,12 @@ const writer: Writer = {
     dropStar: (c) => syncDropStar(c),
     putPick: (c, m, pick, at) => syncPutPick(c, m, pick, at),
     putTitle: (c, m, title, at) => syncPutTitle(c, m, title, at),
+    mergeLists: (raw) => syncMergeLists(raw, (c, m) => api.video(c, m)),
 }
+
+/** What the backup reads and writes (backupFlow.ts): the same lists and writer a sync uses. */
+export const localLists = lists
+export const localWriter = writer
 
 function deps(): Deps {
     return {

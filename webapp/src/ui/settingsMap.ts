@@ -90,6 +90,8 @@ const defs: MapRow[] = [
     { id: 'storage', page: 'storage', core: false, title: 'web.storage_title', details: ['web.storage_body_stream'] },
     { id: 'clear_cache', page: 'storage', core: false, title: 'web.storage_clear_cache', details: ['web.storage_clear_cache_detail'], shown: (c) => c.storageEstimate },
     { id: 'keep_storage', page: 'storage', core: false, title: 'web.keep_storage' },
+    { id: 'back_up', page: 'storage', core: true, title: 'backup.back_up', details: ['backup.back_up_detail'] },
+    { id: 'restore', page: 'storage', core: true, title: 'backup.restore', details: ['backup.restore_detail'] },
 
     { id: 'whats_new', page: 'about', core: true, title: 'settings.whats_new' },
     { id: 'changelog', page: 'about', core: true, title: 'settings.changelog', details: ['settings.changelog_detail'] },

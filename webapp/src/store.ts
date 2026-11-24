@@ -13,6 +13,7 @@ import * as Lists from './ui/lists'
 import { cleanPref, isDefault, type ChatPref } from './ui/filterPref'
 import { resolveSpeed, sanitiseBoost, speedTarget, speedToKeep, type SpeedScopes } from './player/extras'
 import { tdlibMessageId } from './sync/format'
+import { fromFile, missingLines } from './sync/listsFile'
 import { forgetLinks } from './ui/tgLinks'
 import { clearLogs } from './logs'
 import { names, writesOpen } from './accounts'
@@ -1009,6 +1010,41 @@ export function forgetListVideos(keys: readonly string[]): string[] {
     const listed = new Set(listsDoc().lines.filter((l) => !l.show && wanted.has(Lists.lineKey(l))).map(Lists.lineKey))
     if (listed.size) editLists((doc, now) => Lists.forgetVideos(doc, listed, now)[0])
     return [...listed]
+}
+
+/** The lists as stored, for the sync and the backup. */
+export const namedListsDoc = () => listsDoc()
+
+/** How many lines of other devices' lists one sync reads from Telegram, the newest first (the rest wait for the next). */
+export const LISTS_BUDGET = 20
+
+/**
+ * The lists a file holds (the apps' or another tab's) joined into this device's: the newest write
+ * wins per list and per line, a removal beats an older write. A line this device lacks is read
+ * from Telegram first (its card draws from the video), within a budget; one that is gone from its
+ * chat is left out. Returns how many lines came in.
+ */
+/** Lines whose video could not be read this page life (gone from its chat): not asked again, so they never starve the rest of the budget. */
+const deadLines = new Set<string>()
+
+export async function syncMergeLists(raw: unknown, video: (chatId: number, messageId: number) => Promise<VideoItem | null>, budget = LISTS_BUDGET): Promise<number> {
+    const file = fromFile(raw)
+    if (!file.lists.length && !file.entries.length && !file.removed.length) return 0
+    const lines: Lists.ListLine[] = []
+    for (const e of missingLines(file, listsDoc())) {
+        const dead = `${e.chat}:${e.msg}`
+        if (deadLines.has(dead)) continue
+        if (budget-- <= 0) break
+        const item = await video(e.chat, e.msg).catch(() => null)
+        if (!item) {
+            deadLines.add(dead)
+            continue
+        }
+        lines.push({ list: e.list, item: e.show ? { ...item, title: e.title || item.title, name: e.title || item.name } : item, at: e.at, ...(e.show ? { show: e.show } : {}) })
+    }
+    const before = listsDoc()
+    editLists((doc, now) => Lists.merge(doc, { lists: file.lists, lines, removed: file.removed }, now))
+    return Math.max(0, listsDoc().lines.length - before.lines.length)
 }
 
 // Resume across devices (sync/local.ts): what a sync reads of this device's lists and what it writes

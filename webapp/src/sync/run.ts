@@ -106,6 +106,8 @@ export async function runSync(d: Deps, o: { push?: boolean; replace?: boolean } 
         const { doc: merged, dropped } = mergeCounting(remote, local, now)
         const change = apply(local, merged)
         const applied = await applyLocal(change, d.writer)
+        // The named lists the file holds (the apps' and other tabs'), joined into this device's.
+        if (merged.lists !== undefined && d.writer.mergeLists) applied.changes += await d.writer.mergeLists(merged.lists)
         // What changed here because of the file, and nothing else, until the write below goes through:
         // a removal made here since the last push is still told then.
         await d.state.set({ base: earlyBase(state.base, change, applied.resumed) })

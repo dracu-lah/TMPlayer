@@ -15,6 +15,7 @@ import { WorkStatusLine } from '../ui/WorkStatus'
 import { keptFailure, rowsFailure } from '../ui/loadStates'
 import { idle, mergeStatus, type WorkStatus } from '../ui/workStatus'
 import { KeepPlaceCard } from './KeepPlaceCard'
+import { SafariClearsCard } from './SafariClearsCard'
 import { AskGate } from './cardAsk'
 import { createDwell } from '../ui/dwell'
 import { useObservedCovers } from './promo'
@@ -198,6 +199,8 @@ export function Home() {
             </For>
             <WorkStatusLine status={footStatus()} onRetry={refresh.ask} />
             {/* The one question about keeping the place on every device: after a Home that has rows, never over a first run or an empty page. */}
+            {/* Safari clears a tab's storage after 7 days unused: said once to a signed in iPhone tab (WP-56). */}
+            <SafariClearsCard />
             <KeepPlaceCard eligible={!!page()?.settled && rows().length > 0 && !firstRun() && !allOff()} />
         </>
     )

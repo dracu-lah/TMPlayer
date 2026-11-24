@@ -15,6 +15,8 @@
 //   sync left, as the apps do.
 import { decodePick, type Pick } from '../pick.ts'
 import { cleanTitle, titleLine, titleOf } from '../rename.ts'
+import type { ListsDoc } from '../ui/lists.ts'
+import { toFile } from './listsFile.ts'
 import {
     REMOVAL_DAYS,
     TITLE_MAX,
@@ -56,6 +58,8 @@ export interface Lists {
     tombs: { list: 'watched' | 'later' | 'correction'; key: string; at: number }[]
     /** The renames the viewer reset (Use the file name), by the apps' key, with when. */
     titleTombs?: { key: string; at: number }[]
+    /** The named lists (WP-56): written to the file as the apps write theirs. */
+    named?: ListsDoc
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -194,6 +198,9 @@ export function collect(lists: Lists, base: Base, remote: SyncDoc, account: numb
         else removed.push({ list: 'correction', key, at: s.at })
     }
     doc.removed = removed
+    const named = lists.named
+    // Nothing to say (no list made, none taken off): the file's own lists stay as they are.
+    if (named && (named.lists.length || named.lines.length || named.removed.length)) doc.lists = toFile(named)
     return doc
 }
 
@@ -212,6 +219,8 @@ export interface Writer {
     putPick(chatId: number, messageId: number, pick: Pick | null, at: number): void
     /** The video's rename from the file (null: none, the file name reads again), cleaned already. */
     putTitle(chatId: number, messageId: number, title: string | null, at: number): void
+    /** The merged file's named lists (raw): joined into this device's, the lines it lacks read from Telegram. */
+    mergeLists?(raw: unknown): Promise<number> | number
 }
 
 export interface Applied {
