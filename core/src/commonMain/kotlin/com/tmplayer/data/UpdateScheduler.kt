@@ -52,6 +52,9 @@ class UpdateScheduler(
 
     /** The launch check and the repeat timer. Runs until its scope is cancelled. */
     suspend fun run() {
+        // What the last session learned, so the version line can say "Up to date" before the
+        // first check of this launch.
+        runCatching { prefs.lastCheck() }.getOrDefault(0L).takeIf { it > 0L }?.let(Updates::noteAnswered)
         delay(FIRST_CHECK_DELAY_MS)
         while (true) {
             runCatching { checkIfDue() }

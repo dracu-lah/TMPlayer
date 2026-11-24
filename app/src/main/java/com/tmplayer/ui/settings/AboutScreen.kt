@@ -3,6 +3,7 @@ package com.tmplayer.ui.settings
 import com.tmplayer.ui.components.keepTopInSight
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,11 +19,13 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,6 +48,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import com.tmplayer.ui.components.liveMessage
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -264,11 +269,37 @@ private fun Masthead() {
                 size = if (touch) com.tmplayer.ui.components.BrandSize.Medium else com.tmplayer.ui.components.BrandSize.Large,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
+            // The version is the copy target on a touch screen (WP-104); on a television the About
+            // page is read, and the account menu's footer is where OK copies it.
+            val info = com.tmplayer.ui.components.rememberVersionInfo()
+            val copier = com.tmplayer.ui.components.rememberVersionCopier(info)
             Text(
-                "${s.settingsVersion} ${Updates.installedVersion}",
+                if (copier.copied) s.aboutVersionCopied else "${s.settingsVersion} ${com.tmplayer.data.VersionLine.shown(info.version)}",
                 style = if (touch) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                 color = Tone.text,
+                modifier = Modifier
+                    .then(
+                        if (touch) {
+                            Modifier
+                                .heightIn(min = 48.dp)
+                                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = s.aboutVersionCopy, onClick = copier::copy)
+                                .wrapContentHeight(Alignment.CenterVertically)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .liveMessage()
+                    .testTag(com.tmplayer.ui.components.VERSION_FOOTER_TAG),
             )
+            val state = com.tmplayer.ui.components.rememberVersionState()
+            com.tmplayer.ui.components.versionStateText(state)?.let { words ->
+                Text(
+                    words,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (state is com.tmplayer.data.VersionState.Available) Tone.caution else Tone.muted,
+                    modifier = Modifier.testTag(com.tmplayer.ui.components.VERSION_NOTE_TAG),
+                )
+            }
             Text(
                 s.aboutBuildLine(BuildConfig.VERSION_CODE.toString(), About.LICENCE),
                 style = MaterialTheme.typography.bodyMedium,

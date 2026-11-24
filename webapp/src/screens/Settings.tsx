@@ -25,6 +25,7 @@ import { StoragePage } from './settings/Storage'
 import { Support } from './settings/Support'
 import { TvSettings } from './settings/Tv'
 import { dot } from '../ui/dot'
+import { VersionFooter } from '../ui/VersionFooter'
 
 /** The app's pages (SettingsPage) that the web has something to put in, in its order. Home and library are one page, as in the apps (11.1). */
 const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => string }[] = [
@@ -156,6 +157,10 @@ function PageList(props: { selected: PageId | null }) {
             <AccountHeader />
             <SettingsSearch context={rowContext} icons={PAGE_ICONS} />
             <Show when={!showingResults()}>
+                {/* The version, the build and the update state, quietly; a press copies them (WP-104). */}
+                <div class="set-version">
+                    <VersionFooter look="line" />
+                </div>
                 <div class="set-card">
                     <For each={PAGES}>
                         {(p) => (

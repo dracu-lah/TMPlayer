@@ -99,6 +99,13 @@ fun TvMenu(
      * account's), never for one a Menu press opened ([holdable]): that press's release would close it.
      */
     closeOnMenu: Boolean = false,
+    /**
+     * A line under the last action on a television (WP-104: the account menu's version, which OK
+     * copies). It scrolls with the list, so Down from the last action reaches it and Up returns;
+     * Down from it goes on to Close, as from any last line. Not drawn on a phone, whose sheet has
+     * no such line.
+     */
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val first = remember { FocusRequester() }
@@ -174,6 +181,7 @@ fun TvMenu(
                 actions.forEachIndexed { index, action ->
                     MenuRow(action = action, touch = false, modifier = if (index == 0 && header == null) Modifier.focusRequester(first) else Modifier)
                 }
+                if (footer != null) footer()
             }
 
             // The hint and Close share the last line: Close at the end, where a Material dialog

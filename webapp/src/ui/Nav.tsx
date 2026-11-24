@@ -30,6 +30,7 @@ import { activeId, activeProfile, many, openPicker, photoOf, photosVersion } fro
 import { addAccount } from '../accountFlows'
 import { askSignOut } from '../screens/settings/SignOut'
 import { accountName, accountPicture, firstName } from './accountPicture'
+import { VersionFooter } from './VersionFooter'
 
 interface Place {
     href: string
@@ -249,6 +250,9 @@ function YouMenu(props: { anchor: HTMLElement; onClose: () => void }) {
                     void askSignOut()
                 }}
             />
+            {/* The version, the build and the update state; a press copies them for support (WP-104). */}
+            <hr />
+            <VersionFooter look="menu" />
         </div>
     )
 }

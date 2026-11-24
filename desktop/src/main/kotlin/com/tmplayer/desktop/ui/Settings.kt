@@ -538,6 +538,13 @@ private fun CategoryList(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
         )
     }
+    // The version, the build and the update state, quietly; a click copies them (WP-104).
+    if (!searching) {
+        com.tmplayer.ui.components.VersionNote(
+            info = rememberDesktopVersion(),
+            onUpdate = { state.updatePopup = true },
+        )
+    }
     if (searching) {
         val hits = SettingsSearch.match(query, searchRows, DeviceForm.Desktop) { key ->
             s.messages.format(key, mapOf("device" to "desktop", "form" to "desktop"))

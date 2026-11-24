@@ -2300,6 +2300,19 @@ fun SettingsScreen(
                 if (searchOffered) {
                     settingsNote(key = "settings-search") { SettingsSearchBox(searchQuery, onQuery = { searchQuery = it }) }
                 }
+                // The version, the build and the update state, quietly (WP-104). Not a row: on a
+                // television it is read only, so the remote's order through the rows is unchanged
+                // (the account menu's footer is the TV's copy target); a press copies it elsewhere.
+                if (!searchOffered || searchQuery.isBlank()) {
+                    settingsNote(key = "version-line") {
+                        com.tmplayer.ui.components.VersionNote(
+                            info = com.tmplayer.ui.components.rememberVersionInfo(),
+                            modifier = Modifier.padding(horizontal = if (touch) 8.dp else 4.dp),
+                            copyable = touch,
+                            onUpdate = { showUpdate = true },
+                        )
+                    }
+                }
                 val hits = if (searchOffered && searchQuery.isNotBlank()) {
                     SettingsSearch.match(searchQuery, searchRows, form) { key -> s.searchText(key, touch) }
                 } else {

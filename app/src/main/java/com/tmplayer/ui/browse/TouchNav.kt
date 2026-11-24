@@ -1298,6 +1298,13 @@ private fun YouPopover(
                 }
                 // Last, in the danger colour: the press that ends the session, asked first.
                 if (onSignOut != null) PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = onSignOut)
+                // The version, the build and the update state; a press copies them for support (WP-104).
+                HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
+                com.tmplayer.ui.components.VersionFooter(
+                    info = com.tmplayer.ui.components.rememberVersionInfo(),
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                    onUpdate = onUpdate,
+                )
             }
             LaunchedEffect(Unit) {
                 if (keyboard()) {

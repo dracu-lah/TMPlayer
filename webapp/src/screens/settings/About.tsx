@@ -7,6 +7,7 @@ import { feedbackFacts, openFeedback } from '../../ui/FeedbackForm'
 import { ActionRow, LinkRow } from '../../ui/SettingsParts'
 import { AboutNews } from '../SettingsFind'
 import { LICENCES } from './shared'
+import { VersionFooter } from '../../ui/VersionFooter'
 
 /**
  * Report a problem and Request a feature (WB11, HX64). With the build's inbox address, each opens
@@ -51,6 +52,10 @@ function Feedback() {
 export function About() {
     return (
         <>
+            {/* The masthead: the version, the build and the update state at the top, a press copies them (WP-104). */}
+            <div class="set-version set-masthead">
+                <VersionFooter look="line" />
+            </div>
             <div class="set-card">
                 <AboutNews variant="row" icon={StarIcon} changelogIcon={Clock01Icon} />
             </div>

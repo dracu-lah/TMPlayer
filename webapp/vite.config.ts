@@ -310,6 +310,21 @@ function tvLegacy(inWorker = false): Plugin {
  * `TV_BASE=/` builds it for the root, as served from this computer for the LAN wrappers (tv/README.md).
  */
 const TV_BASE = process.env.TV_BASE || '/tv/'
+
+/**
+ * The build the page says it is (WP-104): the first 7 of the commit CI built (`GITHUB_SHA`), else
+ * the checkout's own, else `dev`, and the UTC day it was built. The web deploys from main with no
+ * release number, so "web" plus these two is its version line.
+ */
+function appBuild(): string {
+    const fromCi = (process.env.GITHUB_SHA ?? '').trim().slice(0, 7)
+    if (/^[0-9a-f]{7}$/.test(fromCi)) return fromCi
+    try {
+        const sha = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+        if (/^[0-9a-f]{7}$/.test(sha)) return sha
+    } catch {}
+    return 'dev'
+}
 let tvBuild = false
 const licences = notices(() => (tvBuild ? [coreJs()] : []))
 
@@ -324,6 +339,8 @@ export default defineConfig(({ mode }) => {
             __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),
             __MSONE_GATEWAY_KEY__: JSON.stringify(secret('MSONE_GATEWAY_KEY')),
             __LOG_UPLOAD_URL__: JSON.stringify(secret('LOG_UPLOAD_URL')),
+            __APP_BUILD__: JSON.stringify(appBuild()),
+            __APP_BUILT__: JSON.stringify(new Date().toISOString().slice(0, 10)),
         },
         css: tv ? { postcss: { plugins: [legacyCss()] } } : {},
         worker: { format: tv ? 'iife' : 'es', plugins: () => (tv ? [tvLegacy(true), ...licences.worker()] : licences.worker()) },

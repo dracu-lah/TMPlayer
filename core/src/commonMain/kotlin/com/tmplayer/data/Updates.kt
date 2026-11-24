@@ -85,6 +85,20 @@ object Updates {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
+    private val _answeredAt = MutableStateFlow(0L)
+
+    /**
+     * When a check last got an answer, epoch milliseconds, 0 until one has: what lets the version
+     * line say "Up to date" only after a real check (WP-104). Set by a check that answers and, at
+     * launch, from the stored time of the last one ([UpdateScheduler.run]).
+     */
+    val answeredAt: StateFlow<Long> = _answeredAt.asStateFlow()
+
+    /** A check answered at [at], now or in an earlier session. Never moves backwards to 0. */
+    fun noteAnswered(at: Long) {
+        if (at > _answeredAt.value) _answeredAt.value = at
+    }
+
     /** This build's own version, as it is written on the releases page. */
     @Volatile
     var installedVersion: String = "0"
@@ -205,6 +219,7 @@ object Updates {
             release.version == skipped && quiet -> UpdateState.Idle
             else -> UpdateState.Available(release, skipped = release.version == skipped)
         }
+        if (release != null) noteAnswered(System.currentTimeMillis())
         return release != null
     }
 

@@ -369,6 +369,32 @@ for (const size of [
             await expect.poll(() => focused(page)).toContain('tv-picture')
         })
 
+        test('Account menu: Down from Settings reaches the version line, OK copies it and says so, Up returns', async ({ page, context }) => {
+            await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+            await fakeCase(context, 'mid')
+            await page.goto('/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await press(page, 'ArrowUp')
+            await press(page, 'ArrowLeft', 3)
+            await expect.poll(() => focused(page)).toContain('tv-picture')
+            await press(page, 'Enter')
+            await expect(page.locator('.tv-menu[role=menu]')).toHaveCount(1)
+            await press(page, 'ArrowDown')
+            expect(await focusedText(page)).toBe('tv-menu-row|Settings')
+            await press(page, 'ArrowDown')
+            expect(await focusedText(page)).toMatch(/^tv-menu-row\|TMPlayer web \(\w+, \d{4}-\d{2}-\d{2}\)/)
+            // 14 dp text at least, on the 960 x 540 dp layout (--dp is 1 px per dp there).
+            const size = await page.evaluate(() => parseFloat(getComputedStyle(document.activeElement as HTMLElement).fontSize) / Math.min(innerWidth / 960, innerHeight / 540))
+            expect(size).toBeGreaterThanOrEqual(14)
+            await press(page, 'Enter')
+            await expect(page.locator('.tv-menu [data-version-line] .version-text')).toHaveText('Version details copied')
+            await expect(page.locator('.tv-menu [data-version-line] .version-text')).toHaveAttribute('aria-live', 'polite')
+            // The same row keeps the remote, and Up goes back to Settings.
+            expect(await focusedText(page)).toBe('tv-menu-row|Version details copied')
+            await press(page, 'ArrowUp')
+            expect(await focusedText(page)).toBe('tv-menu-row|Settings')
+        })
+
         test('Settings: choosing Desktop with the remote takes the TV bar and keys away at once', async ({ page }) => {
             await page.goto('/settings')
             await expect.poll(() => focused(page)).not.toBe('')

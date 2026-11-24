@@ -1077,6 +1077,14 @@ button.tonal:active { transform: scale(.96); }
 .you-who strong { font-size: 16px; line-height: 22px; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .you-who span { font-size: 14px; line-height: 20px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .you-row.you-danger { color: var(--error); }
+/* The version line (WP-104): the menu's last line, quiet, wrapping at a large font, 44 px to press; "Update available" is a button under it. */
+.you-row.you-version { height: auto; min-height: 44px; padding-block: 6px; color: var(--muted); font-size: 13px; line-height: 18px; }
+.you-row.you-update { height: auto; min-height: 44px; padding-block: 6px; color: var(--caution, var(--accent)); font-size: 13px; line-height: 18px; }
+.you-version .version-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.version-line { margin: 0; font-size: 13px; line-height: 18px; color: var(--muted); overflow-wrap: anywhere; }
+button.version-copy { display: block; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-radius: 12px; background: none; font: inherit; font-size: 13px; line-height: 18px; color: var(--muted); text-align: start; cursor: pointer; }
+button.version-copy:hover, button.version-copy:focus-visible { background: var(--surface-high); outline: none; }
+.set-version { padding: 0 16px; }
 button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .you-menu { animation: none; } }
 

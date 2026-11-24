@@ -53,6 +53,9 @@
     "telegram_group_detail": "Help and chat, at t.me/tmplayer_chat",
     "title": "About",
     "title_short": "About",
+    "version_build": "TMPlayer {version} ({build})",
+    "version_copied": "Version details copied",
+    "version_copy": "copy the version details",
     "warranty": "TMPlayer comes with no warranty, to the extent the law allows. You may share and change it under the terms of the GPL, which the source code carries in full."
   },
   "accent": {
@@ -4144,6 +4147,11 @@
     "size_and_confirm": "The update is {size} from GitHub. Android asks you to confirm before it installs.",
     "size_and_restart": "The update is {size} from GitHub. It installs without asking, and TMPlayer closes for a moment.",
     "skip": "Skip this version",
+    "state_available": "Update available: {version}",
+    "state_available_plain": "Update available",
+    "state_failed": "Could not check for updates",
+    "state_off": "Updates come from where you installed TMPlayer",
+    "state_up_to_date": "Up to date",
     "the_release_page": "the release page",
     "title": "TMPlayer {version} is out",
     "title_skipped": "TMPlayer {version} is out (you skipped it)",

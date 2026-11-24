@@ -660,6 +660,7 @@ private fun BoxScope.ProfilePopover(
                         PopoverRow(TmIcons.Refresh, update.label, update.version, ink = Tone.caution, onClick = close { state.updatePopup = true })
                     }
                     PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = close { signOutAsked = true })
+                    VersionFooterRow(close { state.updatePopup = true })
                     return@Column
                 }
                 com.tmplayer.ui.components.ViewingSummary(
@@ -692,10 +693,22 @@ private fun BoxScope.ProfilePopover(
                     )
                     PopoverRow(TmIcons.SignOut, s.settingsSignOutConfirm, null, ink = Tone.danger, onClick = close { signOutAsked = true })
                 }
+                VersionFooterRow(close { state.updatePopup = true })
             }
             LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
         }
     }
+}
+
+/** The popover's last line: the version, the build and the update state; a click copies them (WP-104). */
+@Composable
+private fun VersionFooterRow(onUpdate: () -> Unit) {
+    HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 4.dp), color = Tone.outline)
+    com.tmplayer.ui.components.VersionFooter(
+        info = rememberDesktopVersion(),
+        modifier = Modifier.padding(horizontal = 6.dp),
+        onUpdate = onUpdate,
+    )
 }
 
 /**

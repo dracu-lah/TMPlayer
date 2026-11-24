@@ -13,6 +13,16 @@ export { updateReady }
 // The e2e tests (the dev server) bring the notice up without a second build to wait for.
 if (import.meta.env.DEV) (window as unknown as { __e2eUpdateReady?: () => void }).__e2eUpdateReady = () => setUpdateReady(true)
 
+/**
+ * Whether a look for a new version is running now (the first registration, or the hourly update),
+ * and when one last finished with an answer (this page's life only, never stored). The version
+ * line (ui/versionLine.ts) says "Checking" and "Up to date" from these; with no service worker
+ * (the TV build, a browser without one) neither ever becomes true and the line shows the build alone.
+ */
+const [checking, setChecking] = createSignal(false)
+const [lastChecked, setLastChecked] = createSignal<number | null>(null)
+export { checking, lastChecked }
+
 let wb: Workbox | null = null
 let waiting = false
 
@@ -37,13 +47,24 @@ export function registerWorker() {
     })
     // Another tab reloaded into the new version: this one still runs the old one.
     wb.addEventListener('controlling', (e) => e.isExternal && setUpdateReady(true))
-    wb.register().catch((e) => console.warn('[sw]', e))
+    setChecking(true)
+    wb.register().then(
+        () => {
+            setLastChecked(Date.now())
+            setChecking(false)
+        },
+        (e) => {
+            console.warn('[sw]', e)
+            setChecking(false)
+        },
+    )
     // A Home Screen app is rarely closed: it looks for a new version when it comes back after an hour.
     let checked = Date.now()
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible' || Date.now() - checked < HOUR) return
         checked = Date.now()
-        wb?.update().catch(() => {})
+        setChecking(true)
+        wb?.update().then(() => setLastChecked(Date.now()), () => {}).finally(() => setChecking(false))
     })
     checkKept().then(() => standalone && kept() === false && keepData())
 }

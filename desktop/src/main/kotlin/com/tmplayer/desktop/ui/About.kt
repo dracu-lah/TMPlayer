@@ -30,6 +30,8 @@ import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.components.SettingsDividerStart
+import com.tmplayer.ui.components.liveMessage
+import androidx.compose.ui.platform.testTag
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Tone
@@ -109,17 +111,33 @@ private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
         com.tmplayer.ui.components.BrandLockup(size = com.tmplayer.ui.components.BrandSize.Large)
         Spacer(Modifier.size(4.dp))
         // Clicked seven times, it shows the developer rows in Settings (see DevOptions).
+        val info = rememberDesktopVersion()
+        val copier = com.tmplayer.ui.components.rememberVersionCopier(info)
         Text(
-            "${s.settingsVersion} $version",
+            if (copier.copied) s.aboutVersionCopied else "${s.settingsVersion} $version",
             style = MaterialTheme.typography.titleMedium,
             color = Tone.text,
             // A pointer-only easter egg: no Tab stop, which would sit there with no mark on it.
-            modifier = Modifier.focusProperties { canFocus = false }.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = DevOptions::tap,
-            ),
+            // A click also copies the version details for support (WP-104); the popover's footer is
+            // the keyboard's way to the same text.
+            modifier = Modifier.focusProperties { canFocus = false }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { DevOptions.tap(); copier.copy() },
+                )
+                .liveMessage()
+                .testTag(com.tmplayer.ui.components.VERSION_FOOTER_TAG),
         )
+        val state = com.tmplayer.ui.components.rememberVersionState()
+        com.tmplayer.ui.components.versionStateText(state)?.let { words ->
+            Text(
+                words,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (state is com.tmplayer.data.VersionState.Available) Tone.caution else Tone.muted,
+                modifier = Modifier.testTag(com.tmplayer.ui.components.VERSION_NOTE_TAG),
+            )
+        }
         Text(About.LICENCE, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         Text(About.WARRANTY, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
     }

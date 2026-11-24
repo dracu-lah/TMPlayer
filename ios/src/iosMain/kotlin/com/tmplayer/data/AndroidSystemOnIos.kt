@@ -193,6 +193,20 @@ fun appleDevice(): String {
     return "$kind, ${device.systemName} ${device.systemVersion}"
 }
 
+/**
+ * This build's version, build number and device for the version line and the support text
+ * (WP-104): the bundle's own, with the device as bug reports name it. No update state: the build
+ * has no check, so the line says updates come from where it was installed.
+ */
+object VersionFacts {
+    @Suppress("UNUSED_PARAMETER")
+    fun info(context: Context): VersionInfo = VersionInfo(
+        version = com.tmplayer.BuildConfig.VERSION_NAME,
+        build = com.tmplayer.BuildConfig.VERSION_CODE.toString(),
+        device = appleDevice(),
+    )
+}
+
 /** Installing updates by itself is an Android 12 feature of the sideloaded build. */
 object AutoUpdater {
     val supported: Boolean = false

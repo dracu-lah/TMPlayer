@@ -66,7 +66,10 @@ test('Enter opens the menu with whose account it is, the arrows walk it, Escape 
     expect(await focusedText(page)).toBe('Add account')
     await page.keyboard.press('ArrowDown')
     expect(await focusedText(page)).toContain('Settings')
+    // End is the menu's last line, the version (WP-104); Sign out is the one above it.
     await page.keyboard.press('End')
+    expect(await focusedText(page)).toMatch(/^TMPlayer web \(/)
+    await page.keyboard.press('ArrowUp')
     expect(await focusedText(page)).toBe('Sign out')
     await page.keyboard.press('Escape')
     await expect(card).toHaveCount(0)

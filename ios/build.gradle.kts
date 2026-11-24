@@ -197,6 +197,8 @@ val androidScreensForIos = tasks.register<Sync>("androidScreensForIos") {
             "WatchNextPublisher", "AppLocales", "LegacyApiCompat", "NetworkMonitor", "ProfileNotifications",
             // The update's baseline profile (java.util.zip), read only by SelfInstaller.
             "UpdateDexMetadata",
+            // The version line's facts (Build.*), with an iOS twin in AndroidSystemOnIos.kt (WP-104).
+            "VersionFacts",
         ).forEach { exclude("com/tmplayer/data/$it.kt") }
     }
     // The build flavour without Google's services, the one iOS matches (no Cast, no SMS consent).

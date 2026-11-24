@@ -15,6 +15,7 @@ import { HOME_SWITCHES, HomeOrder } from './Home'
 import { LanguageBlock } from './Language'
 import { Rewind, TvMsone } from './Playback'
 import { SignOut } from './SignOut'
+import { VersionFooter } from '../../ui/VersionFooter'
 import { ProfileMenuButton, RemoveAllButton } from '../../ui/Profiles'
 import { Install, StorageBlock } from './Storage'
 import { chosenDetail, LayoutChoices, LICENCES, ThemeChoices } from './shared'
@@ -24,6 +25,8 @@ export function TvSettings() {
     return (
         <section class="settings">
             <h1 class="page-title">{t('nav.settings')}</h1>
+            {/* The version, the build and the update state, read only: the account menu's last row is the TV's copy target (WP-104). */}
+            <VersionFooter look="text" />
             <TvPanel title={t('picker.row_title')} id="add-chats-label" anchor={rowDomId('chosen_chats')}>
                 <p class="muted small">{chosenDetail()}</p>
                 <A class="outline-button" style={{ 'align-self': 'start' }} href="/added-chats">{t('picker.choose_chats')}</A>
@@ -92,6 +95,7 @@ export function TvSettings() {
             </TvPanel>
             <div class="panel">
                 <h2 class="panel-title">{t('about.notices_title')}</h2>
+                <VersionFooter look="text" />
                 <p class="muted small">{t('about.licence_line')}</p>
                 <p class="muted small">{t('about.notices_detail')}</p>
                 <a class="link" id={rowDomId('notices')} href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>

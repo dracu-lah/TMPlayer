@@ -357,6 +357,14 @@ internal fun TvTopBar(
                 null
             },
             closeOnMenu = true,
+            footer = {
+                // The version, the build and the update state; OK copies them (WP-104). The update
+                // itself is the row above, so the state here is words only.
+                com.tmplayer.ui.components.VersionFooter(
+                    info = com.tmplayer.ui.components.rememberVersionInfo(),
+                    tv = true,
+                )
+            },
             onDismiss = { profileOpen = false },
             actions = buildList {
                 add(MenuAction(s.browseTabFavourites, TmIcons.StarOutline, detail = nav.favoriteCount.takeIf { it > 0 }?.toString(), onSelect = go(nav.onFavourites)))

@@ -23,6 +23,7 @@ import { settings } from '../store'
 import { detailPath, shortLength, tileCard, useProgress, watchPath } from '../screens/VideoList'
 import { TitleLogo } from '../ui/TitleLogo'
 import { TmdbMark } from '../ui/TmdbMark'
+import { VersionFooter } from '../ui/VersionFooter'
 import { createFocusMap, resting } from './focus'
 import type { HomeRow, Tile } from '../tg/types'
 import './tv.css'
@@ -248,6 +249,8 @@ function TvAccountMenu(props: { onClose: () => void }) {
             <A class="tv-menu-row" role="menuitem" href="/settings" onClick={props.onClose}>
                 {t('nav.settings')}
             </A>
+            {/* The version and the update state, last; OK copies them for support (WP-104). */}
+            <VersionFooter look="tv" />
         </div>
     )
 }
