@@ -15,32 +15,57 @@ import com.tmplayer.i18n.L
  * Android only: iOS has a no-op of the same name (`ios/src/iosMain`), LocalAuthentication later.
  *
  * What it guards against (see [BiometricUnlock]): it reports a success only when the system does.
- * It asks for a Class 2 or 3 biometric ([BiometricManager.Authenticators.BIOMETRIC_WEAK], which
- * includes the strong ones) and never for the device's PIN, pattern or password: its one negative
+ * It asks for a Class 3 biometric only ([AUTHENTICATORS], SEC2-07): Class 2 is on many phones a 2D
+ * camera face unlock, which Android lets accept a spoof up to one time in five, and on a shared family
+ * phone a photo of the parent would open the app lock. A phone with only that sees no row; the PIN
+ * stays. Never the device's PIN, pattern or password either: its one negative
  * button is "Use the PIN", which is the pad underneath. No cryptographic key is held (enrolment
  * changes cost nothing), the result only lets the pad through, as typing the right PIN does.
  *
  * It shows only while the activity is resumed: asked earlier it waits for that, and a pause takes it
  * down, so no prompt hangs over a locked phone or another app. The prompt dies with a cancel.
+ *
+ * Each prompt has a token of its own (SEC2-06): the system tells a cancelled prompt's callback
+ * later (ERROR_CANCELED), and that late word must not clear the next prompt, which the pad could then
+ * no longer take down. Only the prompt now open is answered.
+ *
+ * [system] shows the system's prompt and returns how to take it down; tests stand in for it.
  */
-class BiometricPrompter(private val activity: FragmentActivity) : BiometricUnlock {
+class BiometricPrompter internal constructor(
+    private val activity: FragmentActivity,
+    private val system: (BiometricPrompt.AuthenticationCallback, BiometricPrompt.PromptInfo) -> () -> Unit,
+) : BiometricUnlock {
 
-    private var prompt: BiometricPrompt? = null
+    constructor(activity: FragmentActivity) : this(activity, { callback, info ->
+        val made = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
+        made.authenticate(info)
+        val stop: () -> Unit = { made.cancelAuthentication() }
+        stop
+    })
+
+    /** Takes down the system's prompt now up, if any. */
+    private var prompt: (() -> Unit)? = null
     private var waiter: DefaultLifecycleObserver? = null
 
+    /** The prompt now open or waiting; null when none. A callback of another one is not listened to. */
+    private var current: Any? = null
+
     /** True while a prompt of ours is up or waiting to come up. */
-    private var live = false
+    private val live: Boolean get() = current != null
 
     override fun available(): Boolean = canAuthenticate(activity) == BiometricManager.BIOMETRIC_SUCCESS
 
     override fun prompt(onSuccess: () -> Unit, onEnd: () -> Unit) {
         if (live) return
-        live = true
+        val token = Any()
+        current = token
         var told = false
         val once: (Boolean) -> Unit = { ok ->
-            if (!told) {
+            // A prompt cancelled since (its late ERROR_CANCELED, or a success after it was taken down)
+            // touches nothing: not the next prompt's state, and no answer to a pad that moved on.
+            if (!told && current === token) {
                 told = true
-                live = false
+                current = null
                 prompt = null
                 if (ok) onSuccess() else onEnd()
             }
@@ -64,14 +89,14 @@ class BiometricPrompter(private val activity: FragmentActivity) : BiometricUnloc
                     .setTitle(L.lockBiometricTitle)
                     .setSubtitle(L.lockBiometricDetail)
                     .setNegativeButtonText(L.lockEnterPin)
-                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                    .setAllowedAuthenticators(AUTHENTICATORS)
                     // The pad is the confirmation: no extra tap after a face is recognised.
                     .setConfirmationRequired(false)
                     .build()
                 runCatching {
-                    val made = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
-                    prompt = made
-                    made.authenticate(info)
+                    val stop = system(callback, info)
+                    // Unless it already answered (a sensor that says no at once).
+                    if (current === token) prompt = stop
                 }.onFailure { once(false) }
             }
         }
@@ -84,7 +109,7 @@ class BiometricPrompter(private val activity: FragmentActivity) : BiometricUnloc
                 override fun onResume(owner: LifecycleOwner) {
                     lifecycle.removeObserver(this)
                     waiter = null
-                    if (live) show()
+                    if (current === token) show()
                 }
 
                 override fun onDestroy(owner: LifecycleOwner) {
@@ -99,17 +124,20 @@ class BiometricPrompter(private val activity: FragmentActivity) : BiometricUnloc
     }
 
     override fun cancel() {
+        current = null
         waiter?.let { activity.lifecycle.removeObserver(it) }
         waiter = null
-        live = false
-        prompt?.let { runCatching { it.cancelAuthentication() } }
+        prompt?.let { runCatching { it() } }
         prompt = null
     }
 
     companion object {
-        /** [BiometricManager.canAuthenticate] for a Class 2 or 3 biometric. */
+        /** What the prompt and the row ask for: a Class 3 (strong) biometric, never a Class 2 one (SEC2-07). */
+        const val AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_STRONG
+
+        /** [BiometricManager.canAuthenticate] for a Class 3 biometric. */
         fun canAuthenticate(context: Context): Int =
-            runCatching { BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) }
+            runCatching { BiometricManager.from(context).canAuthenticate(AUTHENTICATORS) }
                 .getOrDefault(BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE)
 
         /** What the Settings row shows: ready, a sensor with nothing enrolled (the row explains), or nothing (hidden). */

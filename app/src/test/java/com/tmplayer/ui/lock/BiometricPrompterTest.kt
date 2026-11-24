@@ -90,4 +90,76 @@ class BiometricPrompterTest {
         controller.start().resume()
         assertEquals("a cancelled prompt never shows nor answers", 0, told)
     }
+
+    /** The system's success (its constructor is the library's own). */
+    private fun result(): androidx.biometric.BiometricPrompt.AuthenticationResult =
+        androidx.biometric.BiometricPrompt.AuthenticationResult::class.java
+            .getDeclaredConstructor(androidx.biometric.BiometricPrompt.CryptoObject::class.java, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }
+            .newInstance(null, androidx.biometric.BiometricPrompt.AUTHENTICATION_RESULT_TYPE_BIOMETRIC)
+
+    @Test
+    fun onlyAStrongBiometricIsAskedFor_SEC2_07() {
+        assertEquals(BiometricManager.Authenticators.BIOMETRIC_STRONG, BiometricPrompter.AUTHENTICATORS)
+        var asked: androidx.biometric.BiometricPrompt.PromptInfo? = null
+        sensor(true)
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+        BiometricPrompter(activity) { _, info ->
+            asked = info
+            val stop: () -> Unit = {}
+            stop
+        }.prompt(onSuccess = {}, onEnd = {})
+        assertEquals(BiometricManager.Authenticators.BIOMETRIC_STRONG, asked?.allowedAuthenticators)
+    }
+
+    @Test
+    fun aLateCancelOfAnEarlierPromptLeavesTheNextOneInPlace_SEC2_06() {
+        sensor(true)
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+        val callbacks = mutableListOf<androidx.biometric.BiometricPrompt.AuthenticationCallback>()
+        var stopped = 0
+        val prompter = BiometricPrompter(activity) { callback, _ ->
+            callbacks += callback
+            val stop: () -> Unit = { stopped++ }
+            stop
+        }
+        var firstTold = 0
+        prompter.prompt(onSuccess = { firstTold++ }, onEnd = { firstTold++ })
+        // A digit typed: the pad takes the prompt down; then "Use fingerprint" pressed at once.
+        prompter.cancel()
+        assertEquals(1, stopped)
+        var secondSuccess = 0
+        var secondEnded = 0
+        prompter.prompt(onSuccess = { secondSuccess++ }, onEnd = { secondEnded++ })
+        assertEquals(2, callbacks.size)
+        // The system's late word to the first prompt: nothing answers, nothing is cleared.
+        callbacks[0].onAuthenticationError(androidx.biometric.BiometricPrompt.ERROR_CANCELED, "cancelled")
+        assertEquals(0, firstTold)
+        assertEquals(0, secondSuccess + secondEnded)
+        // The pad going away still takes the second prompt down.
+        prompter.cancel()
+        assertEquals(2, stopped)
+        // And a success that comes to it after that opens nothing.
+        callbacks[1].onAuthenticationSucceeded(result())
+        assertEquals(0, secondSuccess)
+    }
+
+    @Test
+    fun theOpenPromptStillAnswers() {
+        sensor(true)
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+        val callbacks = mutableListOf<androidx.biometric.BiometricPrompt.AuthenticationCallback>()
+        val prompter = BiometricPrompter(activity) { callback, _ ->
+            callbacks += callback
+            val stop: () -> Unit = {}
+            stop
+        }
+        var success = 0
+        prompter.prompt(onSuccess = { success++ }, onEnd = {})
+        callbacks[0].onAuthenticationSucceeded(result())
+        assertEquals(1, success)
+        // Answered once only.
+        callbacks[0].onAuthenticationSucceeded(result())
+        assertEquals(1, success)
+    }
 }
