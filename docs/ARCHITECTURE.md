@@ -40,7 +40,10 @@ cases: a format the device has no decoder for (WMV, RealVideo, WMA, Theora) goes
 and so does one the device's decoder refuses as beyond its capabilities (the extension reports it
 handled). A decoder that claims the format and then fails to start or choke on it goes through
 `PlayerActivity.switchDecoderByItself`, once per track type: the failed side's renderers are turned
-off (`DecoderSwitch`) and the player is prepared again from the same position, never to software
+off (`DecoderSwitch` through the player's `DecoderGate`: each video and sound renderer is a
+`GatedRenderer` whose side, when off, answers that it takes no format, so Media3's mapping moves the
+track; the selector's disabled renderers would leave the track mapped to the side turned off, with
+no picture or no sound, PB2-01) and the player is prepared again from the same position, never to software
 for a 4K picture on a weak device (`SoftwareDecode.unwatchable`). "Prefer software video" puts the
 extension's video renderer first (`EXTENSION_RENDERER_MODE_PREFER`); sound keeps the device first
 whatever the setting says. Where neither side can decode the track the player ends in its

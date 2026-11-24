@@ -4637,6 +4637,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             Log.i(START_TAG, "${it.describe()} (file $fileId)")
         }
         videoSwitchedToSoftware = false
+        // One per player: the side of each track type "Try the other decoder" turned off (PB2-01).
+        val decoderGate = DecoderGate()
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock codec adapters, except on the Fire TV sticks with the MediaTek MT8696
@@ -4769,9 +4771,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             ) {
                 // Unless the sound's own ladder put the app's decoder first (A1, [AudioPolicy]).
                 val audioMode = AudioPolicy.rendererMode(extensionRendererMode, softwareFirst = policy.softwareAudio)
+                val built = ArrayList<Renderer>()
                 super.buildAudioRenderers(
-                    context, audioMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out,
+                    context, audioMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, built,
                 )
+                // Each behind the player's decoder gate, so a switch moves the track ([DecoderSwitch]).
+                built.mapTo(out) { GatedRenderer(it, decoderGate) }
             }
 
             /**
@@ -4795,8 +4800,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     context, extensionRendererMode, HardwareFirstCodecSelector(mediaCodecSelector), enableDecoderFallback,
                     eventHandler, eventListener, allowedVideoJoiningTimeMs, built,
                 )
+                // Each behind the player's decoder gate, so a switch moves the picture ([DecoderSwitch]).
                 built.mapTo(out) {
-                    when {
+                    val renderer = when {
                         it is androidx.media3.exoplayer.video.MediaCodecVideoRenderer -> LevelLenientVideoRenderer(it)
                         // On a low-end device FFmpeg gets fewer threads than cores, so the screen
                         // keeps one ([LowEndDevice.softwareVideoThreads]); elsewhere NextLib's own.
@@ -4807,6 +4813,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                             )
                         else -> it
                     }
+                    GatedRenderer(renderer, decoderGate)
                 }
             }
 
@@ -10799,7 +10806,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         decoderPlan = null
         hideFailureActions()
         if (plan.trackType == C.TRACK_TYPE_VIDEO) videoSwitchedToSoftware = plan.toFfmpeg
-        DecoderSwitch.apply(exo, plan)
+        if (!DecoderSwitch.apply(exo, plan)) Log.w(START_TAG, "Decoder: this player has no decoder gate, the switch changes nothing")
         failurePinned = false
         showStatus(if (plan.toFfmpeg) L.playerDecoderSoftwareNow else L.playerDecoderDeviceNow)
         exo.prepare()
@@ -10849,12 +10856,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val exo = player ?: return
         val position = exo.currentPosition
         val wasPlaying = exo.playWhenReady
+        // The gate moves the track (PB2-01); a player without one has nothing to switch.
+        if (!DecoderSwitch.apply(exo, plan)) {
+            Log.w(START_TAG, "Decoder: this player has no decoder gate, the menu's switch changes nothing")
+            return
+        }
         decoderPlan = null
         if (plan.trackType == C.TRACK_TYPE_VIDEO) videoSwitchedToSoftware = plan.toFfmpeg
         decodersSwitched += plan.trackType
         remedies.viewerPickedDecoder(plan.toFfmpeg)
         Log.i(START_TAG, "Decoder: the viewer moved the picture to the ${if (plan.toFfmpeg) "FFmpeg" else "device"} decoder at $position ms")
-        DecoderSwitch.apply(exo, plan)
         runCatching {
             exo.stop()
             exo.seekTo(position)
