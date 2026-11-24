@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { apply, fileNameOf, offered, readMessage, saveUrl, space, whyNot, type Env, type Save, type Savable } from './saveToDevice.ts'
+import { apply, fileNameOf, offered, readMessage, saveUrl, whyNot, type Env, type Save, type Savable } from './saveToDevice.ts'
 
 const env: Env = { worker: true, streams: true }
 const video = (o: Partial<Savable> = {}): Savable => ({ key: 'k1', size: 5_000_000, title: 'Plain Clip', canBeSaved: true, ...o })
@@ -18,14 +18,26 @@ test('a restricted chat never offers Save to device, nor a video in pieces, an a
     assert.equal(whyNot(video({ canBeSaved: false, size: 0 }), { worker: false, streams: false }), 'restricted')
 })
 
-test('the room check says what is needed and what is free, and lets a browser that cannot say go ahead', () => {
-    assert.deepEqual(space(100, { quota: 1000, usage: 800 }), { ok: true, needed: 100, free: 200 })
-    assert.deepEqual(space(300, { quota: 1000, usage: 800 }), { ok: false, needed: 300, free: 200 })
-    assert.deepEqual(space(300, { quota: 1000 }), { ok: true, needed: 300, free: 1000 })
-    assert.deepEqual(space(300, { quota: 1000, usage: 5000 }), { ok: false, needed: 300, free: 0 })
-    assert.deepEqual(space(300, null), { ok: true, needed: 300, free: null })
-    assert.deepEqual(space(300, {}), { ok: true, needed: 300, free: null })
-    assert.deepEqual(space(300, { quota: NaN }), { ok: true, needed: 300, free: null })
+test('no room check: the browser cannot know the Downloads disk, so a save is never refused from storage.estimate()', () => {
+    const run = readFileSync(new URL('./saveRuntime.ts', import.meta.url), 'utf8')
+    const rules = readFileSync(new URL('./saveToDevice.ts', import.meta.url), 'utf8')
+    assert.doesNotMatch(run, /storage\??\.estimate|\.estimate\?\./)
+    assert.doesNotMatch(rules, /estimate|quota/i)
+    // The size is said when the save starts.
+    assert.match(run, /web\.save_size_to_downloads/)
+})
+
+test('a full disk is the browser failing the download: the save ends as failed, keeps what was read, and the toast says so', () => {
+    const one: Save = { id: 'a', name: 'A', size: 100, loaded: 0, state: 'running' }
+    let s = apply([one], { type: 'save', id: 'a', state: 'progress', loaded: 60 })
+    s = apply(s, { type: 'save', id: 'a', state: 'failed', why: 'read' })
+    assert.deepEqual([s[0]!.state, s[0]!.loaded, s[0]!.why], ['failed', 60, 'read'])
+    // A late progress message after the failure changes nothing.
+    s = apply(s, { type: 'save', id: 'a', state: 'progress', loaded: 90 })
+    assert.equal(s[0]!.loaded, 60)
+    const run = readFileSync(new URL('./saveRuntime.ts', import.meta.url), 'utf8')
+    assert.match(run, /t\('web\.save_failed'/)
+    assert.match(run, /START_MS/)
 })
 
 test('the file is called what it is, never a path, and gets an extension from its type', () => {

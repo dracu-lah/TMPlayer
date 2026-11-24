@@ -9,7 +9,7 @@ import { openFile, streams } from '../stream/reader'
 import { t } from '../i18n'
 import type { VideoItem } from '../tg/types'
 import { showToast } from './Toast'
-import { apply, fileNameOf, offered, readMessage, saveUrl, space, type Env, type Save } from './saveToDevice'
+import { apply, fileNameOf, offered, readMessage, saveUrl, type Env, type Save } from './saveToDevice'
 
 const [saves, setSaves] = createSignal<Save[]>([])
 export { saves }
@@ -62,12 +62,14 @@ function end(id: string, state: 'done' | 'failed' | 'cancelled', why?: string) {
     window.setTimeout(() => setSaves((all) => all.filter((s) => s.id !== id)), 4000)
 }
 
-/** Starts saving `item`: room first (what is needed and what is free), then the browser's own download. */
-export async function saveToDevice(item: VideoItem): Promise<void> {
+/**
+ * Starts saving `item`: the size is said, then the browser's own download begins. No room check: a page cannot know
+ * the free space of the disk its Downloads folder is on (the browser reports only the site's own quota, not the disk, SEC2-12),
+ * so a full disk is the browser's own failure and the line ends as "Could not save" (`end` with `failed`).
+ */
+export function saveToDevice(item: VideoItem): void {
     if (!canSaveToDevice(item)) return
     listen()
-    const room = space(item.size, await navigator.storage?.estimate?.().catch(() => null))
-    if (!room.ok) return void showToast({ text: t('web.save_needs_space', { needed: size(room.needed), free: size(room.free ?? 0) }) })
     // Not guessable: the key is all that names this file to the service worker (SEC2-05).
     const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
     const name = fileNameOf(item)
@@ -76,6 +78,7 @@ export async function saveToDevice(item: VideoItem): Promise<void> {
     file.wantAhead = false
     streams.set(streamKeyOf(id), file)
     setSaves((all) => [...all, { id, name, size: item.size, loaded: 0, state: 'running' }])
+    showToast({ text: t('web.save_size_to_downloads', { size: size(item.size) }) })
     timers.set(id, window.setTimeout(() => end(id, 'failed', 'read'), START_MS))
     // A hidden frame, not a link with `download`: the service worker answers a frame's navigation, and a
     // response with Content-Disposition: attachment is the browser's download (StreamSaver's way, which

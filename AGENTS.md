@@ -55,7 +55,9 @@ the happy path alone. The kinds of cases that keep coming up:
 
 - **Space and size.** Check free space before anything that writes (a download, saving files to a
   folder), say plainly how much is needed and how much is free, and offer what fits. Show running
-  totals where the user picks several things.
+  totals where the user picks several things. A browser cannot know the Downloads disk space
+  (`storage.estimate()` is the site's quota, not the disk), so the web shows the size and relies on the
+  failure summary (user decision 2026-11-25).
 - **Several at once.** Select all (and Ctrl+A on the desktop), a selection that changes while the
   work runs, an empty selection, the same action run twice.
 - **Interruptions.** Cancel, a full disk part way, a revoked folder permission, the app going to

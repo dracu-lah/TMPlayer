@@ -1,8 +1,8 @@
 // Save to device (WP-86): a video's file out of Telegram into the browser's own download, streamed by
 // the service worker (public/sw.js `saveStream`) a piece at a time, so no copy is held and no partial
 // file is left: the worker ends the stream with an error on a cancel or a failed read, which the
-// browser answers by dropping the download. The rules here are pure: what may be saved, what it needs,
-// what the file is called, and how the worker's progress messages add up. `node --test` runs them.
+// browser answers by dropping the download. The rules here are pure: what may be saved, what the file is
+// called, and how the worker's progress messages add up. `node --test` runs them.
 
 export interface Savable {
     key: string
@@ -40,22 +40,6 @@ export function whyNot(item: Savable, env: Env): Why | null {
 
 /** Whether the row is offered at all: hidden, never greyed, where the video or the browser cannot. */
 export const offered = (item: Savable, env: Env) => whyNot(item, env) === null
-
-export interface Estimate {
-    quota?: number
-    usage?: number
-}
-
-/**
- * The room check before a save starts: the browser's own figure for this site (its quota less what it
- * uses) is the closest a page can get to the free space. A browser that does not say lets it through,
- * and the download itself fails where the disk is full. `free` is null when unknown.
- */
-export function space(needed: number, e: Estimate | null | undefined): { ok: boolean; needed: number; free: number | null } {
-    if (!e || !(typeof e.quota === 'number') || !(e.quota > 0)) return { ok: true, needed, free: null }
-    const free = Math.max(0, e.quota - (typeof e.usage === 'number' ? e.usage : 0))
-    return { ok: free >= needed, needed, free }
-}
 
 /** A name the browser will keep: no path, no control characters, no leading dots, 120 characters. */
 export function fileNameOf(item: Pick<Savable, 'fileName' | 'title' | 'mime'>): string {
