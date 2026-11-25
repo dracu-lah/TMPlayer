@@ -476,7 +476,9 @@ private fun NavCell(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 4.dp),
+            // Across the whole cell, centred, rather than at the name's own measured width: a paragraph laid out at
+            // exactly that (rounded) width counts a Chinese, Japanese or Korean name as not fitting on macOS's fonts.
+            modifier = Modifier.padding(horizontal = 4.dp).fillMaxWidth(),
         )
     }
 }

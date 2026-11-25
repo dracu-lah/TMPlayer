@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -113,8 +114,10 @@ fun ChoiceRow(
         }
         Spacer(Modifier.width(16.dp))
         Column {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = Tone.text)
-            if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+            // The words take the rest of the row rather than their own measured width: laid out at exactly that width
+            // (rounded), a line of Chinese or Japanese on macOS's fonts counts as not fitting and reads as cut.
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = Tone.text, modifier = Modifier.fillMaxWidth())
+            if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted, modifier = Modifier.fillMaxWidth())
             if (tags.isNotEmpty()) FormatBadgeRow(tags, Modifier.padding(top = 4.dp, bottom = 4.dp))
         }
     }
