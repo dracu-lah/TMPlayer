@@ -870,10 +870,10 @@ private fun FloatingBar(
         }
     } else {
         BoxWithConstraints(outer, contentAlignment = Alignment.Center) {
-            // About 90 percent of the window (at most its width less the margins, 560 dp on a
-            // tablet), and wider still when the widest label, measured with the real style at the
-            // user's font size plus the room round it, needs it: never a fixed guess a word
-            // outgrows (user, 2026-11-25, "Downloads" cut on the POCO; "a bit more width and spacing").
+            // As wide as the widest label needs, measured with the real style at the user's font
+            // size, plus 8 dp each side of four equal slots: about 80 percent of a 393 dp phone, at
+            // most 85 percent of the window and 520 dp on a tablet. First too narrow ("Downloads"
+            // cut), then too big (90 percent, 76 dp high): user, 2026-11-25, "a bit too big".
             val s = LocalStrings.current
             val sizing = rememberBarSizing(listOf(s.browseTabHome, s.browseTabChats, s.commonSearch, s.navDownloads), maxWidth + BAR_SIDE_MARGIN * 2, minOf(maxWidth, PILL_MAX_WIDTH) - 1.dp)
             BarPill(sizing.width, sizing.slot, current, position, downloading, onHome, onChats, onSearch, onDownloads, searchShared, vertical = false, sizing = sizing)
@@ -904,6 +904,9 @@ private fun BarPill(
     // tall plus its margins, so it takes 32 dp corners rather than a full semicircle, which no
     // button could follow.
     val barShape = if (vertical) RAIL_SHAPE else CircleShape
+    // The rail keeps its taller buttons and gaps; the horizontal pill is compact (user, 2026-11-25).
+    val buttonHeight = if (vertical) RAIL_BUTTON_HEIGHT else BUTTON_HEIGHT
+    val gap = if (vertical) BAR_SPACING else BAR_SLOT_GAP
     // One caption size for the four, or none (icons only) when even the smallest does not fit.
     val captionSize = if (sizing != null) sizing.caption else rememberBarCaptionSize(listOf(s.browseTabHome, s.browseTabChats, s.commonSearch, s.navDownloads), slot)
     Box(
@@ -924,7 +927,7 @@ private fun BarPill(
             // One highlight under the chosen page, sliding to the next one rather than blinking
             // off under one button and on under another, so the bar shows where the page went.
             val index = barHighlightIndex(current)
-            val step = with(LocalDensity.current) { ((if (vertical) BUTTON_HEIGHT else slot) + BAR_SPACING).toPx() }
+            val step = with(LocalDensity.current) { ((if (vertical) RAIL_BUTTON_HEIGHT else slot) + gap).toPx() }
             // Where the highlight stands, in buttons from the start: sprung to the chosen one, or,
             // while Home and Chats are on screen, following the pager (sprung only the first time,
             // coming in from another page, then held to the finger).
@@ -955,7 +958,7 @@ private fun BarPill(
                         val along = (place.value * step).roundToInt()
                         if (vertical) IntOffset(0, along) else IntOffset(along, 0)
                     }
-                    .size(slot, BUTTON_HEIGHT)
+                    .size(slot, buttonHeight)
                     .graphicsLayer {
                         alpha = shown
                         // Stretched a little along the way while it springs to another button and
@@ -975,11 +978,11 @@ private fun BarPill(
                     .background(Tone.accent.copy(alpha = 0.16f)),
             )
             val buttons: @Composable () -> Unit = {
-                BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome, slot = slot, captionSize = captionSize, index = 0, vertical = vertical)
-                BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats, slot = slot, captionSize = captionSize, index = 1, vertical = vertical)
+                BarButton(TmIcons.Home, s.browseTabHome, current == TouchDestination.Home, onHome, slot = slot, captionSize = captionSize, index = 0, vertical = vertical, height = buttonHeight)
+                BarButton(TmIcons.Chats, s.browseTabChats, current == TouchDestination.Chats, onChats, slot = slot, captionSize = captionSize, index = 1, vertical = vertical, height = buttonHeight)
                 BarButton(
                     TmIcons.Search, s.commonSearch, false, onSearch,
-                    slot = slot, captionSize = captionSize, role = Role.Button, modifier = searchShared.testTag(BAR_SEARCH_TAG), index = 2, vertical = vertical,
+                    slot = slot, captionSize = captionSize, role = Role.Button, modifier = searchShared.testTag(BAR_SEARCH_TAG), index = 2, vertical = vertical, height = buttonHeight,
                 )
                 BarButton(
                     TmIcons.Download,
@@ -991,6 +994,7 @@ private fun BarPill(
                     badge = downloading,
                     index = 3,
                     vertical = vertical,
+                    height = buttonHeight,
                 )
             }
             // One group of four (WP-17): TalkBack says the bar's size and each button's place in it.
@@ -1000,9 +1004,9 @@ private fun BarPill(
                     collectionInfo = if (vertical) CollectionInfo(BAR_BUTTONS, 1) else CollectionInfo(1, BAR_BUTTONS)
                 }
             if (vertical) {
-                Column(group, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
+                Column(group, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) { buttons() }
             } else {
-                Row(group, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(BAR_SPACING)) { buttons() }
+                Row(group, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) { buttons() }
             }
         }
     }
@@ -1223,14 +1227,14 @@ internal const val BAR_CAPTION_MAX_SCALE = 1.3f
 internal val BAR_CAPTION_STEPS_SP = intArrayOf(BAR_CAPTION_SP, 11, 10)
 
 /** The icon-to-caption gap, and the least room kept either side of a caption inside its slot. */
-internal val BAR_CAPTION_GAP = 5.dp
+internal val BAR_CAPTION_GAP = 3.dp
 internal val BAR_CAPTION_SIDE = 2.dp
 
 /** The room each side of the widest caption in a slot when the window has it to give (user, 2026-11-25). */
-internal val BAR_SLOT_SIDE = 12.dp
+internal val BAR_SLOT_SIDE = 8.dp
 
-/** The share of the window's width the phone's pill aims at, and the room left either side of it. */
-internal const val BAR_WIDTH_SHARE = 0.9f
+/** The most of the window's width the phone's pill takes, and the room left either side of it. */
+internal const val BAR_WIDTH_MAX_SHARE = 0.85f
 internal val BAR_SIDE_MARGIN = 12.dp
 
 /**
@@ -1240,10 +1244,10 @@ internal val BAR_SIDE_MARGIN = 12.dp
 internal class BarSizing(val width: Dp, val slot: Dp, val caption: TextUnit?)
 
 /**
- * The pill sized from its labels. Its width is [BAR_WIDTH_SHARE] of [window] (the window less the
- * margins), more when the widest label needs it, at most [cap]; the four slots are equal. A slot is
- * the widest label, measured with the real style at [density] (the font scale capped as the captions
- * are), plus [BAR_SLOT_SIDE] either side, never less than a [BUTTON_WIDTH] button. When the widest
+ * The pill sized from its labels: four equal slots, each the widest label, measured with the real
+ * style at [density] (the font scale capped as the captions are), plus [BAR_SLOT_SIDE] either side,
+ * never less than a [BUTTON_WIDTH] button (about 76 dp for "Downloads" at 12 sp, a pill of about 316
+ * dp, 80 percent of a 393 dp phone). Never wider than [cap] or [BAR_WIDTH_MAX_SHARE] of [window]. When the widest
  * word does not fit at [cap] at 12 sp, all four captions step down together (11, 10 sp), taking the
  * room round the word before its size, and when not even the smallest fits with [BAR_CAPTION_SIDE]
  * either side the pill shows icons only.
@@ -1256,9 +1260,8 @@ internal fun sizeBar(
     measurer: androidx.compose.ui.text.TextMeasurer,
     base: androidx.compose.ui.text.TextStyle,
 ): BarSizing {
-    val fixed = PILL_PADDING * 2 + BAR_SPACING * (BAR_BUTTONS - 1)
-    val room = (cap - fixed) / BAR_BUTTONS
-    val share = minOf(room, (window * BAR_WIDTH_SHARE - fixed) / BAR_BUTTONS)
+    val fixed = PILL_PADDING * 2 + BAR_SLOT_GAP * (BAR_BUTTONS - 1)
+    val room = (minOf(cap, window * BAR_WIDTH_MAX_SHARE) - fixed) / BAR_BUTTONS
     for (step in BAR_CAPTION_STEPS_SP) {
         val style = base.copy(fontSize = step.sp, lineHeight = (step + 2).sp)
         val widest = with(density) {
@@ -1266,10 +1269,10 @@ internal fun sizeBar(
             labels.maxOf { measurer.measure(it, style, softWrap = false, maxLines = 1, density = density).size.width + 1 }.toDp()
         }
         if (widest + BAR_CAPTION_SIDE * 2 > room) continue
-        val slot = minOf(room, maxOf(BUTTON_WIDTH, share, widest + BAR_SLOT_SIDE * 2))
+        val slot = minOf(room, maxOf(BUTTON_WIDTH, widest + BAR_SLOT_SIDE * 2))
         return BarSizing(slot * BAR_BUTTONS + fixed, slot, step.sp)
     }
-    val slot = minOf(room, maxOf(BUTTON_WIDTH, share))
+    val slot = minOf(room, BUTTON_WIDTH)
     return BarSizing(slot * BAR_BUTTONS + fixed, slot, null)
 }
 
@@ -1335,13 +1338,14 @@ private fun BarButton(
     /** Its place among the bar's [BAR_BUTTONS], for the screen reader. */
     index: Int = 0,
     vertical: Boolean = false,
+    height: Dp = BUTTON_HEIGHT,
 ) {
     val s = LocalStrings.current
     val press = remember { MutableInteractionSource() }
     var showLarge by remember { mutableStateOf(false) }
     Column(
         modifier
-            .size(slot, BUTTON_HEIGHT)
+            .size(slot, height)
             .pressScale(press)
             .clip(HIGHLIGHT_SHAPE)
             .combinedClickable(
@@ -1792,17 +1796,20 @@ private val MOVED_HINT_WIDTH = 300.dp
 private const val SEARCH_KEY = "search-field"
 
 /** The bar's height: a button of icon and caption with a little room above and below it. */
-internal val BAR_HEIGHT = 76.dp
+internal val BAR_HEIGHT = 64.dp
 
 /** Between the bar and the navigation bar (or the screen's edge). */
-internal val BAR_MARGIN = 16.dp
+internal val BAR_MARGIN = 12.dp
 
 /** Between the bar and whatever a list puts last, or a button floating above it. */
 internal val BAR_GAP = 8.dp
 
 /** One of the bar's buttons, its icon over its caption. */
 internal val BUTTON_WIDTH = 64.dp
-internal val BUTTON_HEIGHT = 56.dp
+internal val BUTTON_HEIGHT = 52.dp
+
+/** The rail's buttons keep their height, and the gaps between them. */
+internal val RAIL_BUTTON_HEIGHT = 56.dp
 
 /** The highlight under the chosen button, and the shape a press ripples in: a pill, as the bar is. */
 private val HIGHLIGHT_SHAPE = CircleShape
@@ -1832,12 +1839,15 @@ private val RAIL_MARGIN = 12.dp
 /** Between two of the bar's buttons. */
 internal val BAR_SPACING = 6.dp
 
+/** Between two slots of the horizontal pill: none, the equal slots touch and one highlight shows the page. */
+internal val BAR_SLOT_GAP = 0.dp
+
 /** The floating bar's buttons: Home, Chats, Search, Downloads. */
 internal const val BAR_BUTTONS = 4
 
 /** The pill's room round its slots, and its widest: four 64 dp slots, three gaps and the room either side. */
-internal val PILL_PADDING = 10.dp
-internal val PILL_MAX_WIDTH = 560.dp
+internal val PILL_PADDING = 6.dp
+internal val PILL_MAX_WIDTH = 520.dp
 
 /** Every icon of the bar: one size, over one gap to its caption. */
 internal val BAR_ICON = 24.dp

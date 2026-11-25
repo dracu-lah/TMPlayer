@@ -49,10 +49,11 @@ import kotlin.math.abs
 
 /**
  * The phone's floating bar on the real test phone's window (393 x 873 dp at 440 dpi), where
- * "Downloads" lost its first and last letters (user, 2026-11-25): no caption overflows or leaves its
- * slot at font 1.0, 1.3 and 2.0, in English, German and the pseudo (longest) language; the four
- * slots and caption sizes are equal; the pill is roomy (about 90 percent of the window), its two ends
- * are the same and the highlight sits the same distance in from the top, bottom and ends.
+ * "Downloads" lost its first and last letters (user, 2026-11-25), then the roomier fix was "a bit too
+ * big": no caption overflows or leaves its slot at font 1.0, 1.3 and 2.0, in English, German and the
+ * pseudo (longest) language; the four slots and caption sizes are equal; the pill is compact (at most
+ * 64 dp high and 85 percent of the window, about 80 percent of 393 dp), its two ends are the same and
+ * the highlight sits the same distance in from the top, bottom and ends.
  * Pictures go to design/phone-bar.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -131,9 +132,16 @@ class PhoneBarRealDeviceTest {
         val end = pill.right - slots.last().right
         assertEquals("pill ends alike (start $start, end $end)", start, end, 1.5f)
         assertEquals("the end room is the pill's padding", PILL_PADDING.value * density, start, 1.5f)
-        // Roomy: about 90 percent of the window, never past its width less the margins.
+        // Compact: at most 64 dp high and 85 percent of the window (and 520 dp), never past its width less the margins.
         val share = pill.width / window.width
-        assertTrue("pill $share of the window", share >= 0.86f && pill.width <= window.width - 2 * BAR_SIDE_MARGIN.value * density + 1f)
+        assertTrue("pill ${pill.height / density} dp high", pill.height <= 64f * density + 1f)
+        assertTrue("pill $share of the window", share <= 0.85f + 0.003f && pill.width <= 520f * density + 1f)
+        assertTrue("pill within the margins", pill.width <= window.width - 2 * BAR_SIDE_MARGIN.value * density + 1f)
+        assertTrue("the highlight is 48 to 52 dp high: ${slots.first().height / density}", slots.first().height in 48f * density - 1f..52f * density + 1f)
+        // The usual phone is about 80 percent of the window; a narrow one or a long word takes what it has.
+        if (language == Languages.ENGLISH && window.width / density >= 390f && fontScale <= 1.3f) {
+            assertTrue("pill about 80 percent: $share", share in 0.70f..0.85f + 0.003f)
+        }
         // Highlight room: the button is the same distance from the pill's top and bottom as from its ends.
         val top = slots.first().top - pill.top
         val bottom = pill.bottom - slots.first().bottom
@@ -188,6 +196,14 @@ class PhoneBarRealDeviceTest {
     fun `the real phone, font 1_3, the longest pseudo language`() = check("bar-393-font1.3-pseudo.png", 1.3f, Languages.PSEUDO)
 
     @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h800dp-port-420dpi")
+    fun `a 360 dp phone, font 1_0, English`() = check("bar-360-font1.0-en.png", 1f)
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h800dp-port-420dpi")
+    fun `a 360 dp phone, font 1_3, English`() = check("bar-360-font1.3-en.png", 1.3f)
+
+    @Test
     @Config(sdk = [35], qualifiers = "w320dp-h640dp-port-420dpi")
     fun `a 320 dp phone, font 1_0, English`() = check("bar-320-font1.0-en.png", 1f)
 
@@ -203,21 +219,22 @@ class PhoneBarRealDeviceTest {
                 val d = Density(2.75f, 1f)
                 val base = captionStyle()
                 val words = listOf("Home", "Chats", "Search", "Downloads")
-                wide = sizeBar(words, 393.dp - 24.dp, 393.dp - 24.dp, d, measurer, base)
-                narrow = sizeBar(words + "Herunterladen!", 393.dp - 24.dp, 393.dp - 24.dp, d, measurer, base)
-                tooLong = sizeBar(words + "A very very long translated word", 393.dp - 24.dp, 393.dp - 24.dp, d, measurer, base)
+                wide = sizeBar(words, 393.dp, 393.dp - 24.dp, d, measurer, base)
+                narrow = sizeBar(words + "Herunterladen!", 393.dp, 393.dp - 24.dp, d, measurer, base)
+                tooLong = sizeBar(words + "A very very long translated word", 393.dp, 393.dp - 24.dp, d, measurer, base)
             }
         }
         rule.waitForIdle()
         val cap = 393.dp - 24.dp
-        val fixed = PILL_PADDING * 2 + BAR_SPACING * (BAR_BUTTONS - 1)
+        val fixed = PILL_PADDING * 2 + BAR_SLOT_GAP * (BAR_BUTTONS - 1)
         for (sizing in listOfNotNull(wide, narrow, tooLong)) {
             assertTrue("pill ${sizing.width} within $cap", sizing.width <= cap + 0.01.dp)
+            assertTrue("pill ${sizing.width} within 85 percent of the window", sizing.width <= 393.dp * 0.85f + 0.01.dp)
             assertEquals("four equal slots make the pill", (sizing.slot * BAR_BUTTONS + fixed).value, sizing.width.value, 0.05f)
             assertTrue("a 48 dp target at the least: ${sizing.slot}", sizing.slot >= 48.dp)
         }
         assertEquals("the full size when the words fit", BAR_CAPTION_SP.toFloat(), wide?.caption?.value ?: -1f, 0.01f)
-        assertTrue("the pill is about 90 percent of the window: ${wide?.width}", (wide?.width ?: 0.dp) >= 393.dp * 0.88f)
+        assertTrue("the pill is about 80 percent of the window: ${wide?.width}", (wide?.width ?: 0.dp) in 393.dp * 0.7f..393.dp * 0.85f)
         val n = narrow?.caption
         assertNotNull("a 14 character word still gets captions", n)
         assertTrue("one of the steps: $n", BAR_CAPTION_STEPS_SP.any { it.toFloat() == n!!.value })
