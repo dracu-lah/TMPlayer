@@ -46,6 +46,11 @@ import com.tmplayer.ui.theme.Tone
 const val LIBRARY_TILES_TAG = "libraryTiles"
 const val LIBRARY_TILE_TAG = "libraryTile"
 
+/** The parts of a tile, tagged "libraryTile-favourites-icon", "-label", "-note0", "-note1", for tests. */
+const val LIBRARY_TILE_ICON = "icon"
+const val LIBRARY_TILE_LABEL = "label"
+const val LIBRARY_TILE_NOTE = "note"
+
 /**
  * Your library as ONE row of three equal tiles (user, 2026-11-25): Favourites, History and Watch
  * later, each an icon over its name, so the account menu does not spend three tall rows on them.
@@ -57,7 +62,8 @@ const val LIBRARY_TILE_TAG = "libraryTile"
  * translation wraps to a second line) and the same height, a 48 dp target at the least. A
  * tile fills under a press, the pointer or the keyboard's focus; with a remote or a keyboard Left
  * and Right move between the three. [firstFocus] goes on the first tile. The three are always one
- * height (the tallest tile's), their content centred as a group, with or without a count line.
+ * height (the tallest tile's), their icons and names on shared lines whether or not a tile has a
+ * count line: the counts hang under the name and only grow the tile downward.
  */
 @Composable
 fun LibraryTiles(
@@ -138,11 +144,13 @@ private fun Tile(
                 .testTag("$LIBRARY_TILE_TAG-$tag"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp))
+            Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp).testTag("$LIBRARY_TILE_TAG-$tag-$LIBRARY_TILE_ICON"))
             androidx.compose.foundation.layout.Spacer(Modifier.size(16.dp))
             Column {
-                Text(label, style = MaterialTheme.typography.labelLarge, color = Tone.text)
-                notes.forEach { note -> Text(note, style = MaterialTheme.typography.labelMedium, color = Tone.muted) }
+                Text(label, style = MaterialTheme.typography.labelLarge, color = Tone.text, modifier = Modifier.testTag("$LIBRARY_TILE_TAG-$tag-$LIBRARY_TILE_LABEL"))
+                notes.forEachIndexed { i, note ->
+                    Text(note, style = MaterialTheme.typography.labelMedium, color = Tone.muted, modifier = Modifier.testTag("$LIBRARY_TILE_TAG-$tag-$LIBRARY_TILE_NOTE$i"))
+                }
             }
         }
         return
@@ -155,14 +163,17 @@ private fun Tile(
             .background(fill)
             .clickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = said }
-            .padding(horizontal = 4.dp, vertical = 10.dp)
+            .padding(horizontal = 4.dp, vertical = 12.dp)
             .testTag("$LIBRARY_TILE_TAG-$tag"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        // The icon, name and count lines are one group in the middle of the tile: with no count
-        // (a fresh install) the name does not sit at the top over an empty foot.
-        verticalArrangement = Arrangement.Center,
+        // The icon starts at the same height in all three tiles, whatever counts they carry (user,
+        // 2026-11-25: centring each tile's group put the three icons at three heights, a tile with
+        // two count lines lifting its icon over a tile with none). The name hangs under the icon and
+        // the counts under the name, so a count only ever grows the tile downward. The least height
+        // is the icon and one name line, so with no count there is no empty foot.
+        verticalArrangement = Arrangement.Top,
     ) {
-        Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp).testTag("$LIBRARY_TILE_TAG-$tag-$LIBRARY_TILE_ICON"))
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
@@ -170,9 +181,9 @@ private fun Tile(
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = 4.dp).testTag("$LIBRARY_TILE_TAG-$tag-$LIBRARY_TILE_LABEL"),
         )
-        notes.forEach { note ->
+        notes.forEachIndexed { i, note ->
             Text(
                 note,
                 style = MaterialTheme.typography.labelSmall,
@@ -180,10 +191,11 @@ private fun Tile(
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("$LIBRARY_TILE_TAG-$tag-$LIBRARY_TILE_NOTE$i"),
             )
         }
     }
 }
 
-/** A tile's least height: icon, name, and a count line or two. */
-private const val TILE_MIN_HEIGHT = 84
+/** A tile's least height: its padding, the icon and one line of name, so with no count it has no empty foot. */
+private const val TILE_MIN_HEIGHT = 68
