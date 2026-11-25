@@ -400,6 +400,22 @@ class PhoneAccountButtonTest {
         assertFalse(exists(L.lockEnterPin))
     }
 
+    @Test
+    fun `Add account with one profile shows its line over the page while the open profile's work stops, then opens the new profile`() {
+        val k = com.tmplayer.ui.profiles.ProfileKit("Asha Rao").also { kit = it }
+        val hold = kotlinx.coroutines.CompletableDeferred<Unit>()
+        k.platform.hold = hold
+        val flow = k.flow()
+        show(flow = flow)
+        openMenu()
+        row(L.profilesAdd).performSemanticsAction(SemanticsActions.OnClick)
+        // Never a sheet that closes on nothing (user, 2026-11-25).
+        rule.waitUntil(15_000) { exists(L.profilesWaiting(what = "a sync")) }
+        hold.complete(Unit)
+        rule.waitUntil(15_000) { k.book.list.value.profiles.size == 2 && !flow.adding }
+        assertTrue(k.book.list.value.active?.adding == true)
+    }
+
     // (d) A switch ---------------------------------------------------------------------------
 
     @Test

@@ -2773,9 +2773,11 @@
   },
   "profiles": {
     "add": "Add account",
+    "add_busy": "Another account change is still running. Try again when it is done.",
     "add_detail": "Up to {count} Telegram accounts on this device, each with its own chats, lists and places",
     "add_failed": "The new account could not be made. Try again.",
     "adding": "Not signed in yet",
+    "adding_now": "Getting the sign in ready for a new account",
     "change_pin": "Change the PIN",
     "closing_slowly": "Still closing the last profile. This can take a while on some TVs.",
     "current": "Open now",

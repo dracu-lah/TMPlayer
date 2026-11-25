@@ -1,6 +1,15 @@
 package com.tmplayer.ui.lock
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -48,6 +57,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -176,6 +186,17 @@ class ProfileFlow(
     private var running: Job? = null
     private var listening = false
 
+    /**
+     * Add account's work runs (from the moment it is asked, before its turn comes): with the shell
+     * shown, [ProfilesGate] draws its line over it, so a press is never answered by nothing.
+     */
+    var adding: Boolean by mutableStateOf(false)
+        private set
+
+    /** The work now ending was stopped by the viewer's Cancel, not cut short by anything else. */
+    @kotlin.concurrent.Volatile
+    private var viewerCancelled = false
+
     /** The switch is waiting for work of the open profile to stop: Cancel stays on it. */
     var waitCancellable: Boolean by mutableStateOf(false)
         private set
@@ -186,7 +207,10 @@ class ProfileFlow(
         // never goes ahead with the downloads it paused running again. The resume runs in the
         // cancelled work itself ([stopFirst]), so a retry waits for it.
         if (!wait.cancel()) return
+        viewerCancelled = true
         running?.cancel()
+        // The remote goes back where it was before the line came up.
+        focusAsk++
     }
 
     private val wait = com.tmplayer.data.SwitchWait()
@@ -217,6 +241,7 @@ class ProfileFlow(
         }
         // A Cancel that won: the switch does not go on, even if it was not cancelled in time to stop the wait.
         if (!wait.commit()) {
+            viewerCancelled = true
             resumePaused()
             throw CancellationException("the viewer cancelled the switch")
         }
@@ -243,6 +268,7 @@ class ProfileFlow(
                 platform.appLock.collect {
                     appLockSettings = it ?: AppLockSettings()
                     appLockKnown = true
+                    lockRead()
                 }
             }.onFailure { if (it is CancellationException) throw it else Logger.w(TAG, "the app lock could not be read", it) }
         }
@@ -266,6 +292,19 @@ class ProfileFlow(
         removeAllAsk = null
         manage = false
         if (stage != Stage.Picker) stage = Stage.Picker
+    }
+
+    /**
+     * Add account pressed before the app lock was read waits on its pad, drawn nothing until the
+     * lock is known (fail closed). Read with no PIN after all, it goes on at once rather than
+     * leaving a pad that asks for a PIN nobody set; read with one, the pad shows now.
+     */
+    private fun lockRead() {
+        val now = stage
+        if (now is Stage.AppPin && now.then == Guarded.Add && now.id == null && !appLockPin) {
+            stage = Stage.Picker
+            addChecked()
+        }
     }
 
     /** The profile whose PIN was just given at the picker, until its switch has opened it. */
@@ -409,7 +448,13 @@ class ProfileFlow(
 
     /** Add account: a fresh profile on the normal sign in, after asking when something runs. */
     fun add() {
-        if (status != null) return
+        // Already under way: its line is up (over the shell, or on the picker), nothing to add twice.
+        if (adding) return
+        // Another switch or sign out runs: said, never a press that does nothing.
+        if (status != null) {
+            notice = Notice(L.profilesAdd, L.profilesAddBusy, retry = ::addAfterWork)
+            return
+        }
         if (appLockPin) {
             stage = Stage.AppPin(null, Guarded.Add)
             return
@@ -545,10 +590,22 @@ class ProfileFlow(
     }
 
     /** One switch at a time from here too; the switcher itself keeps only the newest asked. */
-    private fun work(line: String, failure: () -> Notice, onFailed: (() -> Unit)? = null, block: suspend () -> Unit) {
+    private fun work(
+        line: String,
+        failure: () -> Notice,
+        onFailed: (() -> Unit)? = null,
+        onEnd: (() -> Unit)? = null,
+        block: suspend () -> Unit,
+    ) {
         val before = running
         running = scope.launch {
-            before?.join()
+            try {
+                before?.join()
+            } catch (e: CancellationException) {
+                onEnd?.invoke()
+                throw e
+            }
+            viewerCancelled = false
             status = line
             val watch = scope.launch {
                 // Only the slow close's line: the line itself was set above, and a late Idle
@@ -560,6 +617,13 @@ class ProfileFlow(
             try {
                 block()
             } catch (e: CancellationException) {
+                // Not the viewer's Cancel (a timeout inside it, say) while the app goes on: said
+                // like any failure, never a line that just goes away with nothing done.
+                if (!viewerCancelled && scope.isActive) {
+                    Logger.w(TAG, "a profile action was cut short", e)
+                    notice = failure()
+                    resumePaused()
+                }
                 throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "a profile switch failed", e)
@@ -571,6 +635,7 @@ class ProfileFlow(
             } finally {
                 withContext(NonCancellable) { watch.cancelAndJoin() }
                 status = null
+                onEnd?.invoke()
             }
         }
     }
@@ -632,9 +697,22 @@ class ProfileFlow(
         }
     }
 
+    /** Add account that did not happen: Try again asks for it again, behind the app lock's PIN again. */
+    private fun addFailed() = Notice(L.profilesAdd, L.profilesAddFailed, retry = ::addAfterWork)
+
+    /**
+     * Try again on an Add account notice: the notice is up a moment before the work that showed it
+     * has ended, and a press in that moment must not find it still running and do nothing.
+     */
+    private fun addAfterWork() {
+        val last = running
+        if (last == null || last.isCompleted) add() else scope.launch { last.join(); add() }
+    }
+
     private fun addNow() {
         stage = Stage.Picker
-        work(L.profilesSwitching(name = L.profilesAdd), failure = { Notice(L.profilesAdd, L.profilesAddFailed) }) {
+        adding = true
+        work(L.profilesAddingNow, failure = ::addFailed, onEnd = { adding = false }) {
             stopFirst()
             ProfileUnlock.lock()
             val result = switcher.add()
@@ -644,8 +722,9 @@ class ProfileFlow(
                 is AddResult.NoSpace -> notice = Notice(
                     L.profilesNoSpaceTitle,
                     L.profilesNoSpaceBody(needed = L.messages.formatter.size(result.neededBytes), free = L.messages.formatter.size(result.freeBytes)),
+                    retry = ::addAfterWork,
                 )
-                else -> notice = Notice(L.profilesAdd, L.profilesAddFailed)
+                else -> notice = addFailed()
             }
             // Nothing added, the open profile stays: what the wait paused goes on again.
             if (result !is AddResult.Added) resumePaused()
@@ -894,13 +973,37 @@ fun ProfilesGate(
                 )
             }
             else -> {
-                key(list.activeId) { content() }
+                // The shell keeps the item the remote was on when a panel over it took the focus,
+                // and gets it back when the panel is given up ([ProfileFlow.focusAsk]: OK on a
+                // notice, Cancel on a PIN pad or a question, Cancel on Add account's wait).
+                val shellFocus = remember { FocusRequester() }
+                val overlayUp = flow.stage != ProfileFlow.Stage.Picker || flow.notice != null || flow.adding
+                // Kept as the panel comes up, before it takes the remote a frame later.
+                LaunchedEffect(overlayUp) { if (overlayUp) runCatching { shellFocus.saveFocusedChild() } }
+                val seenAsk = remember { mutableIntStateOf(flow.focusAsk) }
+                LaunchedEffect(flow.focusAsk) {
+                    if (flow.focusAsk == seenAsk.intValue) return@LaunchedEffect
+                    seenAsk.intValue = flow.focusAsk
+                    // The panel's last frame first, and only once nothing else is over the shell.
+                    withFrameNanos { }
+                    snapshotFlow { flow.stage == ProfileFlow.Stage.Picker && flow.notice == null && !flow.adding }.first { it }
+                    withFrameNanos { }
+                    runCatching { if (!shellFocus.restoreFocusedChild()) shellFocus.requestFocus() }
+                }
+                Box(Modifier.fillMaxSize().focusRequester(shellFocus).focusGroup()) {
+                    key(list.activeId) { content() }
+                }
                 // A profile on its sign in with others beside it: Back brings the picker.
                 BackHandler(enabled = several && signInStep) { flow.ask() }
                 // A panel a press in the shell asked for (Add account behind the app lock's PIN, or
                 // asked first while a video plays), with one profile too: drawn over the shell,
                 // which stays composed, so Cancel lands back where it came from (Settings).
                 if (flow.stage != ProfileFlow.Stage.Picker && !appShut) ProfileFlowScreen(flow, list, signInStep)
+                // Add account's work, pressed in the shell (the account menu, Settings): its line
+                // over the shell, as the picker shows it on its row. Without it a one profile
+                // install saw the menu close and nothing else while the open profile's work
+                // stopped and the next client opened, and a second press was dropped unseen.
+                if (flow.adding && flow.stage == ProfileFlow.Stage.Picker && !appShut) AddingPanel(flow)
             }
         }
         // Nothing of a profile's notice over the app lock's pad, nor before the lock is read: its Try
@@ -933,6 +1036,31 @@ fun profileShellShown(flow: ProfileFlow?): Boolean {
     val unlockedId by ProfileUnlock.unlockedId.collectAsState()
     val show = ProfilePicker.atLaunch(list) && (flow.asked || !flow.entered)
     return !show && !ProfileUnlock.needsUnlock(list, unlockedId)
+}
+
+/**
+ * Add account under way, over the shell: a spinner and the line (what it waits for, the slow
+ * close), with Cancel while the open profile's work is still being stopped. It holds the remote,
+ * so nothing behind it is pressed while the profile changes under it.
+ */
+@Composable
+private fun AddingPanel(flow: ProfileFlow) {
+    val line = flow.status ?: L.profilesAddingNow
+    val actions = if (flow.waitCancellable) listOf(PanelAction(L.commonCancel, flow::cancelWaiting)) else emptyList()
+    // Back is Cancel while there is one; past that the switch is under way and Back waits with it.
+    ProfilePanel(
+        title = L.profilesAdd,
+        body = line,
+        actions = actions,
+        onDismiss = { if (flow.waitCancellable) flow.cancelWaiting() },
+        header = {
+            CircularProgressIndicator(
+                Modifier.padding(bottom = 16.dp).size(32.dp).clearAndSetSemantics { },
+                color = Tone.accent,
+                strokeWidth = 3.dp,
+            )
+        },
+    )
 }
 
 /** A checker that takes no PIN: where one is required and none is there, nothing gets through. */

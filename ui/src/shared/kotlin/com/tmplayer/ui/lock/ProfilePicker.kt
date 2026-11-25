@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
@@ -553,6 +554,8 @@ fun ProfilePanel(
                 .background(Tone.surface)
                 // A remote stays in the panel: nothing behind it (the row, the shell) can take focus.
                 .focusProperties { onExit = { cancelFocusChange() } }
+                // A panel with nothing to press (a wait) holds the remote itself.
+                .then(if (actions.isEmpty()) Modifier.focusRequester(first).focusable() else Modifier)
                 .focusGroup()
                 // Taps inside stay inside.
                 .pointerInput(Unit) { detectTapGestures { } }
