@@ -228,12 +228,19 @@ class ScreenInvariantsTest {
         val wanted = setOf("home", "history-continue", "history-watched", "series", "favourites-chats")
         for (screen in screens().filter { it.name in wanted }) for ((w, h, fs) in cases) {
             inWindow(screen, w, h, fs) { _, window ->
-                // To the end of every scroller on the page.
-                for (scroller in onAllNodes(hasScrollAction(), useUnmergedTree = true).fetchSemanticsNodes()) {
-                    val by = scroller.config.getOrNull(SemanticsActions.ScrollBy)?.action ?: continue
-                    runOnUiThread { by(0f, 1_000_000f) }
+                // To the end of every scroller on the page, again until none has further to go: a show's page draws its
+                // list once its details have come (or a moment has passed), which on a slow machine is after the first
+                // scroll, and a lazy list only knows its end once it has reached it.
+                for (round in 0 until 3) {
+                    for (scroller in onAllNodes(hasScrollAction(), useUnmergedTree = true).fetchSemanticsNodes()) {
+                        val by = scroller.config.getOrNull(SemanticsActions.ScrollBy)?.action ?: continue
+                        runOnUiThread { by(0f, 1_000_000f) }
+                    }
+                    mainClock.advanceTimeBy(1_000)
+                    val ranges = onAllNodes(hasScrollAction(), useUnmergedTree = true).fetchSemanticsNodes()
+                        .mapNotNull { it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) }
+                    if (ranges.isNotEmpty() && ranges.all { it.value() >= it.maxValue() - 0.5f }) break
                 }
-                mainClock.advanceTimeBy(1_000)
                 val root = onAllNodes(isRoot(), useUnmergedTree = true).fetchSemanticsNodes().first()
                 val tabs = root.walk().filter { it.config.getOrNull(SemanticsProperties.Role)?.toString() == "Tab" }.toList()
                 if (tabs.isEmpty()) return@inWindow
