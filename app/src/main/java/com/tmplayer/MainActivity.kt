@@ -1145,13 +1145,15 @@ private fun Root() {
             com.tmplayer.ui.settings.forgetSession(settings)
         }
         if (Setup.isSignInStep(auth)) {
+            val others = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.profiles?.size ?: 1
             // The setup is for a new start: after an ended session the preferences are still there.
-            if (!com.tmplayer.data.Td.sessionEnded.value) runCatching { settings.armSetup(tvDarkByDefault = FormFactor.isTv(context)) }
+            // Not for Add account's sign in either (HX88): the setup is the device's, already done,
+            // and armed here it came up over the open profile once the new one was given up.
+            if (!com.tmplayer.data.Td.sessionEnded.value && others <= 1) runCatching { settings.armSetup(tvDarkByDefault = FormFactor.isTv(context)) }
             // A sign in screen means the account is gone, however it went: signed out here, or
             // from Telegram's Devices list, which is the way back from a forgotten PIN. The lock
             // was that account's. Unless other profiles share the device (HX88): the lock is the
             // device's, and a new profile's sign in, or one profile's ended login, is not theirs.
-            val others = com.tmplayer.data.AccountSwitcher.current()?.profiles?.value?.profiles?.size ?: 1
             if (others <= 1) runCatching { settings.clearAppLock() }
         }
     }
