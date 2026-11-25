@@ -294,4 +294,38 @@ class WorkStatusTvFocusTest {
         rule.waitForIdle()
         rule.onNode(hasContentDescription(L.stateOfflineRefresh)).assertExists()
     }
+
+    /**
+     * The television's one status ([TvStatusPill]) holds the connection and the page's work in ONE slot: with both
+     * up only the connection's words are drawn, and with only the work up its short words stand in the same place,
+     * never a second pill and never at the foot (the slot is the bar's; here a corner stands for it).
+     */
+    @Test
+    fun `the one status pill draws the connection or the work, never both, and takes no focus`() {
+        FormFactor.override(true)
+        var input by androidx.compose.runtime.mutableStateOf(
+            TvStatusInput(work = PageWork(WorkStatus.Syncing(), true), connection = ConnectionNotice.Connecting),
+        )
+        rule.setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.fillMaxSize().background(Tone.background).testTag("screen")) {
+                    TvStatusPill(input, Modifier.align(Alignment.TopEnd).padding(top = Tv.SafeV, end = Tv.SafeH).testTag("status"))
+                }
+            }
+        }
+        remoteWindow()
+        rule.mainClock.advanceTimeBy(1_500)
+        rule.waitForIdle()
+        rule.onNode(hasText(L.stateConnectingTv)).assertExists()
+        rule.onAllNodes(hasText(L.stateUpdatingTv)).assertCountEquals(0)
+        rule.onAllNodes(hasClickAction()).assertCountEquals(0)
+        val screen = rule.onNodeWithTag("screen").getBoundsInRoot()
+        val box = rule.onNodeWithTag("status").getBoundsInRoot()
+        assertTrue("in the top half, not the foot", box.top < screen.top + (screen.bottom - screen.top) / 2)
+        input = TvStatusInput(work = PageWork(WorkStatus.Syncing(), true))
+        rule.mainClock.advanceTimeBy(1_500)
+        rule.waitForIdle()
+        rule.onNode(hasText(L.stateUpdatingTv)).assertExists()
+        rule.onAllNodes(hasText(L.stateConnectingTv)).assertCountEquals(0)
+    }
 }

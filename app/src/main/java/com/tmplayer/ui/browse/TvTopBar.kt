@@ -131,6 +131,12 @@ internal object TvBarSignals {
     /** The last sync's status, for the words of [statusLine]. */
     val statusSync = MutableStateFlow<com.tmplayer.data.SyncStatus?>(null)
 
+    /** The page's own work (updating, up to date, a failure the viewer asked to see), set by the page under the bar. */
+    val statusWork = MutableStateFlow(com.tmplayer.ui.components.PageWork(com.tmplayer.data.WorkStatus.Idle, false))
+
+    /** The line to Telegram coming back (reconnecting, connecting) or lost (offline: the card says it). */
+    val statusConnection = MutableStateFlow(com.tmplayer.ui.components.ConnectionNotice.Hidden)
+
     /** How many bars are in the composition: with none, the shell draws the status where it used to. */
     val barsShown = MutableStateFlow(0)
 
@@ -292,9 +298,11 @@ internal fun TvTopBar(
                 status = {
                     val statusLine by TvBarSignals.statusLine.collectAsState()
                     val statusSync by TvBarSignals.statusSync.collectAsState()
-                    com.tmplayer.ui.components.GlobalStatusPill(
-                        line = statusLine,
-                        syncStatus = statusSync,
+                    val statusWork by TvBarSignals.statusWork.collectAsState()
+                    val statusConnection by TvBarSignals.statusConnection.collectAsState()
+                    // One status at a time, by priority (TvStatusRules.pick): never a pill at the foot over the cards.
+                    com.tmplayer.ui.components.TvStatusPill(
+                        input = com.tmplayer.ui.components.TvStatusInput(statusLine, statusSync, statusWork, statusConnection),
                         modifier = Modifier.testTag("tv-bar-status"),
                     )
                 },

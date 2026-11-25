@@ -1244,6 +1244,7 @@ private fun Root() {
     androidx.compose.runtime.SideEffect {
         com.tmplayer.ui.browse.TvBarSignals.statusLine.value = globalLine
         com.tmplayer.ui.browse.TvBarSignals.statusSync.value = syncStatus
+        com.tmplayer.ui.browse.TvBarSignals.statusConnection.value = connectionNotice
     }
     val tvBarsShown by com.tmplayer.ui.browse.TvBarSignals.barsShown.collectAsStateWithLifecycle()
 
@@ -2298,7 +2299,6 @@ private fun Root() {
                     onOpenDownloads = openDownloads,
                     returnToRail = railReturn,
                     tvNav = if (tvBar) touchNav else null,
-                    connectionShown = connectionNotice != ConnectionNotice.Hidden,
                     onReturnedToRail = { railReturn = null },
                     downloadCount = activeDownloadCount,
                     updateVersion = offeredUpdate,
@@ -2911,17 +2911,10 @@ private fun Root() {
         // The phone's notice stands in the floating bar's host, above the bar (TouchNavHost's banner).
         // Elsewhere the pills keep the foot of the screen and Offline is the card at the top (R4).
         if (FormFactor.isTv(context)) {
-            ConnectionStatus(
-                notice = connectionNotice,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .tvPillSlot(),
-            )
-            // A catch up, a wait and a sync that needs the viewer: the words only, never focusable (WP-100). The top bar
-            // draws them in its free space; only where no bar is shown (a screen without one) they keep the foot.
-            if (tvBarsShown == 0) com.tmplayer.ui.components.GlobalStatusPill(
-                line = globalLine,
-                syncStatus = syncStatus,
+            // One status at a time (TvStatusRules.pick): the top bar draws it in its free space, over no card or page.
+            // Only where no bar is shown (a chat's grid) it keeps the foot, inside the safe area.
+            if (tvBarsShown == 0) com.tmplayer.ui.components.TvStatusPill(
+                input = com.tmplayer.ui.components.TvStatusInput(globalLine, syncStatus, connection = connectionNotice),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .tvPillSlot(),

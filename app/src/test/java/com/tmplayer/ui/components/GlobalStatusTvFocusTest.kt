@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.GlobalLine
 import com.tmplayer.data.SyncStatus
-import com.tmplayer.data.SyncWords
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.DrainMainLooperRule
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -113,16 +112,9 @@ class GlobalStatusTvFocusTest {
                     Column(Modifier.padding(48.dp).testTag("rows")) {
                         rows.forEach { name -> Button(onClick = {}) { Text(name) } }
                     }
-                    GlobalStatusPill(
-                        line = line,
-                        syncStatus = sync,
+                    TvStatusPill(
+                        input = TvStatusInput(line = line, sync = sync),
                         modifier = Modifier.align(Alignment.TopEnd).padding(top = Tv.SafeV, end = Tv.SafeH).testTag("global"),
-                        // A television passes none of these: the pill must not draw them anyway.
-                        onRetry = {},
-                        onTryAgainSync = {},
-                        onSendLogs = {},
-                        onOpenSettings = {},
-                        onDismiss = {},
                     )
                 }
             }
@@ -142,21 +134,18 @@ class GlobalStatusTvFocusTest {
         rule.onAllNodes(hasClickAction()).assertCountEquals(rows.size)
     }
 
-    private val states: List<Triple<String, GlobalLine, String>> get() = listOf(
-        Triple("catching up", GlobalLine.Updating, L.stateUpdating),
-        Triple("slow", GlobalLine.SlowAnswer, L.commonSlowAnswer),
-        Triple("a wait", GlobalLine.RateLimited(42), L.stateRateLimited(seconds = 42)),
-        Triple("a newer sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.TooNew), L.stateSyncNeedsYouTv(name = L.syncplaceSwitch)),
-        Triple("an unreadable sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Unreadable), L.stateSyncNeedsYouTv(name = L.syncplaceSwitch)),
-        Triple("another account", GlobalLine.SyncNeedsYou(SyncStatus.Kind.OtherAccount), L.stateSyncNeedsYouTv(name = L.syncplaceSwitch)),
-        Triple("three failed tries", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed), L.stateSyncStoppedTv(name = L.syncplaceSwitch)),
-    )
+    private val rowName get() = L.syncplaceSwitch
 
-    /** The long sentence a screen reader gets for a sync line (the reason and where the way out is). */
-    private fun longWords(state: GlobalLine.SyncNeedsYou): String {
-        val said = if (state.kind == SyncStatus.Kind.Failed) SyncWords.stopped(stopped) else SyncWords.status(SyncStatus(state.kind, 0L), 0L, false)
-        return said + " " + L.stateSyncOpenSettings(name = L.syncplaceSwitch)
-    }
+    /** Each state with its short TV words (the whole text of the pill) and the long sentence a screen reader gets. */
+    private val states: List<Triple<String, GlobalLine, Pair<String, String>>> get() = listOf(
+        Triple("catching up", GlobalLine.Updating, L.stateUpdatingTv to L.stateUpdating),
+        Triple("slow", GlobalLine.SlowAnswer, L.stateSlowTv to L.commonSlowAnswer),
+        Triple("a wait", GlobalLine.RateLimited(42), "Retry in 42s" to L.stateRateLimited(seconds = 42)),
+        Triple("a newer sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.TooNew), "Sync needs you" to L.stateSyncNeedsYouTv(name = rowName)),
+        Triple("an unreadable sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Unreadable), "Sync needs you" to L.stateSyncNeedsYouTv(name = rowName)),
+        Triple("another account", GlobalLine.SyncNeedsYou(SyncStatus.Kind.OtherAccount), "Sync needs you" to L.stateSyncNeedsYouTv(name = rowName)),
+        Triple("three failed tries", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed), "Sync stopped" to L.stateSyncStoppedTv(name = rowName)),
+    )
 
     @Test
     fun `every state says its words, takes no focus and offers no button on the remote`() {
@@ -165,14 +154,14 @@ class GlobalStatusTvFocusTest {
         val first = row(rows[0])
         first.requestFocus()
         first.assertIsFocused()
-        for ((name, state, words) in states) {
+        for ((name, state, said) in states) {
             line = state
             rule.waitForIdle()
-            rule.onNode(hasText(words, substring = true)).assertExists("$name: the words are drawn")
+            rule.onNode(hasText(said.first)).assertExists("$name: the short words are drawn whole")
             assertWordsOnly()
+            rule.onNode(hasContentDescription(said.second)).assertExists("$name: the screen reader gets the whole sentence")
             if (state is GlobalLine.SyncNeedsYou) {
-                rule.onNode(hasText(L.syncplaceSwitch, substring = true)).assertExists("$name: Settings' row is named as Settings titles it")
-                rule.onNode(hasContentDescription(longWords(state))).assertExists("$name: the screen reader gets the whole sentence")
+                assertTrue("$name: Settings' row is named in the description", rowName in said.second)
             }
             first.assertIsFocused()
         }
@@ -274,32 +263,34 @@ class GlobalStatusTvFocusTest {
     }
 
     @Test
-    fun `the three failures line says where the way out is, in words, since no button is drawn`() {
+    fun `the three failures line says Sync stopped, and where the way out is for a screen reader, since no button is drawn`() {
         screen()
         sync = stopped
         line = GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)
         rule.waitForIdle()
-        rule.onNode(hasText(L.stateSyncStoppedTv(name = L.syncplaceSwitch))).assertExists()
-        rule.onNode(hasText(L.syncplaceSwitch, substring = true)).assertExists()
+        rule.onNode(hasText("Sync stopped")).assertExists()
+        rule.onNode(hasContentDescription(L.stateSyncStoppedTv(name = rowName))).assertExists()
         assertWordsOnly()
     }
 
     @Test
-    fun `in a narrow slot the line is cut with an ellipsis on one line and the screen reader still gets all of it`() {
+    fun `in a narrow slot the pill shows the first word and never an ellipsis, and the screen reader still gets all of it`() {
         FormFactor.override(true)
         sync = stopped
         line = GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)
         rule.setContent {
             TmMaterialTheme(dark = true) {
-                Box(Modifier.width(160.dp).testTag("slot")) {
-                    GlobalStatusPill(line = line, syncStatus = sync, modifier = Modifier.testTag("global"))
+                Box(Modifier.width(120.dp).testTag("slot")) {
+                    TvStatusPill(TvStatusInput(line = line, sync = sync), modifier = Modifier.testTag("global"))
                 }
             }
         }
         rule.waitForIdle()
         val pill = rule.onNodeWithTag("global").getBoundsInRoot()
         assertTrue("one line in a narrow slot, ${pill.bottom - pill.top} tall", pill.bottom - pill.top <= 48.dp)
-        assertTrue("never wider than the slot, ${pill.right - pill.left}", pill.right - pill.left <= 160.dp)
-        rule.onNode(hasContentDescription(longWords(GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)))).assertExists()
+        assertTrue("never wider than the slot, ${pill.right - pill.left}", pill.right - pill.left <= 120.dp)
+        rule.onNode(hasText("Sync")).assertExists()
+        rule.onAllNodes(hasText("\u2026", substring = true)).assertCountEquals(0)
+        rule.onNode(hasContentDescription(L.stateSyncStoppedTv(name = rowName))).assertExists()
     }
 }

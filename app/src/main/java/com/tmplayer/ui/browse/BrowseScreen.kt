@@ -4,9 +4,6 @@ import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.focusEdge
 import androidx.compose.animation.core.snap
 import com.tmplayer.data.WorkStatus
-import com.tmplayer.ui.components.WorkStatusPill
-import com.tmplayer.ui.components.tvPillSlot
-import com.tmplayer.ui.components.unlessConnectionShown
 import com.tmplayer.ui.components.rememberAskedRefresh
 import com.tmplayer.ui.components.PageWork
 import com.tmplayer.ui.components.pageWork
@@ -252,8 +249,6 @@ internal fun BrowseScreen(
     onReturnedToRail: () -> Unit = {},
     /** What the television's top bar shows and does: the phone's bar's own set. Null on a phone. */
     tvNav: TouchNav? = null,
-    /** The connection pill (Connecting, Offline) is up in the shell: it holds the foot slot, so the work pill stays out (F-03). */
-    connectionShown: Boolean = false,
     /** How many downloads are running, for the badge on that row of the drawer and the rail. */
     downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
@@ -1167,26 +1162,22 @@ internal fun BrowseScreen(
             // Home runs up under the bar, its carousel's picture with it; every other page, and
             // Home while it loads, starts below the bar.
             val underBar = homeShown && state is UiState.Content
-            // The asked refresh's pill, where the connection's sits; never focusable (WP-40, LS-03).
-            // Updating after the menu's Refresh, or after 3 s of an automatic one, then Up to date
-            // for 2 s after a pressed one (WP-93); a failure the viewer asked to see is said here for 6 s
-            // as words (F-02), and Try again is the page foot's line. One pill at a time (F-03).
+            // The asked refresh's status (WP-40, LS-03): Updating after the menu's Refresh, or after 3 s of an automatic
+            // one, then Up to date for 2 s after a pressed one (WP-93); a failure the viewer asked to see is said as words
+            // for 6 s (F-02), and Try again is the page foot's line. It is drawn by the top bar in its one status slot
+            // (TvStatusRules.pick: one at a time, by priority), never at the foot over the cards (Mi TV, 2026-11-25).
             val pillWork = System.currentTimeMillis().let { now ->
                 when {
                     tvSearchOpen -> PageWork(WorkStatus.Idle, false)
                     tab.isHome -> pageWork(homeAsk.status, homeStatus, now)
                     tab.onChatsPage -> pageWork(chatsAsk.status, chatsStatus, now)
                     else -> PageWork(WorkStatus.Idle, false)
-                }.unlessConnectionShown(connectionShown)
+                }
             }
-            WorkStatusPill(
-                status = pillWork.status,
-                asked = pillWork.asked,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(1f)
-                    .tvPillSlot(),
-            )
+            androidx.compose.runtime.SideEffect { TvBarSignals.statusWork.value = pillWork }
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                onDispose { TvBarSignals.statusWork.value = PageWork(WorkStatus.Idle, false) }
+            }
             val homeScrolled by TvBarSignals.homeScrolled.collectAsState()
             val barGround by androidx.compose.animation.core.animateFloatAsState(
                 if (underBar && homeScrolled) 1f else 0f,
