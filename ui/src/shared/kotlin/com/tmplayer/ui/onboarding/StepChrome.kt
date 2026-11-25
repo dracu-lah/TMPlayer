@@ -124,7 +124,7 @@ internal fun StepFrame(
                 brand()
                 Spacer(Modifier.height(12.dp))
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(end = com.tmplayer.ui.components.LocalWindowControlsInset.current), verticalAlignment = Alignment.CenterVertically) {
                 if (wide) {
                     brand()
                     Spacer(Modifier.width(24.dp))

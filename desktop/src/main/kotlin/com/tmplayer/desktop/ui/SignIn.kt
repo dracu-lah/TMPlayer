@@ -260,7 +260,13 @@ private fun QrPane(link: String, scanned: Boolean) {
         Text(s.loginQrNote, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
     }
     val usePhone: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Wraps rather than running out of the pane: beside the steps, at a larger font, the second button's name was cut ("Get a").
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             TextButton(onClick = { scope.launch { Td.chooseSignInMethod(SignInMethod.Phone) } }) {
                 Text(s.signinUsePhone)
             }

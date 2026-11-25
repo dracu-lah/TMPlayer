@@ -145,6 +145,11 @@ fun DesktopShell(
         com.tmplayer.ui.components.LocalSheetHost provides DesktopSheetHost,
         // The big-screen mode's dialogs take the remote as they open and walk with the arrows.
         com.tmplayer.ui.components.LocalRemoteArrows provides BigScreen.on,
+        // The window's own buttons cover the top end of whatever has no header of its own: the setup's and the tour's
+        // Skip all keep clear of them.
+        com.tmplayer.ui.components.LocalWindowControlsInset provides com.tmplayer.ui.components.windowControlsInset(
+            LocalWindowChrome.current?.let { if (it.closeOnly) 1 else if (it.onMinimize != null) 3 else 2 } ?: 0,
+        ),
     ) {
         Surface(
             Modifier

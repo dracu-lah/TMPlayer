@@ -85,11 +85,22 @@ fun LanguagePopup(settings: SettingsStore, onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(s.languagePickerNote, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-                LanguageList(settings, columns = 3)
+                // Three columns where the window has room for names like "Español (Latinoamérica)" whole, two or one as it
+                // narrows, so a name never breaks in the middle of a word.
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val windowDp = with(density) { androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toDp() }
+                LanguageList(settings, columns = languageColumns(windowDp))
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text(s.commonClose) } },
     )
+}
+
+/** How many columns the language list gets in a window [window] wide: each cell wants about 230 dp at the usual font. */
+internal fun languageColumns(window: androidx.compose.ui.unit.Dp): Int = when {
+    window >= 1000.dp -> 3
+    window >= 640.dp -> 2
+    else -> 1
 }
 
 /** "What's new": the highlights of [WhatsNew.VERSION] and a link to the whole changelog. */
