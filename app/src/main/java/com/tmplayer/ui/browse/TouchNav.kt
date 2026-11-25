@@ -1380,20 +1380,27 @@ private fun BarButton(
         Box(Modifier.size(BAR_ICON), contentAlignment = Alignment.Center) {
             com.tmplayer.ui.components.SelectableIcon(icon, selected = chosen, tint = tint, size = BAR_ICON)
             if (badge > 0) {
-                Text(
-                    if (badge > 99) "99+" else badge.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Tone.onAccent,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 10.dp, y = (-6).dp)
-                        .clip(CircleShape)
-                        .background(Tone.accent)
-                        .border(1.5.dp, FloatingTone.menu, CircleShape)
-                        .padding(horizontal = 4.dp)
-                        .testTag(BAR_BADGE_TAG),
-                )
+                // Capped as the captions are: at twice the font the count grew into a disc that covered the
+                // icon it sits on (phone audit, 2026-11-25).
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides Density(density.density, density.fontScale.coerceAtMost(BAR_CAPTION_MAX_SCALE)),
+                ) {
+                    Text(
+                        if (badge > 99) "99+" else badge.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Tone.onAccent,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 10.dp, y = (-6).dp)
+                            .clip(CircleShape)
+                            .background(Tone.accent)
+                            .border(1.5.dp, FloatingTone.menu, CircleShape)
+                            .padding(horizontal = 4.dp)
+                            .testTag(BAR_BADGE_TAG),
+                    )
+                }
             }
         }
         if (captionSize != null) BarCaption(label, chosen, captionSize)

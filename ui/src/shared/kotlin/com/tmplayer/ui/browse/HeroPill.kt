@@ -96,17 +96,27 @@ fun HeroPill(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(26.dp).padding(end = 2.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = ink,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(start = if (icon != null) 6.dp else 0.dp),
-        )
+        // A control's words stop growing at 1.3 times the font, as the bar's captions do: at twice the font
+        // "Play S01E01" took two lines and the pill grew over the text above it (phone audit, 2026-11-25).
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale.coerceAtMost(HERO_PILL_MAX_SCALE)),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(start = if (icon != null) 6.dp else 0.dp),
+            )
+        }
     }
 }
+
+/** The most the pill's words grow with the system font. */
+private const val HERO_PILL_MAX_SCALE = 1.3f
 
 /** As tall as a thumb wants and a remote can find. */
 val HERO_PILL_HEIGHT = 52.dp

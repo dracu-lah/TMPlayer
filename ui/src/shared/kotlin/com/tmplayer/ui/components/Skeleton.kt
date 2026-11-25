@@ -398,9 +398,10 @@ object TileGrid {
      * three on a phone held upright and six on its side, a poster of about 126 dp; on a tablet as
      * many as keep one under [POSTER_TOUCH_MAX]; on a television about seven.
      */
-    fun posterColumns(width: Dp, touch: Boolean, landscape: Boolean): Int =
+    fun posterColumns(width: Dp, touch: Boolean, landscape: Boolean, fontScale: Float = 1f): Int =
         if (touch) {
-            maxOf(if (landscape) 6 else 3, across(width, POSTER_TOUCH_MAX, TouchGap))
+            // Two across at a very large font on a phone upright: three broke "Harbour" into "Harbou" and "r" (phone audit, 2026-11-25).
+            maxOf(if (landscape) 6 else if (fontScale >= 1.6f) 2 else 3, across(width, POSTER_TOUCH_MAX, TouchGap))
         } else {
             across(width, POSTER_TV_MIN, TvGap)
         }

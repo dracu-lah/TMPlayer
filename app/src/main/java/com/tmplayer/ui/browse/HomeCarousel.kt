@@ -293,6 +293,16 @@ private fun FeaturedPage(
     }
     val title = remember(pick) { series?.title?.ifBlank { null } ?: pick.loneEpisode?.title ?: SeriesShelf.tileTitle(item) }
     val facts = remember(pick, chat, s) { featuredFacts(pick, title, chat, s) }
+    // The words stand on the foot, growing upward: in a short frame or at a large font they met the app's name and
+    // the clock (landscape, 393 dp high) or ran under Play (320 dp wide at twice the font). So the overview gives up
+    // its lines first, then the title takes one, until what is left fits under the status bar (phone audit, 2026-11-25).
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val room = height - under - (BRAND_ROOM_ABOVE + (32f * (fontScale - 1f).coerceAtLeast(0f)).dp) - footRoom - TEXT_GAP
+    fun need(titleLines: Int, overview: Int) = ((32f * titleLines + 20f + 28f + 20f * overview) * fontScale + 24f).dp
+    val shownOverview = (overviewLines downTo 0).firstOrNull { need(2, it) <= room } ?: 0
+    val titleLines = if (need(2, shownOverview) <= room) 2 else 1
+    // Not even the facts line fit: the title and the buttons stand alone rather than run into the app's name.
+    val showInfo = need(1, 0) - (28f * fontScale).dp <= room
 
     Box(
         Modifier
@@ -325,11 +335,11 @@ private fun FeaturedPage(
                         title,
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                         color = Tone.text,
-                        maxLines = 2,
+                        maxLines = titleLines,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = overviewLines, leftSec = leftSec)
+                if (showInfo) FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = shownOverview, leftSec = leftSec)
             }
             return@Box
         }
@@ -351,13 +361,13 @@ private fun FeaturedPage(
                     title,
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = Tone.text,
-                    maxLines = 2,
+                    maxLines = titleLines,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = 2, textAlign = TextAlign.Center, leftSec = leftSec)
+            if (showInfo) FeaturedInfo(pick, meta, Modifier.fillMaxWidth(), overviewLines = minOf(2, shownOverview), textAlign = TextAlign.Center, leftSec = leftSec)
         }
     }
 }
@@ -545,6 +555,9 @@ private val TOP_SCRIM = 72.dp
 
 /** Between a page's name and Play. */
 private val TEXT_GAP = 10.dp
+
+/** What the app's name takes above the words on Home: its 12 dp gap, 32 dp line and a breath. */
+private val BRAND_ROOM_ABOVE = 52.dp
 
 private const val SEPARATOR = "  ·  "
 

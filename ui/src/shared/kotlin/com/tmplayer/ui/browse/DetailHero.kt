@@ -372,15 +372,30 @@ fun RoundAction(
         // Up to three lines, in type small enough for the longest word to fit the button's width:
         // in Malayalam "Mark as watched" ran past two lines, and German and French broke
         // "Herunterladen" and "Recommencer" in the middle of the word.
-        Text(
-            short,
-            style = fitLongestWord(short, MaterialTheme.typography.labelSmall, RoundActionWidth),
-            color = ink,
-            textAlign = TextAlign.Center,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
+        CapFontScale(ROUND_CAPTION_MAX_SCALE) {
+            Text(
+                short,
+                style = fitLongestWord(short, MaterialTheme.typography.labelSmall, RoundActionWidth),
+                color = ink,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
+}
+
+/** The most a round action's caption grows with the system font: its button is a fixed 72 dp, and "Download" broke at twice the font (phone audit, 2026-11-25). */
+internal const val ROUND_CAPTION_MAX_SCALE = 1.3f
+
+/** [content] with the system font scale held to at most [max]: for a caption under a control of a fixed size. */
+@Composable
+internal fun CapFontScale(max: Float, content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale.coerceAtMost(max)),
+        content = content,
+    )
 }
 
 /**
@@ -512,7 +527,7 @@ internal fun ResumeLine(watched: WatchPoint?, finished: Boolean, durationSec: In
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ProgressLine(watched.fraction, Modifier.width(RESUME_LINE))
         if (leftSec > 0) {
-            Text(s.browseTimeLeft(s.formatter.duration(leftSec)), style = MaterialTheme.typography.labelLarge, color = Tone.muted, maxLines = 1)
+            Text(s.browseTimeLeft(s.formatter.duration(leftSec)), style = MaterialTheme.typography.labelLarge, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
         }
     }
 }
@@ -630,11 +645,11 @@ internal fun fitLongestWord(text: String, style: TextStyle, width: Dp): TextStyl
         val widest = text.split(' ').filter { it.isNotEmpty() }.maxOfOrNull { word ->
             measurer.measure(word, style, maxLines = 1, softWrap = false).size.width
         } ?: 0
-        if (widest <= room) style else style.copy(fontSize = style.fontSize * (room / widest).coerceAtLeast(MIN_WORD_SCALE))
+        if (widest <= room) style else style.copy(fontSize = style.fontSize * (room / widest * 0.94f).coerceAtLeast(MIN_WORD_SCALE))
     }
 }
 
-private const val MIN_WORD_SCALE = 0.8f
+private const val MIN_WORD_SCALE = 0.5f
 
 /** The long fade at the foot of a page's backdrop. */
 internal val BACKDROP_FADE = 320.dp

@@ -501,15 +501,17 @@ internal fun WideIconAction(
                 SwapIcon(icon, ink, size = 24.dp)
             }
         }
-        Text(
-            short,
-            style = fitLongestWord(short, MaterialTheme.typography.labelSmall, RoundActionWidth),
-            color = ink,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.clearAndSetSemantics {},
-        )
+        CapFontScale(ROUND_CAPTION_MAX_SCALE) {
+            Text(
+                short,
+                style = fitLongestWord(short, MaterialTheme.typography.labelSmall, RoundActionWidth),
+                color = ink,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clearAndSetSemantics {},
+            )
+        }
     }
 }
 

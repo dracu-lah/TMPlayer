@@ -683,7 +683,7 @@ fun MediaGridScreen(
             // Films and shows are 2:3 posters, every other video a 16:9 card, and the two counts
             // across differ; the grid's own columns are a count both divide (see TileGrid).
             val landscape = maxWidth > maxHeight
-            val posterColumns = TileGrid.posterColumns(maxWidth - edge * 2, touch, landscape)
+            val posterColumns = TileGrid.posterColumns(maxWidth - edge * 2, touch, landscape, androidx.compose.ui.platform.LocalDensity.current.fontScale)
             val wideColumns = TileGrid.wideColumns(maxWidth - edge * 2, touch, landscape)
             val columns = TileGrid.columns(posterColumns, wideColumns)
             // A show is one tile that opens its seasons and episodes, and a film posted several
