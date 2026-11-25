@@ -78,8 +78,14 @@ test.describe('one engine', () => {
     })
 
     test('a catalog that does not come in keeps the page as it was, with Try again; a line the catalog lacks stays English', async ({ page }) => {
-        // German has no line for the failure yet (translations are the user's): it shows in English inside a German page.
-        expect(de.web.language_failed).toBeUndefined()
+        // The German catalog the page gets lacks the failure line (the fixture strips it, so a shipped catalog
+        // being complete does not matter): the line shows in English inside a German page.
+        await page.route('**/__strings/de.json', async (route) => {
+            const response = await route.fetch()
+            const body = (await response.json()) as Catalog
+            delete body.web?.language_failed
+            await route.fulfill({ response, json: body })
+        })
         await stored(page, 'de')
         await openLanguages(page)
         await expect(page.getByRole('heading', { name: de.settings.language, exact: true })).toBeVisible()

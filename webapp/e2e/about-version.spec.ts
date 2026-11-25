@@ -25,7 +25,8 @@ test('the account menu ends with the compact version, 44 px to press, and a pres
     await expect(foot).toHaveAttribute('aria-label', /^TMPlayer (v\d+\.\d+(\.\d+)?|web), open About$/)
     // It is the card's last line, under Add account, and one short line (no build, no browser).
     await expect(card.getByRole('menuitem').last()).toHaveText(COMPACT)
-    expect((await foot.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
+    // Layout height, not the bounding box: the menu opens with a scale animation (you-in), which shrinks the box for a moment.
+    expect(await foot.evaluate((el: HTMLElement) => el.offsetHeight)).toBeGreaterThanOrEqual(44)
     await foot.click()
     await expect(page).toHaveURL(/\/settings\/about$/)
     await expect(menu(page)).toHaveCount(0)

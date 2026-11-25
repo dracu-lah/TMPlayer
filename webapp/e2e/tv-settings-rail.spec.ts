@@ -50,7 +50,7 @@ for (const size of [
             expect(await chosen(page)).toBe('Account')
             await expect(page.locator('.tv-crumb')).toContainText('Settings')
             await expect(page.locator('.tv-crumb')).toContainText('Account')
-            await expect(page.locator('.tv-pane')).toContainText('Resume')
+            await expect(page.locator('.tv-pane')).toContainText('Sync across my devices')
         })
 
         test('the pane follows the rail after a moment, and a remote passing down the rail draws only where it rests', async ({ page }) => {
