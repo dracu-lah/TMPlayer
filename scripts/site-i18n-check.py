@@ -34,6 +34,11 @@ UNUSED_OK = {"build.languages"}
 # The old FAQ answer that promised an Audio list (TMPlayer plays videos only since 2026-11-16). The
 # catalogs still hold it; drop it from en.json and every catalog at the next sync, then this line.
 UNUSED_OK |= {"ld.yes_a_chat_with_48f9"}
+# The old FAQ answer for carrying on across devices (it named "Resume on your other devices"). The
+# answer now says "Sync across my devices" under ld.yes_once_you_turn_a79b; the catalogs still hold
+# the old translation under this key. Drop it from en.json and every catalog at the next sync, then
+# this line.
+UNUSED_OK |= {"ld.yes_once_you_turn_9ec7"}
 # The support popup (SupportPopup.astro) is switched off by SHOW_SUPPORT_POPUP in Base.astro since
 # 2026-11-03, so the build never looks these up. Its strings stay translated for when it comes
 # back; delete these four lines then. (They failed the Style job on every push until 2026-11-08.)
