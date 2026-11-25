@@ -32,6 +32,7 @@ import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.browse.DetailRow
 import com.tmplayer.ui.browse.PLAY_PILL_TAG
 import com.tmplayer.ui.browse.WideDetailPanel
+import com.tmplayer.ui.browse.breakableFileName
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -88,7 +89,7 @@ class DetailTwoColumnTest {
                 assertEquals("left gutter at $width", expected.value, gutter.value, 1f)
                 val about = onAllNodesWithText("Details")[0].getBoundsInRoot()
                 // The right edge of the About block is the mirror of the left gutter.
-                val name = onAllNodesWithText(bunny.fileName)[0].getBoundsInRoot()
+                val name = onAllNodesWithText(breakableFileName(bunny.fileName))[0].getBoundsInRoot()
                 assertTrue("About is beside Play at $width: ${about.left} vs ${gutter}", about.left > gutter + 400.dp)
                 assertTrue("the file name has room at $width: ${name.right - name.left}", (name.right - name.left) > 200.dp)
                 assertTrue("the About block ends inside the right gutter at $width", name.right <= width.dp - gutter + 1.dp)
