@@ -1,4 +1,4 @@
-// Resume on your other devices on the web (src/sync): Home's one question, the switch under Settings,
+// Sync across my devices on the web (src/sync): Home's one question, the switch under Settings,
 // Privacy and lock, and the file in Saved Messages (the fake keeps it in the test server, so a test reads
 // what the page put there). Opt in: with the switch off nothing is read from or written to Saved Messages.
 import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
@@ -90,7 +90,7 @@ test('"Yes, sync it" by the keyboard turns the sync on and sends one file, the a
     expect(doc.account).toBe(1)
     // Sync now: the same message, replaced in place, never a second one.
     await page.goto('/settings/privacy')
-    await expect(page.getByRole('switch', { name: /^Resume on your other devices/ })).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByRole('switch', { name: /^Sync across my devices/ })).toHaveAttribute('aria-checked', 'true')
     await page.getByRole('button', { name: 'Sync now' }).click()
     await expect(page.getByRole('status').filter({ hasText: /^Synced / })).toBeVisible()
     const after = await cloud(page, key)
@@ -102,14 +102,14 @@ test('Settings, Privacy and lock: off by default and nothing sent; turning it on
     const key = unique()
     await start(context, page, key)
     await page.goto('/settings/privacy')
-    const sw = page.getByRole('switch', { name: /^Resume on your other devices/ })
+    const sw = page.getByRole('switch', { name: /^Sync across my devices/ })
     await expect(sw).toHaveAttribute('aria-checked', 'false')
     await expect(page.getByText(/^Only TMPlayer's own data goes into one file/)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Sync now' })).toHaveCount(0)
     await shot(page, info, 'settings-privacy-off')
     // Turning it on is a question first; Cancel changes nothing.
     await sw.click()
-    const dialog = page.getByRole('dialog', { name: 'Resume on your other devices?' })
+    const dialog = page.getByRole('dialog', { name: 'Sync across my devices?' })
     await expect(dialog).toBeVisible()
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect(sw).toHaveAttribute('aria-checked', 'false')

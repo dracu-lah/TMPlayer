@@ -154,6 +154,8 @@ test('one home for every row: no id twice, and a page the web lacks (Privacy and
     assert.equal(OLD_PAGES.privacy, 'account')
     assert.equal(pageFor('library'), 'home')
     assert.equal(rowFor('resume_sync')?.page, 'account')
+    // The one name: the row is titled by the string the apps title theirs and the hint names (core SyncHintNameTest).
+    assert.equal(rowFor('resume_sync')?.title, 'syncplace.switch')
 })
 
 test('"Moved to" lines are for rows that exist, on the page they left, pointing at their new page', () => {
@@ -174,7 +176,7 @@ test('Language is the first row of Appearance and language, as in the apps', () 
 test('Sign out, Back up and Language are found by their words', () => {
     const context = everything('desktop')
     const rows = shownRows(context)
-    for (const [query, id] of [['sign out', 'sign_out'], ['back up', 'back_up'], ['language', 'language'], ['resume', 'resume_sync']] as const) {
+    for (const [query, id] of [['sign out', 'sign_out'], ['back up', 'back_up'], ['language', 'language'], ['sync', 'resume_sync']] as const) {
         assert.ok(ownHits(query, rows, text).includes(id) || r.settingsSearch(query, coreForm('desktop'), null).includes(id), `${query} finds ${id}`)
     }
 })

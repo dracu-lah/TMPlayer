@@ -225,7 +225,7 @@ export const faqLd = {
       "name": "Can I stop on one device and carry on watching on another?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes, once you turn on Resume on your other devices in Settings on each device, on a phone, a TV or a computer signed in to the same account. TMPlayer then keeps your Continue watching places in one message in your own Saved Messages, edited in place and never sent again, and your other devices read it, so a video picks up where you stopped. Nothing goes through a TMPlayer server. It is off until you turn it on; to stop, turn it off, then delete that message if you like."
+        "text": "Yes, once you turn on Sync across my devices in Settings on each device, on a phone, a TV or a computer signed in to the same account. TMPlayer then keeps your Continue watching places in one message in your own Saved Messages, edited in place and never sent again, and your other devices read it, so a video picks up where you stopped. Nothing goes through a TMPlayer server. It is off until you turn it on; to stop, turn it off, then delete that message if you like."
       }
     },
     {

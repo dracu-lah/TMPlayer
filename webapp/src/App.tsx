@@ -168,7 +168,7 @@ function Shell(props: ParentProps) {
         // Fetched ahead only: one that fails now (offline) is fetched again when its page opens.
         // The other pages are fetched ahead when the line has room; on Save-Data each is fetched when it opens (ui/saveData.ts).
         if (user && !saveData()) idle(() => later.forEach((load) => load().catch(() => {})))
-        // Resume on your other devices: what was kept is read, and a sync follows if the viewer turned it on.
+        // Sync across my devices: what was kept is read, and a sync follows if the viewer turned it on.
         if (user) openSync()
     })
     // Every other page, not only the one after signing in: a visitor already signed in who never

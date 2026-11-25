@@ -16,7 +16,7 @@ export const PAGE_STRINGS = [
     'submaker',
     'poster',
     'sponsored',
-    // Resume on your other devices (the apps' ResumeSync): Home's question, shown once, and the switch under Settings.
+    // Sync across my devices (the apps' ResumeSync): Home's question, shown once, and the switch under Settings.
     'syncplace',
     'theme',
     // The in-app trailer's sheet on a video's page (ui/TrailerSheet.tsx).
@@ -560,7 +560,6 @@ export const PAGE_STRINGS = [
     'settings.playback',
     'settings.resume_rewind',
     'settings.resume_rewind_detail',
-    'settings.resume_sync',
     'settings.resume_sync_caption',
     'settings.resume_sync_delete',
     'settings.resume_sync_delete_detail',

@@ -133,7 +133,7 @@ export function TvSettings() {
                             <SignOut />
                             <RemoveAllButton />
                         </div>
-                        <TvSwitch id="sync" row="resume_sync" title={t('settings.resume_sync')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
+                        <TvSwitch id="sync" row="resume_sync" title={t('syncplace.switch')} on={syncOn()} onText={t('settings.resume_sync_on')} offText={t('settings.resume_sync_off')} onPick={(on) => void setSyncOn(on)} />
                         <p class="muted small">{t('syncplace.privacy')}</p>
                         <Show when={syncOn()}>
                             <p class="muted small" role="status">{statusLine()}</p>

@@ -17,10 +17,10 @@ test('Language is the first thing on Appearance and language', async ({ page }) 
     await expect(first).toHaveText(/Language/)
 })
 
-test('the old Privacy and lock address lands on Account with Resume on your other devices', async ({ page }) => {
+test('the old Privacy and lock address lands on Account with Sync across my devices', async ({ page }) => {
     await page.goto('/settings/privacy')
     await expect(page).toHaveURL(/\/settings\/account$/)
-    await expect(page.getByRole('switch', { name: /Resume on your other devices/ })).toBeVisible()
+    await expect(page.getByRole('switch', { name: /Sync across my devices/ })).toBeVisible()
 })
 
 test('Playback says where online subtitles went, and a press goes there', async ({ page }) => {
@@ -43,7 +43,7 @@ test('About says where What is new and the reports went, and Help holds them', a
 test('search still finds Sign out, Backup and Language, and a moved row by its words', async ({ page }) => {
     await page.goto('/settings')
     const box = page.getByRole('searchbox', { name: 'Search settings' })
-    for (const [query, name] of [['sign out', /Sign out/], ['back up', /Back up/], ['language', /Language/], ['resume', /Resume on your other devices/]] as const) {
+    for (const [query, name] of [['sign out', /Sign out/], ['back up', /Back up/], ['language', /Language/], ['sync', /Sync across my devices/]] as const) {
         await box.fill(query)
         await expect(page.locator('.set-results .set-row').filter({ hasText: name }).first()).toBeVisible()
     }

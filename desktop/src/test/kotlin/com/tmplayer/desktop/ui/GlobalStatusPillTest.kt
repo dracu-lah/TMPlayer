@@ -107,7 +107,7 @@ class GlobalStatusPillTest {
         }
         onNodeWithText(L.settingsResumeSyncTooNew, substring = true).assertExists()
         // A button does the pointing here, so the television's "find it in Settings" is not said.
-        assertEquals(0, shown(L.settingsResumeSync, substring = true))
+        assertEquals(0, shown(L.syncplaceSwitch, substring = true))
         assertEquals(0, shown(L.commonTryAgain))
         assertEquals(0, shown(L.logsSend))
         onNodeWithText(L.notifyOpenSettings).performClick()

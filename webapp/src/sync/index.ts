@@ -1,4 +1,4 @@
-// Resume on your other devices (the apps' ResumeSync) for the web: the switch, the schedule, the
+// Sync across my devices (the apps' ResumeSync) for the web: the switch, the schedule, the
 // status line and the question Home asks once. The rules are in format.ts, local.ts and run.ts; this
 // file joins them to the stores, the worker and the page.
 //

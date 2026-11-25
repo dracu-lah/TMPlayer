@@ -42,7 +42,7 @@ export interface RowContext {
     tablet?: boolean
     /** The hidden MSone flag. */
     msone: boolean
-    /** Resume on your other devices is on. */
+    /** Sync across my devices is on. */
     sync: boolean
     /** A sync file is in Saved Messages, on or off. */
     syncFile: boolean
@@ -72,7 +72,7 @@ const always = () => true
 /** Every row the web's Settings draws on a phone or a desktop, by page in the order the page draws them. */
 const defs: MapRow[] = [
     // Account: who is signed in and resume on the other devices. Sign out stays beside every page (the list), and the account's menu.
-    { id: 'resume_sync', page: 'account', core: true, title: 'settings.resume_sync' },
+    { id: 'resume_sync', page: 'account', core: true, title: 'syncplace.switch' },
     { id: 'resume_sync_delete', page: 'account', core: true, title: 'settings.resume_sync_delete', shown: (c) => c.sync || c.syncFile },
     { id: 'sign_out', page: null, core: true, title: 'settings.sign_out' },
 
@@ -121,7 +121,7 @@ const defs: MapRow[] = [
 /**
  * Rows that moved in the WP-08 taxonomy and keep a "Moved to" line at their old place for one release (the apps' `also_in_moved`):
  * the old page lists them with the new page's name, and a press goes to the row. Remove them in the release after the beta.
- * Resume on your other devices moved from Privacy and lock, a page the web no longer has: its address goes to Account (OLD_PAGES).
+ * Sync across my devices moved from Privacy and lock, a page the web no longer has: its address goes to Account (OLD_PAGES).
  */
 export const MOVED: readonly { id: string; from: PageId; to: PageId }[] = [
     { id: 'submaker_base', from: 'playback', to: 'subtitles' },

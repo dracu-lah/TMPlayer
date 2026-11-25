@@ -46,7 +46,7 @@ export function Privacy() {
     return (
         <>
             <div class="set-card">
-                <ToggleRow id="resume_sync" icon={CloudSyncIcon} title={t('settings.resume_sync')} subtitle={syncOn() ? t('settings.resume_sync_on') : t('settings.resume_sync_off')} on={syncOn()} onChange={change} />
+                <ToggleRow id="resume_sync" icon={CloudSyncIcon} title={t('syncplace.switch')} subtitle={syncOn() ? t('settings.resume_sync_on') : t('settings.resume_sync_off')} on={syncOn()} onChange={change} />
                 <Show when={syncOn()}>
                     <div class="set-block sync-status">
                         <p class="small" role="status" aria-live="polite" aria-busy={syncRunning()}>{statusLine()}</p>
