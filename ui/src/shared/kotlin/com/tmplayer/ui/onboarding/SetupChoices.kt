@@ -201,7 +201,7 @@ private fun StepRow(
                         s.choiceCopy(chosen).detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = Tone.muted,
-                        maxLines = 3,
+                        // Whole: three lines with no ellipsis stopped "Downloads you keep are never trimmed" at "never".
                     )
                 }
                 if (place == null && step != SetupStep.Device) {

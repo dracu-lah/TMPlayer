@@ -129,17 +129,20 @@ internal fun StepFrame(
                     brand()
                     Spacer(Modifier.width(24.dp))
                 }
-                Row(
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
                     Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
+                    itemVerticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text(group, style = MaterialTheme.typography.labelLarge, color = Tone.accent, maxLines = 1)
+                    // Two lines before a cut: "Step 1 of 6" was clipped with no ellipsis at twice the font on a 320 dp phone.
+                    Text(group, style = MaterialTheme.typography.labelLarge, color = Tone.accent, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text(
                         s.setupStep(position.index + 1, position.total),
                         style = MaterialTheme.typography.labelMedium,
                         color = Tone.muted,
-                        maxLines = 1,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
                 if (onSkipAll != null && onUseRecommended == null) {
@@ -268,7 +271,9 @@ internal fun QuietButton(label: String, icon: Boolean = false, modifier: Modifie
             Icon(TmIcons.ArrowBack, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
         }
-        Text(label, style = MaterialTheme.typography.labelLarge, color = color, maxLines = 1)
+        // Two lines before an ellipsis: squeezed beside another button at twice the font, "Enter it yourself"
+        // was cut to "Enter it" with nothing to say a word was missing (phone audit, 2026-11-25).
+        Text(label, style = MaterialTheme.typography.labelLarge, color = color, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 

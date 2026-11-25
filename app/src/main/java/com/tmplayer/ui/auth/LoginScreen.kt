@@ -65,6 +65,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme as M3
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -1019,9 +1020,11 @@ private fun Step(number: Int, text: String) {
         // container pair rather than the accent itself: full accent here competes with the button
         // underneath it, and on a wallpaper palette it can be loud enough to read as the subject.
         val touch = isTouch()
+        // As big as its number: a fixed 28 dp disc cut the digit at twice the font (phone audit, 2026-11-25).
+        val disc = with(androidx.compose.ui.platform.LocalDensity.current) { maxOf(28.dp, 28.sp.toDp()) }
         Box(
             Modifier
-                .size(28.dp)
+                .size(disc)
                 .clip(CircleShape)
                 .background(if (touch) M3.colorScheme.primaryContainer else Tone.focusFill),
             contentAlignment = Alignment.Center,
