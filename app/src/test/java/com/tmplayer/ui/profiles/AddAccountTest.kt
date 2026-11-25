@@ -281,7 +281,7 @@ class AddAccountTest {
     }
 
     @Test
-    fun `pressed before the app lock was read, Add waits with nothing drawn, then goes on without a PIN nobody set`() {
+    fun `pressed before the app lock was read, Add shows its wait with no pad, then goes on without a PIN nobody set`() {
         val k = ProfileKit("Asha Rao").also { kit = it }
         val lock = MutableSharedFlow<AppLockSettings?>()
         k.platform.readable = false
@@ -290,8 +290,9 @@ class AddAccountTest {
         showTv(flow)
         rule.runOnIdle { flow.add() }
         rule.waitForIdle()
-        // Fail closed: nothing of a PIN pad or a profile panel until the lock is known.
+        // Fail closed: no PIN pad until the lock is known, but the press is answered by its wait.
         assertFalse(exists(L.lockEnterPin))
+        assertTrue("the wait is drawn, never nothing", exists(L.profilesAddingNow))
         assertEquals(1, k.book.list.value.profiles.size)
         rule.runOnIdle { kotlinx.coroutines.runBlocking { lock.emit(AppLockSettings()) } }
         waitFor("the new profile to open") { k.book.list.value.profiles.size == 2 && !flow.adding }

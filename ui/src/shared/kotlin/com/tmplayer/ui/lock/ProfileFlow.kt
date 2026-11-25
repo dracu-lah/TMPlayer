@@ -60,6 +60,8 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -247,28 +249,34 @@ class ProfileFlow(
         }
     }
 
+    /**
+     * The app lock as last read, null until it is. A flow rather than snapshot state: the flow is
+     * made inside the first composition (a `remember` in the shell), and the store answers on the
+     * app's scope before that composition is applied on a slow TV. A snapshot state written then was
+     * put back to unread when the composition applied, so Add account waited on a lock it never knew
+     * and drew nothing for the life of the process (Mi TV, 2026-11-25). Screens collect [appLock].
+     */
+    private val lockRead = MutableStateFlow<AppLockSettings?>(null)
+
+    /** The app lock as read from the store, null until the first answer; for screens to collect. */
+    val appLock: StateFlow<AppLockSettings?> get() = lockRead
+
     /** The app lock as last read; meaningful once [appLockKnown]. */
-    var appLockSettings: AppLockSettings? by mutableStateOf(null)
-        private set
+    val appLockSettings: AppLockSettings? get() = lockRead.value
 
     /** Whether the app lock was read at all: until it is, everything it guards asks (fail closed). */
-    var appLockKnown: Boolean by mutableStateOf(false)
-        private set
+    val appLockKnown: Boolean get() = lockRead.value != null
 
     init {
         // Heard from the start, with or without a screen: switches and the app lock lock it.
         ProfileUnlock.install()
         // The app lock from the store, now and as it changes, on the app's scope: no screen sets it.
-        runCatching { platform.appLockNow() }.getOrNull()?.let {
-            appLockSettings = it
-            appLockKnown = true
-        }
+        runCatching { platform.appLockNow() }.getOrNull()?.let { lockRead.value = it }
         scope.launch {
             runCatching {
                 platform.appLock.collect {
-                    appLockSettings = it ?: AppLockSettings()
-                    appLockKnown = true
-                    lockRead()
+                    lockRead.value = it ?: AppLockSettings()
+                    afterLockRead()
                 }
             }.onFailure { if (it is CancellationException) throw it else Logger.w(TAG, "the app lock could not be read", it) }
         }
@@ -299,7 +307,7 @@ class ProfileFlow(
      * lock is known (fail closed). Read with no PIN after all, it goes on at once rather than
      * leaving a pad that asks for a PIN nobody set; read with one, the pad shows now.
      */
-    private fun lockRead() {
+    private fun afterLockRead() {
         val now = stage
         if (now is Stage.AppPin && now.then == Guarded.Add && now.id == null && !appLockPin) {
             stage = Stage.Picker
@@ -938,13 +946,15 @@ fun ProfilesGate(
     val unlockedId by ProfileUnlock.unlockedId.collectAsState()
     val several = ProfilePicker.atLaunch(list)
     val show = several && (flow.asked || !flow.entered)
-    val lock = flow.appLockSettings
+    // Collected, not read off the flow: its answer can land before this composition is applied.
+    val lock = flow.appLock.collectAsState().value
+    val lockKnown = lock != null
     // The app lock's pad is up (in [content] or here), or the lock was not read: fail closed.
-    val appShut = !flow.appLockKnown || lock == null || (lock.pinSet && lock.onOpen && !appUnlocked)
+    val appShut = lock?.let { it.pinSet && it.onOpen && !appUnlocked } ?: true
     Box(Modifier.fillMaxSize()) {
         when {
             // The app lock not read yet: nothing of the picker until it is (fail closed).
-            show && !flow.appLockKnown -> Box(Modifier.fillMaxSize().background(Tone.background))
+            !lockKnown && show -> Box(Modifier.fillMaxSize().background(Tone.background))
             // "Ask when the app opens": its PIN before the picker too, so the picker never shows
             // whose profiles these are, nor lets one be signed out, past the app's own lock.
             show && lock != null && lock.pinSet && lock.onOpen && !appUnlocked -> {
@@ -1004,6 +1014,13 @@ fun ProfilesGate(
                 // install saw the menu close and nothing else while the open profile's work
                 // stopped and the next client opened, and a second press was dropped unseen.
                 if (flow.adding && flow.stage == ProfileFlow.Stage.Picker && !appShut) AddingPanel(flow)
+                // Add account pressed before the app lock was read: no pad yet (fail closed, the
+                // lock may have no PIN), but its wait with Cancel, never a press answered by nothing.
+                // Nothing of a profile is on it; the shell under it is drawn already.
+                val stage = flow.stage
+                if (!lockKnown && stage is ProfileFlow.Stage.AppPin && stage.then == ProfileFlow.Guarded.Add && stage.id == null) {
+                    AddingPanel(flow, onCancel = { flow.cancelAppPin(null, ProfileFlow.Guarded.Add) })
+                }
             }
         }
         // Nothing of a profile's notice over the app lock's pad, nor before the lock is read: its Try
@@ -1044,15 +1061,16 @@ fun profileShellShown(flow: ProfileFlow?): Boolean {
  * so nothing behind it is pressed while the profile changes under it.
  */
 @Composable
-private fun AddingPanel(flow: ProfileFlow) {
+private fun AddingPanel(flow: ProfileFlow, onCancel: (() -> Unit)? = null) {
     val line = flow.status ?: L.profilesAddingNow
-    val actions = if (flow.waitCancellable) listOf(PanelAction(L.commonCancel, flow::cancelWaiting)) else emptyList()
+    val cancel = onCancel ?: if (flow.waitCancellable) flow::cancelWaiting else null
+    val actions = if (cancel != null) listOf(PanelAction(L.commonCancel, cancel)) else emptyList()
     // Back is Cancel while there is one; past that the switch is under way and Back waits with it.
     ProfilePanel(
         title = L.profilesAdd,
         body = line,
         actions = actions,
-        onDismiss = { if (flow.waitCancellable) flow.cancelWaiting() },
+        onDismiss = { cancel?.invoke() },
         header = {
             CircularProgressIndicator(
                 Modifier.padding(bottom = 16.dp).size(32.dp).clearAndSetSemantics { },
