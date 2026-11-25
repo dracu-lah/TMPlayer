@@ -164,7 +164,8 @@ fun NavFrame(
         }
         if (barShown) {
             var frameX by remember { mutableFloatStateOf(0f) }
-            Box(Modifier.fillMaxSize().onGloballyPositioned { frameX = it.boundsInRoot().left }) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { frameX = it.boundsInRoot().left }) {
+                val room = maxWidth
                 if (tv) {
                     TvTopBar(state, update, account, onPicturePlaced = { pictureX = it }, modifier = Modifier.align(Alignment.TopStart))
                 }
@@ -178,6 +179,7 @@ fun NavFrame(
                         onPicturePlaced = { pictureX = it },
                         profile = profileList?.active,
                         accountFocus = accountFocus,
+                        room = room,
                     )
                 }
                 ProfilePopover(
@@ -242,6 +244,8 @@ private fun NavBar(
     onPicturePlaced: (Float) -> Unit,
     profile: com.tmplayer.data.Profile? = null,
     accountFocus: FocusRequester? = null,
+    /** How wide the window is: the bar never stands wider than that, less its margins. */
+    room: Dp = Dp.Infinity,
 ) {
     val s = LocalStrings.current
     val current = navPlaceOf(state)
@@ -251,7 +255,7 @@ private fun NavBar(
     // its name in the tooltip.
     // Drawn once the choice is read, so a compact bar never opens wide and shrinks.
     val compact = state.settings.compactNav.collectAsState(initial = null).value ?: return
-    val fitted = rememberFittedCell(listOf(s.browseTabHome, s.navChats, s.commonSearch, s.navDownloads))
+    val fitted = rememberFittedCell(listOf(s.browseTabHome, s.navChats, s.commonSearch, s.navDownloads), room)
     val cell = if (compact) NavCellSize(COMPACT_ITEM, COMPACT_ITEM) else fitted
     // The highlight slides between places, but jumps with the cells when the setting changes them.
     var lastCell by remember { mutableStateOf(cell) }
@@ -325,26 +329,58 @@ private fun NavBar(
  * The cell every place gets: [NAV_ITEM] by [NAV_ITEM_HEIGHT] at the usual font, wider for the widest of [labels] at
  * the font in use (a larger system font, or a language with a longer word for Downloads, cut it to "Downlo..") and
  * taller for the caption's line, so a name is always whole and the four cells stay equal.
+ *
+ * The bar never runs wider than [room] (the window) less its margins: where four cells that wide do not
+ * fit (twice the font in a small window, with a wide system font: Téléchargements on Ubuntu's DejaVu),
+ * the cells take the room there is and the caption stops growing at the size that fits, rather than
+ * the last cells being squeezed and their names cut.
  */
 @Composable
-private fun rememberFittedCell(labels: List<String>): NavCellSize {
+private fun rememberFittedCell(labels: List<String>, room: Dp): NavCellSize {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val density = LocalDensity.current
     val caption = captionStyle().copy(fontWeight = FontWeight.SemiBold)
-    return remember(labels, caption, density) {
-        val widest = labels.maxOfOrNull { measurer.measure(it, caption, maxLines = 1, softWrap = false).size.width } ?: 0
-        val line = with(density) { (caption.lineHeight.takeIf { it.isSp } ?: 12.sp).toDp() }
+    val brand = com.tmplayer.ui.components.LocalBrandBadge.current
+    val badgeStyle = MaterialTheme.typography.labelSmall
+    return remember(labels, caption, density, room, brand, badgeStyle) {
+        fun widest(style: androidx.compose.ui.text.TextStyle): Dp = with(density) {
+            (labels.maxOfOrNull { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width } ?: 0).toDp()
+        }
+        // What stands on the bar beside the four places: its padding, the gaps, the picture's cell and a preview's word.
+        val badge = brand?.let { with(density) { measurer.measure(it, badgeStyle, maxLines = 1).size.width.toDp() } + BRAND_SIDES } ?: 0.dp
+        val besides = NAV_PADDING * 2 + NAV_GAP * 4 + NAV_ITEM + badge + NAV_MARGIN * 2
+        val budget = if (room == Dp.Infinity) Dp.Infinity else maxOf(NAV_ITEM, (room - besides) / 4)
+        var style = caption
+        var scale = 1f
+        var words = widest(style)
+        // Smaller in steps until the widest name fits the cell the window leaves, measured each time (glyphs do not scale exactly).
+        while (words + NAV_LABEL_SIDES * 2 > budget && scale > MIN_LABEL_SCALE) {
+            scale = maxOf(MIN_LABEL_SCALE, scale * 0.94f)
+            style = caption.copy(fontSize = caption.fontSize * scale, lineHeight = caption.lineHeight * scale)
+            words = widest(style)
+        }
+        val line = with(density) { (style.lineHeight.takeIf { it.isSp } ?: 12.sp).toDp() }
         NavCellSize(
-            width = maxOf(NAV_ITEM, with(density) { widest.toDp() } + NAV_LABEL_SIDES * 2),
+            width = maxOf(NAV_ITEM, words + NAV_LABEL_SIDES * 2),
             height = maxOf(NAV_ITEM_HEIGHT, GLYPH_SLOT + 2.dp + line + 10.dp),
+            labelScale = scale,
         )
     }
 }
 
-/** A place's cell on the bar, which the compact bar makes a round icon button. */
-private data class NavCellSize(val width: Dp, val height: Dp) {
+/**
+ * A place's cell on the bar, which the compact bar makes a round icon button. [labelScale] is below 1 where the
+ * window is too narrow for the caption at the font in use.
+ */
+private data class NavCellSize(val width: Dp, val height: Dp, val labelScale: Float = 1f) {
     val compact: Boolean get() = width == height
 }
+
+/** The smallest the caption is drawn to fit a narrow window: 0.6 of the font in use. */
+private const val MIN_LABEL_SCALE = 0.6f
+
+/** A preview's word on the bar: its own 6 dp each side and its 8 dp and 6 dp of margin. */
+private val BRAND_SIDES = 26.dp
 
 private val LocalNavCell = androidx.compose.runtime.staticCompositionLocalOf { NavCellSize(NAV_ITEM, NAV_ITEM_HEIGHT) }
 
@@ -410,9 +446,11 @@ private fun NavCell(
     // little under the press, as the phone's buttons do.
     val tint by animateColorAsState(if (chosen) Tone.accent else Tone.text, Motion.standard(Motion.Fast), label = "navIcon")
     val ink by animateColorAsState(if (chosen) Tone.accent else Tone.muted, Motion.standard(Motion.Fast), label = "navLabel")
+    // The picture has no caption, so its cell stays the usual width while the places grow for their names.
+    val width = if (label == null && !cell.compact) minOf(cell.width, NAV_ITEM) else cell.width
     Column(
         modifier
-            .size(cell.width, cell.height)
+            .size(width, cell.height)
             .pressScale(interactions)
             .clip(RoundedCornerShape(cell.height / 2))
             .then(if (focused) Modifier.border(2.dp, Tone.accent, RoundedCornerShape(cell.height / 2)) else Modifier)
@@ -429,9 +467,10 @@ private fun NavCell(
         Box(Modifier.size(GLYPH_SLOT), contentAlignment = Alignment.Center) { glyph(tint) }
         if (cell.compact || label == null) return@Column
         Spacer(Modifier.height(2.dp))
+        val caption = captionStyle()
         Text(
             label,
-            style = captionStyle(),
+            style = if (cell.labelScale < 1f) caption.copy(fontSize = caption.fontSize * cell.labelScale, lineHeight = caption.lineHeight * cell.labelScale) else caption,
             fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Medium,
             color = ink,
             maxLines = 1,
