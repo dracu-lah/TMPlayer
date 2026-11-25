@@ -63,10 +63,20 @@ class ScreenInvariantsTest {
     }
 
     /** Whether some of the words are not drawn: a line ellipsised, lines past the cap, a word wider than its box, or too tall for it. */
-    private fun TextLayoutResult.cut(): Boolean {
-        val box = layoutInput.constraints.maxWidth
-        val wide = box != Constraints.Infinity && (0 until lineCount).any { getLineRight(it) > box + 1f }
-        return didOverflowHeight || multiParagraph.didExceedMaxLines || wide || (0 until lineCount).any { isLineEllipsized(it) }
+    private fun TextLayoutResult.cut(): Boolean = cutWhy() != null
+
+    /** Why [cut] holds, with the numbers, for the failure message (a font on one CI system cuts what another does not); null when whole. */
+    private fun TextLayoutResult.cutWhy(): String? {
+        val c = layoutInput.constraints
+        val box = c.maxWidth
+        val widest = (0 until lineCount).maxOfOrNull { getLineRight(it) } ?: 0f
+        return when {
+            didOverflowHeight -> "too tall: ${multiParagraph.height} in ${c.maxHeight}, $lineCount lines"
+            multiParagraph.didExceedMaxLines -> "past ${layoutInput.maxLines} lines: $lineCount laid out, width ${multiParagraph.width} of $box"
+            box != Constraints.Infinity && widest > box + 1f -> "too wide: $widest in $box"
+            (0 until lineCount).any { isLineEllipsized(it) } -> "ellipsised: width $widest of $box"
+            else -> null
+        }
     }
 
     private fun TextLayoutResult.ellipsised(): Boolean = (0 until lineCount).any { isLineEllipsized(it) }
@@ -119,7 +129,9 @@ class ScreenInvariantsTest {
 
     private fun visible(node: SemanticsNode, window: Rect): Boolean {
         val b = node.boundsInRoot
-        return b.width > 0 && b.height > 0 && b.overlaps(window) && !node.config.contains(SemanticsProperties.InvisibleToUser)
+        // A lazy list keeps an item it scrolled past composed but unplaced (its semantics keep their last bounds): not drawn.
+        val placed = generateSequence(node) { it.parent }.all { it.layoutInfo.isPlaced }
+        return placed && b.width > 0 && b.height > 0 && b.overlaps(window) && !node.config.contains(SemanticsProperties.InvisibleToUser)
     }
 
     @Test
@@ -134,7 +146,8 @@ class ScreenInvariantsTest {
                     for (node in root.walk()) {
                         val words = node.words()
                         if (words !in names) continue
-                        if (node.layouts().any { it.cut() }) problems += "${language.tag} x$fontScale: \"$words\" is cut"
+                        val why = node.layouts().firstNotNullOfOrNull { it.cutWhy() }
+                        if (why != null) problems += "${language.tag} x$fontScale: \"$words\" is cut ($why)"
                     }
                     val tabs = root.walk().filter { it.config.getOrNull(SemanticsProperties.Role)?.toString() == "Tab" }.toList()
                     val inside = tabs.all { window.contains(it.boundsInRoot.topLeft) && window.contains(it.boundsInRoot.bottomRight) }
@@ -153,8 +166,9 @@ class ScreenInvariantsTest {
                 for (node in root.walk()) {
                     if (!visible(node, window)) continue
                     for (layout in node.layouts()) {
-                        if (layout.layoutInput.overflow == TextOverflow.Clip && layout.cut()) {
-                            problems += "${screen.name} ${w}x$h x$fs: \"${layout.layoutInput.text.text.take(40)}\" is clipped"
+                        val why = if (layout.layoutInput.overflow == TextOverflow.Clip) layout.cutWhy() else null
+                        if (why != null) {
+                            problems += "${screen.name} ${w}x$h x$fs: \"${layout.layoutInput.text.text.take(40)}\" is clipped ($why)"
                         }
                     }
                 }
