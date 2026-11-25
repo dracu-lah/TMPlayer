@@ -348,6 +348,13 @@ private const val CLEARING_WORTH_ASKING = CacheShelf.WORTH_ASKING_BYTES
  */
 private const val SUPPORTING_LINES = 4
 
+/**
+ * How many lines a row's title may take on a phone. Two cut "Play the next episode autom..." at twice
+ * the font while the description under it ran to four lines; a title is never worth an ellipsis
+ * when the description beside it wraps in full (phone audit, 2026-11-25).
+ */
+internal const val TITLE_LINES = 4
+
 /** How long Telegram is out of reach before a television's Account page says so. */
 private const val OFFLINE_LINE_AFTER_MS = 2_000L
 
@@ -2911,7 +2918,7 @@ fun SettingsScreen(
             Scaffold(
                 topBar = {
                     PageHeader(
-                        { M3Text(titleOf(page!!), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        { M3Text(titleOf(page!!), maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                         TmIcons.ArrowBack,
                         s.aboutBackToSettings,
                         { closePage() },
@@ -3324,17 +3331,16 @@ private fun ThemePicker(current: ThemeChoice, onPick: (ThemeChoice) -> Unit) {
     val options = ThemeChoice.entries
     // No title on a phone (the segments say it), but the search still finds it as Theme.
     Column(Modifier.seekable(LocalStrings.current.settingsTheme).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
             options.forEachIndexed { index, choice ->
                 SegmentedButton(
                     selected = choice == current,
                     onClick = { onPick(choice) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                     // The word alone is ambiguous read aloud, so the spoken label is the sentence.
-                    modifier = Modifier.semantics { contentDescription = choice.description },
-                    label = {
-                        M3Text(choice.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
+                    modifier = Modifier.fillMaxHeight().semantics { contentDescription = choice.description },
+                    label = { SegmentLabel(choice.label) },
+                    icon = { if (segmentCheckFits()) SegmentedButtonDefaults.Icon(active = choice == current) },
                 )
             }
         }
@@ -3540,7 +3546,7 @@ internal fun StepperRow(
 
     if (touch) {
         ListItem(
-            headlineContent = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            headlineContent = { M3Text(title, maxLines = TITLE_LINES, overflow = TextOverflow.Ellipsis) },
             // Not cut to a line count: beside the two arrows a phone held upright has room for a
             // few words a line, and three lines stopped "Interface size" halfway through a sentence.
             supportingContent = { M3Text(s.settingsValueAndDetail(value, subtitle)) },
@@ -3830,7 +3836,7 @@ internal fun ActionRow(
         onClick = onClick,
         trailing = if (busy != null) ({ Spinner(size = 18.dp, strokeWidth = 2.dp) }) else null,
         headline = {
-            M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            M3Text(title, maxLines = TITLE_LINES, overflow = TextOverflow.Ellipsis)
         },
         supporting = {
             M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis, modifier = if (busy != null) Modifier.liveMessage() else Modifier)
@@ -3894,7 +3900,7 @@ internal fun ToggleRow(
         onClick = toggle,
         checked = checked,
         enabled = enabled,
-        headline = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        headline = { M3Text(title, maxLines = TITLE_LINES, overflow = TextOverflow.Ellipsis) },
         supporting = { M3Text(subtitle, maxLines = SUPPORTING_LINES, overflow = TextOverflow.Ellipsis) },
         leading = { SettingIconChip(icon, service = service) },
         // A real switch on a phone, not the drawn pill below: it can be dragged as well as

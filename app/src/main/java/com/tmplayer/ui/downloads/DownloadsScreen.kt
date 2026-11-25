@@ -2414,7 +2414,7 @@ private fun PhoneDownloads(
             topBar = {
                 // A fixed header with Back in it, so the list never runs under a floating button.
                 PageHeader(
-                    { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     backIcon = if (picking) TmIcons.Close else TmIcons.ArrowBack,
                     // While picking, the button leaves the selection rather than the screen: that
                     // is what Back does here, and the two must not disagree.

@@ -214,7 +214,7 @@ fun AboutScreen(onBack: () -> Unit) {
             Scaffold(
                 topBar = {
                     com.tmplayer.ui.components.PageHeader(
-                        { M3Text(s.aboutTitle, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        { M3Text(s.aboutTitle, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                         TmIcons.ArrowBack,
                         s.aboutBackToSettings,
                         onBack,

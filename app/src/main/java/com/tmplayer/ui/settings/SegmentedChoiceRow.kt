@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -89,7 +90,7 @@ internal fun <T> SegmentedChoiceRow(
                     title,
                     style = M3Theme.typography.bodyLarge,
                     color = Tone.text,
-                    maxLines = 2,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
             } else {
@@ -104,16 +105,21 @@ internal fun <T> SegmentedChoiceRow(
         }
         Spacer(Modifier.height(10.dp))
         if (touch) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            // Equal cells: the chosen answer wrapping to two lines made its cell taller than the others, which stood
+            // short and centred inside it (phone audit, 2026-11-25), so the row takes the tallest and every cell fills it.
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
                 choices.forEachIndexed { index, choice ->
                     SegmentedButton(
                         selected = choice == selected,
                         onClick = { if (choice != selected) onPick(choice) },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = choices.size),
-                        modifier = Modifier.testTag(tag(choice)),
+                        modifier = Modifier.fillMaxHeight().testTag(tag(choice)),
                         // Two lines rather than "Keep vid...": at twice the font size on a narrow phone each
                         // word takes its own line, and a cut label names no choice.
-                        label = { M3Text(label(choice), maxLines = 2, textAlign = TextAlign.Center) },
+                        label = { SegmentLabel(label(choice)) },
+                        // The check takes a word's width: past 1.3 times the font the chosen cell would wrap to a
+                        // second line and stand taller than its neighbours, so the fill alone says which it is.
+                        icon = { if (segmentCheckFits()) SegmentedButtonDefaults.Icon(active = choice == selected) },
                     )
                 }
             }
@@ -146,5 +152,23 @@ internal fun <T> SegmentedChoiceRow(
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
             }
         }
+    }
+}
+
+/** Whether a segmented button has room for its check mark: not at a very large font, where it would cut the word. */
+@Composable
+internal fun segmentCheckFits(): Boolean = androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.3f
+
+/**
+ * A segment's words, at most 1.5 times the font: a third of a phone is about 100 dp, and "System" at twice the
+ * font broke into "Syste" and "m" (phone audit, 2026-11-25). Two lines at that size still break only between words.
+ */
+@Composable
+internal fun SegmentLabel(text: String) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale.coerceAtMost(1.5f)),
+    ) {
+        M3Text(text, maxLines = 2, textAlign = TextAlign.Center)
     }
 }
