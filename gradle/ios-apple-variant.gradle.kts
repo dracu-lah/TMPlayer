@@ -65,8 +65,9 @@ val appleVariant: Map<String, Map<String, List<Replacement>>> = mapOf(
         "com/tmplayer/ui/settings/AboutScreen.kt" to listOf(
             // The list runs to the foot of the window (see `footInsets` above).
             importStatusBars,
-            "                topBar = { com.tmplayer.ui.components.FloatingPageTitle({ M3Text(s.aboutTitle) }, scroll) },\n            ) { padding ->\n" becomes
-                "                topBar = { com.tmplayer.ui.components.FloatingPageTitle({ M3Text(s.aboutTitle) }, scroll) },\n" +
+            // The fixed PageHeader's Scaffold (Back, the title, a hairline once the list has moved).
+            "                        scrolled = moved,\n                    )\n                },\n            ) { padding ->\n" becomes
+                "                        scrolled = moved,\n                    )\n                },\n" +
                 "                contentWindowInsets = WindowInsets.statusBars,\n            ) { padding ->\n",
         ),
         "com/tmplayer/ui/settings/LanguageAndFeedback.kt" to listOf(
@@ -85,16 +86,23 @@ val appleVariant: Map<String, Map<String, List<Replacement>>> = mapOf(
             "subtitle = s.settingsPrivacyDetail(device)," becomes "subtitle = s.settingsPrivacyDetailDevice,",
             // The list and each page run to the foot of the window (see `footInsets` above).
             importStatusBars,
-            "                topBar = { FloatingPageTitle({ M3Text(titleOf(page!!)) }, pageScroll) },\n            ) { padding ->\n" becomes
-                "                topBar = { FloatingPageTitle({ M3Text(titleOf(page!!)) }, pageScroll) },\n" +
+            "                        scrolled = pageMoved,\n                    )\n                },\n            ) { padding ->\n" becomes
+                "                        scrolled = pageMoved,\n                    )\n                },\n" +
                 "                contentWindowInsets = WindowInsets.statusBars,\n            ) { padding ->\n",
-            "                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, listScroll) },\n            ) { padding ->\n" becomes
-                "                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, listScroll) },\n" +
+            "scrolled = listMoved) },\n            ) { padding ->\n" becomes
+                "scrolled = listMoved) },\n" +
                 "                contentWindowInsets = WindowInsets.statusBars,\n            ) { padding ->\n",
         ),
         // Home and the chat lists: the frame stops leaving the home indicator's strip under them,
         // and the lists keep that strip after their last row instead (homeIndicatorInset in :ios).
         "com/tmplayer/ui/browse/PhoneBrowse.kt" to listOf(
+            // Compose for iOS has no statusBarsIgnoringVisibility (the Android-only insets API that keeps
+            // the status bar's height while it is hidden); iOS's status bar height is the plain
+            // statusBars inset, which the clock and the home name are kept clear of the same way.
+            "import androidx.compose.foundation.layout.statusBarsIgnoringVisibility\n" becomes
+                "import androidx.compose.foundation.layout.statusBars\n",
+            "androidx.compose.foundation.layout.WindowInsets.statusBarsIgnoringVisibility.getTop(this)" becomes
+                "androidx.compose.foundation.layout.WindowInsets.statusBars.getTop(this)",
             "                bottom = padding.calculateBottomPadding(),\n            )\n        } else {\n            padding\n        }\n" becomes
                 "                bottom = 0.dp,\n            )\n        } else {\n" +
                 "            PaddingValues(\n" +
