@@ -328,9 +328,9 @@ private fun NavBar(
 /**
  * The cell every place gets: [NAV_ITEM] by [NAV_ITEM_HEIGHT] at the usual font, wider for the widest of [labels] at
  * the font in use (a larger system font, or a language with a longer word for Downloads, cut it to "Downlo..") and
- * taller for the caption's line, so a name is always whole and the four cells stay equal.
+ * taller for the caption's line, so a name is always whole and the five cells (the picture's too) stay equal.
  *
- * The bar never runs wider than [room] (the window) less its margins: where four cells that wide do not
+ * The bar never runs wider than [room] (the window) less its margins: where five cells that wide do not
  * fit (twice the font in a small window, with a wide system font: Téléchargements on Ubuntu's DejaVu),
  * the cells take the room there is and the caption stops growing at the size that fits, rather than
  * the last cells being squeezed and their names cut.
@@ -346,10 +346,11 @@ private fun rememberFittedCell(labels: List<String>, room: Dp): NavCellSize {
         fun widest(style: androidx.compose.ui.text.TextStyle): Dp = with(density) {
             (labels.maxOfOrNull { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width } ?: 0).toDp()
         }
-        // What stands on the bar beside the four places: its padding, the gaps, the picture's cell and a preview's word.
+        // What stands on the bar beside the five cells (four places and the picture, as wide as each other): its
+        // padding, the gaps and a preview's word.
         val badge = brand?.let { with(density) { measurer.measure(it, badgeStyle, maxLines = 1).size.width.toDp() } + BRAND_SIDES } ?: 0.dp
-        val besides = NAV_PADDING * 2 + NAV_GAP * 4 + NAV_ITEM + badge + NAV_MARGIN * 2
-        val budget = if (room == Dp.Infinity) Dp.Infinity else maxOf(NAV_ITEM, (room - besides) / 4)
+        val besides = NAV_PADDING * 2 + NAV_GAP * 4 + badge + NAV_MARGIN * 2
+        val budget = if (room == Dp.Infinity) Dp.Infinity else maxOf(NAV_ITEM, (room - besides) / 5)
         var style = caption
         var scale = 1f
         var words = widest(style)
@@ -446,11 +447,10 @@ private fun NavCell(
     // little under the press, as the phone's buttons do.
     val tint by animateColorAsState(if (chosen) Tone.accent else Tone.text, Motion.standard(Motion.Fast), label = "navIcon")
     val ink by animateColorAsState(if (chosen) Tone.accent else Tone.muted, Motion.standard(Motion.Fast), label = "navLabel")
-    // The picture has no caption, so its cell stays the usual width while the places grow for their names.
-    val width = if (label == null && !cell.compact) minOf(cell.width, NAV_ITEM) else cell.width
+    // The picture's cell, with no caption, is as wide as the places' all the same: the bar's slots stay equal.
     Column(
         modifier
-            .size(width, cell.height)
+            .size(cell.width, cell.height)
             .pressScale(interactions)
             .clip(RoundedCornerShape(cell.height / 2))
             .then(if (focused) Modifier.border(2.dp, Tone.accent, RoundedCornerShape(cell.height / 2)) else Modifier)
