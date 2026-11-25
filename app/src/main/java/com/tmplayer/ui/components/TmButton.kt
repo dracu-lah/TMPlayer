@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -137,9 +138,16 @@ private fun TvButtonBase(
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
+    // The height the caller forces on the button (a 48 dp header button), seen at the button's own edge while it is
+    // measured, and read by the face inside it in the same pass: no state, no recomposition.
+    val forced = remember { ForcedHeight() }
     TvButton(
         onClick = onClick,
-        modifier = modifier.focusRingOnTvButton(focused),
+        modifier = modifier.focusRingOnTvButton(focused).layout { measurable, constraints ->
+            forced.px = if (constraints.minHeight == constraints.maxHeight) constraints.minHeight else 0
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+        },
         enabled = enabled,
         interactionSource = interactions,
         colors = colors,
@@ -151,8 +159,13 @@ private fun TvButtonBase(
             disabledBorder = Border.None,
             focusedDisabledBorder = Border.None,
         ),
-        content = { TvFace(loading, busyLabel, content) },
+        content = { TvFace(loading, busyLabel, forced, content) },
     )
+}
+
+/** The height a caller forced on a TV button, in pixels, 0 when the button wraps its content. */
+private class ForcedHeight {
+    var px = 0
 }
 
 /** A pressed TV button sinks a little instead of growing: the answer to the press without a layout change. */
@@ -243,8 +256,9 @@ private fun ButtonFace(
     loading: Boolean,
     busy: @Composable RowScope.() -> Unit,
     content: @Composable RowScope.() -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Box(contentAlignment = Alignment.Center) {
+    Box(modifier, contentAlignment = Alignment.Center) {
         Face(hidden = loading, content = content)
         Face(hidden = !loading, content = busy)
     }
@@ -270,7 +284,11 @@ private fun Face(hidden: Boolean, content: @Composable RowScope.() -> Unit) {
  * and a spinner drawn in the other library's default is black on a dark button.
  */
 @Composable
-private fun TvFace(loading: Boolean, busyLabel: String?, content: @Composable RowScope.() -> Unit) {
+private fun TvFace(loading: Boolean, busyLabel: String?, forced: ForcedHeight, content: @Composable RowScope.() -> Unit) {
+    // TV Material lays its content row at the top of the button's box: given a height taller than the row's own
+    // 40 dp (a 48 dp header button) the words sat 4 dp above the middle (Find a setting, Mi TV, 2026-11-25). When the
+    // caller forces a height, the face asks for as much (up to what the row may take), so the row is as tall as the
+    // button and the face is centred in it. A button that wraps its content (no forced height) is left alone.
     ButtonFace(
         loading = loading,
         busy = {
@@ -278,6 +296,11 @@ private fun TvFace(loading: Boolean, busyLabel: String?, content: @Composable Ro
             if (busyLabel != null) TvText(busyLabel)
         },
         content = content,
+        modifier = Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val height = maxOf(placeable.height, forced.px.coerceAtMost(constraints.maxHeight))
+            layout(placeable.width, height) { placeable.place(0, (height - placeable.height) / 2) }
+        },
     )
 }
 

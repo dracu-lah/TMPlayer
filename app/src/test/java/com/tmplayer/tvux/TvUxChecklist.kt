@@ -422,6 +422,35 @@ class TvUxChecklist(
         }
     }
 
+    /**
+     * labelCentre: in every button, pill, chip or tab (a focusable with a role, at most [maxDp] tall) the words sit on
+     * the control's own middle line, within [tolPx] pixels (TV, 2026-11-25: Find a setting drew its label 7 px above
+     * the middle of a 96 px pill). The words are the unmerged text nodes inside the control, taken as one block.
+     */
+    fun labelsCentred(tolPx: Float = 2f, maxDp: Float = 72f) {
+        val texts = nodes(merged = false).filter { shown(it) && it.config.contains(SemanticsProperties.Text) }
+        val seen = mutableSetOf<String>()
+        for (n in focusables()) {
+            if (clipped(n)) continue
+            val role = n.config.getOrNull(SemanticsProperties.Role) ?: continue
+            if (role != Role.Button && role != Role.Tab && role != Role.RadioButton) continue
+            val box = n.boundsInRoot
+            if (box.height / density > maxDp) continue
+            val inside = texts.filter { t ->
+                val b = t.boundsInRoot
+                b.left >= box.left - 1f && b.right <= box.right + 1f && b.top >= box.top - 1f && b.bottom <= box.bottom + 1f && b.height > 0f
+            }
+            if (inside.isEmpty()) continue
+            val top = inside.minOf { it.boundsInRoot.top }
+            val bottom = inside.maxOf { it.boundsInRoot.bottom }
+            val off = (top + bottom) / 2f - box.center.y
+            if (abs(off) > tolPx) {
+                val name = nameOf(n)
+                if (seen.add(name)) add("labelCentre", name, "words centre ${"%.1f".format(off)} px off the middle of a ${"%.0f".format(box.height)} px control (${"%.1f".format(off / density)} dp)")
+            }
+        }
+    }
+
     /** labelled: every focusable has words or a description, and a role; toggles carry their state. */
     fun labelled() {
         for (n in focusables()) {
