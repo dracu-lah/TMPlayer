@@ -21,8 +21,19 @@ class X11SideScrollTest {
 
     private val source = object : Component() {}
 
-    private fun mouse(id: Int, button: Int, modifiers: Int = 0, clicks: Int = 1) =
-        MouseEvent(source, id, 1_000L, modifiers, 10, 20, 110, 120, clicks, false, button)
+    /**
+     * AWT's own constructor refuses a button above the third when the machine has no such button or
+     * no display (a Windows or macOS runner, a headless Linux one), so the extra buttons of X11 are
+     * told through the getter, as the toolkit's real events would give them.
+     */
+    private fun mouse(id: Int, button: Int, modifiers: Int = 0, clicks: Int = 1): MouseEvent =
+        if (button <= MouseEvent.BUTTON3) {
+            MouseEvent(source, id, 1_000L, modifiers, 10, 20, 110, 120, clicks, false, button)
+        } else {
+            object : MouseEvent(source, id, 1_000L, modifiers, 10, 20, 110, 120, clicks, false, NOBUTTON) {
+                override fun getButton() = button
+            }
+        }
 
     @Test
     fun `a swipe to the left is a negative sideways wheel step with shift`() {
@@ -50,10 +61,12 @@ class X11SideScrollTest {
 
     @Test
     fun `the mouse side buttons become Back and Forward`() {
-        val back = X11SideScroll.translate(mouse(MouseEvent.MOUSE_PRESSED, X11SideScroll.SIDE_BACK)) as MouseEvent
-        assertEquals(4, back.button)
-        val forward = X11SideScroll.translate(mouse(MouseEvent.MOUSE_PRESSED, X11SideScroll.SIDE_FORWARD)) as MouseEvent
-        assertEquals(5, forward.button)
+        // The renumbering itself; the event it builds needs a mouse with five buttons, which only
+        // the machine's own toolkit can promise, so the number is checked apart from the event.
+        assertEquals(4, X11SideScroll.sideButton(X11SideScroll.SIDE_BACK))
+        assertEquals(5, X11SideScroll.sideButton(X11SideScroll.SIDE_FORWARD))
+        assertNull(X11SideScroll.sideButton(MouseEvent.BUTTON1))
+        assertNull(X11SideScroll.sideButton(X11SideScroll.SCROLL_LEFT))
     }
 
     @Test
