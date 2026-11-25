@@ -266,8 +266,9 @@ fun WorkStatusLine(
     sendLogs: (@Composable () -> Unit)? = null,
     now: () -> Long = ::wallClock,
     focusAfterRetry: FocusRequester? = null,
+    fillWidth: Boolean = true,
 ) {
-    WorkStatusLine(rememberWorkStatusTimer(status, asked), modifier, asked, onRetry, sendLogs, now, focusAfterRetry)
+    WorkStatusLine(rememberWorkStatusTimer(status, asked), modifier, asked, onRetry, sendLogs, now, focusAfterRetry, fillWidth)
 }
 
 /** [WorkStatusLine] for a status already run through the ladder ([rememberWorkStatusTimer]). */
@@ -281,6 +282,8 @@ fun WorkStatusLine(
     sendLogs: (@Composable () -> Unit)? = null,
     now: () -> Long = ::wallClock,
     focusAfterRetry: FocusRequester? = null,
+    /** False for a line that is only words (Updating): it is as wide as they are, not the whole row. */
+    fillWidth: Boolean = true,
 ) {
     val retryFocus = remember { FocusRequester() }
     val wordsFocus = remember { FocusRequester() }
@@ -329,7 +332,7 @@ fun WorkStatusLine(
     val spoken = rememberSpoken(drawn, asked, now)
     AnnounceOnce(spoken)
     FlowRow(
-        modifier.fillMaxWidth().heightIn(min = LINE_MIN_HEIGHT),
+        (if (fillWidth) modifier.fillMaxWidth() else modifier).heightIn(min = LINE_MIN_HEIGHT),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,

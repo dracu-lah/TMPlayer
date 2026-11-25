@@ -985,7 +985,11 @@ internal fun BrowseScreen(
     // A phone's Home runs up under the status bar for its carousel (see LocalUnderStatusBar); while
     // the chat list is still loading, or failed, what stands in its place keeps below the bar.
     val pane: @Composable (BrowseSection) -> Unit = { tab ->
-        val under = if (tab.isHome && state !is UiState.Content) LocalUnderStatusBar.current else 0.dp
+        // Not while Home is drawn from its own rows (the chat list still loading): HomePane keeps
+        // clear of the bar itself, and a second gap here pushed it down by the bar's height, which
+        // then jumped back up when the list arrived.
+        val homeDrawn = tab.isHome && state is UiState.Loading && homeRows.isNotEmpty()
+        val under = if (tab.isHome && state !is UiState.Content && !homeDrawn) LocalUnderStatusBar.current else 0.dp
         Box(Modifier.fillMaxSize().padding(top = under)) { paneOf(tab) }
     }
     // Every way to refresh (the pull, the account menu's row, F5 and Ctrl+R, the TV's menu, the screen

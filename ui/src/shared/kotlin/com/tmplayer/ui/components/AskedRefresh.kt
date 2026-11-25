@@ -1,6 +1,8 @@
 package com.tmplayer.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -193,6 +195,12 @@ fun WorkStatus.failureOnly(): WorkStatus =
  * over a carousel or a list, drawn only once the ladder says it is due (an answer in under 400 ms
  * shows nothing, and no empty container flashes). A page places it over its top or foot, where it
  * never pushes a row; Try again runs [onRetry], which is the same guarded refresh.
+ *
+ * "Up to date" is a compact status badge, not a bar: the Success look of the toast family (a tinted
+ * wash, a 1 dp border, a small tick that draws itself, still under less motion), as wide as its
+ * words and at most [ToastLayout.BadgeMax], one line, shown [WorkLadder.UPDATED_FOR_MS] and gone
+ * with a 120 ms fade. Updating is as wide as its words too; only a failure, which carries buttons,
+ * takes the room the page gives it.
  */
 @Composable
 fun AskedRefreshLine(
@@ -202,12 +210,41 @@ fun AskedRefreshLine(
     sendLogs: (@Composable () -> Unit)? = null,
 ) {
     val shown = rememberWorkStatusTimer(status, asked = true)
-    if (!shown.visible) return
+    val badge = status is WorkStatus.Updated
+    val still = rememberLessMotion()
+    // Kept composed while it fades, so the badge leaves with the 120 ms fade rather than blinking out.
+    AnimatedVisibility(
+        visible = badge && shown.visible,
+        modifier = modifier,
+        enter = ToastMotion.enter(still),
+        exit = ToastMotion.exit(),
+    ) {
+        UpToDateBadge(animateIcon = !still)
+    }
+    if (badge || !shown.visible) return
+    val compact = status !is WorkStatus.Failed && status !is WorkStatus.Partial
     WorkStatusLine(
         shown = shown,
-        modifier = modifier.background(Tone.surfaceHigh, RoundedCornerShape(24.dp)).padding(horizontal = 8.dp),
+        modifier = modifier
+            .then(if (compact) Modifier.widthIn(max = ToastLayout.BadgeMax) else Modifier)
+            .background(Tone.surfaceHigh, RoundedCornerShape(24.dp))
+            .padding(horizontal = 8.dp),
         asked = true,
         onRetry = onRetry,
         sendLogs = sendLogs,
+        fillWidth = !compact,
+    )
+}
+
+/** The Success badge "Up to date": one line, [ToastLayout.BadgeMax] wide at most, the words ellipsize past it. */
+@Composable
+fun UpToDateBadge(modifier: Modifier = Modifier, animateIcon: Boolean = true) {
+    val words = L.stateUpdated
+    ToastCard(
+        kind = ToastKind.Success,
+        message = words,
+        modifier = modifier.widthIn(max = ToastLayout.BadgeMax),
+        animateIcon = animateIcon,
+        compact = true,
     )
 }

@@ -54,6 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Account
 import com.tmplayer.data.ChatGate
@@ -479,7 +481,7 @@ internal val LocalPageOnScreen = androidx.compose.runtime.compositionLocalOf { t
  * The Chats page has its name pinned, from the start as Settings has it: it and the chips under it stay put
  * while the chat list scrolls beneath them.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun PhonePageFrame(
     section: BrowseSection,
@@ -542,7 +544,13 @@ internal fun PhonePageFrame(
         } else {
             padding
         }
-        val under = if (section.isHome) padding.calculateTopPadding() else 0.dp
+        // Never less than the status bar's own height, whatever the Scaffold reports for a frame (an
+        // inset a closing sheet or dialog left unread, or one an ancestor consumed): the name and the
+        // carousel's top must not be drawn under the clock and the system icons.
+        val statusBar = with(androidx.compose.ui.platform.LocalDensity.current) {
+            androidx.compose.foundation.layout.WindowInsets.statusBarsIgnoringVisibility.getTop(this).toDp()
+        }
+        val under = if (section.isHome) maxOf(padding.calculateTopPadding(), statusBar) else 0.dp
         // The page's count under the title, where a phone's app bar puts a subtitle.
         androidx.compose.runtime.CompositionLocalProvider(LocalUnderStatusBar provides under) {
         Box(Modifier.fillMaxSize().padding(framePadding)) {
@@ -591,10 +599,18 @@ internal fun PhonePageFrame(
             }
         }
         // The asked refresh's line floats over the page's top, so it never pushes a row; its own
-        // container keeps it legible over Home's carousel (WP-40, LS-02).
-        if (refresh != null && refreshStatus != WorkStatus.Idle) {
+        // container keeps it legible over Home's carousel (WP-40, LS-02). On Home it stands below the
+        // row that holds the name and the account's picture, centred, so it never meets either; on a
+        // page with a title bar the page already starts under it. Kept composed while Idle so the
+        // "Up to date" badge can fade out (it draws nothing then).
+        if (refresh != null) {
             val retry = androidx.compose.runtime.rememberUpdatedState(refresh)
-            Box(Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top = under + 8.dp, start = 16.dp, end = 16.dp)) {
+            Box(
+                Modifier
+                    .align(androidx.compose.ui.Alignment.TopCenter)
+                    .padding(top = refreshLineTop(under), start = 16.dp, end = 16.dp)
+                    .testTag(REFRESH_LINE_TAG),
+            ) {
                 com.tmplayer.ui.components.AskedRefreshLine(
                     status = refreshStatus,
                     onRetry = { retry.value() },
@@ -606,6 +622,20 @@ internal fun PhonePageFrame(
         }
     }
 }
+
+/**
+ * How far the asked refresh's line stands from the top of the page's frame: on Home ([under] is the
+ * status bar) below the header row of the name and the account's picture ([HOME_HEADER_ROW]) and a
+ * gap; on a page with a title bar, a gap under that bar.
+ */
+internal fun refreshLineTop(under: androidx.compose.ui.unit.Dp): androidx.compose.ui.unit.Dp =
+    if (under > 0.dp) under + HOME_HEADER_ROW + 8.dp else 8.dp
+
+/** The top row of a phone's Home under the status bar: the account's picture (8 dp, its 48 dp target) and the name. */
+internal val HOME_HEADER_ROW = 56.dp
+
+/** The test tag of the box that holds the asked refresh's line over a page. */
+internal const val REFRESH_LINE_TAG = "refresh-line"
 
 /**
  * How far a page without a title (Home on a phone, whose featured carousel is its top) runs up

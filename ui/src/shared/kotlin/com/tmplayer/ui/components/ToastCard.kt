@@ -105,6 +105,13 @@ object ToastLayout {
 
     val Radius: Dp = 16.dp
 
+    /** The chip and its icon in a compact status badge ([ToastCard]'s `compact`). */
+    val BadgeChip: Dp = 24.dp
+    val BadgeGlyph: Dp = 16.dp
+
+    /** The widest a status badge grows: its words ellipsize past it. */
+    val BadgeMax: Dp = 280.dp
+
     /** A phone's toast fills the width less this margin at each side, up to [PhoneMax]. */
     val PhoneMargin: Dp = 16.dp
     val PhoneMax: Dp = 560.dp
@@ -196,6 +203,8 @@ fun ToastCard(
     /** True where the card has a fixed width (a phone's): the words take the room and the action stands at the end. */
     fillWidth: Boolean = false,
     animateIcon: Boolean = true,
+    /** A status badge rather than a toast: a 24 dp chip, one line, 6 dp above and below (about 36 dp high). */
+    compact: Boolean = false,
     dismiss: ToastDismiss = ToastDismiss.None,
     onDismiss: () -> Unit = {},
     action: (@Composable () -> Unit)? = null,
@@ -228,19 +237,24 @@ fun ToastCard(
             .semantics(mergeDescendants = true) {
                 liveRegion = if (kind == ToastKind.Error) LiveRegionMode.Assertive else LiveRegionMode.Polite
             }
-            .padding(start = 12.dp, end = if (action != null) 8.dp else 16.dp, top = 10.dp, bottom = 10.dp),
+            .padding(
+                start = if (compact) 8.dp else 12.dp,
+                end = if (action != null) 8.dp else if (compact) 12.dp else 16.dp,
+                top = if (compact) 6.dp else 10.dp,
+                bottom = if (compact) 6.dp else 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp),
     ) {
         Box(
-            Modifier.size(ToastLayout.Chip).clip(CircleShape).background(tint.copy(alpha = CHIP)),
+            Modifier.size(if (compact) ToastLayout.BadgeChip else ToastLayout.Chip).clip(CircleShape).background(tint.copy(alpha = CHIP)),
             contentAlignment = Alignment.Center,
-        ) { ToastGlyph(kind, tint, animateIcon) }
+        ) { ToastGlyph(kind, tint, animateIcon, if (compact) ToastLayout.BadgeGlyph else ToastLayout.Glyph) }
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium.let { if (large) it.copy(fontSize = ToastLayout.TvText, lineHeight = 26.sp) else it },
             color = Tone.text,
-            maxLines = 2,
+            maxLines = if (compact) 1 else 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = fillWidth),
         )
@@ -262,7 +276,7 @@ private const val CHIP = 0.22f
 
 /** The icon in the chip, and its one small movement: a tick that draws, a cross that shakes, a pulse, a scale in. */
 @Composable
-private fun ToastGlyph(kind: ToastKind, tint: Color, animate: Boolean) {
+private fun ToastGlyph(kind: ToastKind, tint: Color, animate: Boolean, glyph: Dp = ToastLayout.Glyph) {
     val progress = remember(kind) { Animatable(if (animate) 0f else 1f) }
     LaunchedEffect(kind, animate) {
         if (animate) {
@@ -274,7 +288,7 @@ private fun ToastGlyph(kind: ToastKind, tint: Color, animate: Boolean) {
     }
     val p = progress.value
     when (kind) {
-        ToastKind.Success -> Canvas(Modifier.size(ToastLayout.Glyph)) {
+        ToastKind.Success -> Canvas(Modifier.size(glyph)) {
             val k = size.width / 24f
             val full = Path().apply {
                 moveTo(5f * k, 12.5f * k)
@@ -288,7 +302,7 @@ private fun ToastGlyph(kind: ToastKind, tint: Color, animate: Boolean) {
             drawPath(
                 shown,
                 tint,
-                style = Stroke(width = 2.25.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                style = Stroke(width = (2.25f * glyph.value / ToastLayout.Glyph.value).dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
         }
         ToastKind.Error -> Icon(
@@ -296,13 +310,13 @@ private fun ToastGlyph(kind: ToastKind, tint: Color, animate: Boolean) {
             contentDescription = null,
             tint = tint,
             // One shake: a few quick swings that settle.
-            modifier = Modifier.size(ToastLayout.Glyph).graphicsLayer { translationX = shake(p) * 3.dp.toPx() },
+            modifier = Modifier.size(glyph).graphicsLayer { translationX = shake(p) * 3.dp.toPx() },
         )
         ToastKind.Warning -> Icon(
             TmIcons.Warning,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(ToastLayout.Glyph).graphicsLayer {
+            modifier = Modifier.size(glyph).graphicsLayer {
                 val s = pulse(p)
                 scaleX = s
                 scaleY = s
@@ -312,7 +326,7 @@ private fun ToastGlyph(kind: ToastKind, tint: Color, animate: Boolean) {
             TmIcons.Info,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(ToastLayout.Glyph).graphicsLayer {
+            modifier = Modifier.size(glyph).graphicsLayer {
                 val s = 0.6f + 0.4f * p
                 scaleX = s
                 scaleY = s

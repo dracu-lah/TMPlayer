@@ -416,6 +416,13 @@ internal fun HomePane(
         snapshotFlow { listState.isScrollInProgress }.first { it }
         scrolled = true
     }
+    // A refresh does not move the page (user, 2026-11-25): Home keeps its place while rows answer.
+    if (touch) HoldPlaceWhileWorking(listState, working = work != WorkStatus.Idle)
+    // The name stands below the status bar and fades out as the page scrolls up to it, so it is never
+    // drawn under the clock: one name at a time, gone from the list once it would sit under the bar.
+    val brandRoomPx = with(LocalDensity.current) { (if (carousel) BRAND_TOP else 4.dp + BRAND_TOP).toPx() }
+    val brandFade: () -> Float = { brandFadeOf(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, brandRoomPx) }
+    val brandShown by remember(listState, brandRoomPx) { androidx.compose.runtime.derivedStateOf { brandFade() > 0f } }
     LaunchedEffect(carousel) {
         // On a television too: a carousel arriving after the rows otherwise sits above the screen,
         // out of reach of Up.
@@ -660,13 +667,17 @@ internal fun HomePane(
                         // 2026-10-22). Held sideways it stays there too: the right corner is the
                         // account's picture's (user, 2026-11-25, "TMPl" under the avatar), and the
                         // title's words sit lower, at the start.
-                        PhoneHomeCorner(start, under)
+                        if (brandShown) PhoneHomeCorner(start, under, fade = brandFade)
                       }
                     }
                 } else if (touch) {
                     // No carousel: the name heads the rows instead.
                     item(key = BRAND_KEY, contentType = BRAND_KEY) {
-                        PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP, bottom = 4.dp), onArt = false)
+                        if (brandShown) {
+                            PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP, bottom = 4.dp), onArt = false, fade = brandFade)
+                        } else {
+                            androidx.compose.foundation.layout.Spacer(Modifier.height(BRAND_ROOM))
+                        }
                     }
                 }
                 items(listed, key = { it.key }, contentType = { it::class }) { row ->
@@ -1786,16 +1797,67 @@ internal val BRAND_TOP = 12.dp
  * Chats and in Settings.
  */
 @Composable
-internal fun BoxScope.PhoneHomeCorner(start: Dp, under: Dp) {
-    PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP), onArt = true)
+internal fun BoxScope.PhoneHomeCorner(start: Dp, under: Dp, fade: () -> Float = { 1f }) {
+    PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP), onArt = true, fade = fade)
 }
+
+/**
+ * How much of the name Home's list leaves in view: 1 at the top, down to 0 by the time the page has
+ * scrolled up by the room (the gap the name stands below the status bar), so the name fades out before
+ * it reaches the clock and the system icons, and is gone from the list once it would sit under them.
+ */
+internal fun brandFadeOf(firstIndex: Int, scrollOffsetPx: Int, roomPx: Float): Float =
+    if (firstIndex > 0) 0f else if (roomPx <= 0f) 1f else (1f - scrollOffsetPx / roomPx).coerceIn(0f, 1f)
+
+/** The height the name takes in the list when it has faded away, so the rows under it do not jump. */
+private val BRAND_ROOM = BRAND_TOP + 32.dp + 4.dp
 
 /** The mark and "TMPlayer" at the top of a phone's Home, in the colours for art over the carousel. */
 @Composable
-internal fun PhoneHomeBrand(modifier: Modifier, onArt: Boolean) {
+internal fun PhoneHomeBrand(modifier: Modifier, onArt: Boolean, fade: () -> Float = { 1f }) {
     com.tmplayer.ui.components.BrandLockup(
-        modifier,
+        modifier.graphicsLayer { alpha = fade() },
         layout = com.tmplayer.ui.components.BrandLayout.Row,
         color = if (onArt) Tone.onArt else Tone.text,
     )
+}
+
+/** How long after its work ends Home still puts the page back where the viewer left it. */
+private const val HOLD_TAIL_MS = 600L
+
+/**
+ * Keeps a phone's Home where the viewer left it while [working] (a refresh, a retry) and a moment
+ * after: rows answering one by one, a carousel taking new picks or a row changing height must not
+ * scroll the page, so the name and the carousel do not end up under the status bar. The place
+ * follows the viewer's own scrolling and every quiet moment; only a move nobody asked for during the
+ * work is put back.
+ */
+@Composable
+internal fun HoldPlaceWhileWorking(listState: androidx.compose.foundation.lazy.LazyListState, working: Boolean) {
+    var holding by remember { mutableStateOf(false) }
+    val workingNow by androidx.compose.runtime.rememberUpdatedState(working)
+    val holdingNow by androidx.compose.runtime.rememberUpdatedState(holding)
+    LaunchedEffect(working) {
+        if (working) {
+            holding = true
+        } else {
+            kotlinx.coroutines.delay(HOLD_TAIL_MS)
+            holding = false
+        }
+    }
+    LaunchedEffect(listState) {
+        var index = listState.firstVisibleItemIndex
+        var offset = listState.firstVisibleItemScrollOffset
+        androidx.compose.runtime.snapshotFlow {
+            Triple(listState.isScrollInProgress, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        }.collect { (moving, i, o) ->
+            when {
+                moving || !(holdingNow || workingNow) -> {
+                    index = i
+                    offset = o
+                }
+                i != index || o != offset -> listState.requestScrollToItem(index, offset)
+            }
+        }
+    }
 }
