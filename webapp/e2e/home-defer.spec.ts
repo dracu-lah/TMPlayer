@@ -85,16 +85,22 @@ async function settle(page: Page) {
     }
 }
 
-/** A hard fling to the foot: a screen at a time, 30 ms apart, so a row is on screen for well under 250 ms. */
+/**
+ * A hard fling to the foot: nine tenths of a screen every 30 ms, so a row is on screen for well under 250 ms. Run in the page
+ * and placed by the clock at each frame, as a fling is: a step per round trip from the test let a slow runner keep each
+ * screen up for more than 250 ms, and the rows it showed were read as they should be (run 45691829607).
+ */
 async function flingToFoot(page: Page) {
-    for (let i = 0; i < 120; i++) {
-        const done = await page.evaluate(() => {
-            window.scrollBy(0, innerHeight * 0.9)
-            return scrollY + innerHeight >= document.documentElement.scrollHeight - 2
-        })
-        if (done) return
-        await page.waitForTimeout(15)
-    }
+    await page.evaluate(async () => {
+        const speed = (innerHeight * 0.9) / 30
+        const from = scrollY
+        const start = performance.now()
+        while (performance.now() - start < 20_000) {
+            await new Promise((r) => requestAnimationFrame(r))
+            window.scrollTo(0, from + (performance.now() - start) * speed)
+            if (scrollY + innerHeight >= document.documentElement.scrollHeight - 2) return
+        }
+    })
 }
 
 const note = (type: string, description: string) => {
