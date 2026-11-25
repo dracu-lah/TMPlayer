@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.Account
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.DrainMainLooperRule
+import com.tmplayer.ui.components.LIBRARY_TILE_ICON
+import com.tmplayer.ui.components.LIBRARY_TILE_LABEL
 import com.tmplayer.ui.components.LIBRARY_TILE_TAG
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Motion
@@ -160,27 +162,32 @@ class PhoneLayoutFixesTest {
         assertTrue("one tile height: $heights", heights.all { abs(it - heights.first()) < 1.5f })
         assertTrue("a 48 dp target at the least: $heights", heights.all { it >= 48f * density })
         assertTrue("one tile top: ${tiles.map { it.boundsInRoot.top }}", tiles.all { abs(it.boundsInRoot.top - tiles.first().boundsInRoot.top) < 1.5f })
-        // The content (icon over name, over the count lines) stands in the middle of its tile as a group:
-        // the room above its icon is the room under its last line, within a pixel or two.
-        tiles.forEach { node ->
+        // The icons stand level at one top and the names on one line under them, whatever counts the
+        // tiles carry: the counts hang under the name and only grow the tile downward.
+        val tags = listOf("favourites", "history", "watch-later")
+        fun part(tag: String, part: String) = rule.onNodeWithTag("$LIBRARY_TILE_TAG-$tag-$part", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val icons = tags.map { part(it, LIBRARY_TILE_ICON) }
+        val labels = tags.map { part(it, LIBRARY_TILE_LABEL) }
+        assertTrue("icons at one top: ${icons.map { it.top }}", icons.all { abs(it.top - icons.first().top) < 1.5f })
+        assertTrue("names at one top: ${labels.map { it.top }}", labels.all { abs(it.top - labels.first().top) < 1.5f })
+        tiles.forEachIndexed { i, node ->
             val box = node.boundsInRoot
-            val texts = node.children.filter { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text) != null }
-            assertTrue("a tile has its name", texts.isNotEmpty())
-            val firstText = texts.minOf { it.boundsInRoot.top }
-            val lastText = texts.maxOf { it.boundsInRoot.bottom }
-            // The icon is 24 dp, then 4 dp before the name.
-            val groupTop = firstText - (24f + 4f) * density
-            val above = groupTop - box.top
-            val below = box.bottom - lastText
-            assertEquals("content centred in ${box.height}: $above above, $below below", above, below, 2f)
+            // The icon starts one padding (12 dp) under the tile's top, and the name hangs under it.
+            assertEquals("icon top padding in tile $i", 12f * density, icons[i].top - box.top, 2f)
+            assertTrue("the name is under the icon in tile $i", labels[i].top >= icons[i].bottom - 1.5f)
+            if (!withCounts) {
+                // With no count the least height is padding, icon and one name line: no empty foot.
+                val below = box.bottom - labels[i].bottom
+                assertEquals("no empty foot in tile $i: ${below}px under the name", 12f * density, below, 3f * density)
+            }
         }
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "w393dp-h873dp-port-440dpi")
-    fun `with no counts the three tiles stand level with their content in the middle`() = checkTiles(withCounts = false)
+    fun `with no counts the three tiles stand level with their icons and names on one line`() = checkTiles(withCounts = false)
 
     @Test
     @Config(sdk = [35], qualifiers = "w393dp-h873dp-port-440dpi")
-    fun `with counts on two tiles the three are still one height and centred`() = checkTiles(withCounts = true)
+    fun `with counts on two tiles the three are still one height with icons and names level`() = checkTiles(withCounts = true)
 }
