@@ -101,7 +101,14 @@ fun ChatAvatar(chat: ChatBrief?, size: Dp, modifier: Modifier = Modifier) {
             if (Motion.television) {
                 DrawnLetter(letter, style.copy(color = NameArt.onLetter))
             } else {
-                Text(letter, style = style, color = NameArt.onLetter)
+                // A picture sized to its disc, not text to read larger: at twice the font the letter outgrew
+                // the circle, so it is laid out at font scale 1 (phone audit, 2026-11-25).
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1f),
+                ) {
+                    Text(letter, style = style, color = NameArt.onLetter)
+                }
             }
         }
     }

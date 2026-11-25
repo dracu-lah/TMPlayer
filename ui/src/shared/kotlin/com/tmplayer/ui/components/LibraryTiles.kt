@@ -72,41 +72,39 @@ fun LibraryTiles(
 ) {
     val s = LocalStrings.current
     val number = s.formatter
-    Row(
-        // The tallest tile sets the row's height and the others stretch to it (below), so the three
-        // stand level whether or not any has a count line.
-        modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).height(IntrinsicSize.Min).testTag(LIBRARY_TILES_TAG),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    // At a very large font a third of the card is no room for "Favourites": it broke in the middle of the
+    // word. The three then stand as full width rows, the icon at the start and the words beside it.
+    val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale > STACK_FROM_SCALE
+    val starredNotes = listOfNotNull(starred.takeIf { it > 0 }?.let { s.navTileStarred(number.number(it)) })
+    val historyNotes = listOfNotNull(
+        watching.takeIf { it > 0 }?.let { s.navTileWatching(number.number(it)) },
+        watched.takeIf { it > 0 }?.let { s.navTileWatched(number.number(it)) },
+    )
+    val body: @Composable (Modifier) -> Unit = { each ->
         Tile(
-            icon = TmIcons.StarOutline,
-            label = s.browseTabFavourites,
-            notes = listOfNotNull(starred.takeIf { it > 0 }?.let { s.navTileStarred(number.number(it)) }),
-            onClick = onFavourites,
-            tag = "favourites",
-            modifier = Modifier.weight(1f).then(if (firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier),
+            icon = TmIcons.StarOutline, label = s.browseTabFavourites, notes = starredNotes, onClick = onFavourites, tag = "favourites",
+            modifier = each.then(if (firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier), stacked = stacked,
         )
-        Tile(
-            icon = TmIcons.History,
-            label = s.browseTabHistory,
-            notes = listOfNotNull(
-                watching.takeIf { it > 0 }?.let { s.navTileWatching(number.number(it)) },
-                watched.takeIf { it > 0 }?.let { s.navTileWatched(number.number(it)) },
-            ),
-            onClick = onHistory,
-            tag = "history",
-            modifier = Modifier.weight(1f),
-        )
-        Tile(
-            icon = TmIcons.Clock,
-            label = s.browseTabWatchLater,
-            notes = emptyList(),
-            onClick = onWatchLater,
-            tag = "watch-later",
-            modifier = Modifier.weight(1f),
-        )
+        Tile(icon = TmIcons.History, label = s.browseTabHistory, notes = historyNotes, onClick = onHistory, tag = "history", modifier = each, stacked = stacked)
+        Tile(icon = TmIcons.Clock, label = s.browseTabWatchLater, notes = emptyList(), onClick = onWatchLater, tag = "watch-later", modifier = each, stacked = stacked)
+    }
+    if (stacked) {
+        Column(
+            modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag(LIBRARY_TILES_TAG),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) { body(Modifier.fillMaxWidth()) }
+    } else {
+        Row(
+            // The tallest tile sets the row's height and the others stretch to it (below), so the three
+            // stand level whether or not any has a count line.
+            modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).height(IntrinsicSize.Min).testTag(LIBRARY_TILES_TAG),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) { body(Modifier.weight(1f)) }
     }
 }
+
+/** The font scale past which the tiles stand one under another. */
+private const val STACK_FROM_SCALE = 1.5f
 
 @Composable
 private fun Tile(
@@ -116,6 +114,7 @@ private fun Tile(
     onClick: () -> Unit,
     tag: String,
     modifier: Modifier,
+    stacked: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
@@ -127,6 +126,27 @@ private fun Tile(
         label = "libraryTile",
     )
     val said = (listOf(label) + notes).joinToString(", ")
+    if (stacked) {
+        Row(
+            modifier
+                .heightIn(min = 56.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(fill)
+                .clickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, role = Role.Button, onClick = onClick)
+                .semantics(mergeDescendants = true) { contentDescription = said }
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .testTag("$LIBRARY_TILE_TAG-$tag"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp))
+            androidx.compose.foundation.layout.Spacer(Modifier.size(16.dp))
+            Column {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = Tone.text)
+                notes.forEach { note -> Text(note, style = MaterialTheme.typography.labelMedium, color = Tone.muted) }
+            }
+        }
+        return
+    }
     Column(
         modifier
             .fillMaxHeight()

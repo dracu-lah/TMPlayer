@@ -35,17 +35,24 @@ fun MediaPreview(
         // letter at all: the colour then stands alone, which still reads as art and not as a hole.
         NameArtTile(fallbackLabel) {
             val letter = NameInitial.of(fallbackLabel) ?: return@NameArtTile
-            Text(
-                letter,
-                // The tile this letter stands in for is a third of the size on a phone, where a
-                // headline glyph fills it corner to corner and reads as a mistake.
-                style = if (isTouch()) {
-                    MaterialTheme.typography.titleLarge
-                } else {
-                    MaterialTheme.typography.headlineLarge
-                },
-                color = NameArt.onLetter,
-            )
+            // A picture sized to its tile, not text to read larger: at twice the font the letter outgrew a 36 dp
+            // avatar (112 px of letter in 99), so it is laid out at font scale 1 (phone audit, 2026-11-25).
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1f),
+            ) {
+                Text(
+                    letter,
+                    // The tile this letter stands in for is a third of the size on a phone, where a
+                    // headline glyph fills it corner to corner and reads as a mistake.
+                    style = if (isTouch()) {
+                        MaterialTheme.typography.titleLarge
+                    } else {
+                        MaterialTheme.typography.headlineLarge
+                    },
+                    color = NameArt.onLetter,
+                )
+            }
         }
     }
 }

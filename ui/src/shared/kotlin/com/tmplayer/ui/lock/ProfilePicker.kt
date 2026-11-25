@@ -280,7 +280,7 @@ private fun ProfileTileView(
         .joinToString(", ")
     Column(
         modifier
-            .width(size + 16.dp)
+            .width((size + 16.dp) * nameRoom())
             .longOk(enabled, onClick = onOpen, onLong = onOptions)
             .combinedClickable(
                 interactionSource = interactions,
@@ -344,6 +344,14 @@ private fun ProfileTileView(
     }
 }
 
+/**
+ * How much wider than its picture a tile is, from the font: 1 up to 1.3 times, then as much as the
+ * font grew. A name is 16 sp, so past 1.3 times the fixed 88 to 120 dp broke "Benedict" into
+ * "Benedi" and "ct" and cut "Add account" (phone audit, 2026-11-25); the row then wraps to fewer tiles.
+ */
+@Composable
+private fun nameRoom(): Float = LocalDensity.current.fontScale.let { if (it > 1.3f) it else 1f }
+
 /** The Add account tile, last in the row, a plus in a ring where a picture would be. */
 @Composable
 private fun AddTile(size: Dp, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
@@ -352,7 +360,7 @@ private fun AddTile(size: Dp, enabled: Boolean, modifier: Modifier, onClick: () 
     val focused by interactions.collectIsFocusVisibleAsState()
     Column(
         modifier
-            .width(size + 16.dp)
+            .width((size + 16.dp) * nameRoom())
             .longOk(enabled, onClick = onClick, onLong = onClick)
             .combinedClickable(
                 interactionSource = interactions,

@@ -71,9 +71,11 @@ fun NameArtTile(name: String?, modifier: Modifier = Modifier, letter: @Composabl
  */
 @Composable
 fun DrawnLetter(letter: String, style: TextStyle, modifier: Modifier = Modifier) {
+    // The letter is a picture sized to its disc, not text to be read larger: at twice the font it grew past
+    // the circle (112 px of letter in a 99 px avatar), so it is laid out at font scale 1 (phone audit, 2026-11-25).
     val measurer = LetterLayouts.measurer(
         LocalFontFamilyResolver.current,
-        LocalDensity.current,
+        LocalDensity.current.let { Density(it.density, 1f) },
         LocalLayoutDirection.current,
     )
     Spacer(
