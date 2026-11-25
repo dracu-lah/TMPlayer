@@ -76,8 +76,8 @@ import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import com.tmplayer.ui.components.FloatingBackButton
-import com.tmplayer.ui.components.FloatingPageTitle
+import com.tmplayer.ui.components.PageHeader
+import com.tmplayer.ui.components.rememberMoved
 import com.tmplayer.ui.components.LocalBottomChrome
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -662,6 +662,9 @@ fun SettingsScreen(
     val syncChannelFocus = remember { FocusRequester() }
     // A fresh scroll position for every page opened.
     val pageState = remember(page) { LazyListState() }
+    // Whether the rows under the phone's fixed header have moved: the cue for its hairline.
+    val listMoved = listState.rememberMoved()
+    val pageMoved = pageState.rememberMoved()
     breadcrumb.state = if (page == null) listState else pageState
     breadcrumb.onRow = { row -> page?.let { rowMemory.put(it, row) } }
     // A Library row that removes itself hands the remote on in the list it is drawn in: the
@@ -2853,11 +2856,10 @@ fun SettingsScreen(
         // Side by side (WP-76): the category list with its search box at 280 dp, the open page beside
         // it, rows with their description in the row (no strip on touch). A screen reader reads the
         // list, then the page.
-        val twoScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+        // The title is a fixed header with Back in it: nothing floats over the rows.
         Box(Modifier.fillMaxSize()) {
             Scaffold(
-                modifier = Modifier.nestedScroll(twoScroll.nestedScrollConnection),
-                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, twoScroll) },
+                topBar = { PageHeader({ SettingsTitle(s.settingsTitle) }, TmIcons.ArrowBack, s.commonBack, onBack, scrolled = listMoved || pageMoved) },
             ) { padding ->
                 Row(Modifier.fillMaxSize().padding(padding)) {
                     BoxWithConstraints(
@@ -2901,16 +2903,21 @@ fun SettingsScreen(
                     }
                 }
             }
-            FloatingBackButton(TmIcons.ArrowBack, s.commonBack, onBack, Modifier.align(Alignment.TopStart))
         }
     } else if (touch && page != null) {
-        // A page: its name along the top beside the round Back, which goes back to the list, the
-        // same as the hardware key. The floating bar is the list's, not the page's.
-        val pageScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+        // A page: its name in the fixed header beside Back, which goes back to the list, the same
+        // as the hardware key. The floating bar is the list's, not the page's.
         Box(Modifier.fillMaxSize()) {
             Scaffold(
-                modifier = Modifier.nestedScroll(pageScroll.nestedScrollConnection),
-                topBar = { FloatingPageTitle({ M3Text(titleOf(page!!)) }, pageScroll) },
+                topBar = {
+                    PageHeader(
+                        { M3Text(titleOf(page!!), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        TmIcons.ArrowBack,
+                        s.aboutBackToSettings,
+                        { closePage() },
+                        scrolled = pageMoved,
+                    )
+                },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     list(page, null)
@@ -2918,16 +2925,13 @@ fun SettingsScreen(
                     FastScroller(if (page == null) listState else pageState)
                 }
             }
-            FloatingBackButton(TmIcons.ArrowBack, s.aboutBackToSettings, { closePage() }, Modifier.align(Alignment.TopStart))
         }
     } else if (touch) {
         // The list: opened from the profile picture's menu as a page of its own, so it has the
-        // pages' floating title and round Back, which goes back where it was opened from.
-        val listScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+        // pages' fixed header with Back, which goes back where it was opened from.
         Box(Modifier.fillMaxSize()) {
             Scaffold(
-                modifier = Modifier.nestedScroll(listScroll.nestedScrollConnection),
-                topBar = { FloatingPageTitle({ SettingsTitle(s.settingsTitle) }, listScroll) },
+                topBar = { PageHeader({ SettingsTitle(s.settingsTitle) }, TmIcons.ArrowBack, s.commonBack, onBack, scrolled = listMoved) },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     list(page, null)
@@ -2935,7 +2939,6 @@ fun SettingsScreen(
                     FastScroller(if (page == null) listState else pageState)
                 }
             }
-            FloatingBackButton(TmIcons.ArrowBack, s.commonBack, onBack, Modifier.align(Alignment.TopStart))
         }
     } else {
         // A television (WP-07): the category rail, the open page beside it, the header pinned

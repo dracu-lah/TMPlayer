@@ -40,10 +40,10 @@ import com.tmplayer.ui.browse.TouchPage
 import com.tmplayer.ui.browse.TouchPageSpec
 import com.tmplayer.ui.browse.toTop
 import com.tmplayer.ui.browse.VideoPosterThumb
-import com.tmplayer.ui.components.FloatingBackButton
+import com.tmplayer.ui.components.PageHeader
+import com.tmplayer.ui.components.rememberMoved
 import com.tmplayer.ui.components.FloatingBarIcon
 import com.tmplayer.ui.components.FloatingChrome
-import com.tmplayer.ui.components.FloatingPageTitle
 import com.tmplayer.ui.components.LocalBottomChrome
 import com.tmplayer.ui.components.StickyActionBar
 import com.tmplayer.ui.components.rememberCompactChrome
@@ -2394,13 +2394,23 @@ private fun PhoneDownloads(
         picking || (!hosted && actions != null) -> navigationBar + FloatingChrome.clearance(compact)
         else -> maxOf(LocalBottomChrome.current, shell, navigationBar) + 16.dp
     }
-    val scroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val moved = listState.rememberMoved()
 
     Box(Modifier.fillMaxSize().background(Tone.background)) {
         Scaffold(
             containerColor = Tone.background,
-            modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-            topBar = { FloatingPageTitle({ Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) }, scroll) },
+            topBar = {
+                // A fixed header with Back in it, so the list never runs under a floating button.
+                PageHeader(
+                    { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    backIcon = if (picking) TmIcons.Close else TmIcons.ArrowBack,
+                    // While picking, the button leaves the selection rather than the screen: that
+                    // is what Back does here, and the two must not disagree.
+                    backLabel = if (picking) s.downloadsLeaveSelection else s.commonBack,
+                    onBack = if (picking) onLeavePicking else onBack,
+                    scrolled = moved,
+                )
+            },
             // The list runs to the foot of the window, under the bars that float over it.
             contentWindowInsets = WindowInsets.statusBars,
         ) { padding ->
@@ -2420,15 +2430,6 @@ private fun PhoneDownloads(
                 }
             }
         }
-
-        FloatingBackButton(
-            icon = if (picking) TmIcons.Close else TmIcons.ArrowBack,
-            // While picking, the button leaves the selection rather than the screen: that is what
-            // Back does here, and the two must not disagree.
-            label = if (picking) s.downloadsLeaveSelection else s.commonBack,
-            onClick = if (picking) onLeavePicking else onBack,
-            modifier = Modifier.align(Alignment.TopStart),
-        )
 
         if (picking) {
             StickyActionBar(Modifier.align(Alignment.BottomCenter), compact = compact, fill = true) {

@@ -1,6 +1,7 @@
 package com.tmplayer.ui.settings
 
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.rememberMoved
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -111,9 +112,11 @@ fun AboutScreen(onBack: () -> Unit) {
     val insets = WindowInsets.safeDrawing.asPaddingValues()
     val open = { link: About.Link -> if (!openLink(context, link.url)) qr = link }
 
+    val aboutState = rememberLazyListState()
     val list: @Composable () -> Unit = {
         LazyColumn(
-            Modifier
+            state = aboutState,
+            modifier = Modifier
                 .fillMaxSize()
                 .then(
                     if (touch) {
@@ -205,21 +208,22 @@ fun AboutScreen(onBack: () -> Unit) {
     }
 
     if (touch) {
-        // Its name along the top beside the round Back, as on every other page of Settings.
-        val scroll = androidx.compose.material3.TopAppBarDefaults.enterAlwaysScrollBehavior()
+        // Its name in a fixed header beside Back, as on every other page of Settings.
+        val moved = aboutState.rememberMoved()
         Box(Modifier.fillMaxSize()) {
             Scaffold(
-                modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-                topBar = { com.tmplayer.ui.components.FloatingPageTitle({ M3Text(s.aboutTitle) }, scroll) },
+                topBar = {
+                    com.tmplayer.ui.components.PageHeader(
+                        { M3Text(s.aboutTitle, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        TmIcons.ArrowBack,
+                        s.aboutBackToSettings,
+                        onBack,
+                        scrolled = moved,
+                    )
+                },
             ) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) { list() }
             }
-            com.tmplayer.ui.components.FloatingBackButton(
-                TmIcons.ArrowBack,
-                s.aboutBackToSettings,
-                onBack,
-                Modifier.align(androidx.compose.ui.Alignment.TopStart),
-            )
         }
     } else {
         // Settings' pinned header (WP-07), outside the list, so a focused row never scrolls under

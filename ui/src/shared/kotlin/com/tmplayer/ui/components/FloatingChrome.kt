@@ -254,25 +254,6 @@ fun FloatingEndButton(
 }
 
 /**
- * The title along the top of a page that has a [FloatingBackButton]: the page's name beside the
- * button, with nothing to press, scrolling away with the list ([scrollBehavior]) and back on the
- * first pull down. The button stays where it is.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FloatingPageTitle(
-    title: @Composable () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior? = null,
-) {
-    TopAppBar(
-        title = title,
-        // The button's room: it is drawn over the page, not in this bar, so it stays when this goes.
-        navigationIcon = { Spacer(Modifier.width(FloatingChrome.Button + 12.dp)) },
-        scrollBehavior = scrollBehavior,
-    )
-}
-
-/**
  * A page's own actions, in a pill at the foot of the screen that stays put while the page scrolls.
  *
  * It sits above the navigation bar and above the keyboard when one is up ([WindowInsets.safeDrawing]
