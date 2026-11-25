@@ -63,7 +63,10 @@ if [ "$mode" != named ]; then
     else
       has '^core/' && KTESTS+=(:core:jvmTest)
       has '^ui/' && KTESTS+=(:ui:jvmTest)
-      has '^app/' && KTESTS+=(:app:testDebugUnitTest)
+      # app and desktop tests also exercise the shared ui and core code (CI found the app's focus
+      # tests and the desktop's screen invariants red after ui-only pushes, 2026-11-25).
+      has '^(app|ui|core)/' && KTESTS+=(:app:testDebugUnitTest)
+      has '^(desktop|ui|core)/' && KTESTS+=(:desktop:test)
     fi
   fi
   has '^(ios|iosApp|altstore)/|^(core|ui)/src/|^app/src/main/(java|res)/|^scripts/ios-setup\.sh$|^gradle/|^(build|settings)\.gradle\.kts$|^gradle\.properties$' && want+=(ios)
@@ -105,9 +108,9 @@ g_style() {
 }
 
 g_kotlin() {
-  local tests=(:core:jvmTest :ui:jvmTest :app:testDebugUnitTest)
+  local tests=(:core:jvmTest :ui:jvmTest :app:testDebugUnitTest :desktop:test)
   [ "$mode" = changed ] && [ "$FULL" != 1 ] && tests=("${KTESTS[@]}")
-  if [ ${#tests[@]} -eq 0 ]; then echo "ci-local: no module with unit tests changed (desktop and iOS only), left to the nightly run"; return 0; fi
+  if [ ${#tests[@]} -eq 0 ]; then echo "ci-local: no module with unit tests changed (iOS only), left to the nightly run"; return 0; fi
   "${GRADLE[@]}" "${tests[@]}" || return 1
   [ "$FULL" = 1 ] && { "${GRADLE[@]}" :app:assembleDebug || return 1; }
   return 0
