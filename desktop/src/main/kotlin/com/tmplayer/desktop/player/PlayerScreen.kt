@@ -182,11 +182,15 @@ internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offse
 }
 
 private val blankCursor: PointerIcon by lazy {
-    PointerIcon(
-        Toolkit.getDefaultToolkit().createCustomCursor(
-            BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB), Point(0, 0), "blank",
-        ),
-    )
+    // A toolkit without a display (a headless test run, a session without X) cannot draw a custom
+    // cursor: the pointer then simply stays as it is instead of taking the player down.
+    runCatching {
+        PointerIcon(
+            Toolkit.getDefaultToolkit().createCustomCursor(
+                BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB), Point(0, 0), "blank",
+            ),
+        )
+    }.getOrDefault(PointerIcon.Default)
 }
 
 /**
