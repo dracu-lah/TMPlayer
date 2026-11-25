@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,6 +119,15 @@ fun ModalPageHost(state: ShellState, content: @Composable () -> Unit) {
                 // The pages clear the floating bar by this; the panel has no bar under it.
                 // The window's buttons would minimize, maximize or quit the app from inside a panel: it gets a close of its own.
                 val outer = LocalWindowChrome.current
+                // A panel that fills the window carries its own close in its header, so the window's three buttons (drawn on
+                // their own where the page under has no header) would stand beside it as a second, overlapping set. A
+                // centred card leaves the window's corner free, so they stay there.
+                if (size.full && outer != null) {
+                    DisposableEffect(outer) {
+                        outer.headers++
+                        onDispose { outer.headers-- }
+                    }
+                }
                 val panelChrome = remember(outer, state) {
                     outer?.let { WindowChrome(it.mode, null, null, {}, { state.closeModal() }, { false }, closeOnly = true) }
                 }

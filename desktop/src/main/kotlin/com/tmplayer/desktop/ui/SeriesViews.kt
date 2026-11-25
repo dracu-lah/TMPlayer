@@ -246,7 +246,7 @@ internal fun SeriesPage(
             } else {
                 null
             },
-            contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp),
+            contentPadding = PaddingValues(start = gutter, end = gutter, bottom = 24.dp + com.tmplayer.ui.components.LocalBottomChrome.current),
             modifier = Modifier.fillMaxSize(),
             seasonPicker = { stops, selected, guide, onSelect ->
                 SeasonDropdown(stops, selected, guide, onSelect, startOpen)
