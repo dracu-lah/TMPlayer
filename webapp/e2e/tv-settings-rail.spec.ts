@@ -43,6 +43,10 @@ for (const size of [
             await tv(page)
             await page.goto('/settings')
             await expect(page.locator('.tv-rail')).toBeVisible()
+            // The remote lands on the rail a moment after the page draws (tv/focus.ts settle); a key pressed before that only
+            // lands it. The walks below counted that landing press, and a slow runner, where the remote had landed by then, ended
+            // them a page further (run 45691829607): each walk starts with the remote on Account.
+            await expect.poll(() => onRail(page)).toBe(true)
         })
 
         test('the rail is the apps order, the header names where the pane is, and the first page is Account', async ({ page }) => {
@@ -54,7 +58,6 @@ for (const size of [
         })
 
         test('the pane follows the rail after a moment, and a remote passing down the rail draws only where it rests', async ({ page }) => {
-            await expect.poll(() => onRail(page)).toBe(true)
             await press(page, 'ArrowDown', 1, 400)
             expect(await chosen(page)).toBe('Playback')
             await expect(page.locator('.tv-crumb')).toContainText('Playback')
@@ -67,7 +70,7 @@ for (const size of [
         })
 
         test('Right enters the pane, Left returns to the chosen page, and Back does too', async ({ page }) => {
-            await press(page, 'ArrowDown', 4, 250)
+            await press(page, 'ArrowDown', 3, 250)
             expect(await chosen(page)).toBe('Downloads and data')
             await press(page, 'ArrowRight')
             expect(await inPane(page)).toBe(true)
@@ -86,7 +89,6 @@ for (const size of [
 
         test('a choice in the pane is made with OK, and the rail keeps its mark while the remote is in the pane', async ({ page }) => {
             await press(page, 'ArrowDown', 4, 250)
-            await press(page, 'ArrowDown', 1, 250)
             expect(await chosen(page)).toBe('Appearance and language')
             await press(page, 'ArrowRight')
             const theme = () => page.evaluate(() => document.documentElement.dataset.theme ?? 'system')
