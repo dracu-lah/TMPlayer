@@ -173,6 +173,8 @@ class MediaGridOptionsPillTest {
         rule.waitForIdle()
         rule.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
         rule.waitForIdle()
+        // The grid lets go of the rows it scrolled past a frame or more later (a slow runner took longer than one idle wait).
+        rule.waitUntil(30_000) { rule.onAllNodesWithText(nameOf(deep)).fetchSemanticsNodes().isEmpty() }
         assertEquals("the tile is off screen", 0, rule.onAllNodesWithText(nameOf(deep)).fetchSemanticsNodes().size)
         press(Key.DirectionCenter)
         // The hold menu is the video's own page as a menu: it names the video and offers Play.

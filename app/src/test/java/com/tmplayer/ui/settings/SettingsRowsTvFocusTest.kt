@@ -284,7 +284,8 @@ class SettingsRowsTvFocusTest {
         val start = scale()
         press("Interface size", Key.Enter)
         rule.waitUntil(5_000) { scale() != start }
-        // The size applied at once, and the question is up with its countdown.
+        // The size applied at once, and the question is up with its countdown (it follows the store write by a frame).
+        rule.waitUntil(5_000) { rule.onAllNodes(hasText("Keep this size?")).fetchSemanticsNodes().isNotEmpty() }
         rule.onAllNodes(hasText("Keep this size?")).assertCountEquals(1)
         rule.onAllNodes(hasText("It changes back in 10 s", substring = true) or hasText("It changes back in 9 s", substring = true)).assertCountEquals(1)
         answer("Undo")
@@ -304,6 +305,9 @@ class SettingsRowsTvFocusTest {
         // No answer for 10 s: the old size comes back by itself.
         press("Interface size", Key.DirectionLeft)
         rule.waitUntil(5_000) { scale() != tried }
+        // The countdown starts when the screen has the answer to the step (after the store write): wait for the question, or a slow runner moves the clock before it starts.
+        rule.waitUntil(5_000) { rule.onAllNodes(hasText("Keep this size?")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitForIdle()
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(11))
         rule.mainClock.advanceTimeBy(1_000)
         rule.waitUntil(5_000) { scale() == tried }
