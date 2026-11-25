@@ -56,7 +56,7 @@ const PLACES: Place[] = [
 const sheetWidth = () => form() === 'phone' || (typeof matchMedia === 'function' && matchMedia('(max-width: 599px)').matches)
 
 /** The card's width (POPOVER_WIDTH). */
-const WIDTH = 232
+const WIDTH = 264
 
 /** The pages the "You" menu leads to: the picture is lit on them. */
 const YOURS = /^\/(settings|favourites)(\/|$)/
