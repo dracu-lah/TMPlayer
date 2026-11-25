@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -70,6 +71,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
@@ -135,6 +137,10 @@ fun NavFrame(
     // page stays at the same place in the tree either way, so a change of layout keeps its state.
     val tv = BigScreen.on
     var pictureX by remember { mutableFloatStateOf(Float.NaN) }
+    // How tall the bar stands as drawn (its margin included): a larger font or a longer word makes its cells grow, and
+    // the page keeps that much room at its foot, never less than the bar at its usual size.
+    var barPx by remember { mutableIntStateOf(0) }
+    val clearance = maxOf(NavBarClearance, with(LocalDensity.current) { barPx.toDp() } + NAV_CLEARANCE_GAP)
     // The profile open now (WP-103): its saved photo or letter stands in for Telegram's picture, and
     // its name for Telegram's, until Telegram has answered (or offline). Null before the profiles open.
     val profileFlow = remember { com.tmplayer.desktop.profiles.DesktopProfiles.flow() }
@@ -151,7 +157,7 @@ fun NavFrame(
             // On a television, one focus group that remembers where the remote was: Down from the
             // bar and the end of a video put it back on that item (ShellState.focusPage).
             Box(Modifier.weight(1f).fillMaxWidth().focusRequester(state.pageFocus).then(if (tv || state.destination.isModal) Modifier.focusRestorer().focusGroup() else Modifier)) {
-                CompositionLocalProvider(LocalBottomChrome provides if (barShown && !tv) NavBarClearance else 0.dp) {
+                CompositionLocalProvider(LocalBottomChrome provides if (barShown && !tv) clearance else 0.dp) {
                     content()
                 }
             }
@@ -168,7 +174,7 @@ fun NavFrame(
                         update,
                         account,
                         // The bar tells toasts where its top edge is, so they stand above it.
-                        Modifier.align(Alignment.BottomCenter).toastFloor(),
+                        Modifier.align(Alignment.BottomCenter).toastFloor().onSizeChanged { barPx = it.height },
                         onPicturePlaced = { pictureX = it },
                         profile = profileList?.active,
                         accountFocus = accountFocus,
@@ -245,7 +251,8 @@ private fun NavBar(
     // its name in the tooltip.
     // Drawn once the choice is read, so a compact bar never opens wide and shrinks.
     val compact = state.settings.compactNav.collectAsState(initial = null).value ?: return
-    val cell = if (compact) NavCellSize(COMPACT_ITEM, COMPACT_ITEM) else NavCellSize(NAV_ITEM, NAV_ITEM_HEIGHT)
+    val fitted = rememberFittedCell(listOf(s.browseTabHome, s.navChats, s.commonSearch, s.navDownloads))
+    val cell = if (compact) NavCellSize(COMPACT_ITEM, COMPACT_ITEM) else fitted
     // The highlight slides between places, but jumps with the cells when the setting changes them.
     var lastCell by remember { mutableStateOf(cell) }
     val resized = lastCell != cell
@@ -311,6 +318,26 @@ private fun NavBar(
             }
         }
     }
+    }
+}
+
+/**
+ * The cell every place gets: [NAV_ITEM] by [NAV_ITEM_HEIGHT] at the usual font, wider for the widest of [labels] at
+ * the font in use (a larger system font, or a language with a longer word for Downloads, cut it to "Downlo..") and
+ * taller for the caption's line, so a name is always whole and the four cells stay equal.
+ */
+@Composable
+private fun rememberFittedCell(labels: List<String>): NavCellSize {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val density = LocalDensity.current
+    val caption = captionStyle().copy(fontWeight = FontWeight.SemiBold)
+    return remember(labels, caption, density) {
+        val widest = labels.maxOfOrNull { measurer.measure(it, caption, maxLines = 1, softWrap = false).size.width } ?: 0
+        val line = with(density) { (caption.lineHeight.takeIf { it.isSp } ?: 12.sp).toDp() }
+        NavCellSize(
+            width = maxOf(NAV_ITEM, with(density) { widest.toDp() } + NAV_LABEL_SIDES * 2),
+            height = maxOf(NAV_ITEM_HEIGHT, GLYPH_SLOT + 2.dp + line + 10.dp),
+        )
     }
 }
 
@@ -870,6 +897,10 @@ fun TopMessageHost(host: androidx.compose.material3.SnackbarHostState, modifier:
 val NavBarClearance: Dp get() = NAV_MARGIN + NAV_HEIGHT + 8.dp
 
 private val NAV_ITEM = 68.dp
+
+/** The room a cell keeps each side of its name, and the gap the page keeps above the bar. */
+private val NAV_LABEL_SIDES = 6.dp
+private val NAV_CLEARANCE_GAP = 8.dp
 
 /** Between two places, as much as the bar keeps round them. */
 private val NAV_GAP = 6.dp
