@@ -592,8 +592,10 @@ object Td {
             methodAfterRestart = SignInMethod.Undecided
             closedSignal = closed
 
+            // Through AuthUpdates: the library can end this flow on the client's Closed without
+            // handing it on, and a Closed never heard left the next client never started.
             val updates = launch {
-                td.authorizationStateUpdates.collect { apply(td, it.authorizationState) }
+                AuthUpdates.follow(td.authorizationStateUpdates.map { it.authorizationState }) { apply(td, it) }
             }
             val folders = launch {
                 td.chatFoldersUpdates.collect { update ->
