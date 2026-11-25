@@ -1261,7 +1261,8 @@ private class PickScreen(
                 // width at all (HX56): the count goes over the button then.
                 // Only where the window is narrow: on its side a phone has 800 dp or more of room, and stacking took
                 // a third of its 393 dp of height from the list (phone audit, 2026-11-25).
-                if (LocalDensity.current.fontScale >= LARGE_FONT && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600) {
+                val widthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value }
+                if (LocalDensity.current.fontScale >= LARGE_FONT && widthDp < 600f) {
                     Column(card, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
                         totalWords(Modifier.fillMaxWidth())
                         DoneButton()
