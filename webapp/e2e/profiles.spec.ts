@@ -679,12 +679,13 @@ test('locked under a playing video: no key plays, opens or skips it, and nothing
     await page.addInitScript(() => {
         const handlers: Record<string, unknown> = {}
         ;(window as unknown as { __media: Record<string, unknown> }).__media = handlers
-        const session = navigator.mediaSession
-        if (!session) return
-        const set = session.setActionHandler.bind(session)
-        session.setActionHandler = (action, handler) => {
+        // On the prototype, not the instance: WebKit gives navigator.mediaSession no own method to replace, or makes it after this script ran.
+        const proto = globalThis.MediaSession?.prototype
+        if (!proto) return
+        const set = proto.setActionHandler
+        proto.setActionHandler = function (this: MediaSession, action: MediaSessionAction, handler: MediaSessionActionHandler | null) {
             handlers[action] = handler
-            set(action, handler)
+            return set.call(this, action, handler)
         }
     })
     await danaUnlocked(page)
@@ -706,7 +707,8 @@ test('locked under a playing video: no key plays, opens or skips it, and nothing
             pip: !!document.pictureInPictureElement,
             fullscreen: !!document.fullscreenElement,
             metadata: navigator.mediaSession?.metadata ?? null,
-            playback: navigator.mediaSession?.playbackState ?? 'none',
+            // WebKit works the state out itself: with no media left it reads 'paused', which is as quiet as 'none'. Only 'playing' is a gap.
+            playback: navigator.mediaSession?.playbackState === 'playing' ? 'playing' : 'none',
             handlers: Object.entries((window as unknown as { __media: Record<string, unknown> }).__media).filter(([, h]) => h !== null).map(([a]) => a),
             path: location.pathname,
             dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.className),
