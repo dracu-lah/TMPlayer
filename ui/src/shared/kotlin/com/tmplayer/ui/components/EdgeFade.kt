@@ -104,6 +104,30 @@ private class Edges(scope: CacheDrawScope, start: Dp, end: Dp, private val mask:
 }
 
 /**
+ * Melts the foot of a vertically scrolling list into [ground] while there is more below it, for a list
+ * that ends against something fixed (a row of filters, a field): without it the last line is cut
+ * through its middle by a hard edge (phone audit, 2026-11-25). [canScrollForward] is read where it is
+ * drawn, so the fade comes and goes without a recomposition; at the list's end nothing is drawn.
+ */
+fun Modifier.bottomFade(canScrollForward: () -> Boolean, height: Dp, ground: Color): Modifier = drawWithCache {
+    val fadePx = height.toPx()
+    val brush = Brush.verticalGradient(
+        0f to ground.copy(alpha = 0f), 1f to ground,
+        startY = size.height - fadePx, endY = size.height,
+    )
+    val at = Offset(0f, size.height - fadePx)
+    val box = Size(size.width, fadePx)
+    onDrawWithContent {
+        drawContent()
+        if (canScrollForward()) drawRect(brush, at, box)
+    }
+}
+
+/** [bottomFade] for a column that scrolls by a [ScrollState]; put it before `verticalScroll`, so it is drawn on the viewport and does not move with the content. */
+fun Modifier.bottomFade(state: androidx.compose.foundation.ScrollState, height: Dp, ground: Color): Modifier =
+    bottomFade({ state.canScrollForward }, height, ground)
+
+/**
  * Keeps a card that takes focus (the remote's or the keyboard's) inside a row's side margins rather
  * than at its very edge, where [edgeFade] would fade it: the row scrolls just far enough to stand
  * the card between [start] and [end] of the row's own edges.

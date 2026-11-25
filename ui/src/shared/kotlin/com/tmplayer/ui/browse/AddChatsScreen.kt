@@ -138,6 +138,7 @@ import com.tmplayer.data.KidsLock
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.ui.components.EdgeStep
+import com.tmplayer.ui.components.bottomFade
 import com.tmplayer.ui.components.LoadMoreAhead
 import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.components.rememberJumpAheadListState
@@ -820,7 +821,7 @@ private class PickScreen(
         // down: the slide was a fresh layout of the list on every frame of every press (HX76).
         EdgeStep(start = 24.dp, end = 24.dp, enabled = tv) {
             LazyColumn(
-                Modifier.weight(1f).fillMaxWidth(),
+                Modifier.weight(1f).fillMaxWidth().then(if (form == DeviceForm.Phone) Modifier.bottomFade({ listState.canScrollForward }, 20.dp, Tone.background) else Modifier),
                 state = listState,
                 contentPadding = PaddingValues(top = if (form == DeviceForm.Phone) 16.dp else 0.dp, bottom = 8.dp),
             ) {
@@ -1258,7 +1259,9 @@ private class PickScreen(
                     .padding(start = ROW_INSET, end = 10.dp, top = 10.dp, bottom = 10.dp)
                 // At a large system font the button takes the whole card and left the count no
                 // width at all (HX56): the count goes over the button then.
-                if (LocalDensity.current.fontScale >= LARGE_FONT) {
+                // Only where the window is narrow: on its side a phone has 800 dp or more of room, and stacking took
+                // a third of its 393 dp of height from the list (phone audit, 2026-11-25).
+                if (LocalDensity.current.fontScale >= LARGE_FONT && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600) {
                     Column(card, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
                         totalWords(Modifier.fillMaxWidth())
                         DoneButton()

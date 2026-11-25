@@ -1,6 +1,7 @@
 package com.tmplayer.ui.browse
 
 import com.tmplayer.ui.components.FastScroller
+import com.tmplayer.ui.components.bottomFade
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.components.riseIn
 import com.tmplayer.ui.components.rememberLessMotion
@@ -235,7 +236,7 @@ internal fun PhoneSearchScreen(
         // A tablet's or an open foldable's results and field stand in a centred column (U17); zero on a phone.
         val gutter = com.tmplayer.ui.components.largePaneGutter(maxWidth)
         Column(Modifier.fillMaxSize().imePadding()) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxWidth().bottomFade({ listState.canScrollForward }, 20.dp, Tone.background)) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -457,18 +458,24 @@ private fun androidx.compose.foundation.lazy.LazyListScope.emptySearch(
     if (chats.isNotEmpty()) {
         item(key = "chats-h") { Heading(LocalStrings.current.searchChatsHeading) }
         item(key = "chats") {
+            // The label grows with the font, and wraps to two lines before it is cut: at twice the font a
+            // fixed 64 dp left "Wee..." and "Harb..." for names (phone audit, 2026-11-25).
+            val labelWidth = (64f * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceIn(1f, 1.75f)).dp
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(chats, key = { it.id }) { chat ->
                     Column(
-                        Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpenChat(chat) }.padding(vertical = 4.dp),
+                        Modifier.width(labelWidth).clip(RoundedCornerShape(12.dp)).clickable { onOpenChat(chat) }.padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         ChatAvatar(ChatBrief.of(chat), 56.dp)
                         Spacer(Modifier.height(6.dp))
-                        Text(chat.title, style = MaterialTheme.typography.labelSmall, color = Tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            chat.title, style = MaterialTheme.typography.labelSmall, color = Tone.text, maxLines = 2,
+                            overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
                     }
                 }
             }
@@ -615,13 +622,17 @@ private fun androidx.compose.foundation.lazy.LazyListScope.results(
     val shown = state.shown
     searchCountLine(state)?.let { count ->
         item(key = "count") {
-            Row(
+            // A row that wraps: at twice the font "4 videos in 3 chats" was split into "video" and "s in 3 chats"
+            // by the button beside it (phone audit, 2026-11-25); the button goes under the line when there is no room.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
                 // Room under the line before the first card, with or without the button beside it.
                 Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.Center,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(count, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, modifier = Modifier.weight(1f))
+                Text(count, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                 if (state.canSearchOthers) {
                     TextButton(onClick = onSearchOthers) { Text(LocalStrings.current.searchOtherChats) }
                 }

@@ -44,7 +44,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tmplayer.data.DeviceForm
+import com.tmplayer.ui.components.bottomFade
 import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
@@ -126,8 +128,11 @@ fun TourScreen(
                 }
             }
         } else {
+            // The page scrolls under the Back and Next row: its foot melts into the ground while there is more,
+            // so a line is never cut through its middle by a hard edge (phone audit, 2026-11-25).
+            val scroll = rememberScrollState()
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                Modifier.fillMaxSize().bottomFade(scroll, 28.dp, Tone.background).verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 StepHeading(copy.title, body = null)
@@ -182,9 +187,11 @@ private fun Picture(page: TourPage, badges: List<androidx.compose.ui.geometry.Of
 /** A number in a filled circle: on the picture and in front of the line it belongs to. */
 @Composable
 private fun Badge(number: String, marked: Boolean) {
+    // As big as its number: a fixed 28 dp disc cut the digit at twice the font (phone audit, 2026-11-25).
+    val disc = with(androidx.compose.ui.platform.LocalDensity.current) { maxOf(BADGE, BADGE.value.sp.toDp()) }
     Box(
         Modifier
-            .size(BADGE)
+            .size(disc)
             .clip(CircleShape)
             .background(if (marked) Tone.accent else Tone.surfaceHigh),
         contentAlignment = Alignment.Center,
