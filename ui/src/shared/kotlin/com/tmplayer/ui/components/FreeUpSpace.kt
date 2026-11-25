@@ -90,9 +90,30 @@ fun StorageOverview(
     result: String? = null,
     large: Boolean = !isTouch(),
     focus: FocusRequester? = null,
+    /**
+     * Free up space at the end of the ring's row instead of under it: a 64 dp shorter card, for the television's Downloads
+     * page, where the card, the empty sentence and both buttons must fit one 1080p screen (TV fix, 2026-11-25).
+     */
+    buttonBeside: Boolean = false,
 ) {
     val s = LocalStrings.current
     val f = s.formatter
+    // Only when there is something to free (7.3): the page's loudest button used to stand over nothing. A quiet step,
+    // not the accent fill, since freeing is an errand and not the page's job; while a run goes it stays, saying Freeing,
+    // so the press is answered.
+    val somethingToFree = measured && !nothingToFree
+    val reviewButton: @Composable (Modifier) -> Unit = { own ->
+        ReviewButton(
+            label = if (busy) s.downloadsReviewFreeing else s.downloadsFreeUpSpace,
+            icon = TmIcons.Delete,
+            onClick = onFreeUp,
+            kind = ButtonKind.Quiet,
+            enabled = !busy,
+            busy = busy,
+            large = large,
+            modifier = own.then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
+        )
+    }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(if (large) 16.dp else 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             StorageRing(figures, measured, if (large) 76.dp else 64.dp)
@@ -116,23 +137,12 @@ fun StorageOverview(
                     )
                 }
             }
+            if (buttonBeside && (somethingToFree || busy)) {
+                Spacer(Modifier.width(20.dp))
+                reviewButton(Modifier)
+            }
         }
-        // Only when there is something to free (7.3): the page's loudest button used to stand over
-        // nothing. A quiet step, not the accent fill, since freeing is an errand and not the page's
-        // job; while a run goes it stays, saying Freeing, so the press is answered.
-        val somethingToFree = measured && !nothingToFree
-        if (somethingToFree || busy) {
-            ReviewButton(
-                label = if (busy) s.downloadsReviewFreeing else s.downloadsFreeUpSpace,
-                icon = TmIcons.Delete,
-                onClick = onFreeUp,
-                kind = ButtonKind.Quiet,
-                enabled = !busy,
-                busy = busy,
-                large = large,
-                modifier = Modifier.fillMaxWidth().then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
-            )
-        }
+        if (!buttonBeside && (somethingToFree || busy)) reviewButton(Modifier.fillMaxWidth())
         val line = when {
             busy -> null
             result != null -> result

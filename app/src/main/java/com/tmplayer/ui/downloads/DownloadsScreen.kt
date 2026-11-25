@@ -3,6 +3,7 @@ package com.tmplayer.ui.downloads
 import com.tmplayer.ui.components.ToastKind
 import com.tmplayer.ui.components.dropStaleArrowRepeats
 import com.tmplayer.ui.components.keepTopInSight
+import com.tmplayer.ui.components.softVerticalEdges
 import com.tmplayer.ui.components.PageTiles
 import com.tmplayer.ui.components.pageKeys
 import com.tmplayer.ui.components.pageTile
@@ -16,6 +17,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import com.tmplayer.ui.components.rowAfterRemoving
@@ -1123,6 +1126,8 @@ fun DownloadsScreen(
                             onAction = onBrowse,
                             secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
                             onSecondAction = onDownloadSeason,
+                            // The tab holds the remote; a button below it taking the focus scrolled the page.
+                            takeFocus = false,
                         )
                     }
                 }
@@ -1163,6 +1168,10 @@ fun DownloadsScreen(
                         onAction = onBrowse,
                         secondLabel = onDownloadSeason?.let { L.downloadsEmptySeason },
                         onSecondAction = onDownloadSeason,
+                        // Under the storage card on a television: one row, so card, sentence and buttons fit whole; and
+                        // the tab keeps the remote (a button taking it scrolled the card under the header, 2026-11-25).
+                        compact = true,
+                        takeFocus = false,
                         linkLabel = openDownloadsFolder?.let { L.downloadsOpenFolder },
                         onLink = openDownloadsFolder,
                     )
@@ -1612,7 +1621,7 @@ internal fun StorageSummary(
 ) {
     val tv = !isTouch()
     Card(
-        Modifier.fillMaxWidth().padding(CARD_EDGE),
+        Modifier.fillMaxWidth().padding(CARD_EDGE).testTag(STORAGE_CARD_TAG),
         shape = if (tv) RoundedCornerShape(Corner.Large) else MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = Tone.surface),
     ) {
@@ -1624,6 +1633,9 @@ internal fun StorageSummary(
             busy = busy,
             result = result,
             modifier = Modifier.padding(CARD_PAD),
+            // On a television Free up space sits at the end of the ring's row: a card 64 dp shorter, so the card, the
+            // empty sentence and both buttons fit one screen (Mi TV, 2026-11-25).
+            buttonBeside = tv,
         )
     }
 }
@@ -2505,6 +2517,14 @@ private fun TvDownloads(
 ) {
     val s = LocalStrings.current
     val tabFocus = remember { List(2) { FocusRequester() } }
+    // The remote on the title row, the tabs or anything else above the list brings the list back to its first item, so the
+    // storage card and the first row stand whole under the tabs (it stayed cut after Up, Mi TV, 2026-11-25).
+    val topScope = androidx.compose.runtime.rememberCoroutineScope()
+    val listToTop: (androidx.compose.ui.focus.FocusState) -> Unit = { state ->
+        if (state.hasFocus && (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)) {
+            topScope.launch { listState.scrollToItem(0) }
+        }
+    }
     LaunchedEffect(refocus) {
         if (refocus == 0) return@LaunchedEffect
         withFrameNanos { }
@@ -2531,7 +2551,7 @@ private fun TvDownloads(
         // title (the bar marks the account's picture, not Downloads) and no back button but the
         // one that leaves a selection.
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).onFocusChanged(listToTop),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (picking) {
@@ -2572,7 +2592,7 @@ private fun TvDownloads(
         }
         Spacer(Modifier.height(16.dp))
         Row(
-            Modifier.padding(horizontal = 16.dp).focusRestorer(tabFocus[tab]),
+            Modifier.padding(horizontal = 16.dp).onFocusChanged(listToTop).focusRestorer(tabFocus[tab]),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TvPill(tabLabel(ONGOING), TmIcons.Download, selected = tab == ONGOING, modifier = Modifier.focusRequester(tabFocus[ONGOING])) { onTab(ONGOING) }
@@ -2582,7 +2602,11 @@ private fun TvDownloads(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().keepTopInSight(listState).dropStaleArrowRepeats().pageKeys(listState, pageTiles),
+                modifier = Modifier
+                    .fillMaxSize()
+                    // The first and last 24 dp melt into the page where there is more that way: no half cut line.
+                    .softVerticalEdges(Tone.background, atTop = { listState.canScrollBackward }, atBottom = { listState.canScrollForward })
+                    .keepTopInSight(listState).dropStaleArrowRepeats().pageKeys(listState, pageTiles),
                 contentPadding = PaddingValues(bottom = Tv.SafeV),
                 content = body,
             )
@@ -2683,6 +2707,9 @@ internal fun TvPill(
         }
     }
 }
+
+/** The storage card's test tag. */
+internal const val STORAGE_CARD_TAG = "downloads-storage"
 
 /** The two tabs, as indices: what is coming down, and what is on this device (downloaded and auto-saved together). */
 private const val ONGOING = 0

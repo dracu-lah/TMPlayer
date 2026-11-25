@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.CacheDrawScope
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -128,4 +130,36 @@ fun WithinMargins(start: Dp, end: Dp, content: @Composable () -> Unit) {
         }
     }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
+}
+
+/**
+ * Soft top and bottom edges for a vertical list that stands on one plain colour, [ground]: the last [fade] of the
+ * viewport melts into the page instead of ending on a hard line through a heading or a card (TV, 2026-11-25: the
+ * "PRIVACY" heading cut through its letters at the foot of Settings). Each edge shows only while there is more to
+ * scroll to that way ([atTop], [atBottom], read where it is drawn), so a list at rest is whole. Drawn over the
+ * content, never an offscreen layer: a television redraws it with the list at no extra cost.
+ */
+fun Modifier.softVerticalEdges(
+    ground: Color,
+    fade: Dp = 24.dp,
+    atTop: () -> Boolean = { false },
+    atBottom: () -> Boolean = { false },
+): Modifier = drawWithContent {
+    drawContent()
+    val edge = fade.toPx().coerceAtMost(size.height / 2f)
+    if (edge <= 0f) return@drawWithContent
+    if (atTop()) {
+        drawRect(
+            Brush.verticalGradient(0f to ground, 1f to ground.copy(alpha = 0f), startY = 0f, endY = edge),
+            topLeft = Offset.Zero,
+            size = Size(size.width, edge),
+        )
+    }
+    if (atBottom()) {
+        drawRect(
+            Brush.verticalGradient(0f to ground.copy(alpha = 0f), 1f to ground, startY = size.height - edge, endY = size.height),
+            topLeft = Offset(0f, size.height - edge),
+            size = Size(size.width, edge),
+        )
+    }
 }

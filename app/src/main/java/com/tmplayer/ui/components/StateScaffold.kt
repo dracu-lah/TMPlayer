@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -398,9 +400,19 @@ fun BigEmpty(
     /** A text link under the buttons, for a way that is useful but never the page's main one (Downloads: Open folder). */
     linkLabel: String? = null,
     onLink: (() -> Unit)? = null,
+    /**
+     * On a television, the empty state under a card that already fills much of the screen (Downloads' storage card): one
+     * row, a small icon, the sentence and the buttons, so card, sentence and both buttons fit whole on a 1080p panel.
+     * Phones and desktops ignore it.
+     */
+    compact: Boolean = false,
 ) {
     val touch = isTouch()
     val muted = Tone.muted
+    if (compact && !touch) {
+        CompactEmptyRow(message, icon, actionLabel, onAction, actionIcon, takeFocus, secondLabel, onSecondAction)
+        return
+    }
     StatePage(touch) {
         // On a phone it rises in rather than appearing, so a list emptying or a load failing
         // reads as the page changing, not a flash.
@@ -455,6 +467,51 @@ fun BigEmpty(
         }
     }
 }
+
+/** [BigEmpty]'s compact television form: icon, sentence and buttons on one row, 64 dp of icon at most. */
+@Composable
+private fun CompactEmptyRow(
+    message: String,
+    icon: ImageVector,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
+    actionIcon: ImageVector?,
+    takeFocus: Boolean,
+    secondLabel: String?,
+    onSecondAction: (() -> Unit)?,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag(COMPACT_EMPTY_TAG),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EmptyArt(icon, size = 56.dp)
+        Text(
+            message,
+            style = MaterialTheme.typography.titleMedium,
+            color = Tone.muted,
+            maxLines = 3,
+            modifier = Modifier.weight(1f),
+        )
+        if (actionLabel != null && onAction != null) {
+            val focus = remember { FocusRequester() }
+            TmButton(onClick = onAction, modifier = Modifier.focusRequester(focus)) {
+                if (actionIcon != null) {
+                    Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(actionLabel, maxLines = 1)
+            }
+            if (secondLabel != null && onSecondAction != null) {
+                TmButton(onClick = onSecondAction) { Text(secondLabel, maxLines = 1) }
+            }
+            if (takeFocus) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        }
+    }
+}
+
+/** The compact empty row's test tag. */
+const val COMPACT_EMPTY_TAG = "compact-empty"
 
 /**
  * Something went wrong: what, Try again where there is something to retry, and Send logs
