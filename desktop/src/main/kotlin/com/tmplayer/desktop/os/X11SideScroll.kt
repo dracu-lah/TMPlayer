@@ -48,12 +48,11 @@ object X11SideScroll {
     /** What [event] should be once the X11 numbering is undone; null to drop it. */
     internal fun translate(event: AWTEvent): AWTEvent? {
         if (event !is MouseEvent || event is MouseWheelEvent) return event
-        return when (event.button) {
-            SCROLL_LEFT, SCROLL_RIGHT -> if (event.id == MouseEvent.MOUSE_PRESSED) sideways(event) else null
-            SIDE_BACK -> renumbered(event, BACK)
-            SIDE_FORWARD -> renumbered(event, FORWARD)
-            else -> event
+        if (event.button == SCROLL_LEFT || event.button == SCROLL_RIGHT) {
+            return if (event.id == MouseEvent.MOUSE_PRESSED) sideways(event) else null
         }
+        val side = sideButton(event.button) ?: return event
+        return renumbered(event, side)
     }
 
     /** One step of the sideways wheel: left is a negative turn, as up is on the vertical wheel. */
@@ -65,6 +64,13 @@ object X11SideScroll {
             event.x, event.y, event.xOnScreen, event.yOnScreen,
             0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL, WHEEL_AMOUNT, turn, turn.toDouble(),
         )
+    }
+
+    /** Java's Back (4) or Forward (5) for the number X11's side button arrives under; null for any other. */
+    internal fun sideButton(button: Int): Int? = when (button) {
+        SIDE_BACK -> BACK
+        SIDE_FORWARD -> FORWARD
+        else -> null
     }
 
     private fun renumbered(event: MouseEvent, button: Int): MouseEvent {
