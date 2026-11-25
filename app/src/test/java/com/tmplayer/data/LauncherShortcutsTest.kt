@@ -138,7 +138,10 @@ class LauncherShortcutsTest {
         waitUntil("the chat shortcut is removed") { published().none { it.id == "last_chat" } }
         // Only the chat: the three generic shortcuts hold no content of the profile.
         assertEquals(setOf("continue", "search", "downloads"), published().map { it.id }.toSet())
+        // Cancel and wait: a clear() still running on a Default thread when the next test starts, on a
+        // loaded machine, took the next test's pinned copy off before it was read (gate run, 2026-11-26).
         job.cancel()
+        kotlinx.coroutines.runBlocking { job.join() }
     }
 
     @Test
