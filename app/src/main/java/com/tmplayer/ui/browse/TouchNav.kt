@@ -219,6 +219,13 @@ internal class TouchNav(
      * signed in from the first frame. Null where there is no profile list (a preview).
      */
     val profile: com.tmplayer.data.Profile? = null,
+    /**
+     * The television's standing sync status as a sentence ("Sync stopped. Turn it on again in Settings: Sync across my
+     * devices."), or null when none stands: the avatar's dot and the account sheet's row once the bar's pill has folded.
+     */
+    val syncNote: String? = null,
+    /** The row's press: Settings on the page of the sync switch. */
+    val onSyncNote: (() -> Unit)? = null,
 )
 
 /**

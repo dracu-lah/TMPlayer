@@ -138,6 +138,9 @@ internal fun TvAccountSheet(
     onUpdate: () -> Unit,
     onAbout: () -> Unit,
     onDismiss: () -> Unit,
+    /** The standing sync status as a sentence, a row after Settings that opens the sync switch; null for none. */
+    syncNote: String? = null,
+    onSyncNote: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val reduced = rememberReducedMotion() || Motion.reduced
@@ -206,6 +209,8 @@ internal fun TvAccountSheet(
                         onAbout = go(onAbout),
                         onClose = close,
                         title = s.navAccountNamed(name),
+                        syncNote = syncNote,
+                        onSyncNote = onSyncNote?.let(go),
                     )
                 }
                 FocusOnOpen(first, key = shown)
@@ -237,6 +242,8 @@ internal fun SheetPanel(
     onAbout: () -> Unit,
     onClose: () -> Unit,
     title: String,
+    syncNote: String? = null,
+    onSyncNote: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val scroll = rememberScrollState()
@@ -299,6 +306,10 @@ internal fun SheetPanel(
                     SheetRow("watch-later", TmIcons.Clock, s.browseTabWatchLater, null, onWatchLater)
                     Divider()
                     SheetRow("settings", TmIcons.Settings, s.navSettings, null, onSettings)
+                    // The sync that stands (stopped, needs you): once its pill has left the bar, this row is where it lives.
+                    if (syncNote != null && onSyncNote != null) {
+                        SheetRow("sync", TmIcons.Warning, syncNote, null, onSyncNote, ink = Tone.caution, labelLines = 2)
+                    }
                     if (onSwitchOrAdd != null) {
                         SheetRow("switch", TmIcons.Person, if (several) s.profilesSwitchOrAdd else s.profilesAdd, null, onSwitchOrAdd)
                     }
@@ -368,6 +379,8 @@ private fun SheetRow(
     modifier: Modifier = Modifier,
     isFirst: Boolean = false,
     ink: Color = Tone.text,
+    /** A long sentence of a row (the sync note) may take two lines of its 56 dp. */
+    labelLines: Int = 1,
 ) {
     val interactions = remember { MutableInteractionSource() }
     // The first row takes the remote as it is laid out: asked from the row itself, so it is there to be asked.
@@ -405,7 +418,7 @@ private fun SheetRow(
             Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(ICON_COLUMN))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            Text(label, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 24.sp), color = foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = if (labelLines > 1) 22.sp else 24.sp), color = foreground, maxLines = labelLines, overflow = TextOverflow.Ellipsis)
             if (sub != null) {
                 Text(sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp, lineHeight = 18.sp), color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

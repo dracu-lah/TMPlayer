@@ -65,6 +65,7 @@ class TvStatusOverHomeTest {
         TvBarSignals.statusSync.value = null
         TvBarSignals.statusWork.value = PageWork(WorkStatus.Idle, false)
         TvBarSignals.statusConnection.value = ConnectionNotice.Hidden
+        TvBarSignals.syncStanding.value = false
     }
 
     private fun media(id: Long, title: String) = MediaItem(
@@ -96,6 +97,8 @@ class TvStatusOverHomeTest {
     private fun home() {
         FormFactor.override(true)
         Motion.reduced = true
+        // The sync that stands is on show on Home for its first seconds (TvStatusRules.STANDING_MS).
+        TvBarSignals.syncStanding.value = true
         rule.setContent {
             TMPlayerTheme {
                 BrowseScreen(

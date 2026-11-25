@@ -68,6 +68,7 @@ class TvBarStatusTest {
         TvBarSignals.statusSync.value = null
         TvBarSignals.statusWork.value = PageWork(WorkStatus.Idle, false)
         TvBarSignals.statusConnection.value = ConnectionNotice.Hidden
+        TvBarSignals.syncStanding.value = false
     }
 
     private val stopped = SyncStatus(SyncStatus.Kind.Failed, at = 1_800_000_000_000L, detail = "Telegram did not answer. Try again in a moment.", failures = 3)
@@ -119,6 +120,8 @@ class TvBarStatusTest {
     private fun bar() {
         FormFactor.override(true)
         Motion.reduced = true
+        // A standing sync status is drawn on Home only, and only while it stands (its first seconds): the bar is Home's here.
+        TvBarSignals.syncStanding.value = true
         val nav = TouchNav(
             account = null, favoriteCount = 0, downloadCount = 0, updateVersion = null,
             onHome = {}, onChats = {}, onSearch = {}, onSettings = {},
@@ -129,7 +132,7 @@ class TvBarStatusTest {
             TMPlayerTheme {
                 Column(Modifier.fillMaxSize()) {
                     TvTopBar(
-                        nav = nav, current = TvBarTab.Chats, inProfile = false, searchOpen = true,
+                        nav = nav, current = TvBarTab.Home, inProfile = false, searchOpen = false,
                         onHome = {}, onChats = {}, onSearch = {}, onRefresh = null,
                         currentFocus = FocusRequester(), contentFocus = FocusRequester(), overArt = false,
                     )

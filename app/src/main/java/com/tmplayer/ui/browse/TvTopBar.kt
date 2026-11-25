@@ -137,6 +137,13 @@ internal object TvBarSignals {
     /** The line to Telegram coming back (reconnecting, connecting) or lost (offline: the card says it). */
     val statusConnection = MutableStateFlow(com.tmplayer.ui.components.ConnectionNotice.Hidden)
 
+    /**
+     * A standing sync status (needs you, stopped) is on show now: true for [com.tmplayer.ui.components.TvStatusRules.STANDING_MS]
+     * after the app opens, the sync's state changes or Settings is opened (the shell's effect writes it). After that the status
+     * is the avatar's dot and the account sheet's row, and a normal line in Settings' sync row.
+     */
+    val syncStanding = MutableStateFlow(false)
+
     /** How many bars are in the composition: with none, the shell draws the status where it used to. */
     val barsShown = MutableStateFlow(0)
 
@@ -280,7 +287,8 @@ internal fun TvTopBar(
                 profile = nav.profile,
                 chosen = inProfile && !searchOpen && !downloadsShown,
                 // An update waiting; the running downloads count on the Downloads tab now.
-                badge = if (nav.updateVersion != null) Tone.caution else null,
+                // The sync that stands folds into the same dot once its pill has gone from the bar (its row is in the sheet).
+                badge = if (nav.updateVersion != null || (nav.syncNote != null && !TvBarSignals.syncStanding.collectAsState().value)) Tone.caution else null,
                 description = description,
                 onClickLabel = s.navAccountMenu,
                 onClick = { profileOpen = true },
@@ -300,9 +308,14 @@ internal fun TvTopBar(
                     val statusSync by TvBarSignals.statusSync.collectAsState()
                     val statusWork by TvBarSignals.statusWork.collectAsState()
                     val statusConnection by TvBarSignals.statusConnection.collectAsState()
+                    val standingNow by TvBarSignals.syncStanding.collectAsState()
                     // One status at a time, by priority (TvStatusRules.pick): never a pill at the foot over the cards.
+                    // The sync that stands is on Home only, and only for its first seconds (Chats, Search and Downloads never).
                     com.tmplayer.ui.components.TvStatusPill(
-                        input = com.tmplayer.ui.components.TvStatusInput(statusLine, statusSync, statusWork, statusConnection),
+                        input = com.tmplayer.ui.components.TvStatusInput(
+                            statusLine, statusSync, statusWork, statusConnection,
+                            standing = standingNow && current == TvBarTab.Home && !searchOpen && !downloadsShown,
+                        ),
                         modifier = Modifier.testTag("tv-bar-status"),
                     )
                 },
@@ -371,6 +384,8 @@ internal fun TvTopBar(
             watchedCount = nav.watchedCount,
             several = nav.onSwitchProfile != null,
             updateVersion = nav.updateVersion,
+            syncNote = nav.syncNote,
+            onSyncNote = nav.onSyncNote?.let(go),
             onFavourites = go(nav.onFavourites),
             onHistory = go { nav.onHistory(HistoryTab.Continue) },
             onWatchLater = go { nav.onHistory(HistoryTab.WatchLater) },

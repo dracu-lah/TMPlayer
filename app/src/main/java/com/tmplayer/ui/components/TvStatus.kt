@@ -70,6 +70,12 @@ data class TvStatusInput(
     val sync: SyncStatus? = null,
     val work: PageWork = PageWork(WorkStatus.Idle, false),
     val connection: ConnectionNotice = ConnectionNotice.Hidden,
+    /**
+     * Whether a standing sync status (needs you, stopped) may be drawn now: false once its [TvStatusRules.STANDING_MS]
+     * have passed, and on every page that must never show it (the player, Details, Search, Downloads, Chats). The
+     * sync then lives in the avatar's dot and the account sheet's row. Transient statuses ignore it.
+     */
+    val standing: Boolean = true,
 )
 
 /** The television's status words and their priority, pure so every kind is tested for its text and its fit. */
@@ -80,6 +86,12 @@ object TvStatusRules {
     const val HOURS_FROM_SECONDS = 5_940
 
     /**
+     * How long a standing sync status (needs you, stopped) stays in the bar after the app opens, after the sync's state
+     * changes and after Settings is opened: then it folds into the avatar's dot and the account sheet's row.
+     */
+    const val STANDING_MS = 8_000L
+
+    /**
      * What the slot says, by priority: the sync that needs the viewer, the sync that stopped, offline,
      * the line to Telegram coming back, a wait Telegram asked for, then work (updating, loading, up to date,
      * a failure the viewer asked to see). [work] is a status already run through the timing ladder and
@@ -88,7 +100,7 @@ object TvStatusRules {
     fun pick(m: Messages, input: TvStatusInput, work: ShownWork, now: Long, failureWords: String? = null): TvStatusSay? {
         val line = input.line
         val rowName = m.syncplaceSwitch
-        if (line is GlobalLine.SyncNeedsYou) {
+        if (line is GlobalLine.SyncNeedsYou && input.standing) {
             return if (line.kind == SyncStatus.Kind.Failed) {
                 TvStatusSay(TvStatusSay.Kind.SyncStopped, m.stateSyncStoppedShortTv, m.stateSyncStoppedTv(rowName), spinner = false)
             } else {
@@ -128,6 +140,16 @@ object TvStatusRules {
             status is WorkStatus.Failed -> TvStatusSay(TvStatusSay.Kind.Updating, m.stateFailedTv, failureWords ?: said, spinner = false)
             else -> null
         }
+    }
+
+    /**
+     * The sentence of a standing sync status for the account sheet's row ("Sync stopped. Turn it on again in Settings: Sync
+     * across my devices."), or null when [line] is no standing sync status.
+     */
+    fun standingSentence(m: Messages, line: GlobalLine): String? {
+        if (line !is GlobalLine.SyncNeedsYou) return null
+        val rowName = m.syncplaceSwitch
+        return if (line.kind == SyncStatus.Kind.Failed) m.stateSyncStoppedTv(rowName) else m.stateSyncNeedsYouTv(rowName)
     }
 
     /** A wait past this many hours is just "Retry later": the words stay short whatever Telegram asks. */
@@ -241,5 +263,30 @@ fun TvStatusPill(input: TvStatusInput, modifier: Modifier = Modifier) {
                     .semantics { contentDescription = shown.description },
             )
         }
+    }
+}
+
+/**
+ * Keeps [standing] true for [holdMs] each time [key] or [visits] changes, then false: the sync status that stands
+ * (stopped, needs you) is on show for its first seconds when the app opens (the first composition), when its state
+ * changes ([key]) and when Settings is opened ([visits] goes up), then it is the avatar's dot and the account sheet's
+ * row. A null [key] (nothing stands) or no television clears it at once. One effect, ended by the wait.
+ */
+@Composable
+fun TvSyncStandingEffect(
+    key: Any?,
+    visits: Int,
+    tv: Boolean,
+    standing: kotlinx.coroutines.flow.MutableStateFlow<Boolean>,
+    holdMs: Long = TvStatusRules.STANDING_MS,
+) {
+    LaunchedEffect(key, visits, tv) {
+        if (!tv || key == null) {
+            standing.value = false
+            return@LaunchedEffect
+        }
+        standing.value = true
+        delay(holdMs)
+        standing.value = false
     }
 }

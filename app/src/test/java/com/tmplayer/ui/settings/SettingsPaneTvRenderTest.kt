@@ -222,7 +222,9 @@ class SettingsPaneTvRenderTest {
                 val layout = layouts.firstOrNull() ?: continue
                 val sp = layout.layoutInput.style.fontSize.value
                 assertTrue("$tag: ${layout.layoutInput.text} at $sp sp", sp >= 14f)
-                assertEquals("$tag: ${layout.layoutInput.text} on one line at $fontScale", 1, layout.lineCount)
+                // The header's words stay on one line; a rail label may wrap to a second (never an ellipsis at 1.0, TV fix 2026-11-25).
+                val most = if (tag == SETTINGS_RAIL_TAG) 2 else 1
+                assertTrue("$tag: ${layout.layoutInput.text} on at most $most line(s) at $fontScale, got ${layout.lineCount}", layout.lineCount <= most)
             }
         }
     }

@@ -93,6 +93,32 @@ class TvStatusRulesTest {
     }
 
     @Test
+    fun `a standing sync status is left out once it no longer stands, every transient status keeps its place`() {
+        val stopped = TvStatusInput(line = GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed), standing = false)
+        assertNull("folded: nothing in the bar", pick(stopped))
+        assertNull(pick(stopped.copy(line = GlobalLine.SyncNeedsYou(SyncStatus.Kind.TooNew))))
+        assertEquals("standing: the words", "Sync stopped", pick(stopped.copy(standing = true))!!.words)
+        // Under the sync, a lower status shows: the sync no longer holds it back.
+        val work = ShownWork(WorkStatus.Syncing())
+        assertEquals("Updating", pick(stopped, work)!!.words)
+        assertEquals("Reconnecting", pick(stopped.copy(connection = ConnectionNotice.Reconnecting), work)!!.words)
+        assertEquals(TvStatusSay.Kind.Offline, pick(stopped.copy(connection = ConnectionNotice.Offline), work)!!.kind)
+        assertEquals("Retry in 30s", pick(TvStatusInput(line = GlobalLine.RateLimited(30), standing = false))!!.words)
+        assertEquals("Updating", pick(TvStatusInput(line = GlobalLine.Updating, standing = false))!!.words)
+    }
+
+    @Test
+    fun `the account sheet's sentence names the sync switch and only a standing sync has one`() {
+        val row = L.syncplaceSwitch
+        assertEquals(L.stateSyncStoppedTv(name = row), TvStatusRules.standingSentence(m, GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)))
+        assertEquals("Sync stopped. Turn it on again in Settings: Sync across my devices.", TvStatusRules.standingSentence(m, GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)))
+        assertEquals(L.stateSyncNeedsYouTv(name = row), TvStatusRules.standingSentence(m, GlobalLine.SyncNeedsYou(SyncStatus.Kind.TooNew)))
+        assertNull(TvStatusRules.standingSentence(m, GlobalLine.Idle))
+        assertNull(TvStatusRules.standingSentence(m, GlobalLine.Updating))
+        assertEquals("about 8 seconds", 8_000L, TvStatusRules.STANDING_MS)
+    }
+
+    @Test
     fun `a page's failure is told only when the viewer asked for it and only for a few seconds, a partial answer never`() {
         val failed = ShownWork(WorkStatus.Failed("x"))
         assertTrue(TvStatusRules.workShown(failed, asked = true, failureOver = false, now = now).visible)

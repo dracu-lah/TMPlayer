@@ -1291,6 +1291,16 @@ private fun Root() {
     // videos are showing, and coming back from either should land on the page that led there.
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
 
+    // A sync status that stands (stopped, needs you) shows on the television for a few seconds when the app opens, when the
+    // sync's state changes and when Settings is opened; then it is the avatar's dot and a row in the account sheet, and a
+    // normal line in Settings' sync row. Never a pill for good.
+    val tvForStanding = FormFactor.isTv(context)
+    val inSettingsNow = screen is Screen.Settings
+    var settingsVisits by remember { mutableStateOf(0) }
+    LaunchedEffect(inSettingsNow) { if (inSettingsNow) settingsVisits++ }
+    val standingKey = (globalLine as? com.tmplayer.data.GlobalLine.SyncNeedsYou)?.let { it.kind to syncStatus?.failures }
+    com.tmplayer.ui.components.TvSyncStandingEffect(standingKey, settingsVisits, tvForStanding, com.tmplayer.ui.browse.TvBarSignals.syncStanding)
+
     // A launch that asked for a particular screen, which is how the download notification opens
     // the list it is about. Cleared as it is acted on, so it happens once per press.
     val requestedScreen by MainActivity.requestedScreen.collectAsStateWithLifecycle()
@@ -2255,6 +2265,12 @@ private fun Root() {
             onSignOut = { signOutState.request() },
             signOutPhase = signOutState.phase,
             profile = profileList?.active,
+            // The television's standing sync status: the account sheet's row, which opens the sync switch.
+            syncNote = if (tvForStanding) com.tmplayer.ui.components.TvStatusRules.standingSentence(LocalStrings.current, globalLine) else null,
+            onSyncNote = if (tvForStanding) ({
+                openSettings()
+                settingsPage = SettingsPage.Accounts
+            }) else null,
             // A profile panel or PIN pad, a notice, or the app lock over the pages: no hint over them.
             promptUp = (profileFlow != null && (profileFlow.stage != com.tmplayer.ui.lock.ProfileFlow.Stage.Picker || profileFlow.notice != null)) ||
                 (appLock?.onOpen == true && !appUnlocked),
@@ -2913,8 +2929,9 @@ private fun Root() {
         if (FormFactor.isTv(context)) {
             // One status at a time (TvStatusRules.pick): the top bar draws it in its free space, over no card or page.
             // Only where no bar is shown (a chat's grid) it keeps the foot, inside the safe area.
-            if (tvBarsShown == 0) com.tmplayer.ui.components.TvStatusPill(
-                input = com.tmplayer.ui.components.TvStatusInput(globalLine, syncStatus, connection = connectionNotice),
+            // Settings and About carry it in their own header (SettingsHeader); a standing sync status never stands here.
+            if (tvBarsShown == 0 && screen !is Screen.Settings && screen !is Screen.About) com.tmplayer.ui.components.TvStatusPill(
+                input = com.tmplayer.ui.components.TvStatusInput(globalLine, syncStatus, connection = connectionNotice, standing = false),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .tvPillSlot(),

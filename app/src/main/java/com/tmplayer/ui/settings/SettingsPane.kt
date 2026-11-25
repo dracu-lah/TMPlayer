@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,7 +64,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
+import com.tmplayer.ui.components.softVerticalEdges
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -208,6 +211,7 @@ internal fun TvSettingsPane(
                 }
             },
             end = headerEnd,
+            syncStays = open == SettingsPage.Accounts,
         )
         Row(Modifier.fillMaxWidth().weight(1f)) {
             Column(
@@ -303,7 +307,15 @@ internal fun TvSettingsPane(
             ) {
                 Box(Modifier.fillMaxWidth().weight(1f)) {
                     androidx.compose.runtime.CompositionLocalProvider(LocalSettingsDetail provides detail) {
-                        PaneFade(paneKey, Modifier.fillMaxSize()) { pane() }
+                        // The last 24 dp of the page melt into the ground: a heading never ends half cut at the strip.
+                        PaneFade(
+                            paneKey,
+                            Modifier.fillMaxSize().softVerticalEdges(
+                                ground = Tone.background,
+                                atTop = { breadcrumb.state?.canScrollBackward == true },
+                                atBottom = { breadcrumb.state?.canScrollForward == true },
+                            ),
+                        ) { pane() }
                     }
                     if (hints != null) PageKeysHint(hints, visible = !railHasFocus, Modifier.align(Alignment.BottomCenter))
                 }
@@ -356,6 +368,8 @@ internal fun SettingsHeader(
     /** The Find a setting button, between the breadcrumb and [end] (WP-09); null on About. */
     find: (@Composable () -> Unit)? = null,
     end: @Composable () -> Unit = {},
+    /** The page of the sync switch: a standing sync status stays here as a normal line, not only for its first seconds. */
+    syncStays: Boolean = false,
 ) {
     val s = LocalStrings.current
     val section = breadcrumb?.section?.takeIf { !onRail && it.isNotBlank() }
@@ -390,7 +404,19 @@ internal fun SettingsHeader(
             find()
             Spacer(Modifier.width(16.dp))
         }
-        Box(Modifier.width(HEADER_END_WIDTH), contentAlignment = Alignment.CenterEnd) { end() }
+        // The television's one status, here as in the top bar (Settings has no bar): the same pill, to the right of Find a setting.
+        val line by com.tmplayer.ui.browse.TvBarSignals.statusLine.collectAsState()
+        val sync by com.tmplayer.ui.browse.TvBarSignals.statusSync.collectAsState()
+        val work by com.tmplayer.ui.browse.TvBarSignals.statusWork.collectAsState()
+        val connection by com.tmplayer.ui.browse.TvBarSignals.statusConnection.collectAsState()
+        val standing by com.tmplayer.ui.browse.TvBarSignals.syncStanding.collectAsState()
+        Box(Modifier.width(HEADER_END_WIDTH)) {
+            com.tmplayer.ui.components.TvStatusPill(
+                input = com.tmplayer.ui.components.TvStatusInput(line, sync, work, connection, standing = standing || syncStays),
+                modifier = Modifier.align(Alignment.CenterStart).testTag(SETTINGS_STATUS_TAG),
+            )
+            Box(Modifier.align(Alignment.CenterEnd)) { end() }
+        }
     }
 }
 
@@ -455,7 +481,7 @@ private fun RailItem(
     Row(
         Modifier
             .fillMaxWidth()
-            .height(RAIL_ITEM)
+            .heightIn(min = RAIL_ITEM)
             .focusRequester(requester)
             .onFocusChanged { if (it.isFocused) onFocused() }
             .onPreviewKeyEvent { event ->
@@ -489,12 +515,14 @@ private fun RailItem(
     ) {
         Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(12.dp))
+        // Two lines of a 20 sp line height fit the 48 dp item, so "Appearance and language" wraps instead of ending in
+        // an ellipsis (Mi TV, 2026-11-25) and the rail is no wider and no taller for it.
         Text(
             label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 20.sp),
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = ink,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -744,6 +772,7 @@ internal const val SETTINGS_RAIL_TAG = "settings-rail"
 internal const val SETTINGS_PANE_TAG = "settings-pane"
 internal const val SETTINGS_HEADER_TAG = "settings-header"
 internal const val SETTINGS_CRUMB_TAG = "settings-crumb"
+internal const val SETTINGS_STATUS_TAG = "settings-status"
 internal const val SETTINGS_DETAIL_TAG = "settings-detail"
 
 /** How long the rail rests on an item before the pane follows it. */
