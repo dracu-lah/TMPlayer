@@ -221,7 +221,7 @@ class ChooseChatsBarTest {
         ) {
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF334455))) {
-                    PhoneHomeCorner(sideways, start = 16.dp, end = 16.dp, under = 24.dp)
+                    PhoneHomeCorner(start = 16.dp, under = 24.dp)
                 }
             }
         }

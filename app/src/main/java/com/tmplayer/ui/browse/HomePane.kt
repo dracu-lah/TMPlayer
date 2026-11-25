@@ -655,12 +655,12 @@ internal fun HomePane(
                                 if (series != null) opened.open(series) else onHoldMedia(pick.item, chatTitle(pick.item.chatId))
                             },
                         )
-                        // The app's mark and name in the picture's top corner, under the status
-                        // bar, as the desktop sets them (user, 2026-10-22). A phone on its side
-                        // sets the title's art down the left, so there the name takes the right
-                        // corner and stays off it (user, 2026-10-27).
-                        val sideways = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
-                        PhoneHomeCorner(sideways, start, end, under)
+                        // The app's mark and name in the picture's top start corner, under the
+                        // status bar, on the content gutter, as the desktop sets them (user,
+                        // 2026-10-22). Held sideways it stays there too: the right corner is the
+                        // account's picture's (user, 2026-11-25, "TMPl" under the avatar), and the
+                        // title's words sit lower, at the start.
+                        PhoneHomeCorner(start, under)
                       }
                     }
                 } else if (touch) {
@@ -1781,16 +1781,13 @@ internal val BRAND_TOP = 12.dp
 
 /**
  * The top corner of a phone's Home over the carousel's picture, under the status bar: the app's
- * mark and name at the start. A phone on its side sets the title's art down the left, so there
- * the name takes the right corner. Choose chats is not here: it lives on Chats and in Settings.
+ * mark and name at the start, on the content gutter, upright or on its side (the end corner is the
+ * account's picture's, which the name must never sit under). Choose chats is not here: it lives on
+ * Chats and in Settings.
  */
 @Composable
-internal fun BoxScope.PhoneHomeCorner(sideways: Boolean, start: Dp, end: Dp, under: Dp) {
-    if (sideways) {
-        PhoneHomeBrand(Modifier.align(Alignment.TopEnd).padding(end = end, top = under + BRAND_TOP), onArt = true)
-    } else {
-        PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP), onArt = true)
-    }
+internal fun BoxScope.PhoneHomeCorner(start: Dp, under: Dp) {
+    PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP), onArt = true)
 }
 
 /** The mark and "TMPlayer" at the top of a phone's Home, in the colours for art over the carousel. */

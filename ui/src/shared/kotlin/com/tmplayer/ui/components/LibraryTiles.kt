@@ -9,6 +9,9 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -53,7 +56,8 @@ const val LIBRARY_TILE_TAG = "libraryTile"
  * Every tile has the same width, the same label size (a fixed size, never shrunk to fit; a long
  * translation wraps to a second line) and the same height, a 48 dp target at the least. A
  * tile fills under a press, the pointer or the keyboard's focus; with a remote or a keyboard Left
- * and Right move between the three. [firstFocus] goes on the first tile.
+ * and Right move between the three. [firstFocus] goes on the first tile. The three are always one
+ * height (the tallest tile's), their content centred as a group, with or without a count line.
  */
 @Composable
 fun LibraryTiles(
@@ -69,7 +73,9 @@ fun LibraryTiles(
     val s = LocalStrings.current
     val number = s.formatter
     Row(
-        modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag(LIBRARY_TILES_TAG),
+        // The tallest tile sets the row's height and the others stretch to it (below), so the three
+        // stand level whether or not any has a count line.
+        modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).height(IntrinsicSize.Min).testTag(LIBRARY_TILES_TAG),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Tile(
@@ -123,6 +129,7 @@ private fun Tile(
     val said = (listOf(label) + notes).joinToString(", ")
     Column(
         modifier
+            .fillMaxHeight()
             .heightIn(min = TILE_MIN_HEIGHT.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(fill)
@@ -131,7 +138,9 @@ private fun Tile(
             .padding(horizontal = 4.dp, vertical = 10.dp)
             .testTag("$LIBRARY_TILE_TAG-$tag"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top,
+        // The icon, name and count lines are one group in the middle of the tile: with no count
+        // (a fresh install) the name does not sit at the top over an empty foot.
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp))
         Text(
