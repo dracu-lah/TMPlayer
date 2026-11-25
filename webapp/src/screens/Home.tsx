@@ -288,6 +288,14 @@ function Row(props: { row: HomeRow; index: number; selfId: number | null }) {
         setStayed(false)
     }
     const noObserver = typeof IntersectionObserver === 'undefined'
+    /** What the observer said last: on screen or not. */
+    let seen = false
+    // Focus passing on before a frame was drawn (a remote held down on a slow TV stick: several rows a frame) leaves a row the
+    // observer never saw on screen, so it never says it left: the row is left here, else it was read 250 ms later all the same.
+    const focusLeft = (e: FocusEvent) => {
+        if (noObserver || seen || section.contains(e.relatedTarget as Node | null)) return
+        leave()
+    }
     onMount(() => {
         if (noObserver) {
             // An old engine without an observer: the row asks when it is focused or pointed at (the TV's remote, a mouse), the first ones at once.
@@ -296,7 +304,9 @@ function Row(props: { row: HomeRow; index: number; selfId: number | null }) {
         }
         const io = new IntersectionObserver((entries) => {
             const last = entries[entries.length - 1]
-            if (last) last.isIntersecting ? enter() : leave()
+            if (!last) return
+            seen = last.isIntersecting
+            seen ? enter() : leave()
         })
         io.observe(section)
         onCleanup(() => io.disconnect())
@@ -322,7 +332,7 @@ function Row(props: { row: HomeRow; index: number; selfId: number | null }) {
     const seeAllState = () => (props.row.kind === 'recent' ? { starredOnly: props.row.starredOnly } : undefined)
     return (
         // Focus counts as on screen: the TV's remote moves it row to row, and a browser without an observer asks on it.
-        <section class="home-row" aria-labelledby={id} ref={section} onFocusIn={enter} onPointerEnter={() => noObserver && enter()}>
+        <section class="home-row" aria-labelledby={id} ref={section} onFocusIn={enter} onFocusOut={focusLeft} onPointerEnter={() => noObserver && enter()}>
             <div class="row-head">
                 <h2 class="row-title" id={id}>
                     <Show when={props.row.kind === 'chat' && props.row.chatId != null} fallback={rowTitle(props.row, props.selfId)}>

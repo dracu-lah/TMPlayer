@@ -74,11 +74,13 @@ for (const f of FORMS) {
             })
             if (!f.phone) await page.addInitScript(() => localStorage.setItem('tmplayer-layout', 'desktop'))
             await page.goto('/')
+            // The bar first: a toast shown before it is drawn stands at the foot until its next look (twice a second), and
+            // a slow runner drew the bar after the toast's 700 ms here (74 px apart, run 45691829607).
+            await expect(page.locator('#main-nav .nav-cells')).toBeVisible()
             await show(page, 'info')
             await expect(toast(page)).toBeVisible()
-            await page.waitForTimeout(700)
-            const gap = await page.evaluate(() => document.querySelector('#main-nav .nav-cells')!.getBoundingClientRect().top - document.querySelector('.toast')!.getBoundingClientRect().bottom)
-            expect(Math.abs(gap - 12)).toBeLessThanOrEqual(1)
+            const gap = () => page.evaluate(() => document.querySelector('#main-nav .nav-cells')!.getBoundingClientRect().top - document.querySelector('.toast')!.getBoundingClientRect().bottom)
+            await expect.poll(async () => Math.abs((await gap()) - 12), { timeout: 3000 }).toBeLessThanOrEqual(1)
         })
     })
 }
