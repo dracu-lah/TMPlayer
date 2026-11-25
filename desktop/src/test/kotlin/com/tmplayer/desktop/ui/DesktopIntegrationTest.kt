@@ -44,7 +44,7 @@ class DesktopIntegrationTest {
     @Test
     fun `a dropped link opens, a backup leads to Restore, anything else says what TMPlayer plays`() {
         assertEquals(WindowDropKind.Link("https://t.me/c/123/45"), WindowDrop.classify(" https://t.me/c/123/45 ", emptyList()))
-        assertEquals(WindowDropKind.Backup("/home/me/tmplayer-backup.json"), WindowDrop.classify(null, listOf("file:///home/me/tmplayer-backup.json")))
+        assertEquals(WindowDropKind.Backup(File("/home/me/tmplayer-backup.json").path), WindowDrop.classify(null, listOf("file:///home/me/tmplayer-backup.json")))
         assertEquals(WindowDropKind.Backup("C:\\backups\\a.JSON"), WindowDrop.classify(null, listOf("C:\\backups\\a.JSON")))
         // A link that is not Telegram's, a picture, an empty drop, text that is no link.
         assertEquals(WindowDropKind.Unsupported, WindowDrop.classify("https://example.com/video", emptyList()))
