@@ -527,6 +527,17 @@ internal fun DetailFacts(
         if (item.durationSec > 0) add(s.detailLength to s.formatter.duration(item.durationSec.toLong()))
         if (item.date > TELEGRAM_LAUNCH) add(s.detailPosted to s.formatter.date(item.date * 1000L))
     }
+    // At a large font a label word wider than its column ("Resolution" at twice the font) would
+    // break in the middle of the word: then every label stands over its value instead, full width.
+    val labelRoom = with(androidx.compose.ui.platform.LocalDensity.current) { (if (large) FACT_LABEL_LARGE - 12.dp else FACT_LABEL).toPx() }
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val labels = lines.map { it.first }
+    // The measurer is keyed too: it carries the font scale, which labelRoom (in pixels) does not.
+    val stacked = remember(labels, factStyle, labelRoom, measurer) {
+        labels.any { label ->
+            label.split(' ').any { it.isNotEmpty() && measurer.measure(it, factStyle, maxLines = 1, softWrap = false).size.width > labelRoom }
+        }
+    }
     val synopsis = (overview?.takeIf { it.isNotBlank() } ?: com.tmplayer.data.MediaText.overviewOf(item))
         ?.takeIf { showSynopsis }
     val fromName = facts.videoCodec != null || facts.audio != null || facts.tracks.isNotEmpty()
@@ -548,22 +559,32 @@ internal fun DetailFacts(
             .padding(vertical = 8.dp, horizontal = if (remote) 8.dp else 0.dp),
         verticalArrangement = Arrangement.spacedBy(if (large) 8.dp else 6.dp),
     ) {
-        lines.forEach { (label, value) ->
-            Row(Modifier.fillMaxWidth()) {
-                Text(
-                    label,
-                    style = factStyle,
-                    color = Tone.muted,
-                    modifier = if (large) Modifier.width(FACT_LABEL_LARGE).padding(end = 12.dp) else Modifier.width(FACT_LABEL),
-                )
-                Text(
-                    value,
-                    style = factStyle,
-                    color = Tone.text,
-                    maxLines = if (wrapName && label == s.detailFileName) FILE_NAME_LINES else 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+        lines.forEach { (label, raw) ->
+            val isName = label == s.detailFileName
+            val value = if (isName) breakableFileName(raw) else raw
+            val maxLines = if (wrapName && isName) FILE_NAME_LINES else 3
+            if (stacked) {
+                Column(Modifier.fillMaxWidth()) {
+                    Text(label, style = factStyle, color = Tone.muted)
+                    Text(value, style = factStyle, color = Tone.text, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+                }
+            } else {
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        label,
+                        style = factStyle,
+                        color = Tone.muted,
+                        modifier = if (large) Modifier.width(FACT_LABEL_LARGE).padding(end = 12.dp) else Modifier.width(FACT_LABEL),
+                    )
+                    Text(
+                        value,
+                        style = factStyle,
+                        color = Tone.text,
+                        maxLines = maxLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
         if (fromName) {
@@ -640,6 +661,15 @@ private const val FILE_NAME_LINES = 6
 /** The facts table's labels on a large window's page, where they are set a size up. */
 private val FACT_LABEL_LARGE = 132.dp
 private val JOINERS = Regex("[-_.]+")
+
+/**
+ * A file name with a line break allowed after each dot and underscore (a zero width space), so a
+ * name with no spaces ("Clip.2020.1080p.WEB-DL.x264.mkv") wraps at its own separators instead of
+ * in the middle of "mkv" when it is wider than its column.
+ */
+fun breakableFileName(name: String): String = name.replace(NAME_SEPARATOR) { "${it.value}​" }
+
+private val NAME_SEPARATOR = Regex("[._](?=[\\p{L}\\p{N}])")
 
 /** August 2013, in seconds: a post dated before Telegram existed is a fixture, not a date worth printing. */
 private const val TELEGRAM_LAUNCH = 1_375_000_000
