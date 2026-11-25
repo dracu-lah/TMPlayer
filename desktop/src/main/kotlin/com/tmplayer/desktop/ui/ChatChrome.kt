@@ -228,6 +228,7 @@ internal fun ChatBar(
                         tint = if (favourite) Tone.accent else Tone.text,
                         checked = favourite,
                         caption = s.browseFavourite,
+                        slotWidth = FloatingChrome.DesktopSlot,
                         // The star pops as it fills: the answer to the press, with no message.
                         glyph = {
                             com.tmplayer.ui.components.StarIcon(favourite, TmIcons.Star, TmIcons.StarOutline, on = Tone.accent, off = Tone.text)
@@ -253,7 +254,7 @@ private fun BarPill(modifier: Modifier = Modifier, content: @Composable RowScope
             // As far from the round ends as from the top and bottom of a captioned button.
             .padding(horizontal = (FloatingChrome.LabelledBar - FloatingChrome.LabelledIcon) / 2),
         // The window's bar's gap, so a hovered button and a focused one beside it stay apart.
-        horizontalArrangement = Arrangement.spacedBy(BarGap),
+        horizontalArrangement = Arrangement.spacedBy(FloatingChrome.DesktopBarGap),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
@@ -272,7 +273,7 @@ private fun BarIcon(
 ) {
     // A glyph alone carries its own tooltip; one with its caption has the bar's here, as before.
     if (caption != null && shortcut == null) {
-        BarTooltip(label, null) { FloatingBarIcon(icon, label, onClick, modifier = modifier, tint = tint, enabled = enabled, caption = caption) }
+        BarTooltip(label, null) { FloatingBarIcon(icon, label, onClick, modifier = modifier, tint = tint, enabled = enabled, caption = caption, slotWidth = FloatingChrome.DesktopSlot) }
     } else {
         FloatingBarIcon(icon, label, onClick, modifier = modifier, tint = tint, enabled = enabled, caption = caption, shortcut = shortcut)
     }

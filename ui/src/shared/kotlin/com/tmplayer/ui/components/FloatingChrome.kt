@@ -89,6 +89,10 @@ object FloatingChrome {
     val Icon = 48.dp
     val LabelledIcon = 52.dp
 
+    /** A captioned button on the desktop bar: one roomy width for all of them, a gap of [DesktopBarGap] between (user, 2026-11-25). */
+    val DesktopSlot = 88.dp
+    val DesktopBarGap = 12.dp
+
     /** Between the sticky bar and the navigation bar (or the keyboard). */
     val Margin = 12.dp
 
@@ -340,16 +344,18 @@ fun FloatingBarIcon(
     glyph: (@Composable () -> Unit)? = null,
     /** The desktop's key for it, shown in its tooltip. */
     shortcut: String? = null,
+    /** The least width of a captioned button; equal across a bar that gives every button the same. */
+    slotWidth: Dp = FloatingChrome.LabelledIcon,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val ink = if (enabled) tint else tint.copy(alpha = 0.38f)
     // A glyph alone is named in a tooltip ([IconTip]); one with its caption already says what it
     // is, and has a tooltip only for the desktop's key.
     if (caption != null && shortcut == null) {
-        BarIconBody(icon, label, onClick, modifier, ink, checked, enabled, caption, glyph, interactions)
+        BarIconBody(icon, label, onClick, modifier, ink, checked, enabled, caption, glyph, interactions, slotWidth)
     } else {
         IconTip(label, modifier, shortcut = shortcut) {
-            BarIconBody(icon, label, onClick, Modifier, ink, checked, enabled, caption, glyph, interactions)
+            BarIconBody(icon, label, onClick, Modifier, ink, checked, enabled, caption, glyph, interactions, slotWidth)
         }
     }
 }
@@ -366,11 +372,12 @@ private fun BarIconBody(
     caption: String?,
     glyph: (@Composable () -> Unit)?,
     interactions: MutableInteractionSource,
+    slotWidth: Dp,
 ) {
     val focused by interactions.collectIsFocusVisibleAsState()
     Box(
         modifier
-            .then(if (caption == null) Modifier.size(FloatingChrome.Icon) else Modifier.height(FloatingChrome.LabelledIcon).widthIn(min = FloatingChrome.LabelledIcon))
+            .then(if (caption == null) Modifier.size(FloatingChrome.Icon) else Modifier.height(FloatingChrome.LabelledIcon).widthIn(min = slotWidth))
             .pressScale(interactions)
             // A pill like the bar round it, so its ends follow the bar's at the same inset.
             .clip(CircleShape)
