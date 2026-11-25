@@ -106,8 +106,8 @@ html[data-theme=light][data-tv-keys] .tv-choose:focus { box-shadow: 0 0 0 calc(v
 }
 .tv-menu-row { border-radius: calc(var(--dp) * 12); min-height: calc(var(--dp) * 48); }
 /* The version line in the account menu (WP-104): a row of its own, 14 dp text, OK copies it. */
-button.tv-menu-row.tv-version { display: flex; width: 100%; min-height: calc(var(--dp) * 48); padding: calc(var(--dp) * 8) calc(var(--dp) * 18); border-radius: calc(var(--dp) * 12); background: var(--surface); text-align: start; font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 400; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
-p.tv-version { margin: 0; font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); color: var(--muted); }
+button.tv-menu-row.tv-version { display: flex; justify-content: center; align-items: center; width: 100%; min-height: calc(var(--dp) * 48); padding: calc(var(--dp) * 8) calc(var(--dp) * 18); border-radius: calc(var(--dp) * 12); background: var(--surface); text-align: center; font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 400; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+p.tv-version { margin: 0; text-align: center; font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); color: var(--muted); }
 html[data-tv-keys] button.tv-menu-row.tv-version:focus { background: var(--focus-fill); color: var(--on-focus-fill); }
 html[data-tv-keys] .tv-menu-button:focus, html[data-tv-keys] .tv-menu-row:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
 /* Sign out is quiet at rest and red only under the remote. */

@@ -32,6 +32,19 @@ test('the account menu ends with the compact version, 44 px to press, and a pres
     await expect(page.locator('dialog[open]')).toHaveCount(0)
 })
 
+test('the compact row is one centred group and never says where updates come from', async ({ page }) => {
+    await page.goto('/')
+    await picture(page).click()
+    const foot = menu(page).locator('.you-foot')
+    await expect(foot).toBeVisible()
+    await expect(menu(page)).not.toContainText('Updates come from')
+    const [row, mark, text] = [await foot.boundingBox(), await foot.locator('img.version-mark').boundingBox(), await foot.locator('.version-text').boundingBox()]
+    const groupCentre = (Math.min(mark!.x, text!.x) + Math.max(mark!.x + mark!.width, text!.x + text!.width)) / 2
+    expect(Math.abs(groupCentre - (row!.x + row!.width / 2))).toBeLessThanOrEqual(1)
+    await page.goto('/settings')
+    await expect(page.locator('.set-list')).not.toContainText('Updates come from')
+})
+
 test('the arrows reach the version, End lands on it, Up goes back to Add account', async ({ page }) => {
     await page.goto('/')
     await picture(page).focus()

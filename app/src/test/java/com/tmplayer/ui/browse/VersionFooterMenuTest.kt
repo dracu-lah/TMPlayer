@@ -140,7 +140,8 @@ class VersionFooterPhoneMenuTest {
         rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_ICON_TAG, useUnmergedTree = true).assertExists()
         val compact = VersionLine.compact(BuildConfig.VERSION_NAME)
         assertTrue("\"v1.28.7\"-style, no -test or build suffix: $compact", Regex("v\\d+\\.\\d+\\.\\d+").matches(compact))
-        rule.onNodeWithTextExists("$compact  ·  ${L.updateStateUpToDate}")
+        rule.onNodeWithTextExists(compact)
+        assertTrue("no Up to date in the compact row", rule.onAllNodes(hasText(L.updateStateUpToDate, substring = true)).fetchSemanticsNodes().isEmpty())
         // The long sentence is gone from the menu: the build and the source are About's.
         assertFalse(rule.onAllNodes(hasText(BuildConfig.VERSION_CODE.toString(), substring = true)).fetchSemanticsNodes().isNotEmpty())
         // It is the last thing in the sheet: below Settings.
@@ -149,7 +150,7 @@ class VersionFooterPhoneMenuTest {
         // A 48 dp target, and a screen reader hears the name, the number and the state.
         assertTrue(mark.fetchSemanticsNode().boundsInRoot.height >= 48f * rule.activity.resources.displayMetrics.density - 1f)
         assertEquals(
-            "TMPlayer $compact, ${L.updateStateUpToDate}",
+            "TMPlayer $compact",
             mark.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull(),
         )
         mark.performSemanticsAction(SemanticsActions.OnClick)
@@ -158,10 +159,23 @@ class VersionFooterPhoneMenuTest {
     }
 
     @Test
-    fun `a build with no update check says so beside the number`() {
+    fun `the compact row is one centred group with no Updates come from sentence`() {
+        open()
+        val mark = rule.onNodeWithTag(VERSION_MARK_TAG).fetchSemanticsNode().boundsInRoot
+        val row = rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_ROW_TAG).fetchSemanticsNode().boundsInRoot
+        val density = rule.activity.resources.displayMetrics.density
+        assertEquals("centre of the group is the row's centre", row.center.x, mark.center.x, density)
+        assertTrue(rule.onAllNodes(hasText("Updates come from", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `a build with no update check shows the number alone, never where updates come from`() {
         Updates.enabled = false
         open()
-        rule.onNodeWithTextExists(VersionLine.compact(BuildConfig.VERSION_NAME) + "  ·  " + L.updateStateOff)
+        // The compact row is icon and number on one line; the update source is About's sentence (user, 2026-11-25).
+        rule.onNodeWithTextExists(VersionLine.compact(BuildConfig.VERSION_NAME))
+        assertTrue(rule.onAllNodes(hasText(L.updateStateOff, substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodes(hasText("Updates come from", substring = true)).fetchSemanticsNodes().isEmpty())
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onNodeWithTextExists(text: String) {

@@ -25,7 +25,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tmplayer.data.GlobalLine
 import com.tmplayer.data.GlobalStatusRules
 import com.tmplayer.data.SyncStatus
@@ -34,7 +37,6 @@ import com.tmplayer.data.TelegramLink
 import com.tmplayer.data.Td
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
 
 /**
@@ -80,13 +82,21 @@ fun rememberGlobalLine(
     return line
 }
 
-/** The widest the corner's pill gets on a television; longer words wrap on a second line. */
-private val TV_PILL_MAX_WIDTH = 720.dp
+/**
+ * The widest the status line gets on a television: one line, ellipsized, in the free space of the top bar
+ * between the last tab and the app's mark (the bar's own layout gives it whatever is left, never more than this).
+ */
+val TV_STATUS_MAX_WIDTH = 560.dp
+
+/** The smallest the status line's text is drawn on a television (a 10-foot read). */
+private val TV_STATUS_TEXT = 16.sp
 
 /**
- * The corner's pill for a [GlobalLine]: a spinner and a few words, in the snackbar's shape on a
+ * The status pill for a [GlobalLine]: a spinner and a few words, in the snackbar's shape on a
  * phone and a pill on a television and a desktop. Never takes focus on a television: it says the
- * words only, and what it points to (Retry, Settings) is reached through the usual ways. Where a
+ * words only, and what it points to (Retry, Settings) is reached through the usual ways. On a
+ * television it is one line of at most [TV_STATUS_MAX_WIDTH], ellipsized, which the top bar places in
+ * its free space (never over a page); the long sentence is its description for a screen reader. Where a
  * pointer or a finger is the input, Retry and Open settings are buttons, and the sync line can be
  * closed ([onDismiss]). Draws nothing for [GlobalLine.Idle].
  */
@@ -124,28 +134,37 @@ fun GlobalStatusPill(
                     SyncWords.status(syncStatus?.takeIf { it.kind == shown.kind } ?: SyncStatus(shown.kind, 0L), 0L, false)
                 }
         }
-        // A remote has no button to press here, so the words say where the way out is (WP-100).
-        val words = if (!touch && shown is GlobalLine.SyncNeedsYou) said + " " + s.stateSyncOpenSettings(s.settingsResumeSync) else said
+        // A remote has no button to press here, so the words say where the way out is (WP-100). The row is named
+        // with the string that titles it in Settings on every platform.
+        val rowName = s.syncplaceSwitch
+        val full = if (!touch && shown is GlobalLine.SyncNeedsYou) said + " " + s.stateSyncOpenSettings(rowName) else said
+        // One line on a television: the short wording for a sync that needs the viewer, the long one read by a screen reader.
+        val words = when {
+            touch || shown !is GlobalLine.SyncNeedsYou -> full
+            shown.kind == SyncStatus.Kind.Failed -> s.stateSyncStoppedTv(rowName)
+            else -> s.stateSyncNeedsYouTv(rowName)
+        }
         Row(
             // Heard when it appears. A count down changes every second and is not read each time.
             Modifier
-                // On a television a long line (a sync that needs you says a whole sentence and where to go) wraps inside the
-                // safe area, not out to the screen's edges.
-                .then(if (touch) Modifier else Modifier.padding(horizontal = Tv.SafeH).widthIn(max = TV_PILL_MAX_WIDTH))
+                .then(if (touch) Modifier else Modifier.widthIn(max = TV_STATUS_MAX_WIDTH))
                 .liveMessage(on = shown !is GlobalLine.RateLimited)
                 .background(container, if (touch) MaterialTheme.shapes.extraSmall else CircleShape)
-                .padding(horizontal = if (touch) 12.dp else 16.dp, vertical = if (touch) 4.dp else 10.dp),
+                .padding(horizontal = if (touch) 12.dp else 16.dp, vertical = if (touch) 4.dp else 8.dp),
             horizontalArrangement = Arrangement.spacedBy(if (touch) 8.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (shown !is GlobalLine.SyncNeedsYou) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = onContainer)
             Text(
                 text = words,
-                style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge.let { it.copy(fontSize = if (it.fontSize.value >= TV_STATUS_TEXT.value) it.fontSize else TV_STATUS_TEXT) },
                 color = onContainer,
-                maxLines = 2,
+                maxLines = if (touch) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    // The whole sentence for a screen reader, whatever the line shows of it.
+                    .then(if (touch || full == words) Modifier else Modifier.semantics { contentDescription = full }),
             )
             if (touch) {
                 when (shown) {

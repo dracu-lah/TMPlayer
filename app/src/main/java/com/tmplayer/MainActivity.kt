@@ -1240,6 +1240,12 @@ private fun Root() {
         syncDismissed = syncHintId != null && syncHintId in hintsSeen,
         syncStopped = com.tmplayer.data.SyncStreak.stopped(syncStatus),
     )
+    // On a television the line is drawn by the top bar, in its free space, so it never covers a page or a key (the bar reads these).
+    androidx.compose.runtime.SideEffect {
+        com.tmplayer.ui.browse.TvBarSignals.statusLine.value = globalLine
+        com.tmplayer.ui.browse.TvBarSignals.statusSync.value = syncStatus
+    }
+    val tvBarsShown by com.tmplayer.ui.browse.TvBarSignals.barsShown.collectAsStateWithLifecycle()
 
     var screen by rememberSaveable(stateSaver = ScreenSaver) {
         mutableStateOf<Screen>(Screen.Chats)
@@ -2911,8 +2917,9 @@ private fun Root() {
                     .align(Alignment.BottomCenter)
                     .tvPillSlot(),
             )
-            // The same corner for a catch up, a wait and a sync that needs the viewer: the words only, never focusable (WP-100).
-            com.tmplayer.ui.components.GlobalStatusPill(
+            // A catch up, a wait and a sync that needs the viewer: the words only, never focusable (WP-100). The top bar
+            // draws them in its free space; only where no bar is shown (a screen without one) they keep the foot.
+            if (tvBarsShown == 0) com.tmplayer.ui.components.GlobalStatusPill(
                 line = globalLine,
                 syncStatus = syncStatus,
                 modifier = Modifier

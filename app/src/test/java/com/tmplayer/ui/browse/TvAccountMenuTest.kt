@@ -18,6 +18,7 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -284,6 +285,51 @@ class TvAccountMenuTest {
             row(b).performKeyInput { pressKey(Key.DirectionUp) }
             rule.waitForIdle()
             row(a).assertIsFocused()
+        }
+    }
+
+    @Test
+    fun `with Refresh in the sheet the remote walks to it after Add account, then the version, and OK on it refreshes`() {
+        open(several = false, refresh = true)
+        openMenu()
+        val ids = listOf("favourites", "history", "watch-later", "settings", "switch", "refresh")
+        row("favourites").assertIsFocused()
+        for ((a, b) in ids.zipWithNext()) {
+            row(a).performKeyInput { pressKey(Key.DirectionDown) }
+            rule.waitForIdle()
+            row(b).assertIsFocused()
+        }
+        // One focus indicator: only Refresh holds the remote, no other row of the sheet.
+        for (id in ids.dropLast(1)) row(id).assertIsNotFocused()
+        // Refresh sits after the account row, below Settings in the second group.
+        val settings = row("settings").fetchSemanticsNode().boundsInRoot
+        val refresh = row("refresh").fetchSemanticsNode().boundsInRoot
+        assertTrue("Refresh is below Settings", refresh.top > settings.bottom - 1f)
+        row("refresh").performKeyInput { pressKey(Key.Enter) }
+        rule.waitForIdle()
+        assertTrue("Refresh asked the page", "refresh" in calls)
+    }
+
+    @Test
+    fun `the version row is one line, the number and a short state, never where updates come from`() {
+        com.tmplayer.data.Updates.enabled = false
+        try {
+            open(several = false, refresh = true)
+            openMenu()
+            val density = rule.activity.resources.displayMetrics.density
+            val mark = rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_TAG, useUnmergedTree = true)
+            val bounds = mark.fetchSemanticsNode().boundsInRoot
+            // 48 dp row height with padding: one line of 14 sp text stays far under two lines (56 dp).
+            assertTrue("one line, ${bounds.height / density} dp tall", bounds.height <= 56f * density + 1f)
+            assertTrue("no update source sentence", rule.onAllNodes(hasText("Updates come from", substring = true)).fetchSemanticsNodes().isEmpty())
+            assertTrue("no update source in the description", rule.onAllNodes(androidx.compose.ui.test.hasContentDescription("Updates come from", substring = true)).fetchSemanticsNodes().isEmpty())
+            val sheet = rule.onNodeWithTag(TV_ACCOUNT_SHEET_TAG).fetchSemanticsNode().boundsInRoot
+            assertTrue("the row fits the sheet's width", bounds.right <= sheet.right)
+            // Icon and number are one group, centred in the row the sheet gives it (within 1 dp).
+            val holder = rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_ROW_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertEquals("centred", holder.center.x, bounds.center.x, density)
+        } finally {
+            com.tmplayer.data.Updates.enabled = true
         }
     }
 

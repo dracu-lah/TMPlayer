@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -122,6 +123,18 @@ internal object TvBarSignals {
     val homeToTop = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     /**
+     * The status line (WP-100): what the shell derives each second, drawn in the bar's free space between
+     * the last tab and the app's mark, never over a page. The bottom corner keeps it only where no bar is shown.
+     */
+    val statusLine = MutableStateFlow<com.tmplayer.data.GlobalLine>(com.tmplayer.data.GlobalLine.Idle)
+
+    /** The last sync's status, for the words of [statusLine]. */
+    val statusSync = MutableStateFlow<com.tmplayer.data.SyncStatus?>(null)
+
+    /** How many bars are in the composition: with none, the shell draws the status where it used to. */
+    val barsShown = MutableStateFlow(0)
+
+    /**
      * Menu, when no screen took it (WP-02): the activity asks the bar for the account's menu, so a
      * place with no item action (an empty Home, the carousel's background) still reaches it.
      */
@@ -188,6 +201,10 @@ internal fun TvTopBar(
     var profileOpen by remember { mutableStateOf(false) }
     // Menu from a place with no item action: the activity asks, the bar opens the menu.
     LaunchedEffect(Unit) { TvBarSignals.accountMenuAsked.collect { profileOpen = true } }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        TvBarSignals.barsShown.value += 1
+        onDispose { TvBarSignals.barsShown.value -= 1 }
+    }
     // The shell's sign out (WP-02): under its first question the menu stays, and Cancel puts the remote
     // back on Sign out; once it has started the menu closes, since nothing of it belongs to the menu.
     // The sheet does not hold Sign out any more (it is in Settings, Account); a sign out started
@@ -270,8 +287,20 @@ internal fun TvTopBar(
             // The row's own FocusClearance of padding keeps a tab's focus scale and ring from being
             // cut at the row's ends; the spacer gives it back, so the tabs stand where they did.
             Spacer(Modifier.width(18.dp - Tv.FocusClearance))
+            TvBarMiddle(
+                modifier = Modifier.weight(1f),
+                status = {
+                    val statusLine by TvBarSignals.statusLine.collectAsState()
+                    val statusSync by TvBarSignals.statusSync.collectAsState()
+                    com.tmplayer.ui.components.GlobalStatusPill(
+                        line = statusLine,
+                        syncStatus = statusSync,
+                        modifier = Modifier.testTag("tv-bar-status"),
+                    )
+                },
+            ) {
             Row(
-                Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = Tv.FocusClearance),
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Tv.FocusClearance),
                 // The width the account's name used to take goes to the gaps, one gap between every item (user, 2026-11-25).
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -296,6 +325,7 @@ internal fun TvTopBar(
                         onClick = onChooseChats,
                     )
                 }
+            }
             }
             Spacer(Modifier.width(18.dp))
             // The app's own mark at the picture's size, the way a television's home screen signs
@@ -664,4 +694,35 @@ internal fun Modifier.underTvBar(content: FocusRequester, bar: FocusRequester, o
         .tvReturnPoint(content)
         .focusRestorer()
         .focusGroup()
+}
+
+/**
+ * The bar's middle: the tabs at the start, as wide as their content (scrolling when there are too many), and
+ * the status line in whatever is left up to the app's mark, end aligned, never wider than it fits. The tabs are
+ * measured first and never move for the status; with nothing to say it takes no room and draws nothing.
+ */
+@Composable
+private fun TvBarMiddle(
+    modifier: Modifier,
+    status: @Composable () -> Unit,
+    tabs: @Composable () -> Unit,
+) {
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Box { tabs() }
+            Box(contentAlignment = Alignment.CenterEnd) { status() }
+        },
+        modifier = modifier.fillMaxWidth().height(BAR_ROW),
+    ) { measurables, constraints ->
+        val gap = 12.dp.roundToPx()
+        val tabsPlaced = measurables[0].measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val room = (constraints.maxWidth - tabsPlaced.width - gap).coerceAtLeast(0)
+        val statusPlaced = measurables[1].measure(
+            androidx.compose.ui.unit.Constraints(minWidth = 0, maxWidth = room, minHeight = 0, maxHeight = constraints.maxHeight),
+        )
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            tabsPlaced.placeRelative(0, (constraints.maxHeight - tabsPlaced.height) / 2)
+            statusPlaced.placeRelative(constraints.maxWidth - statusPlaced.width, (constraints.maxHeight - statusPlaced.height) / 2)
+        }
+    }
 }

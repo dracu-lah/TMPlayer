@@ -42,6 +42,9 @@ import com.tmplayer.ui.theme.focusRingOnTv
 /** The tag of the compact version row's own target, for tests. */
 const val VERSION_MARK_TAG = "versionMark"
 
+/** The row that holds the mark and centres it (a test measures the group against it). */
+const val VERSION_MARK_ROW_TAG = "versionMarkRow"
+
 /** The tag of the amber update chip beside the mark, for tests. */
 const val VERSION_MARK_UPDATE_TAG = "versionMarkUpdate"
 
@@ -65,8 +68,9 @@ fun AppTile(size: Dp, modifier: Modifier = Modifier) {
 }
 
 /**
- * The version, said once and small (user, 2026-11-25): the app's own tile, then "v1.28.7", then the
- * update state in a few words. It replaces the long "TMPlayer 1.28.7 (1280799), Updates come from
+ * The version, said once and small (user, 2026-11-25): the app's own tile and "v1.28.7" as one group,
+ * centred, on one line, with a small "Update available" beside them only while one is waiting (no "Up
+ * to date", no "Checking", never where updates come from). It replaces the long "TMPlayer 1.28.7 (1280799), Updates come from
  * where you installed TMPlayer" sentence everywhere the app has a menu or a list to end; the build,
  * the update source and the copy-for-support line stay in About ([VersionFooter]).
  *
@@ -98,7 +102,10 @@ fun VersionMark(
 ) {
     val s = LocalStrings.current
     val compact = VersionLine.compact(info.version)
-    val stateText = versionStateText(state)
+    // The compact row is the app's tile and the number, centred (user, 2026-11-25): no "Up to date", no
+    // "Checking", no "Updates come from where you installed TMPlayer" (that is About's sentence, [VersionFooter]).
+    // Only news shows beside it: a small "Update available".
+    val stateText = if (state is VersionState.Available) s.updateStateAvailablePlain else null
     val split = onUpdate != null && state is VersionState.Available && !tv
     val shape = RoundedCornerShape(Corner.Medium)
     val interactions = remember { MutableInteractionSource() }
@@ -131,8 +138,9 @@ fun VersionMark(
         .testTag(VERSION_MARK_TAG)
 
     FlowRow(
-        modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start,
+        modifier.fillMaxWidth().testTag(VERSION_MARK_ROW_TAG),
+        // The tile, the number and the chip as one group, centred in whatever holds the row.
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.Center,
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
@@ -145,7 +153,7 @@ fun VersionMark(
                 },
                 style = MaterialTheme.typography.labelLarge,
                 color = ink,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }

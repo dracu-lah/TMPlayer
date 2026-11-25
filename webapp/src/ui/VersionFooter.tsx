@@ -79,17 +79,13 @@ export function VersionFooter(props: { look: 'menu' | 'chip' | 'tv' | 'line' | '
     )
     const press = createMemo(() => props.look !== 'text' && canCopy())
     const label = () => t('about.version_short', { version: compact() })
-    // "Update available" (a button) or the quiet state (words), beside the compact version.
-    const chip = () => {
-        const s = state()
-        return s === 'none' ? null : s === 'available' ? (
+    // "Update available" (a button) beside the compact version, and only then (user, 2026-11-25): no "Checking", no "Up to date".
+    const chip = () =>
+        state() !== 'available' ? null : (
             <button type="button" class="version-state available" role={props.look === 'menu' ? 'menuitem' : undefined} onClick={() => applyUpdate()}>
                 {t('update.state_available_plain')}
             </button>
-        ) : (
-            <span class="version-state">{stateWords(s)}</span>
         )
-    }
     return (
         <Switch>
             <Match when={props.look === 'menu'}>

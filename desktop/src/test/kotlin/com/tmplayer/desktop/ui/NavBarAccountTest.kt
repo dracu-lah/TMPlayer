@@ -200,6 +200,11 @@ class NavBarAccountTest {
         }
         onNode(androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.components.LIBRARY_TILES_TAG), useUnmergedTree = true).assertExists()
         onNode(androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.components.VERSION_MARK_TAG), useUnmergedTree = true).assertExists()
+        // The compact row: one centred group, never the update source sentence (user, 2026-11-25).
+        assertFalse(onAllNodes(hasText("Updates come from", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        val group = onNode(androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.components.VERSION_MARK_TAG), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val holder = onNode(androidx.compose.ui.test.hasTestTag(com.tmplayer.ui.components.VERSION_MARK_ROW_TAG), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(holder.center.x, group.center.x, 1f)
         // The stray block of three bare numbers is gone, and so is Sign out (Settings, Account has it).
         assertFalse(exists(L.profileHeading))
         assertFalse(exists(L.profileStarred))

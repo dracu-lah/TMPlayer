@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -55,12 +57,14 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * The corner's line on a television (WP-100, WP-102): catching up, slow, a wait and a sync that
- * needs the viewer say words only. Nothing in the pill takes the remote or answers a press (no
- * Retry, Try again, Send logs, Open settings, Close: those are for a finger or a pointer), the
- * remote stays on the row it was on through every state, no row moves or repaints when the pill
- * appears or changes, and the pill stays inside the safe area at 960 x 540 and 1920 x 1080. The
- * three failures line names where the way out is, since no button does.
+ * The status line on a television (WP-100, WP-102): catching up, slow, a wait and a sync that
+ * needs the viewer say words only, on ONE line (the top bar gives it its free space). Nothing in the
+ * pill takes the remote or answers a press (no Retry, Try again, Send logs, Open settings, Close:
+ * those are for a finger or a pointer), the remote stays on the row it was on through every state,
+ * no row moves or repaints when the pill appears or changes, and the pill stays inside the safe area
+ * at 960 x 540 and 1920 x 1080. The sync lines name the Settings row by the string that titles it,
+ * since no button points to it, and keep the long sentence as the screen reader's description. Where
+ * the bar puts it, and that it covers no page or key, is [com.tmplayer.ui.browse.TvBarStatusTest].
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -100,7 +104,7 @@ class GlobalStatusTvFocusTest {
 
     private val rows = listOf("Row one", "Row two", "Row three")
 
-    /** Three rows in the page and the pill in the television's foot slot, as the shell draws them. */
+    /** Three rows in the page and the pill in the bar's corner (the bar's own layout is TvBarStatusTest's). */
     private fun screen() {
         FormFactor.override(true)
         rule.setContent {
@@ -112,7 +116,7 @@ class GlobalStatusTvFocusTest {
                     GlobalStatusPill(
                         line = line,
                         syncStatus = sync,
-                        modifier = Modifier.align(Alignment.BottomCenter).tvPillSlot().testTag("global"),
+                        modifier = Modifier.align(Alignment.TopEnd).padding(top = Tv.SafeV, end = Tv.SafeH).testTag("global"),
                         // A television passes none of these: the pill must not draw them anyway.
                         onRetry = {},
                         onTryAgainSync = {},
@@ -142,11 +146,17 @@ class GlobalStatusTvFocusTest {
         Triple("catching up", GlobalLine.Updating, L.stateUpdating),
         Triple("slow", GlobalLine.SlowAnswer, L.commonSlowAnswer),
         Triple("a wait", GlobalLine.RateLimited(42), L.stateRateLimited(seconds = 42)),
-        Triple("a newer sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.TooNew), L.settingsResumeSyncTooNew),
-        Triple("an unreadable sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Unreadable), L.settingsResumeSyncUnreadable),
-        Triple("another account", GlobalLine.SyncNeedsYou(SyncStatus.Kind.OtherAccount), L.settingsResumeSyncOtherAccount),
-        Triple("three failed tries", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed), SyncWords.stopped(stopped)),
+        Triple("a newer sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.TooNew), L.stateSyncNeedsYouTv(name = L.syncplaceSwitch)),
+        Triple("an unreadable sync file", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Unreadable), L.stateSyncNeedsYouTv(name = L.syncplaceSwitch)),
+        Triple("another account", GlobalLine.SyncNeedsYou(SyncStatus.Kind.OtherAccount), L.stateSyncNeedsYouTv(name = L.syncplaceSwitch)),
+        Triple("three failed tries", GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed), L.stateSyncStoppedTv(name = L.syncplaceSwitch)),
     )
+
+    /** The long sentence a screen reader gets for a sync line (the reason and where the way out is). */
+    private fun longWords(state: GlobalLine.SyncNeedsYou): String {
+        val said = if (state.kind == SyncStatus.Kind.Failed) SyncWords.stopped(stopped) else SyncWords.status(SyncStatus(state.kind, 0L), 0L, false)
+        return said + " " + L.stateSyncOpenSettings(name = L.syncplaceSwitch)
+    }
 
     @Test
     fun `every state says its words, takes no focus and offers no button on the remote`() {
@@ -161,7 +171,8 @@ class GlobalStatusTvFocusTest {
             rule.onNode(hasText(words, substring = true)).assertExists("$name: the words are drawn")
             assertWordsOnly()
             if (state is GlobalLine.SyncNeedsYou) {
-                rule.onNode(hasText(L.settingsResumeSync, substring = true)).assertExists("$name: Settings' row is named")
+                rule.onNode(hasText(L.syncplaceSwitch, substring = true)).assertExists("$name: Settings' row is named as Settings titles it")
+                rule.onNode(hasContentDescription(longWords(state))).assertExists("$name: the screen reader gets the whole sentence")
             }
             first.assertIsFocused()
         }
@@ -237,13 +248,13 @@ class GlobalStatusTvFocusTest {
     }
 
     @Test
-    fun `at 960 x 540 each state keeps inside the safe area and the longest line wraps in two`() {
+    fun `at 960 x 540 each state keeps inside the safe area on one line`() {
         assertSafe()
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-television-night-mdpi")
-    fun `at 1920 x 1080 each state keeps inside the safe area`() {
+    fun `at 1920 x 1080 each state keeps inside the safe area on one line`() {
         assertSafe()
     }
 
@@ -255,8 +266,10 @@ class GlobalStatusTvFocusTest {
             line = state
             rule.waitForIdle()
             val pill = rule.onNodeWithTag("global").getBoundsInRoot()
-            assertTrue("$name: bottom ${pill.bottom} within safe line ${box.bottom - Tv.SafeV}", pill.bottom <= box.bottom - Tv.SafeV)
+            assertTrue("$name: top ${pill.top} below the safe line ${box.top + Tv.SafeV}", pill.top >= box.top + Tv.SafeV)
             assertTrue("$name: inside the screen sides $pill in $box", pill.left >= box.left + Tv.SafeH && pill.right <= box.right - Tv.SafeH)
+            assertTrue("$name: one line, ${pill.bottom - pill.top} tall", pill.bottom - pill.top <= 48.dp)
+            assertTrue("$name: at most 560 dp wide, ${pill.right - pill.left}", pill.right - pill.left <= 560.dp)
         }
     }
 
@@ -266,8 +279,27 @@ class GlobalStatusTvFocusTest {
         sync = stopped
         line = GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)
         rule.waitForIdle()
-        rule.onNode(hasText(L.settingsResumeSyncStopped, substring = true)).assertExists()
-        rule.onNode(hasText(L.settingsResumeSync, substring = true)).assertExists()
+        rule.onNode(hasText(L.stateSyncStoppedTv(name = L.syncplaceSwitch))).assertExists()
+        rule.onNode(hasText(L.syncplaceSwitch, substring = true)).assertExists()
         assertWordsOnly()
+    }
+
+    @Test
+    fun `in a narrow slot the line is cut with an ellipsis on one line and the screen reader still gets all of it`() {
+        FormFactor.override(true)
+        sync = stopped
+        line = GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)
+        rule.setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.width(160.dp).testTag("slot")) {
+                    GlobalStatusPill(line = line, syncStatus = sync, modifier = Modifier.testTag("global"))
+                }
+            }
+        }
+        rule.waitForIdle()
+        val pill = rule.onNodeWithTag("global").getBoundsInRoot()
+        assertTrue("one line in a narrow slot, ${pill.bottom - pill.top} tall", pill.bottom - pill.top <= 48.dp)
+        assertTrue("never wider than the slot, ${pill.right - pill.left}", pill.right - pill.left <= 160.dp)
+        rule.onNode(hasContentDescription(longWords(GlobalLine.SyncNeedsYou(SyncStatus.Kind.Failed)))).assertExists()
     }
 }

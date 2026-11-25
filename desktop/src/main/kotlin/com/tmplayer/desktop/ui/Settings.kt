@@ -647,8 +647,8 @@ private fun CategoryList(
             ) { if (selected == null) RowTail(null, RowEnd.Chevron) }
         }
     }
-    // The last thing of the list (user, 2026-11-25): the app's tile and "v1.28.7" with the update
-    // state beside it; a click opens About, which has the build, the source and the copy for support.
+    // The last thing of the list (user, 2026-11-25): the app's tile and "v1.28.7", centred, with "Update
+    // available" beside it only when one waits; a click opens About, which has the build, the source and the copy for support.
     com.tmplayer.ui.components.VersionMark(
         info = rememberDesktopVersion(),
         modifier = Modifier.padding(top = 8.dp),

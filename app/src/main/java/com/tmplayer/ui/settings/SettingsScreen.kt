@@ -2762,14 +2762,14 @@ fun SettingsScreen(
                         )
                     }
                     // The very last thing of the list, on a phone held either way and in the left
-                    // list of the two panes (user, 2026-11-25): the app's tile and "v1.28.7", with
-                    // the update state beside it; a press goes to About, which has the build, the
+                    // list of the two panes (user, 2026-11-25): the app's tile and "v1.28.7", centred, with
+                    // "Update available" beside it only when one waits; a press goes to About, which has the build, the
                     // update source and the copy for support. A television shows it at the foot of
                     // its rail instead (TvSettingsPane.railFooter), where it is no stop.
                     item(key = "version-mark") {
                         com.tmplayer.ui.components.VersionMark(
                             info = com.tmplayer.ui.components.rememberVersionInfo(),
-                            modifier = Modifier.padding(top = 8.dp, start = if (touch) 8.dp else 4.dp),
+                            modifier = Modifier.padding(top = 8.dp),
                             onClick = if (touch) ({ showPage(SettingsPage.About) }) else null,
                             onClickLabel = s.settingsAbout,
                             onUpdate = { showUpdate = true },
@@ -2993,7 +2993,7 @@ fun SettingsScreen(
                 // Read only: the remote walks the pages, and the account menu's row is the copy target.
                 com.tmplayer.ui.components.VersionMark(
                     info = com.tmplayer.ui.components.rememberVersionInfo(),
-                    modifier = Modifier.padding(top = 12.dp, start = 4.dp),
+                    modifier = Modifier.padding(top = 12.dp),
                     tv = true,
                 )
             },

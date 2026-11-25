@@ -1254,10 +1254,14 @@ internal fun BrowseScreen(
                     // chat list); the chats, favourites and history tabs offer none any more.
                     // A remote has no pull and no F5, so the menu's Refresh is how a TV asks (WP-40):
                     // Home's rows and the chat list, with the pill below to say it runs.
-                    tvSearchOpen -> null
+                    //
+                    // The account sheet always has the row (user, 2026-11-25: the TV had none on Favourites, History or
+                    // the search, where a remote has no pull): on a page with no fetch of its own it asks Home's rows,
+                    // the lists those pages are built from.
+                    tvSearchOpen -> askHome
                     tab.isHome -> askHome
                     tab.onChatsPage -> askChats
-                    else -> null
+                    else -> askHome
                 },
                 currentFocus = barFocus,
                 contentFocus = pageFocus,

@@ -110,7 +110,12 @@ class VersionFooterTest {
         val mark = rule.onNodeWithTag(VERSION_MARK_TAG)
         mark.assertExists()
         rule.onNodeWithTag(VERSION_MARK_ICON_TAG, useUnmergedTree = true).assertExists()
-        assertTrue(rule.onAllNodes(hasText("${compact()}  ·  ${L.updateStateUpToDate}")).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(rule.onAllNodes(hasText(compact())).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("no Up to date in the compact row", rule.onAllNodes(hasText(L.updateStateUpToDate, substring = true)).fetchSemanticsNodes().isEmpty())
+        // One centred group in the list's width.
+        val group = rule.onNodeWithTag(VERSION_MARK_TAG).fetchSemanticsNode().boundsInRoot
+        val holder = rule.onNodeWithTag(com.tmplayer.ui.components.VERSION_MARK_ROW_TAG).fetchSemanticsNode().boundsInRoot
+        assertEquals("centred", holder.center.x, group.center.x, rule.activity.resources.displayMetrics.density)
         // Below the last category (About), and a press goes to About.
         val about = rule.onAllNodes(hasText(L.settingsGroupAboutPageSummary(com.tmplayer.BuildConfig.VERSION_NAME), substring = true))
         if (about.fetchSemanticsNodes().isNotEmpty()) {
@@ -159,7 +164,9 @@ class VersionFooterTest {
         generation++
         rule.waitForIdle()
         assertEquals(before, rule.onNodeWithTag(railTag(SettingsPage.Playback), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top, 0.5f)
-        assertTrue(rule.onAllNodes(hasText("${compact()}  ·  ${L.updateStateOff}")).fetchSemanticsNodes().isNotEmpty())
+        // The compact row holds the number alone here: the update source is About's sentence, not the foot's.
+        assertTrue(rule.onAllNodes(hasText(compact())).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(rule.onAllNodes(hasText("Updates come from", substring = true)).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
