@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.desktop.os.OsInfo
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -78,6 +79,8 @@ class ShellBehindGateTest {
 
     @Test
     fun `the window's shortcuts leave the shell alone while the gate shows, its own keys still work`() = runComposeUiTest {
+        // The shell's command key: Cmd on a Mac, Ctrl elsewhere.
+        val command = if (OsInfo.isMac) Key.MetaLeft else Key.CtrlLeft
         var quits = 0
         shell.quit = { quits++ }
         setContent {
@@ -87,17 +90,17 @@ class ShellBehindGateTest {
         window.requestFocus()
 
         shell.shellShown = false
-        window.performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.K) } }
-        window.performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.Comma) } }
-        window.performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.J) } }
+        window.performKeyInput { withKeyDown(command) { pressKey(Key.K) } }
+        window.performKeyInput { withKeyDown(command) { pressKey(Key.Comma) } }
+        window.performKeyInput { withKeyDown(command) { pressKey(Key.J) } }
         assertFalse(shell.paletteOpen)
         assertEquals(Destination.Home, shell.destination)
-        window.performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.Q) } }
+        window.performKeyInput { withKeyDown(command) { pressKey(Key.Q) } }
         assertEquals(1, quits)
 
         // Shown again: the shortcuts are the shell's as before.
         shell.shellShown = true
-        window.performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.K) } }
+        window.performKeyInput { withKeyDown(command) { pressKey(Key.K) } }
         assertTrue(shell.paletteOpen)
     }
 }
