@@ -19,7 +19,8 @@ interface Fill {
 // TmIcons.selectedOf, part by part.
 const FILLS = new Map<IconData, Fill>([
     [Home03Icon, { body: [0], cut: 1, cutWidth: 2.25 }],
-    [Message01Icon, { body: [1], cut: 0 }],
+    // The bubble is part 0 and its two lines part 1 in this Hugeicons release: filling the lines and cutting the bubble out left two dashes.
+    [Message01Icon, { body: [0], cut: 1 }],
     [Settings01Icon, { body: [0], cut: 1, cutFilled: true }],
     [Search01Icon, { body: [0, 1] }],
     [StarIcon, { body: [0] }],
@@ -55,7 +56,7 @@ export function Icon(props: { icon: IconData; size?: number; selected?: boolean;
     return (
         <svg
             class={props.class ? `icon ${props.class}` : 'icon'}
-            classList={{ chosen: !!props.selected }}
+            classList={{ chosen: !!props.selected, fills: !!fill() }}
             width={props.size ?? 24}
             height={props.size ?? 24}
             viewBox="0 0 24 24"

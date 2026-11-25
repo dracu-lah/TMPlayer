@@ -385,7 +385,8 @@ dialog.lock-cover::backdrop { background: var(--bg); }
 .icon { display: block; flex: none; }
 .icon .icon-fill { opacity: 0; transition: opacity 120ms; }
 .icon.chosen .icon-fill { opacity: 1; transition-duration: 220ms; }
-.icon.chosen .icon-outline { opacity: 0; transition: opacity 220ms; }
+/* Only a glyph that has a filled form hands over to it: History's has none, and went blank when its place was chosen. */
+.icon.chosen.fills .icon-outline { opacity: 0; transition: opacity 220ms; }
 
 /* A page's own top: Back and the title pill (FloatingChrome.Button 44, Avatar.Compact 40 less the pill's inset). */
 .page-bar { display: flex; align-items: center; gap: 12px; margin: 2px 0 16px; min-height: 48px; }
