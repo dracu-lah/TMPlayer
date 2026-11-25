@@ -369,12 +369,12 @@ private fun Steps(state: EpisodesState, actions: EpisodesActions, sideBySide: Bo
     @Composable
     fun PreviousButton(m: Modifier) = previous?.let {
         val short = state.previousCode?.takeIf { sideBySide }?.let { code -> s.playerPreviousUp(code) }
-        PanelButton(short ?: state.previousLabel ?: s.playerPreviousEpisode, onClick = { actions.onPlay(it) }, modifier = m, icon = TmIcons.SkipPrevious, lines = if (sideBySide) 1 else 2)
+        PanelButton(short ?: state.previousLabel ?: s.playerPreviousEpisode, onClick = { actions.onPlay(it) }, modifier = m, icon = TmIcons.SkipPrevious, lines = 2)
     }
     @Composable
     fun NextButton(m: Modifier) = next?.let {
         val short = state.nextCode?.takeIf { sideBySide }?.let { code -> s.playerNextUp(code) }
-        PanelButton(short ?: state.nextLabel ?: s.playerNextEpisode, onClick = { actions.onPlay(it) }, modifier = m, icon = TmIcons.SkipNext, lines = if (sideBySide) 1 else 2)
+        PanelButton(short ?: state.nextLabel ?: s.playerNextEpisode, onClick = { actions.onPlay(it) }, modifier = m, icon = TmIcons.SkipNext, lines = 2)
     }
     if (sideBySide) {
         Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
