@@ -160,7 +160,7 @@ object About {
             L.aboutContact,
             listOf(
                 Link(L.aboutEmail, EMAIL, "mailto:$EMAIL"),
-                Link(L.aboutTelegramChannel, L.aboutTelegramChannelDetail, "https://t.me/tmplayerapp", Service.Telegram),
+                Link(L.aboutTelegramChannel, L.aboutTelegramChannelDetail, "https://t.me/tmplayer_chat/1376", Service.Telegram),
                 Link(L.aboutTelegramGroup, L.aboutTelegramGroupDetail, "https://t.me/tmplayer_chat", Service.Telegram),
                 Link("GitHub Discussions", L.aboutDiscussionsDetail, "$SOURCE/discussions"),
                 // Moved here (and to Settings' language picker) from the tour's first page.

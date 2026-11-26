@@ -194,7 +194,7 @@ private fun iconFor(link: About.Link, group: About.Group): ImageVector = when {
     link.url == About.LEGAL -> TmIcons.Gavel
     link.url.startsWith("mailto:") -> TmIcons.Email
     link.url.endsWith("/discussions") -> TmIcons.ChatsMany
-    link.url.contains("t.me/tmplayerapp") -> TmIcons.Channel
+    link.url.contains("t.me/tmplayer_chat") -> TmIcons.Channel
     link.url.contains("t.me/") -> TmIcons.Group
     link.url == com.tmplayer.ui.onboarding.Onboarding.TRANSLATE_URL -> TmIcons.Language
     group.support -> TmIcons.Favorite

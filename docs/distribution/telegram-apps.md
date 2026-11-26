@@ -156,7 +156,7 @@ adb install TMPlayer-<version>-universal.apk[/CODE]
 [B]Links[/B]
 Source (GPL-3.0): [URL]https://github.com/dracu-lah/TMPlayer[/URL]
 Website: [URL]https://tmplayer.org[/URL]
-News: [URL]https://t.me/tmplayerapp[/URL]
+News: [URL]https://t.me/tmplayer_chat/1376[/URL]
 Bugs: [URL]https://github.com/dracu-lah/TMPlayer/issues[/URL]
 
 [B]Version[/B] <version>: <one line from the release notes>

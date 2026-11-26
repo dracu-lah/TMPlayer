@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://t.me/tmplayerapp"><img alt="Telegram channel" src="https://img.shields.io/badge/Telegram-channel-26A5E4?logo=telegram&logoColor=white" /></a>
+  <a href="https://t.me/tmplayer_chat/1376"><img alt="Telegram group" src="https://img.shields.io/badge/Telegram-group-26A5E4?logo=telegram&logoColor=white" /></a>
   <a href="https://github.com/dracu-lah/TMPlayer/discussions"><img alt="GitHub Discussions" src="https://img.shields.io/badge/GitHub-Discussions-181717?logo=github" /></a>
   <a href="https://github.com/sponsors/dracu-lah"><img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white" /></a>
   <a href="https://buymeacoffee.com/nevil.dev"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
@@ -145,7 +145,7 @@ the reference test devices, and the version pins that are not free choices.
 
 ## Community and support
 
-- **News:** the [Telegram channel](https://t.me/tmplayerapp) announces every release.
+- **News:** the Announcements topic of the [Telegram group](https://t.me/tmplayer_chat/1376) announces every release.
 - **Help and chat:** the [Telegram group](https://t.me/tmplayer_chat) or
   [GitHub Discussions](https://github.com/dracu-lah/TMPlayer/discussions). Bugs go in
   [Issues](https://github.com/dracu-lah/TMPlayer/issues); security reports follow [SECURITY.md](SECURITY.md).
