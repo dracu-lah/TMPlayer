@@ -387,3 +387,14 @@ above; F0 plus F2 plus F11 plus F5 carry most of it.
   `1290099.txt` (3b829e2), `LOG_UPLOAD_URL` in `release.yml` (eb49f0d) and set as a repository
   secret, log inbox worker live at `https://tmplayer-log-inbox.dracu.workers.dev/v1/report`.
   User-only still: the tag, the download mirror's Worker deploy, the production web deploy.
+- 2026-11-26 (later): 1.29.0 is green. `main` at 8d32627 (pushed): `CI` run 45738033813 and `Web player` run
+  45738038037 both succeeded (webkit-iphone needed one re-run of a WebKit "Page closed" crash in
+  library.spec.ts:40, it passed on 9ab7192 and again on re-run). Fixes this round: web worker's four commits
+  merged (12fec2b); LauncherShortcutsTest waits for its follower (9ab7192); macOS ScreenInvariantsTest (a line
+  is cut for height only when taller than its room, scroll check up to ten rounds) and ToastPlacementTest
+  20 s wait (8d32627). Lessons for F1/F7: (1) a push held open by a 70 minute pre-push hook loses its SSH
+  connection ("closed by remote host"): run `scripts/ci-local.sh` first, then push (the pass is recorded
+  per commit); (2) the screenshot tests rewrite tracked `design/` PNGs on every gate run: `git checkout --
+  design` before pushing or the recorded pass is ignored; (3) three Kotlin tests failed only under load
+  (follower leak, 5 s waits): F2 parallel forks will make that more common, so waits need to be generous.
+  Still the user's: the tag, the mirror Worker deploy, the production web deploy.
