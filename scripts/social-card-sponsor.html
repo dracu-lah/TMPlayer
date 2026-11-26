@@ -16,25 +16,28 @@
   .brand img { width: 66px; height: 66px; border-radius: 16px; }
   .brand span { font-size: 38px; font-weight: 600; letter-spacing: -0.01em; }
 
-  .stage { position: absolute; top: 160px; left: 0; width: 1080px; height: 500px; }
+  .stage { position: absolute; top: 146px; left: 0; width: 1080px; height: 500px; }
   .tv { position: absolute; left: 305px; top: 8px; width: 470px; border: 5px solid #1a1c20;
     border-radius: 6px; background: #000; overflow: hidden; }
   .tv img { display: block; width: 100%; }
-  .ph { position: absolute; width: 138px; border: 4px solid #1a1c20; border-radius: 22px;
-    overflow: hidden; background: #000; }
+  /* The three phones fan out symmetrically around the page's centre line (x = 540), the middle one
+     upright and a little larger in front, the outer two tilted away from it behind, all three
+     standing on the same baseline (top + height, 1:2.22 screens). */
+  .ph { position: absolute; width: 140px; border: 4px solid #1a1c20; border-radius: 22px;
+    overflow: hidden; background: #000; transform-origin: 50% 100%; }
   .ph img { display: block; width: 100%; }
-  .ph.c { left: 471px; top: 168px; width: 142px; z-index: 3; }
-  .ph.l { left: 372px; top: 212px; transform: rotate(-9deg); z-index: 2; }
-  .ph.r { left: 568px; top: 212px; transform: rotate(9deg); z-index: 2; }
+  .ph.c { left: 465px; top: 176px; width: 150px; z-index: 3; }
+  .ph.l { left: 346px; top: 198px; transform: rotate(-8deg); z-index: 2; }
+  .ph.r { left: 594px; top: 198px; transform: rotate(8deg); z-index: 2; }
 
   h1 { position: absolute; top: 700px; left: 0; right: 0; font-size: 86px; line-height: 1.02;
     font-weight: 700; letter-spacing: -0.045em; }
   h1 span { display: block; color: #6b6f78; }
-  .sub { position: absolute; top: 912px; left: 0; right: 0; font-size: 28px; line-height: 1.5;
+  .sub { position: absolute; top: 906px; left: 0; right: 0; font-size: 28px; line-height: 1.5;
     color: #6b6f78; }
   .sub b { font-weight: 600; color: #1a1c20; }
 
-  .stats { position: absolute; top: 1018px; left: 90px; right: 90px; display: flex;
+  .stats { position: absolute; top: 1026px; left: 90px; right: 90px; display: flex;
     justify-content: space-between; }
   .stat { width: 280px; }
   .stat b { display: block; font-size: 56px; line-height: 1.1; font-weight: 700;
