@@ -70,7 +70,7 @@ class Media3Check {
     private val offset = AudioOffsetProcessor()
     private val mixer = ChannelMixingAudioProcessor()
     private var subtitleDelayUs = 0L
-    private val text = DelayedTextRenderer(TextProbe()) { subtitleDelayUs }
+    private val text = DelayedTextRenderer(TextProbe(), { subtitleDelayUs })
 
     init {
         exo.addListener(Recorder(heard, exo))
