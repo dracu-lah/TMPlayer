@@ -1,0 +1,66 @@
+name: Announce backfill
+
+# One-off: posts the old channel announcements, oldest first, into the Announcements topic of the
+# chat group, without a notification. The input is a JSON array of Telegram HTML strings. It stops
+# at the first message Telegram refuses, so a missing admin right fails on message one. Delete this
+# file once the backfill has run.
+on:
+  workflow_dispatch:
+    inputs:
+      messages:
+        description: JSON array of messages, in Telegram HTML
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    name: Post the old announcements
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Send the messages
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          TELEGRAM_TOPIC_ID: ${{ secrets.TELEGRAM_TOPIC_ID }}
+          MESSAGES: ${{ inputs.messages }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.error, urllib.parse, urllib.request
+
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+          chat = os.environ["TELEGRAM_CHANNEL"]
+          topic = os.environ.get("TELEGRAM_TOPIC_ID", "").strip()
+          messages = json.loads(os.environ["MESSAGES"])
+          for index, text in enumerate(messages, 1):
+              fields = {
+                  "chat_id": chat,
+                  "text": text,
+                  "parse_mode": "HTML",
+                  "disable_web_page_preview": "true",
+                  "disable_notification": "true",
+              }
+              if topic.isdigit():
+                  fields["message_thread_id"] = topic
+              body = urllib.parse.urlencode(fields).encode()
+              for attempt in range(4):
+                  try:
+                      with urllib.request.urlopen(
+                          urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", body), timeout=30
+                      ) as response:
+                          reply = json.load(response)
+                      print(f"{index}/{len(messages)} sent as message {reply['result']['message_id']}")
+                      break
+                  except urllib.error.HTTPError as error:
+                      info = json.load(error)
+                      wait = info.get("parameters", {}).get("retry_after")
+                      if error.code == 429 and wait and attempt < 3:
+                          time.sleep(wait + 1)
+                          continue
+                      print(f"{index}/{len(messages)} refused: {info.get('description')}", file=sys.stderr)
+                      sys.exit(1)
+              time.sleep(4)
+          PY
