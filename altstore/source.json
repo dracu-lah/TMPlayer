@@ -82,17 +82,44 @@
           }
         ]
       },
-      "versions": [],
+      "versions": [
+        {
+          "version": "1.29.0",
+          "buildVersion": "1",
+          "date": "2026-11-26T14:51:20Z",
+          "localizedDescription": "- Add more than one Telegram account and switch between them, each with its own library, history and settings, and an optional PIN for a profile\n- A hidden or PIN-locked profile stays private: the app switcher shows a cover instead of your video, and Now Playing shows only the app's name\n- AirPlay and Picture in picture for MP4 and MOV files, from the player's More panel\n- Trailers play in a sheet inside the app, with Close and Watch on YouTube\n- A Downloads tab: one list, a storage page, and a question before a running download is cancelled\n- Search shows what it is doing at every step, has one clear button, and a result with progress has a Resume button\n- Skip intro, recap, credits and preview from one Skip button, from the file's chapters, online lists and your own marks, and you can mark an intro yourself\n- Quiet loud scenes: a switch in the player that holds loud parts back and makes dialogue clearer\n- Audio and subtitle languages are an ordered list: the first match wins\n- While streaming: choose Keep video or Save space, and TMPlayer offers Save space when a video does not fit\n- On mobile data: one answer (Ask first, Never or Allow) replaces the Wi-Fi only and Save mobile data switches\n- Keep my place on all my devices: one small file in your own Saved Messages carries where you stopped, bookmarks, lists and corrections. The switch is called Sync across my devices everywhere\n- Offline: Home shows what is already on this device, with a Needs internet cover on the rest\n- Series: Specials, whole seasons in one file, a note for episodes not in your chats yet, Find in other chats and Only mine\n- The player's Episodes list is a sheet with 16:9 pictures and a Next up card\n- Subtitles: Size and Position now apply to styled (ASS) tracks\n- When a picture looks wrong, the player tries another way to show it and keeps the last minute for Send logs\n- Choose chats asks Which chats have your videos? and no longer counts videos\n- Hide small clips under a size you choose\n- Settings, About and Downloads keep a fixed top bar, the bottom bar is more compact, and large text no longer cuts words\n- Home no longer says Get your first video while a slow account is still loading",
+          "downloadURL": "https://github.com/dracu-lah/TMPlayer/releases/download/apple-v1.29.0/TMPlayer-ios-1.29.0.ipa",
+          "size": 49860815,
+          "sha256": "275c1ff4be29b68c060b2a2c2fc7bde5808e3509f6171b5cbf98c7445ec8e624",
+          "minOSVersion": "26.4"
+        }
+      ],
       "appPermissions": {
         "entitlements": [],
         "privacy": {
           "NSPhotoLibraryAddUsageDescription": "TMPlayer saves the videos and frames you choose to Photos."
         }
       },
-      "iconURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/TMPlayer/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+      "iconURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/TMPlayer/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+      "version": "1.29.0",
+      "versionDate": "2026-11-26T14:51:20Z",
+      "versionDescription": "- Add more than one Telegram account and switch between them, each with its own library, history and settings, and an optional PIN for a profile\n- A hidden or PIN-locked profile stays private: the app switcher shows a cover instead of your video, and Now Playing shows only the app's name\n- AirPlay and Picture in picture for MP4 and MOV files, from the player's More panel\n- Trailers play in a sheet inside the app, with Close and Watch on YouTube\n- A Downloads tab: one list, a storage page, and a question before a running download is cancelled\n- Search shows what it is doing at every step, has one clear button, and a result with progress has a Resume button\n- Skip intro, recap, credits and preview from one Skip button, from the file's chapters, online lists and your own marks, and you can mark an intro yourself\n- Quiet loud scenes: a switch in the player that holds loud parts back and makes dialogue clearer\n- Audio and subtitle languages are an ordered list: the first match wins\n- While streaming: choose Keep video or Save space, and TMPlayer offers Save space when a video does not fit\n- On mobile data: one answer (Ask first, Never or Allow) replaces the Wi-Fi only and Save mobile data switches\n- Keep my place on all my devices: one small file in your own Saved Messages carries where you stopped, bookmarks, lists and corrections. The switch is called Sync across my devices everywhere\n- Offline: Home shows what is already on this device, with a Needs internet cover on the rest\n- Series: Specials, whole seasons in one file, a note for episodes not in your chats yet, Find in other chats and Only mine\n- The player's Episodes list is a sheet with 16:9 pictures and a Next up card\n- Subtitles: Size and Position now apply to styled (ASS) tracks\n- When a picture looks wrong, the player tries another way to show it and keeps the last minute for Send logs\n- Choose chats asks Which chats have your videos? and no longer counts videos\n- Hide small clips under a size you choose\n- Settings, About and Downloads keep a fixed top bar, the bottom bar is more compact, and large text no longer cuts words\n- Home no longer says Get your first video while a slow account is still loading",
+      "downloadURL": "https://github.com/dracu-lah/TMPlayer/releases/download/apple-v1.29.0/TMPlayer-ios-1.29.0.ipa",
+      "size": 49860815
     }
   ],
-  "news": [],
+  "news": [
+    {
+      "identifier": "release-1-29-0-1",
+      "title": "TMPlayer 1.29.0",
+      "caption": "Add more than one Telegram account and switch between them, each with its own library, history and settings, and an optional PIN for a profile",
+      "date": "2026-11-26T14:51:20Z",
+      "tintColor": "#2AABEE",
+      "notify": true,
+      "appID": "org.tmplayer.ios",
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/tag/apple-v1.29.0"
+    }
+  ],
   "iconURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/iosApp/TMPlayer/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
   "website": "https://tmplayer.org",
   "sourceURL": "https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/altstore/source.json"
