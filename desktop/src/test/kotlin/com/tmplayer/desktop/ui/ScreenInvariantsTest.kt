@@ -71,7 +71,10 @@ class ScreenInvariantsTest {
         val box = c.maxWidth
         val widest = (0 until lineCount).maxOfOrNull { getLineRight(it) } ?: 0f
         return when {
-            didOverflowHeight -> "too tall: ${multiParagraph.height} in ${c.maxHeight}, $lineCount lines"
+            // Only when the words are taller than the room they were given: on macOS a Chinese, Japanese or Korean line
+            // reports didOverflowHeight with 14 in 22 or 29 in no limit at all (the fallback font's metrics settle after
+            // the box was sized), and nothing is cut then (run 45727885135).
+            didOverflowHeight && multiParagraph.height > c.maxHeight -> "too tall: ${multiParagraph.height} in ${c.maxHeight}, $lineCount lines"
             multiParagraph.didExceedMaxLines -> "past ${layoutInput.maxLines} lines: $lineCount laid out, width ${multiParagraph.width} of $box"
             box != Constraints.Infinity && widest > box + 1f -> "too wide: $widest in $box"
             (0 until lineCount).any { isLineEllipsized(it) } -> "ellipsised: width $widest of $box"
@@ -228,10 +231,10 @@ class ScreenInvariantsTest {
         val wanted = setOf("home", "history-continue", "history-watched", "series", "favourites-chats")
         for (screen in screens().filter { it.name in wanted }) for ((w, h, fs) in cases) {
             inWindow(screen, w, h, fs) { _, window ->
-                // To the end of every scroller on the page, again until none has further to go: a show's page draws its
+                // To the end of every scroller on the page, again (up to ten times) until none has further to go: a show's page draws its
                 // list once its details have come (or a moment has passed), which on a slow machine is after the first
                 // scroll, and a lazy list only knows its end once it has reached it.
-                for (round in 0 until 3) {
+                for (round in 0 until 10) {
                     for (scroller in onAllNodes(hasScrollAction(), useUnmergedTree = true).fetchSemanticsNodes()) {
                         val by = scroller.config.getOrNull(SemanticsActions.ScrollBy)?.action ?: continue
                         runOnUiThread { by(0f, 1_000_000f) }
