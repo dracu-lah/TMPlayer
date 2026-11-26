@@ -175,7 +175,7 @@ data class SubtitleStyle(
 
     /** The nearest fine step of the size now, so the stepper starts from what is on screen. */
     val fineSizePercent: Int
-        get() = if (sizePercent > 0) sizePercent else (kotlin.math.round(size.cueScale * 10f).toInt() * 10).coerceIn(SIZE_MIN, SIZE_MAX)
+        get() = if (sizePercent > 0) sizePercent else (kotlin.math.round(size.cueScale * 10f).toInt() * 10).coerceIn(SIZE_MIN, SIZE_MAX_PERCENT)
 
     /** `SubtitleView`'s bottom padding as a share of its height. */
     val bottomFraction: Float get() = if (positionPercent >= 0) positionPercent / 100f else position.bottomFraction
@@ -195,7 +195,7 @@ data class SubtitleStyle(
 
     /** One fine step larger or smaller ([direction] 1 or -1), held between 50 and 250 per cent. */
     fun stepSize(direction: Int): SubtitleStyle =
-        copy(sizePercent = (fineSizePercent + direction * SIZE_STEP).coerceIn(SIZE_MIN, SIZE_MAX))
+        copy(sizePercent = (fineSizePercent + direction * SIZE_STEP).coerceIn(SIZE_MIN, SIZE_MAX_PERCENT))
 
     /** The bottom line higher ([direction] 1) or lower (-1) by two per cent of the height, held between 0 and 30. */
     fun stepPosition(direction: Int): SubtitleStyle =
@@ -325,7 +325,7 @@ data class SubtitleStyle(
 
         /** The fine size steps: 50 to 250 per cent of Medium in tens. */
         const val SIZE_MIN = 50
-        const val SIZE_MAX = 250
+        const val SIZE_MAX_PERCENT = 250
         const val SIZE_STEP = 10
 
         /** The bottom line's height, 0 to 30 per cent, by two. */
@@ -343,7 +343,7 @@ data class SubtitleStyle(
 
         /** A stored size off the steps (or garbage) is no fine size: the preset stays. */
         fun sanitiseSizePercent(value: Long?): Int =
-            value?.takeIf { it in SIZE_MIN..SIZE_MAX && it % SIZE_STEP == 0L }?.toInt() ?: 0
+            value?.takeIf { it in SIZE_MIN..SIZE_MAX_PERCENT && it % SIZE_STEP == 0L }?.toInt() ?: 0
 
         fun sanitisePositionPercent(value: Long?): Int =
             value?.takeIf { it in 0..POSITION_MAX }?.toInt() ?: -1

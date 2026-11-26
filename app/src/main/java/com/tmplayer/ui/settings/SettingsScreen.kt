@@ -4137,7 +4137,7 @@ private fun SubtitleStyleDialog(style: SubtitleStyle, onChange: (SubtitleStyle) 
             ) { onChange(style.stepSize(-1)) }
             ChoiceLine(
                 title = s.subtitlesLarger, detail = fine, icon = TmIcons.Add,
-                enabled = style.fineSizePercent < SubtitleStyle.SIZE_MAX,
+                enabled = style.fineSizePercent < SubtitleStyle.SIZE_MAX_PERCENT,
             ) { onChange(style.stepSize(1)) }
             ChoiceSection(s.subtitlesColour)
             com.tmplayer.player.SubtitleColour.entries.forEach { colour ->
@@ -4339,7 +4339,7 @@ private fun TvSubtitleStyle(style: SubtitleStyle, onChange: (SubtitleStyle) -> U
                         option(s.subtitlesSmaller, null, detail = fine, icon = TmIcons.Remove, enabled = style.fineSizePercent > SubtitleStyle.SIZE_MIN, target = style.sizePercent > 0) {
                             onChange(style.stepSize(-1))
                         }
-                        option(s.subtitlesLarger, null, detail = fine, icon = TmIcons.Add, enabled = style.fineSizePercent < SubtitleStyle.SIZE_MAX) {
+                        option(s.subtitlesLarger, null, detail = fine, icon = TmIcons.Add, enabled = style.fineSizePercent < SubtitleStyle.SIZE_MAX_PERCENT) {
                             onChange(style.stepSize(1))
                         }
                     }
