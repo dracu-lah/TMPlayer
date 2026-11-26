@@ -36,20 +36,29 @@ A test version for people trying TMPlayer before the release. It is the same app
 - Hide small clips under a size you choose
 - Buttons, switches and menu rows are named and at least 48 pt, and large text no longer cuts words
 
-## 1.28.6
+## 1.29.0 (2026-11-26)
 
+- Add more than one Telegram account and switch between them, each with its own library, history and settings, and an optional PIN for a profile
+- A hidden or PIN-locked profile stays private: the app switcher shows a cover instead of your video, and Now Playing shows only the app's name
+- AirPlay and Picture in picture for MP4 and MOV files, from the player's More panel
+- Trailers play in a sheet inside the app, with Close and Watch on YouTube
+- A Downloads tab: one list, a storage page, and a question before a running download is cancelled
+- Search shows what it is doing at every step, has one clear button, and a result with progress has a Resume button
 - Skip intro, recap, credits and preview from one Skip button, from the file's chapters, online lists and your own marks, and you can mark an intro yourself
 - Quiet loud scenes: a switch in the player that holds loud parts back and makes dialogue clearer
+- Audio and subtitle languages are an ordered list: the first match wins
 - While streaming: choose Keep video or Save space, and TMPlayer offers Save space when a video does not fit
 - On mobile data: one answer (Ask first, Never or Allow) replaces the Wi-Fi only and Save mobile data switches
-- Keep my place on all my devices: one small file in your own Saved Messages carries where you stopped, bookmarks, lists and corrections
+- Keep my place on all my devices: one small file in your own Saved Messages carries where you stopped, bookmarks, lists and corrections. The switch is called Sync across my devices everywhere
 - Offline: Home shows what is already on this device, with a Needs internet cover on the rest
 - Series: Specials, whole seasons in one file, a note for episodes not in your chats yet, Find in other chats and Only mine
+- The player's Episodes list is a sheet with 16:9 pictures and a Next up card
 - Subtitles: Size and Position now apply to styled (ASS) tracks
 - When a picture looks wrong, the player tries another way to show it and keeps the last minute for Send logs
 - Choose chats asks Which chats have your videos? and no longer counts videos
 - Hide small clips under a size you choose
-- Buttons, switches and menu rows are named and at least 48 pt, and large text no longer cuts words
+- Settings, About and Downloads keep a fixed top bar, the bottom bar is more compact, and large text no longer cuts words
+- Home no longer says Get your first video while a slow account is still loading
 
 ## History: TMPlayer for Apple
 
