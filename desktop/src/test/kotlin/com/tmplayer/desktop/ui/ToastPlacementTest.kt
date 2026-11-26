@@ -122,7 +122,8 @@ class ToastPlacementTest {
     fun `an action is a button reached by the keyboard, and pressing it runs it once`() = runComposeUiTest {
         open(barHeight = 62)
         runOnIdle { undoToast("Chat hidden", "Undo") { undone++ } }
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
+        // 20 s, not 5: the toast drew late on a gate run that shared the machine with another build (2026-11-26); passes alone.
+        waitUntil(timeoutMillis = 20_000) { onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()
         onNodeWithText("Undo").performClickCompat()
         assertEquals(1, undone)
