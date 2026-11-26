@@ -148,7 +148,7 @@ g_web() {
   # Install, type check and the node tests run in the same image as the e2e, with node_modules in a
   # volume so the host's copy is not touched. HOME is set for the browsers (the CI image needs it too).
   local rc=0
-  podman run --rm --ipc=host -e HOME=/root -e CI=1 \
+  podman run --rm --ipc=host -e HOME=/root -e CI=1 -e PW_WORKERS \
     -v "$PWD":/work:z -v tmplayer-webapp-node-modules:/work/webapp/node_modules \
     -v tmplayer-pnpm-store:/root/.local/share/pnpm \
     -w /work "$PLAYWRIGHT_IMAGE" bash -euc "
