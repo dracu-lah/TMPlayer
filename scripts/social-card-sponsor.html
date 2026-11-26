@@ -16,50 +16,58 @@
   .brand img { width: 66px; height: 66px; border-radius: 16px; }
   .brand span { font-size: 38px; font-weight: 600; letter-spacing: -0.01em; }
 
-  .stage { position: absolute; top: 146px; left: 0; width: 1080px; height: 500px; }
-  .tv { position: absolute; left: 305px; top: 8px; width: 470px; border: 5px solid #1a1c20;
-    border-radius: 6px; background: #000; overflow: hidden; }
-  .tv img { display: block; width: 100%; }
-  /* The three phones fan out symmetrically around the page's centre line (x = 540), the middle one
-     upright and a little larger in front, the outer two tilted away from it behind, all three
-     standing on the same baseline (top + height, 1:2.22 screens). */
-  .ph { position: absolute; width: 140px; border: 4px solid #1a1c20; border-radius: 22px;
-    overflow: hidden; background: #000; transform-origin: 50% 100%; }
-  .ph img { display: block; width: 100%; }
-  .ph.c { left: 465px; top: 176px; width: 150px; z-index: 3; }
-  .ph.l { left: 346px; top: 198px; transform: rotate(-8deg); z-index: 2; }
-  .ph.r { left: 594px; top: 198px; transform: rotate(8deg); z-index: 2; }
+  /* The stage is the home page's hero (site/src/components/home/HeroStage.astro, styles.css
+     "Hero stage"), same numbers: a box of 100:84 whose children are percentages of its width, the
+     television at the back (8% in, 84% wide), the three phones standing on the floor, 24% wide,
+     each turning about its own foot, the sides at -9 and 9 degrees and 0.9 scale, the middle one
+     in front. The frames are the site's device shells. */
+  .stage { position: absolute; top: 142px; left: 220px; width: 640px; aspect-ratio: 100 / 84; }
+  .tv { position: absolute; top: 0; left: 8%; width: 84%; padding-bottom: 16px; }
+  .tv .screen { aspect-ratio: 16 / 9; border: 4px solid #202429; border-bottom-width: 10.4px;
+    border-radius: 6px; box-shadow: 0 0 0 1px rgba(15,23,42,0.24); overflow: hidden; background: #000; }
+  .tv .screen img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .tv .stand { position: absolute; bottom: 0; left: 50%; width: 11%; height: 22px;
+    transform: translateX(-50%); background: #202429;
+    clip-path: polygon(0 100%, 40% 0, 60% 0, 100% 100%, 82% 100%, 50% 30%, 18% 100%); }
+  .slot { position: absolute; bottom: 0; width: 24%; transform-origin: 50% 100%; }
+  .slot.l { left: 24.5%; rotate: -9deg; scale: 0.9; z-index: 1; }
+  .slot.r { left: 51.5%; rotate: 9deg; scale: 0.9; z-index: 1; }
+  .slot.c { left: 38%; z-index: 2; }
+  .phone { padding: 4px; background: #202429; border-radius: 18px;
+    box-shadow: 0 0 0 1px rgba(15,23,42,0.24); }
+  .phone .screen { aspect-ratio: 9 / 20; border-radius: 14px; overflow: hidden; background: #000; }
+  .phone .screen img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
-  h1 { position: absolute; top: 700px; left: 0; right: 0; font-size: 86px; line-height: 1.02;
+  h1 { position: absolute; top: 712px; left: 0; right: 0; font-size: 86px; line-height: 1.02;
     font-weight: 700; letter-spacing: -0.045em; }
   h1 span { display: block; color: #6b6f78; }
-  .sub { position: absolute; top: 906px; left: 0; right: 0; font-size: 28px; line-height: 1.5;
+  .sub { position: absolute; top: 916px; left: 0; right: 0; font-size: 28px; line-height: 1.5;
     color: #6b6f78; }
   .sub b { font-weight: 600; color: #1a1c20; }
 
-  .stats { position: absolute; top: 1026px; left: 90px; right: 90px; display: flex;
+  .stats { position: absolute; top: 1032px; left: 90px; right: 90px; display: flex;
     justify-content: space-between; }
   .stat { width: 280px; }
   .stat b { display: block; font-size: 56px; line-height: 1.1; font-weight: 700;
     letter-spacing: -0.03em; }
   .stat span { font-size: 26px; color: #6b6f78; }
 
-  .cta { position: absolute; top: 1140px; left: 84px; right: 84px; height: 112px;
+  .cta { position: absolute; top: 1146px; left: 84px; right: 84px; height: 112px;
     border-radius: 56px; background: #FFDD00; display: flex; align-items: center;
     justify-content: center; gap: 22px; font-size: 42px; font-weight: 700;
     letter-spacing: -0.01em; color: #0d0c22; }
   .cta img { height: 52px; }
-  .note { position: absolute; top: 1274px; left: 0; right: 0; font-size: 22px; color: #6b6f78; }
+  .note { position: absolute; top: 1280px; left: 0; right: 0; font-size: 22px; color: #6b6f78; }
 </style>
 </head>
 <body>
   <div class="brand"><img src="../site/public/icon-512.png" alt=""><span>TMPlayer</span></div>
 
   <div class="stage">
-    <div class="tv"><img src="../site/public/screenshots/tv-home-light.webp" alt=""></div>
-    <div class="ph l"><img src="../site/public/screenshots/phone-chats-light.webp" alt=""></div>
-    <div class="ph r"><img src="../site/public/screenshots/phone-grid-light.webp" alt=""></div>
-    <div class="ph c"><img src="../site/public/screenshots/phone-show-light.webp" alt=""></div>
+    <div class="tv"><div class="screen"><img src="../site/public/screenshots/tv-home-light.webp" alt=""></div><div class="stand"></div></div>
+    <div class="slot l"><div class="phone"><div class="screen"><img src="../site/public/screenshots/phone-chats-light.webp" alt=""></div></div></div>
+    <div class="slot r"><div class="phone"><div class="screen"><img src="../site/public/screenshots/phone-grid-light.webp" alt=""></div></div></div>
+    <div class="slot c"><div class="phone"><div class="screen"><img src="../site/public/screenshots/phone-show-light.webp" alt=""></div></div></div>
   </div>
 
   <h1>Still free.<span>Still one person.</span></h1>
