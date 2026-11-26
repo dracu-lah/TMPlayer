@@ -31,7 +31,7 @@ export default defineConfig({
     timeout: 30_000,
     expect: { timeout: 10_000 },
     // Two at a time: each runs a Telegram worker and a player.
-    workers: 2,
+    workers: Number(process.env.PW_WORKERS) || 2,
     retries: process.env.CI ? 1 : 0,
     reporter: process.env.CI ? 'github' : 'list',
     use: { baseURL: `http://127.0.0.1:${PORT}`, trace: 'retain-on-failure' },
