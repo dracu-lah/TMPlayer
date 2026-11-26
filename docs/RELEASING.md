@@ -309,7 +309,7 @@ of them to see the in-app offer.
 
 3. **The feed and the site.** `git pull`, then `jq . site/public/latest.json`: the new version, its
    changes and each file's SHA-256.
-4. **The Telegram post** on t.me/tmplayerapp went out (the run's summary has a "Telegram:" line).
+4. **The Telegram post** in the Announcements topic of t.me/tmplayer_chat went out (the run's summary has a "Telegram:" line).
 5. **AUR.** `desktop/packaging/aur/PKGBUILD` on `main` names `pkgver=<v>` (the feed step runs
    `scripts/aur-bump.py`). Once the `AUR_SSH_PRIVATE_KEY` secret is set, the next step pushes it,
    and aur.archlinux.org/packages/tmplayer-bin shows the new version. For a release that went out

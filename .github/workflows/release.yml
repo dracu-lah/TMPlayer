@@ -939,6 +939,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          TELEGRAM_TOPIC_ID: ${{ secrets.TELEGRAM_TOPIC_ID }}
         run: |
           VERSION="${{ needs.version.outputs.name }}"
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then

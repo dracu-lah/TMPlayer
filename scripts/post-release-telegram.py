@@ -12,8 +12,10 @@ went out before the job could, so every announcement has one format:
     scripts/post-release-telegram.py --version 1.22.0 --notes "$NOTES"
     scripts/post-release-telegram.py --version 1.16.0 --notes "..." --dry-run
 
-TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL (an @handle or a chat id) come from the environment. With
-no token the script says so and exits 0, so a fork's release is not failed by a missing secret.
+TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL (an @handle or a chat id) come from the environment, and
+TELEGRAM_TOPIC_ID (optional) names the topic of a forum group to post in, for a group whose
+Announcements topic is closed (the bot must be an admin with "Manage topics"). With no token the
+script says so and exits 0, so a fork's release is not failed by a missing secret.
 """
 
 import argparse
@@ -66,12 +68,16 @@ def main() -> int:
         print("No TELEGRAM_BOT_TOKEN or TELEGRAM_CHANNEL; not announcing.")
         return 0
 
-    body = urllib.parse.urlencode({
+    fields = {
         "chat_id": chat,
         "text": text,
         "parse_mode": "HTML",
         "disable_web_page_preview": "true",
-    }).encode()
+    }
+    topic = os.environ.get("TELEGRAM_TOPIC_ID", "").strip()
+    if topic.isdigit():
+        fields["message_thread_id"] = topic
+    body = urllib.parse.urlencode(fields).encode()
     request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", body)
     with urllib.request.urlopen(request, timeout=30) as response:
         reply = json.load(response)
