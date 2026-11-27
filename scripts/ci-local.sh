@@ -3,6 +3,9 @@
 #
 #   scripts/ci-local.sh              what changed against origin/main (what the pre-push hook runs)
 #   scripts/ci-local.sh --all        every group, whatever changed, and the full versions (WebKit, debug APK)
+#   scripts/ci-local.sh --fast       about 3 minutes: dash check, Kotlin compiles, web type check and node tests.
+#                                    No unit-test run of core/ui/app and no e2e. A fast pass is NOT recorded as a
+#                                    pass, so the hook still runs the full gate. Use it while working.
 #   scripts/ci-local.sh --list       print the groups that would run and stop
 #   scripts/ci-local.sh kotlin web   exactly these groups (style kotlin ios web site)
 #
@@ -30,6 +33,7 @@ GRADLE=(./gradlew --max-workers="$WORKERS")
 
 want=()
 KTESTS=()
+FAST=0
 mode=changed
 FULL=${CI_LOCAL_FULL:-0}   # 1: also WebKit e2e and the debug APK (the pre-push hook leaves both to the nightly run)
 for a in "$@"; do
@@ -37,6 +41,7 @@ for a in "$@"; do
     --all) mode=all; FULL=1 ;;
     --full) FULL=1 ;;
     --list) mode=list ;;
+    --fast) FAST=1 ;;
     style|kotlin|ios|web|site|linux) want+=("$a"); mode=named ;;
     *) echo "ci-local: unknown argument $a" >&2; exit 2 ;;
   esac
@@ -79,7 +84,7 @@ if [ "$mode" = list ]; then printf '%s\n' "${want[@]}"; exit 0; fi
 # again. This is what lets `scripts/ci-local.sh && git push` work: git holds the SSH connection to
 # GitHub open while the pre-push hook runs, GitHub drops it after a few idle minutes ("Connection
 # to github.com closed by remote host"), so a long test run inside the hook loses the push.
-if [ "$mode" != list ] && [ -f "$LOGDIR/$(git rev-parse HEAD).txt" ] \
+if [ "$mode" != list ] && [ "$FAST" != 1 ] && [ -f "$LOGDIR/$(git rev-parse HEAD).txt" ] \
    && git diff --quiet HEAD -- . ':!design' ':!private' \
    && grep -qxF "groups: ${want[*]}" <(cut -d' ' -f2- "$LOGDIR/$(git rev-parse HEAD).txt"); then
   echo "ci-local: already passed for $(git rev-parse --short HEAD) (${want[*]}), not run again"
@@ -108,6 +113,11 @@ g_style() {
 }
 
 g_kotlin() {
+  if [ "$FAST" = 1 ]; then
+    # Compile only: catches the broken build and the missing import, not a failing test.
+    "${GRADLE[@]}" :core:compileKotlinJvm :ui:compileKotlinJvm :desktop:compileKotlin :app:compileDebugKotlin
+    return $?
+  fi
   local tests=(:core:jvmTest :ui:jvmTest :app:testDebugUnitTest :desktop:test)
   [ "$mode" = changed ] && [ "$FULL" != 1 ] && tests=("${KTESTS[@]}")
   if [ ${#tests[@]} -eq 0 ]; then echo "ci-local: no module with unit tests changed (iOS only), left to the nightly run"; return 0; fi
@@ -117,6 +127,7 @@ g_kotlin() {
 }
 
 g_ios() {
+  [ "$FAST" = 1 ] && { echo "ci-local: iOS checks skipped in --fast"; return 0; }
   python3 -I -m unittest discover -s iosApp/release || return 1
   python3 -I iosApp/release/altstore_source.py check --project iosApp/project.yml || return 1
   # jsonschema is only needed for the schema check; skip it when it is not installed here.
@@ -132,6 +143,13 @@ g_ios() {
 }
 
 g_web() {
+  if [ "$FAST" = 1 ]; then
+    # On the host, no container: type check and the node tests. Needs webapp/node_modules and webapp/src/rules.
+    [ -d webapp/node_modules ] || pnpm -C webapp install --frozen-lockfile || return 1
+    "${GRADLE[@]}" -q :core:webRules || return 1
+    pnpm -C webapp check && pnpm -C webapp test:unit
+    return $?
+  fi
   command -v podman >/dev/null || { echo "podman is needed for the e2e run"; return 1; }
   "${GRADLE[@]}" -q :core:webRules || return 1
   local pm; pm=$(grep -oP '"packageManager": "pnpm@\K[0-9.]+' webapp/package.json)
@@ -165,6 +183,7 @@ g_web() {
 }
 
 g_site() {
+  [ "$FAST" = 1 ] && { echo "ci-local: site build skipped in --fast"; return 0; }
   pnpm -C site install --frozen-lockfile && pnpm -C site check && pnpm -C site build \
     && python3 scripts/site-i18n-check.py && python3 scripts/site-links.py
 }
@@ -181,6 +200,7 @@ echo; echo "=== ci-local summary"
 for p in "${passed[@]:-}"; do [ -n "$p" ] && echo "  ok      $p"; done
 for f in "${failed[@]:-}"; do [ -n "$f" ] && echo "  FAILED  $f"; done
 if [ ${#failed[@]} -eq 0 ]; then
+  [ "$FAST" = 1 ] && { echo "ci-local: fast pass (not recorded; the push gate still runs the full tests)"; exit 0; }
   printf '%s groups: %s\n' "$(date -Is)" "${want[*]}" >> "$LOGDIR/$(git rev-parse HEAD).txt"
   exit 0
 fi

@@ -38,7 +38,9 @@ These are easy to miss because they are not in a file called "deploy":
 - **`nightly.yml`** starts four other workflows when `main` has new commits. It publishes nothing.
 - **The pre-push hook** (`.githooks/pre-push`, via `core.hooksPath`) runs `scripts/ci-local.sh` on
   the maintainer's machine before any push. Web e2e inside it takes 30 to 35 minutes.
-  `SKIP_LOCAL_CI=1 git push` skips it; use that only for changes that cannot affect a build, such as
+  While working, `scripts/ci-local.sh --fast` (about 3 minutes: dash check, Kotlin compiles, web type
+  check and node tests) catches the broken build early; a fast pass is not recorded, so the hook still
+  runs the full gate. `SKIP_LOCAL_CI=1 git push` skips it; use that only for changes that cannot affect a build, such as
   a workflow-only edit.
 
 Nothing deploys the web player on a push: `webapp.yml` deploys only when started by hand with
