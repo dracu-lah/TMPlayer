@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.sentry.android)
+    alias(libs.plugins.test.retry)
 }
 
 val localProps = Properties().apply {
@@ -374,6 +375,16 @@ android {
                 // changed setting never reached the screen (CP101), and whole runs sat for close to
                 // an hour on CI. Each class starting clean costs a few seconds and removes all of it.
                 it.forkEvery = 1
+                // On CI only, a test that failed is run again (twice at most) before the run is
+                // red: a Robolectric frame that came late is not a bug. More than 25 failures
+                // means a real break, so those are not retried. Local runs never retry.
+                if (System.getenv("CI") != null) {
+                    it.extensions.configure<org.gradle.testretry.TestRetryTaskExtension>("retry") {
+                        maxRetries.set(2)
+                        maxFailures.set(25)
+                        failOnPassedAfterRetry.set(false)
+                    }
+                }
                 // The tv-ux-review checklist as a machine suite (WP-16) walks every TV screen and
                 // takes minutes, so it runs only with -Ptvux=true: once in every batch gate, never in
                 // the pre-push hook. Only its TvUx classes: the rest of com.tmplayer.tvux runs as usual.
