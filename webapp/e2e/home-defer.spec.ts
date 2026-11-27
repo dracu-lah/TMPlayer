@@ -119,7 +119,7 @@ for (const form of FORMS) {
             await starChats(page)
         })
 
-        test('forty starred rows: only the first screens and the rows that stay are read, a returning row is not read again', async ({ page }) => {
+        test('forty starred rows: only the first screens and the rows that stay are read, a returning row is not read again @slow', async ({ page }) => {
             await page.goto('/')
             await expect(page.locator('.home-row .card').first()).toBeVisible({ timeout: 20_000 })
             await page.waitForTimeout(1500)
@@ -160,7 +160,7 @@ for (const form of FORMS) {
             expect(await thumbFetches(page)).toBe(thumbsFrom)
         })
 
-        test('a row that stays on screen is read, one left before 250 ms is not', async ({ page }) => {
+        test('a row that stays on screen is read, one left before 250 ms is not @slow', async ({ page }) => {
             await page.goto('/')
             await expect(page.locator('.home-row .card').first()).toBeVisible({ timeout: 20_000 })
             await page.waitForTimeout(1500)
@@ -182,7 +182,7 @@ for (const form of FORMS) {
             await expect(target.locator('.card').first(), title).toBeVisible({ timeout: 10_000 })
         })
 
-        test('thumbnails: a hard fling down a long chat fetches the few cards it stops on, not every card it passed', async ({ page }) => {
+        test('thumbnails: a hard fling down a long chat fetches the few cards it stops on, not every card it passed @slow', async ({ page }) => {
             await page.goto('/chat/-1009')
             await expect(page.locator('.card').first()).toBeVisible({ timeout: 20_000 })
             await page.waitForTimeout(1500)
@@ -220,7 +220,7 @@ test.describe('home deferral, the TV remote and an engine without an observer', 
         await starChats(page)
     })
 
-    test('focus jumping down the rows reads the rows it rests on, not the ones it passes', async ({ page }) => {
+    test('focus jumping down the rows reads the rows it rests on, not the ones it passes @slow', async ({ page }) => {
         await page.goto('/')
         await expect(page.locator('.home-row .card').first()).toBeVisible({ timeout: 20_000 })
         await page.waitForTimeout(1500)

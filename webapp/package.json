@@ -22,7 +22,10 @@
     "test:sync": "node --test \"src/sync/*.test.ts\"",
     "test:tg": "node --test \"src/tg/*.test.ts\"",
     "test:tv": "node --test \"tv/test/*.test.cjs\" \"tv/test/*.test.ts\"",
-    "e2e": "playwright test"
+    "test:src": "node --test \"src/*.test.ts\"",
+    "test:unit": "pnpm test:tmdb && pnpm test:player && pnpm test:stream && pnpm test:ui && pnpm test:screens && pnpm test:sync && pnpm test:tg && pnpm test:tv && pnpm test:src",
+    "e2e": "playwright test",
+    "e2e:full": "E2E_FULL=1 playwright test"
   },
   "dependencies": {
     "@hevcjs/core": "1.6.0",

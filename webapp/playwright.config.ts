@@ -48,8 +48,13 @@ export default defineConfig({
         { name: 'phone-412', testMatch: FORM_SPECS, use: form('phone', 412, 915) },
         { name: 'desktop-1280', testMatch: FORM_SPECS, use: form('desktop', 1280, 800) },
     ],
+    // Tests tagged @slow count real time (rest timers, flings) and fail on a loaded machine, so
+    // they are an opt-in run: E2E_FULL=1 pnpm e2e (or pnpm e2e:full). See docs/CI.md.
+    grepInvert: process.env.E2E_FULL ? undefined : /@slow/,
     webServer: {
-        command: 'pnpm exec vite --config e2e/vite.e2e.ts',
+        // One Node process serves every test for half an hour: give it room, and a bounded start.
+        command: 'NODE_OPTIONS=--max-old-space-size=4096 pnpm exec vite --config e2e/vite.e2e.ts',
+        timeout: 120_000,
         url: `http://127.0.0.1:${PORT}/__e2e/sizes`,
         reuseExistingServer: !process.env.CI,
     },

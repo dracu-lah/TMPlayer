@@ -151,6 +151,13 @@ g_web() {
       pnpm -C webapp check
       pnpm -C webapp test:tmdb
       pnpm -C webapp test:screens
+      pnpm -C webapp test:player
+      pnpm -C webapp test:stream
+      pnpm -C webapp test:ui
+      pnpm -C webapp test:sync
+      pnpm -C webapp test:tg
+      pnpm -C webapp test:tv
+      pnpm -C webapp test:src
       pnpm -C webapp exec playwright test $projects
     " || rc=$?
   [ "$shots_clean" = 1 ] && git checkout -- design/web-sync
