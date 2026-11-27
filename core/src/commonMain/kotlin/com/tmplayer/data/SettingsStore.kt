@@ -47,15 +47,6 @@ private val NIGHT_MODE = booleanPreferencesKey("night_mode")
 private val EVEN_VOLUME = booleanPreferencesKey("even_volume")
 private val PLAYER_VOLUME = longPreferencesKey("player_volume")
 
-/** Defaults the platform sets at start, where one device differs from another. */
-object SettingsDefaults {
-    /**
-     * Even out volume until the viewer chooses: off on a television, where processing every
-     * sample of the sound costs a weak stick's cores while it decodes the picture.
-     */
-    @Volatile
-    var evenVolume: Boolean = true
-}
 private val RESUME_SYNC = booleanPreferencesKey("resume_sync")
 private val RESUME_SYNC_MESSAGE = longPreferencesKey("resume_sync_message")
 private val RESUME_SYNC_KEYS = stringPreferencesKey("resume_sync_keys")
@@ -296,9 +287,6 @@ private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 /** The TDLib database the stored queue's file ids belong to ([DatabaseMarker], HX88). */
 private val DOWNLOAD_QUEUE_DB = stringPreferencesKey("download_queue_db")
 
-/** [SettingsStore.saveDownloadQueue]'s default: the marker of the store's own profile's database. */
-const val DATABASE_OF_STORE = "@store"
-
 /** Set once the downloads recorded before they had a folder of their own have been moved into it. */
 private val DOWNLOADS_MIGRATED = booleanPreferencesKey("downloads_migrated")
 
@@ -413,9 +401,6 @@ private fun metaKey(chatId: Long, messageId: Long) =
 private fun topicKey(chatId: Long) = longPreferencesKey("topic_$chatId")
 
 private val DEVELOPER_OPTIONS = booleanPreferencesKey("developer_options")
-
-/** What a chat's search turns the developer options on with, on a phone or a television. */
-const val DEVELOPER_PHRASE = "/namecheck"
 
 /** The order a chat's videos are listed in, per chat. See [VideoSort]. */
 private fun videoSortKey(chatId: Long) = stringPreferencesKey("vsort_$chatId")
