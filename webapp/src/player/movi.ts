@@ -3,9 +3,10 @@
 // draws on a canvas laid over our `<video>`, which stays the one element the controls, resume,
 // the stall watch and the keys read: its properties and events are taken over for as long as
 // this engine runs (see [takeOver]) and given back on destroy.
-import type { MoviPlayer, PlayerState, SourceAdapter, AudioTrack } from 'movi-player/player'
+import type { MoviPlayer, PlayerState, SourceAdapter, AudioTrack, SubtitleTrack } from 'movi-player/player'
 import type { MediaFile } from '../stream/reader'
 import { cueOverlay } from './cueoverlay'
+import { applyDelay, placeCues } from './cues'
 import { boostLevel } from './boost'
 import { moviVolume } from './extras'
 import { Unplayable, type Engine, type EngineEvents, type SoundTrack } from './engines'
@@ -151,6 +152,7 @@ export class MoviEngine implements Engine {
                 await settled(player, 20_000)
             }
             mark('at the start')
+            engine.embedSubtitles(video)
             engine.watchStart(file, events, v.codec)
             video.dispatchEvent(new Event('loadedmetadata'))
             video.dispatchEvent(new Event('durationchange'))
@@ -163,6 +165,58 @@ export class MoviEngine implements Engine {
     }
 
     private startWatch: ReturnType<typeof setInterval> | undefined
+    private embeddedOff: () => void = () => {}
+
+    /**
+     * The file's own text subtitles (SRT, ASS, WebVTT, mov_text) as text tracks of `video`, off until
+     * picked, so the Subtitles sheet, the delay, the look and the cue layer treat them like a file laid
+     * over the picture. A track's cues are read from movi the first time it is shown, one track at a time.
+     * Picture subtitles (PGS, DVB) cannot be drawn this way and are left out.
+     */
+    embedSubtitles(video: HTMLVideoElement) {
+        let tracks: SubtitleTrack[] = []
+        try {
+            tracks = this.player.getSubtitleTracks().filter((t) => t.subtitleType === 'text')
+        } catch (e) {
+            console.warn('[movi] subtitle tracks', e)
+        }
+        if (!tracks.length) return
+        const made = new Map<TextTrack, { id: number; loaded: boolean }>()
+        tracks.forEach((t, i) => {
+            const tt = video.addTextTrack('subtitles', t.label || `${i + 1}`, t.language && t.language !== 'und' ? t.language : '')
+            tt.mode = 'disabled'
+            made.set(tt, { id: t.id, loaded: false })
+        })
+        let busy: Promise<void> = Promise.resolve()
+        const read = async (tt: TextTrack, id: number) => {
+            try {
+                if (!(await this.player.selectSubtitleTrack(id))) return
+                const cues = await this.player.getAllSubtitleCues()
+                if (this.destroyed) return
+                for (const c of cues) {
+                    // ASS lines carry {\an8}-style overrides and \N breaks: the words only.
+                    const text = String(c.text ?? '').replace(/\{[^}]*\}/g, '').replace(/\\[Nn]/g, '\n').trim()
+                    if (text && c.end > c.start) tt.addCue(new VTTCue(c.start, c.end, text))
+                }
+                placeCues(video, false)
+                applyDelay(video)
+            } catch (e) {
+                console.warn('[movi] subtitle cues', e)
+            } finally {
+                // movi's own drawing stays off: the cue layer shows the track.
+                this.player.selectSubtitleTrack(null).catch(() => {})
+            }
+        }
+        const onChange = () => {
+            for (const [tt, state] of made) {
+                if (tt.mode !== 'showing' || state.loaded) continue
+                state.loaded = true
+                busy = busy.then(() => read(tt, state.id))
+            }
+        }
+        video.textTracks.addEventListener('change', onChange)
+        this.embeddedOff = () => video.textTracks.removeEventListener('change', onChange)
+    }
 
     /**
      * movi can open a file and then decode nothing (a codec its build lacks): no frame and no
@@ -200,6 +254,7 @@ export class MoviEngine implements Engine {
         if (this.destroyed) return
         this.destroyed = true
         clearInterval(this.startWatch)
+        this.embeddedOff()
         this.resize.disconnect()
         this.restore()
         try {
