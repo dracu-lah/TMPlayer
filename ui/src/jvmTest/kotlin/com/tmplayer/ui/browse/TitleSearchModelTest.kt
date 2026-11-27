@@ -1,5 +1,7 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.data.AddedChats
+import com.tmplayer.data.AddedChoice
 import com.tmplayer.data.AllChatsCursor
 import com.tmplayer.data.AllChatsPage
 import com.tmplayer.data.ChatGate
@@ -33,6 +35,8 @@ class TitleSearchModelTest {
 
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
+        // Process wide, and another test class may have left a choice of chats behind.
+        AddedChats.set(AddedChoice())
         ChatGate.set(null)
     }
 
