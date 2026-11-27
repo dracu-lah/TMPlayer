@@ -3,8 +3,9 @@
 // with its words (the first visit of a page load used to drop them). The fake's `forums` case has three groups with topics.
 import { expect, test, type Page } from '@playwright/test'
 import { countCalls, fakeCase, noSizeFloor, workerCalls } from './helpers'
+import { shotsUrl } from './shots'
 
-const SHOTS = new URL('../../design/web-gaps/WB21/', import.meta.url)
+const SHOTS = shotsUrl('web-gaps/WB21')
 
 /** Only these chats are added (the choice written where the app keeps it, before it starts). */
 async function addOnly(page: Page, ids: number[]) {

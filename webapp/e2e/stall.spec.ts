@@ -3,11 +3,11 @@
 // TV skin. The page's clock is the test's (page.clock), so the 10 s and the 20 s pass at once; the
 // worker's own clock is real, which is why the cases are flags it reads again each time.
 import { mkdirSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase, openCard, openClips, playsPast } from './helpers'
+import { shotsDir } from './shots'
 
-const SHOTS = fileURLToPath(new URL('../../design/web-gaps/WB17/', import.meta.url))
+const SHOTS = shotsDir('web-gaps/WB17') + '/'
 
 const FORMS = [
     { name: 'phone-390', width: 390, height: 844, layout: null, touch: true },

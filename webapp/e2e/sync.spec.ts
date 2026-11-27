@@ -6,10 +6,11 @@ import { mkdirSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { fakeCase, noSizeFloor } from './helpers'
 import { emptyDoc, encode, tdlibMessageId } from '../src/sync/format'
+import { shotsDir } from './shots'
 
 test.skip(({ browserName }) => browserName !== 'chromium', 'the sync runs in Chromium')
 
-const SHOTS = `${process.cwd()}/../design/web-sync`
+const SHOTS = shotsDir('web-sync')
 
 interface Stored {
     id: number

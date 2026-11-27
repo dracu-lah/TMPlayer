@@ -6,8 +6,9 @@
 import { mkdirSync } from 'node:fs'
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 import { fakeCase, noSizeFloor, playsPast } from './helpers'
+import { shotsDir, writeShots } from './shots'
 
-const SHOTS = process.env.WB_SHOTS ? `${process.cwd()}/../design/web-gaps/WB16` : null
+const SHOTS = writeShots() ? shotsDir('web-gaps/WB16') : null
 async function shot(page: Page, info: TestInfo, name: string) {
     if (!SHOTS) return
     await page.waitForTimeout(400)

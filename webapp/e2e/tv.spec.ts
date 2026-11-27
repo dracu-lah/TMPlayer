@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase, mockSplitShow, openTvSettingsPage } from './helpers'
+import { shotsDir, writeShots } from './shots'
 
 /** The layout set to TV and two chats starred, written where the app keeps them before it starts. */
 async function tv(page: Page) {
@@ -1008,9 +1009,9 @@ for (const size of [
             await press(page, 'Escape')
             await expect(page.locator('dialog[open]')).toHaveCount(0)
             expect(await focused(page)).toBe('episode|Episode 23, not in this chat')
-            if (process.env.WB_SHOTS) {
+            if (writeShots()) {
                 await page.evaluate(() => document.querySelector('.season-tabs')!.scrollIntoView())
-                await page.screenshot({ path: new URL(`../../design/web-gaps/WB19/tv-${size.width}.png`, import.meta.url).pathname })
+                await page.screenshot({ path: `${shotsDir('web-gaps/WB19')}/tv-${size.width}.png` })
             }
         })
     })

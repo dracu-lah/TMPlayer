@@ -2,8 +2,9 @@
 // bottom sheet under it; 16:9 pictures with the code on them, short words (no file size), the playing
 // episode marked and in view. WB_SHOTS=1 writes the frames to design/episodes/web/.
 import { expect, test } from '@playwright/test'
+import { shotsUrl, writeShots } from './shots'
 
-const SHOTS = new URL('../../design/episodes/web/', import.meta.url)
+const SHOTS = shotsUrl('episodes/web')
 
 for (const [name, width, height, touch] of [
     ['desktop-1280', 1280, 800, false],
@@ -45,7 +46,7 @@ for (const [name, width, height, touch] of [
             await expect(page.locator('.pc-episode.playing')).toHaveCount(1)
             await expect(panel).not.toContainText(/\d (MB|GB)/)
             await expect(panel).not.toContainText('.mkv')
-            if (process.env.WB_SHOTS) await page.screenshot({ path: new URL(`player-episodes-${name}.png`, SHOTS).pathname })
+            if (writeShots()) await page.screenshot({ path: new URL(`player-episodes-${name}.png`, SHOTS).pathname })
             // Escape or Back closes it and the video plays on.
             await page.keyboard.press('Escape')
             await expect(panel).toHaveCount(0)

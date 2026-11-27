@@ -89,5 +89,7 @@ run is the only one that can match.
   seconds), `pnpm -C webapp e2e` runs Playwright without the `@slow` tests, `pnpm -C webapp
   e2e:full` runs everything.
 - Tag a new e2e test `@slow` in its title when it counts real time (rest timers, flings, idle CPU).
-- Specs write screenshots into `design/` only when a shots variable is set; keep it that way so a
-  normal run leaves the tracked files alone.
+- Specs write their screenshots through `webapp/e2e/shots.ts`: a normal run puts them under the OS
+  temp directory (`tmplayer-shots/`), so the tracked pictures in `design/` stay untouched. Set
+  `WRITE_SHOTS=1` to refresh the tracked pictures. A new spec uses `shotsDir()` or `shotsUrl()`,
+  never a `design/` path.

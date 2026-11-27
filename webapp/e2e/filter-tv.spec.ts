@@ -3,6 +3,7 @@
 // onto the Sort button, and a filter that hides everything puts the remote on Clear filter.
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase } from './helpers'
+import { shotsDir, writeShots } from './shots'
 
 async function tv(page: Page) {
     await page.goto('/__e2e/sizes')
@@ -70,7 +71,7 @@ for (const size of [
             expect(await focusedText(page)).toBe('Unwatched')
             await press(page, 'ArrowRight', 3)
             expect(await focusedText(page)).toBe('Shows')
-            if (process.env.E2E_SHOTS) await page.screenshot({ path: `../design/web-gaps/WB13/menu-tv-${size.width}.png` })
+            if (writeShots()) await page.screenshot({ path: `${shotsDir('web-gaps/WB13')}/menu-tv-${size.width}.png` })
             await press(page, 'Enter')
             // The menu stays open, the chip is ticked and the grid has changed behind it.
             await expect(page.getByRole('menuitemradio', { name: 'Shows', exact: true })).toHaveAttribute('aria-checked', 'true')
@@ -79,7 +80,7 @@ for (const size of [
             await expect(page.getByRole('menu')).toHaveCount(0)
             expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Sort and filter, a filter is on')
             await expect(page.getByText(/^Shows hides all \d+ videos loaded so far\.$/)).toBeVisible()
-            if (process.env.E2E_SHOTS) await page.screenshot({ path: `../design/web-gaps/WB13/hides-all-tv-${size.width}.png` })
+            if (writeShots()) await page.screenshot({ path: `${shotsDir('web-gaps/WB13')}/hides-all-tv-${size.width}.png` })
             // Down from the bar reaches Clear filter, and OK clears it.
             await press(page, 'ArrowDown')
             expect(await focusedText(page)).toBe('Clear filter')
