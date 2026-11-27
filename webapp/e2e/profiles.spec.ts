@@ -6,10 +6,11 @@ import { mkdirSync } from 'node:fs'
 import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
 import { fakeCase, isPhoneProject, openCard, openClips, playsPast } from './helpers'
 import { makePin, type Pin } from '../src/ui/accountBook'
+import { shotsDir } from './shots'
 
 const BOOK = 'tmplayer-accounts'
 /** The picker in each form, for a look by eye (design/web-profiles). */
-const SHOTS = `${process.cwd()}/../design/web-profiles`
+const SHOTS = shotsDir('web-profiles')
 async function shot(page: Page, info: TestInfo, name: string) {
     mkdirSync(SHOTS, { recursive: true })
     await page.screenshot({ path: `${SHOTS}/${name}-${info.project.name}.png` })

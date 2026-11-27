@@ -6,8 +6,8 @@
 // reduced motion; errors are announced at once, the rest politely; it never takes focus and a press
 // dismisses it. SHOTS=1 also writes pictures of the four kinds to design/toasts-web/ (index.html shows them).
 import { mkdirSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
+import { shotsDir } from './shots'
 
 const KINDS = ['success', 'info', 'warning', 'error'] as const
 type Kind = (typeof KINDS)[number]
@@ -196,7 +196,7 @@ test.describe('the TV', () => {
 
 test.describe('pictures', () => {
     test.skip(!process.env.SHOTS, 'SHOTS=1 writes the pictures')
-    const DIR = fileURLToPath(new URL('../../design/toasts-web/', import.meta.url))
+    const DIR = shotsDir('toasts-web') + '/'
     const FORM = [
         { name: 'phone', width: 390, height: 844, phone: true },
         { name: 'desktop', width: 1280, height: 800, phone: false },

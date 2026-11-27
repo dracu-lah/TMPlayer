@@ -14,9 +14,9 @@
 //    landscape and in the desktop's two panes too.
 // SHOTS=1 also writes pictures to design/account-sheet-web/ (index.html shows them).
 import { mkdirSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase } from './helpers'
+import { shotsDir } from './shots'
 /** The `longname` case's name (e2e/fake/mtcute.ts), 60 characters. */
 const LONG_NAME = 'Maximilian-Alexander Featherstonehaugh-Montgomery Fitzgerald'
 
@@ -397,7 +397,7 @@ test.describe('Settings on a phone', () => {
 
 test.describe('pictures', () => {
     test.skip(!process.env.SHOTS, 'SHOTS=1 writes the pictures')
-    const DIR = fileURLToPath(new URL('../../design/account-sheet-web/', import.meta.url))
+    const DIR = shotsDir('account-sheet-web') + '/'
     const shots: { name: string; width: number; height: number; phone: boolean; url: string; open?: boolean; zoom?: number; mid?: boolean }[] = [
         { name: 'phone-390-bar', width: 390, height: 844, phone: true, url: '/' },
         { name: 'phone-390-sheet', width: 390, height: 844, phone: true, url: '/', open: true },

@@ -2,11 +2,11 @@
 // way out, on a phone, a desktop and the TV skin (Chromium: the counters and the clipboard are its own).
 // Nothing is sent anywhere in these flows: the test fails on any request that is not the app's own.
 import { mkdirSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase, noSizeFloor, openCard, openClips, playsPast } from './helpers'
+import { shotsDir } from './shots'
 
-const SHOTS = fileURLToPath(new URL('../../design/web-gaps/WB18/', import.meta.url))
+const SHOTS = shotsDir('web-gaps/WB18') + '/'
 
 const FORMS = [
     { name: 'phone-390', width: 390, height: 844, layout: null, touch: true },

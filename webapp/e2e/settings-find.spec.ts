@@ -6,12 +6,13 @@ import { readFileSync } from 'node:fs'
 import { mkdirSync } from 'node:fs'
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { openTvSettingsPage } from './helpers'
+import { shotsDir } from './shots'
 
 type Catalog = Record<string, Record<string, string>>
 const catalog = (tag: string): Catalog => JSON.parse(readFileSync(new URL(`../../core/src/commonMain/resources/i18n/${tag}.json`, import.meta.url), 'utf8'))
 const de = catalog('de')
 const ar = catalog('ar')
-const SHOTS = new URL('../../design/web-gaps/WB20/', import.meta.url).pathname
+const SHOTS = shotsDir('web-gaps/WB20') + '/'
 
 const IN = {
     // The screen of a phone, not the default tablet-sized one: a tablet is offered the Layout choice (WP-62).

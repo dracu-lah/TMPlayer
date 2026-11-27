@@ -6,11 +6,12 @@
 import { mkdirSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { countCalls, fakeCase, workerCalls } from './helpers'
+import { shotsDir } from './shots'
 
 const STARRED = 40
 const EAGER = 8
 const starId = (slot: number) => -2_000_000 - slot
-const SHOTS = new URL('../../design/web-gaps/WB5/', import.meta.url).pathname
+const SHOTS = shotsDir('web-gaps/WB5') + '/'
 
 interface Form {
     name: string

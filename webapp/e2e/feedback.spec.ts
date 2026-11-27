@@ -6,8 +6,9 @@ import { mkdirSync } from 'node:fs'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test'
 import { fakeCase, noSizeFloor, openTvSettingsPage } from './helpers'
+import { shotsDir } from './shots'
 
-const SHOTS = `${process.cwd()}/../design/web-gaps/WB11`
+const SHOTS = shotsDir('web-gaps/WB11')
 const INBOX = 'https://inbox.test/v1/feedback'
 const CODE = 'FB-7K3Q-M4XP'
 

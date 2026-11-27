@@ -5,8 +5,9 @@
 import { mkdirSync } from 'node:fs'
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { fakeCase, noSizeFloor, openClips, openDetail, openTvSettingsPage } from './helpers'
+import { shotsDir } from './shots'
 
-const SHOTS = `${process.cwd()}/../design/web-gaps/WB8`
+const SHOTS = shotsDir('web-gaps/WB8')
 
 async function shot(page: Page, info: TestInfo, name: string) {
     mkdirSync(SHOTS, { recursive: true })

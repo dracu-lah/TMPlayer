@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase, mockSplitShow, noSizeFloor, playsPast } from './helpers'
+import { shotsUrl, writeShots } from './shots'
 
 const PICTURE = readFileSync(new URL('./media/thumb.jpg', import.meta.url))
 
@@ -122,7 +123,7 @@ test('an anime show lists the episodes its chat lacks from the guide, names the 
 })
 
 // WB19: a show TMDB lists as one season that an episode group splits (Blue Box, 25 + 12), over the chat's three episodes.
-const SPLIT_SHOTS = new URL('../../design/web-gaps/WB19/', import.meta.url)
+const SPLIT_SHOTS = shotsUrl('web-gaps/WB19')
 
 test('a split show lists TMDB\'s seasons with names, days and lengths: a missing row keeps Find, an upcoming one is no control', async ({ page }, info) => {
     const asked: string[] = []
@@ -164,7 +165,7 @@ test('a split show lists TMDB\'s seasons with names, days and lengths: a missing
     await expect(upcoming.first()).toHaveAttribute('aria-label', /Episode 24, airs .*2099/)
     expect(await upcoming.first().evaluate((el) => el.tagName + el.hasAttribute('tabindex'))).toBe('DIVfalse')
     await page.locator('.season-tabs').evaluate((el) => el.scrollIntoView())
-    if (process.env.WB_SHOTS) await page.screenshot({ path: new URL(`${info.project.name}-season1.png`, SPLIT_SHOTS).pathname })
+    if (writeShots()) await page.screenshot({ path: new URL(`${info.project.name}-season1.png`, SPLIT_SHOTS).pathname })
     // A press on a missing row asks where to find it.
     await missing.scrollIntoViewIfNeeded()
     await missing.click()
@@ -181,7 +182,7 @@ test('a split show lists TMDB\'s seasons with names, days and lengths: a missing
     await expect(page.locator('.episode.gap').nth(0).locator('.episode-name')).toHaveText('The 26th Tide')
     await expect(page.locator('.episode.gap').nth(6).locator('.episode-name')).toHaveText('Episode 7')
     await expect(page.locator('.episode.gap.upcoming')).toHaveCount(2)
-    if (process.env.WB_SHOTS) {
+    if (writeShots()) {
         await page.locator('.season-tabs').evaluate((el) => el.scrollIntoView())
         await page.screenshot({ path: new URL(`${info.project.name}-season2.png`, SPLIT_SHOTS).pathname })
     }
@@ -245,7 +246,7 @@ async function recommended(page: Page): Promise<{ height: '4K' | '1080p'; messag
     return form !== 'phone' && hevc ? { height: '4K', message: 25, hevc, device } : { height: '1080p', message: 26, hevc, device }
 }
 
-const shotsDir = new URL('../../design/web-gaps/WB3/', import.meta.url)
+const wb3Shots = shotsUrl('web-gaps/WB3')
 
 test('a video posted three times: the card badges and opens the recommended copy, its page lists it first, the count is the list', async ({ page }, info) => {
     await mockTmdb(page)
@@ -276,9 +277,9 @@ test('a video posted three times: the card badges and opens the recommended copy
     } else {
         await expect(page.getByText(/May stutter/)).toHaveCount(0)
     }
-    if (process.env.WB_SHOTS) {
+    if (writeShots()) {
         await options.nth(0).scrollIntoViewIfNeeded()
-        await page.screenshot({ path: new URL(`${info.project.name}.png`, shotsDir).pathname })
+        await page.screenshot({ path: new URL(`${info.project.name}.png`, wb3Shots).pathname })
     }
     // Play opens the copy the card badged.
     await page.locator('.detail-play').click()
@@ -357,7 +358,7 @@ test.describe('on the TV', () => {
         await expect(options).toHaveCount(3)
         await expect(options.nth(0).locator('.detail-copy-best')).toHaveText('Best for this device')
         await expect(options.nth(2)).toContainText('May stutter on this TV')
-        if (process.env.WB_SHOTS) await page.screenshot({ path: new URL('tv-1920.png', shotsDir).pathname })
+        if (writeShots()) await page.screenshot({ path: new URL('tv-1920.png', wb3Shots).pathname })
         for (let i = 0; i < 4 && !(await options.nth(1).evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
         await expect(options.nth(1)).toBeFocused()
         await page.keyboard.press('Enter')

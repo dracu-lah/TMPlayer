@@ -1,6 +1,7 @@
 // A chat's filters on the Sort menu (U6) and Play random (U16), over the fake Telegram, in every form.
 import { expect, test, type Page } from '@playwright/test'
 import { noSizeFloor, openDetail } from './helpers'
+import { shotsDir, writeShots } from './shots'
 
 test.beforeEach(async ({ page }) => {
     test.setTimeout(90_000)
@@ -16,8 +17,8 @@ const chip = (page: Page, name: string) => page.getByRole('menu').getByRole('men
 
 /** The shot a person looks at, into design/web-gaps/WB13 (E2E_SHOTS=1). */
 async function shot(page: Page, name: string, info: { project: { name: string } }) {
-    if (!process.env.E2E_SHOTS) return
-    await page.screenshot({ path: `../design/web-gaps/WB13/${name}-${info.project.name}.png` })
+    if (!writeShots()) return
+    await page.screenshot({ path: `${shotsDir('web-gaps/WB13')}/${name}-${info.project.name}.png` })
 }
 
 test('the Sort menu lists the order, then the filters as chips; a pick applies at once and is kept for this chat only', async ({ page }, info) => {

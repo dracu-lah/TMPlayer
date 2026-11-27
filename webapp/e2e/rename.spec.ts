@@ -3,8 +3,9 @@
 // reload and another tab, is cut at 120, and "Use the file name" takes it off again.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { noSizeFloor } from './helpers'
+import { shotsDir, writeShots } from './shots'
 
-const SHOTS = process.env.WB_SHOTS ? new URL('../../design/web-gaps/WB14/', import.meta.url).pathname : null
+const SHOTS = writeShots() ? shotsDir('web-gaps/WB14') + '/' : null
 
 test.beforeEach(async ({ page }) => {
     await noSizeFloor(page)
