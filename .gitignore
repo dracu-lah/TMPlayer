@@ -43,3 +43,12 @@ private/
 .env*
 !.env.example
 .pnpm-store/
+
+# Local scratch, never committed
+/40.raw
+/issue-images/
+/seo-data/
+/.playwright-mcp/
+/.claude/worktrees/
+/.claude/settings.local.json
+/*.zip
