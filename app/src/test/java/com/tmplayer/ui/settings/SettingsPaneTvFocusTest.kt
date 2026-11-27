@@ -558,6 +558,7 @@ class SettingsPaneTvFocusTest {
         row("Forget it").press(Key.Enter)
         settle()
         assertPaneRowFocused("Remember searches")
+        rule.waitUntil(5_000) { rule.waitForIdle(); rule.onAllNodes(hasText("Forget it")).fetchSemanticsNodes().isEmpty() }
         assertEquals(0, rule.onAllNodes(hasText("Forget it")).fetchSemanticsNodes().size)
     }
 

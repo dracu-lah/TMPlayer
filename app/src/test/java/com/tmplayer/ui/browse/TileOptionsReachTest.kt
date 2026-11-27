@@ -120,8 +120,10 @@ class TileOptionsReachTest {
         open()
         assertEquals(0, hint().fetchSemanticsNodes().size)
         rule.runOnIdle { first.requestFocus() }
-        rule.waitForIdle()
+        // The hint and its counter arrive after the focus, off the test thread: wait for both.
+        rule.waitUntil(5_000) { rule.waitForIdle(); hint().fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Hold OK or press Menu for options").assertExists()
+        rule.waitUntil(5_000) { runBlocking { settings.hintCount(HintIds.TILE_OPTIONS) } == 1 }
         assertEquals(1, runBlocking { settings.hintCount(HintIds.TILE_OPTIONS) })
     }
 

@@ -122,7 +122,7 @@ class ResumeSyncRowsTest {
         // Off again: no question either, the rows go, the file is left for the delete row.
         reveal(hasText(SWITCH) and hasClickAction()); rule.onNode(hasText(SWITCH) and hasClickAction()).performClick()
         rule.waitUntil(WRITE_MS) { !runBlocking { settings.resumeSync.first() } }
-        rule.waitForIdle()
+        rule.waitUntil(WRITE_MS) { rule.waitForIdle(); rule.onAllNodesWithText("Sync now").fetchSemanticsNodes().isEmpty() }
         rule.onAllNodesWithText("Sync now").assertCountEquals(0)
     }
 

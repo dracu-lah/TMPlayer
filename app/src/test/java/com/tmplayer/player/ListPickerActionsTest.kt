@@ -79,7 +79,8 @@ class ListPickerActionsTest {
     fun `a name another list has makes a second list holding the video`() {
         runBlocking { lists.create("Weekend") }
         actions().create("Weekend", known = 1)
-        until("two lists") { visible().size == 2 }
+        // create() writes the list, then adds the video: wait for the end state, not the first write.
+        until("two lists, one holding the video") { visible().size == 2 && visible().count { it.ids.isNotEmpty() } == 1 }
         assertEquals(listOf("Weekend", "Weekend"), visible().map { it.info.name })
         assertEquals(1, visible().count { it.ids.isNotEmpty() })
     }
