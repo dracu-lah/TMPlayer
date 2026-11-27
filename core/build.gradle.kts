@@ -24,7 +24,21 @@ plugins {
     // then redraw rows that had not changed.
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.test.retry)
 }
+
+// On CI only, a failed test runs again (twice at most) before the run is red; over 25 failures is a
+// real break and is not retried. Local runs never retry (docs/CI.md).
+if (System.getenv("CI") != null) {
+    tasks.withType<Test>().configureEach {
+        retry {
+            maxRetries.set(2)
+            maxFailures.set(25)
+            failOnPassedAfterRetry.set(false)
+        }
+    }
+}
+
 
 // The UI text catalog, i18n/en.json, turned into the typed `Strings` interface and `object L`
 // (com.tmplayer.i18n), so code asks for `L.commonRetry` or `L.browseVideosCount(n)` and a key

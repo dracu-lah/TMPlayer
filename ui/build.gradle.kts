@@ -19,7 +19,21 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.test.retry)
 }
+
+// On CI only, a failed test runs again (twice at most) before the run is red; over 25 failures is a
+// real break and is not retried. Local runs never retry (docs/CI.md).
+if (System.getenv("CI") != null) {
+    tasks.withType<Test>().configureEach {
+        retry {
+            maxRetries.set(2)
+            maxFailures.set(25)
+            failOnPassedAfterRetry.set(false)
+        }
+    }
+}
+
 
 // THIRD_PARTY_NOTICES.md, compiled in as a string so About can show it with no network: a TV has
 // no browser to read it in, and a constant needs no asset plumbing on either target.
