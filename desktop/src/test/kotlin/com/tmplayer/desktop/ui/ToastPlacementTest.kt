@@ -126,6 +126,9 @@ class ToastPlacementTest {
         waitUntil(timeoutMillis = 20_000) { onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()
         onNodeWithText("Undo").performClickCompat()
+        // The click reaches the action on the next frame; on a loaded macOS runner it was not there yet (2026-11-27).
+        waitUntil(timeoutMillis = 20_000) { undone >= 1 }
+        waitForIdle()
         assertEquals(1, undone)
     }
 
