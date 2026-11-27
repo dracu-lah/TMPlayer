@@ -131,6 +131,51 @@ function tooOldStrings(): Plugin {
 }
 
 /**
+ * `import { A, B as C } from '@hugeicons/core-free-icons'` becomes one import per icon from the
+ * package's own subpaths. The package's index re-exports all 6,000 icons: the dev server turned it
+ * into one 21 MB module for every cold page and Node aborted on it in the middle of an end to end
+ * run (V8 "Lazy deopt after a fast API call", 2026-11-27). The build tree-shakes either way.
+ */
+function hugeiconsPerIcon(): Plugin {
+    const from = /import\s*\{([^}]*)\}\s*from\s*(['"])@hugeicons\/core-free-icons\2/g
+    const dir = fileURLToPath(new URL('./node_modules/@hugeicons/core-free-icons/dist/esm/', import.meta.url))
+    // An icon has several names (Cancel01Icon, CancelIcon, Cancel ...): the index says which file holds each.
+    let files: Map<string, string> | null = null
+    const fileOf = (name: string): string | undefined => {
+        if (!files) {
+            files = new Map()
+            const index = readFileSync(`${dir}index.js`, 'utf8')
+            for (const m of index.matchAll(/export \{([^}]*)\} from '\.\/([^']+)'/g)) {
+                for (const e of m[1].split(',')) {
+                    const alias = e.trim().split(/\s+as\s+/)[1]
+                    if (alias) files.set(alias, m[2])
+                }
+            }
+        }
+        return files.get(name)
+    }
+    return {
+        name: 'tmplayer-hugeicons-per-icon',
+        enforce: 'pre',
+        transform(code, id) {
+            if (id.includes('/node_modules/') || !/\.(tsx?|jsx?)(\?|$)/.test(id) || !code.includes('@hugeicons/core-free-icons')) return null
+            const out = code.replace(from, (whole, names: string) => {
+                const parts = names.split(',').map((n) => n.trim()).filter(Boolean)
+                if (parts.some((n) => n.startsWith('type '))) return whole
+                const lines = parts.map((n) => {
+                    const [name, alias] = n.split(/\s+as\s+/)
+                    const file = fileOf(name)
+                    return file ? `import ${alias ?? name} from '${dir}${file}'` : null
+                })
+                // A name the index does not list stays as it was, so the build says so.
+                return lines.some((l) => l === null) ? whole : lines.join('\n')
+            })
+            return out === code ? null : { code: out, map: null }
+        },
+    }
+}
+
+/**
  * /tmdb/* for `pnpm dev` and `pnpm preview`: the poster proxy (tmdb/handler.ts, which Cloudflare
  * runs as functions/tmdb/[[path]].ts) with the key from the environment or local.properties.
  * Without one every lookup answers 503 and the cards keep their thumbnails.
@@ -349,7 +394,7 @@ export default defineConfig(({ mode }) => {
     tvBuild = tv
     return {
         base: tv ? TV_BASE : '/',
-        plugins: [solid(), pageStrings(), pageCatalogs(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, tv ? tvLegacy() : offlineShell()],
+        plugins: [hugeiconsPerIcon(), solid(), pageStrings(), pageCatalogs(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, tv ? tvLegacy() : offlineShell()],
         define: {
             __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
             __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),

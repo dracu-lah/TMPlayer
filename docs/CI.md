@@ -72,7 +72,7 @@ Kotlin lines starting `w:` are warnings, not the cause.
 | Symptom | Cause | State |
 | --- | --- | --- |
 | Web deploy: `Could not resolve ../src/...` | The proxy imported from `webapp/src`, which the sparse checkout lacks | Keep the proxy's imports inside `webapp/tmdb` or `webapp/shared` |
-| Web e2e: 300+ failures, `ERR_CONNECTION_REFUSED` | The Vite dev server ran out of memory after half an hour | Server gets `--max-old-space-size=4096` and a start timeout |
+| Web e2e: 300+ failures, `ERR_CONNECTION_REFUSED` | The Vite dev server died mid-run: it served the icon package's index (6,000 icons, one 21 MB module) and Node aborted (V8 "Lazy deopt after a fast API call") | `vite.config.ts` rewrites each icon import to the one file it needs (`hugeiconsPerIcon`); the server also gets a 4 GB heap and a start timeout |
 | Web e2e `home-defer.spec.ts` counts over the limit | Timing tests that need an idle machine | Tagged `@slow`, run with `pnpm e2e:full` |
 | Android unit tests: a different test fails each run | Compose in Robolectric asserted right after an async write | Four tests now wait for the real end state; if it returns, add retries and shard (see below) |
 | Apple release: "not permitted to create pull requests" | A repo setting | **User only**: Settings, Actions, General, Workflow permissions, "Allow GitHub Actions to create and approve pull requests", or set the repository variable `APPLE_SOURCE_PUSH=true` |
