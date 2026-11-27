@@ -15,7 +15,7 @@
 // One difference from the apps, on purpose: a picture counts only when it is a TMDB still ("/abc.jpg"),
 // the one kind of picture the worker serves (`/tmdb/img/...`); a Kitsu or AniList picture is never
 // drawn by the page, so it is never taken as "the picture" in place of a later source's own.
-import type { SeasonStop } from '../tmdb/extras.ts'
+import type { SeasonStop } from './extras.ts'
 import { plain } from './plain.ts'
 
 export type Source = 'group' | 'seasons' | 'kitsu' | 'jikan' | 'anilist'

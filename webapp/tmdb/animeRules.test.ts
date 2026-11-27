@@ -1,8 +1,8 @@
-// The anime episode guide's rules (src/animeGuide.ts) over the cases of the apps' AnimeEpisodesTest:
+// The anime episode guide's rules (tmdb/animeGuide.ts) over the cases of the apps' AnimeEpisodesTest:
 // the pure resolver, its numbering both ways, the order sources are taken in, and garbage.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import * as g from '../src/animeGuide.ts'
+import * as g from './animeGuide.ts'
 import { counts, date, place, seasonSizes, stillOf, tmdbGroup, title } from './anime-fixtures.ts'
 import { groupOf } from './anime-sources.ts'
 

@@ -179,7 +179,6 @@ jobs:
           sparse-checkout: |
             webapp/functions
             webapp/tmdb
-            webapp/src
 
       - name: Download the site
         uses: actions/download-artifact@v8

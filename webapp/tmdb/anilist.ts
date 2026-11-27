@@ -11,7 +11,7 @@
 import type { Candidate } from './match.ts'
 import type { Extras, Person } from './extras.ts'
 import { rating } from './extras.ts'
-import { plain } from '../src/plain.ts'
+import { plain } from './plain.ts'
 
 export const BASE = 'https://graphql.anilist.co'
 /** AniListApi.DEFAULT_WAIT_MS: how long asking stops after a throttle that names no time. */

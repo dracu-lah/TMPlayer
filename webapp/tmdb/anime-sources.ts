@@ -4,7 +4,7 @@
 // a wrong type, a missing field or an absurd number skips that entry and keeps the rest, and no
 // reader throws (anime-sources.test.ts feeds each truncated, wrong-typed, huge and random input).
 import type { SeasonStop } from './extras.ts'
-import { MAX_EPISODES, MAX_NUMBER, MAX_SEASONS, dateOf, streamingPiece, type GroupEpisode, type ListedEpisode, type Next, type Piece } from '../src/animeGuide.ts'
+import { MAX_EPISODES, MAX_NUMBER, MAX_SEASONS, dateOf, streamingPiece, type GroupEpisode, type ListedEpisode, type Next, type Piece } from './animeGuide.ts'
 
 /** KitsuApi.BASE, PAGE and JikanApi.BASE: how the worker reaches them, and how many episodes a page holds. */
 export const KITSU = 'https://kitsu.io/api/edge'

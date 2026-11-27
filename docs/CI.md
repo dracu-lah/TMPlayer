@@ -52,8 +52,8 @@ Nothing deploys the web player on a push: `webapp.yml` deploys only when started
    after the push in one command: a failed push must stop the deploy.
 2. `gh workflow run webapp.yml -f deploy=production` (or `preview`).
 3. The run is Build, e2e x3, then Deploy to Cloudflare Pages. The Deploy job checks out only
-   `webapp/functions`, `webapp/tmdb` and `webapp/src` (sparse), because wrangler bundles the poster
-   proxy from them. A file the proxy imports from anywhere else needs adding there.
+   `webapp/functions` and `webapp/tmdb` (sparse), because wrangler bundles the poster
+   proxy from them (`tmdb/plain.ts` and `tmdb/animeGuide.ts` live there so it never needs `webapp/src`). A file the proxy imports from anywhere else needs adding there.
 4. After it: open https://web.tmplayer.org and the `/tmdb/...` proxy answers JSON, not the page.
 
 ## Reading a red run
@@ -70,7 +70,7 @@ Kotlin lines starting `w:` are warnings, not the cause.
 
 | Symptom | Cause | State |
 | --- | --- | --- |
-| Web deploy: `Could not resolve ../src/plain.ts` | Sparse checkout lacked `webapp/src` | Fixed in the workflow |
+| Web deploy: `Could not resolve ../src/...` | The proxy imported from `webapp/src`, which the sparse checkout lacks | Keep the proxy's imports inside `webapp/tmdb` |
 | Web e2e: 300+ failures, `ERR_CONNECTION_REFUSED` | The Vite dev server ran out of memory after half an hour | Server gets `--max-old-space-size=4096` and a start timeout |
 | Web e2e `home-defer.spec.ts` counts over the limit | Timing tests that need an idle machine | Tagged `@slow`, run with `pnpm e2e:full` |
 | Android unit tests: a different test fails each run | Compose in Robolectric asserted right after an async write | Four tests now wait for the real end state; if it returns, add retries and shard (see below) |
