@@ -71,6 +71,11 @@ jobs:
       - name: Screen rules tests
         run: pnpm -C webapp test:screens
 
+      # The player, the stream layer, the UI helpers, sync, Telegram and the TV shell: about 1,000
+      # fast tests that run in seconds. They were never run here until 2026-11-27.
+      - name: Player, stream, UI, sync, Telegram and TV unit tests
+        run: pnpm -C webapp test:player && pnpm -C webapp test:stream && pnpm -C webapp test:ui && pnpm -C webapp test:sync && pnpm -C webapp test:tg && pnpm -C webapp test:tv && pnpm -C webapp test:src
+
       # The Telegram id and hash end up in the page's script, exactly as they are in the APK, so
       # only a push or a manual run gets them; a pull request stops at the type check (a release
       # build refuses to run without them, vite.config.ts).

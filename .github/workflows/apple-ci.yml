@@ -1,7 +1,7 @@
 name: Apple CI
 
 # Checks for the iOS and iPadOS app (docs/IOS.md) on every pull request and push to main that
-# touches what it is built from. Like ci.yml it never sees a secret: Telegram's api id and hash are
+# touches what it is built from. Like android-check.yml it never sees a secret: Telegram's api id and hash are
 # dummies, so an unknown contributor's pull request is safe to run.
 #
 # Two jobs:

@@ -1,7 +1,7 @@
 name: Desktop Linux packages
 description: >
   Tests the desktop app, builds the Linux tarball and AppImage into dist/, and runs the packaged
-  app's --self-test from each of them, so that no package whose natives fail to load can leave CI. Shared by ci.yml and release.yml; the caller checks out,
+  app's --self-test from each of them, so that no package whose natives fail to load can leave CI. Shared by desktop-check.yml and release.yml; the caller checks out,
   sets up JDK 21 and Gradle, runs the linux-natives action (it sets TMPLAYER_LINUX_NATIVES, which
   the Gradle build reads), and writes local.properties if the build should carry credentials.
 

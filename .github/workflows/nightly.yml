@@ -29,7 +29,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          last="$(gh run list --workflow ci.yml --branch main --status success --limit 1 --json headSha -q '.[0].headSha' 2>/dev/null || true)"
+          last="$(gh run list --workflow android-check.yml --branch main --status success --limit 1 --json headSha -q '.[0].headSha' 2>/dev/null || true)"
           if [ "${{ github.event_name }}" = workflow_dispatch ] || [ -z "$last" ] || [ "$last" != "$(git rev-parse HEAD)" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
@@ -43,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           fail=0
-          for wf in ci.yml webapp.yml apple-ci.yml; do
+          for wf in android-check.yml desktop-check.yml webapp.yml apple-ci.yml; do
             gh workflow run "$wf" --ref main || fail=1
           done
           exit $fail

@@ -1,0 +1,77 @@
+name: Android check
+
+# Android check: the unit tests of core, ui and app, and the debug APKs. Runs on a pull request
+# that touches the build, by hand, and from nightly.yml when main has new commits. Publishes
+# nothing (the APKs and the test report are 14 day artifacts) and uses no secrets, so it is safe
+# for contributions from people you do not know. Pushes to main run nothing here: the pre-push
+# hook (scripts/ci-local.sh) runs the Linux half first. See docs/CI.md.
+# Split out of ci.yml on 2026-11-27; the desktop half is desktop-check.yml.
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "site/**"
+      - "docs/**"
+      - "**/*.md"
+      - "fastlane/**"
+      - "desktop/packaging/aur/**"
+  workflow_dispatch:
+
+concurrency:
+  group: android-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # No credentials on this path. The app compiles fine without them and says so at runtime,
+      # which is exactly what a fork or a pull request should get.
+      # :core is the shared half (TDLib, settings, downloads, the streaming window) and :ui the
+      # shared Compose half that the desktop app builds on too. Their tests run on a plain JVM,
+      # the way the desktop runs them. Both are Kotlin Multiplatform libraries on AGP's own
+      # plugin, which has no Android host tests here, so jvmTest is the whole of their suites.
+      - name: Run core and ui tests
+        run: ./gradlew :core:jvmTest :ui:jvmTest
+
+      # Debug only: the promo and release variants run the same test sources. Since AGP 9 only
+      # the tested build type (debug) gets a unit test task at all, so this is every app test.
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmplayer-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Publish test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: |
+            core/build/reports/tests/
+            ui/build/reports/tests/
+            app/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore

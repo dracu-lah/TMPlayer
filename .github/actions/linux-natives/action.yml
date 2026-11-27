@@ -3,7 +3,7 @@ description: >
   Builds the TDLib and libmpv libraries that let the desktop AppImage and tarball run on glibc 2.35
   (Ubuntu 22.04 and newer, issue #30), or restores them from the cache, checks every file against
   natives/linux-2-35/PINS.txt and sets TMPLAYER_LINUX_NATIVES for the steps after it, which is what
-  desktop/build.gradle.kts reads. Call it before the desktop-linux action (ci.yml and release.yml).
+  desktop/build.gradle.kts reads. Call it before the desktop-linux action (desktop-check.yml and release.yml).
   The build runs scripts/build-tdlib-linux.sh and scripts/build-mpv-linux-2-35.sh, which use podman
   and an Ubuntu 22.04 image pinned by digest. The cache is keyed by the recipe (natives/ and the
   two scripts), so a cold build (about 20 minutes on a 4 core runner) happens only when that changes.

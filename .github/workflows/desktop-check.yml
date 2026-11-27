@@ -1,14 +1,9 @@
-name: CI
+name: Desktop check
 
-# Every pull request that touches the build, a manual run, and the nightly run (nightly.yml) when
-# main has new commits. Pushes to main run nothing here: scripts/ci-local.sh (the pre-push hook)
-# runs the Linux half on the maintainer's machine first (docs/agents/CI-LOCAL-PLAN.md). This job never touches signing keys
-# or Telegram credentials, so it is safe to run on contributions from people you do not know.
-#
-# A change confined to the site, the docs, Markdown, the store listing text under fastlane/ or
-# the PKGBUILD cannot break a build, so it does not start one: that covers the release job's own
-# "site: the update feed names x.y.z" commit and ordinary doc edits. A push that also touches
-# anything else still runs everything, and workflow_dispatch runs it by hand whatever changed.
+# Desktop check: the desktop app packaged exactly as a release packages it and self-tested from
+# every download (Linux, Windows; macOS only by hand and from nightly). Publishes nothing (14 day
+# artifacts) and uses no secrets. See docs/CI.md.
+# Split out of ci.yml on 2026-11-27; the Android half is android-check.yml.
 on:
   pull_request:
     branches: [main]
@@ -21,63 +16,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: desktop-check-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Test and build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      # No credentials on this path. The app compiles fine without them and says so at runtime,
-      # which is exactly what a fork or a pull request should get.
-      # :core is the shared half (TDLib, settings, downloads, the streaming window) and :ui the
-      # shared Compose half that the desktop app builds on too. Their tests run on a plain JVM,
-      # the way the desktop runs them. Both are Kotlin Multiplatform libraries on AGP's own
-      # plugin, which has no Android host tests here, so jvmTest is the whole of their suites.
-      - name: Run core and ui tests
-        run: ./gradlew :core:jvmTest :ui:jvmTest
-
-      # Debug only: the promo and release variants run the same test sources. Since AGP 9 only
-      # the tested build type (debug) gets a unit test task at all, so this is every app test.
-      - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest
-
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug
-
-      - name: Upload debug APKs
-        uses: actions/upload-artifact@v7
-        with:
-          name: tmplayer-debug
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: Publish test report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results
-          path: |
-            core/build/reports/tests/
-            ui/build/reports/tests/
-            app/build/reports/tests/
-          retention-days: 14
-          if-no-files-found: ignore
-
   # The desktop app, packaged exactly as a release packages it (the same composite actions under
   # .github/actions) and self-tested from every download, so a broken installer shows up on the
   # push that broke it rather than on release day. No credentials: the app builds and loads its
@@ -90,6 +32,7 @@ jobs:
   # build, and glibc-floor.sh fails the job if any native needs more than 2.35.
   desktop-linux:
     name: Desktop (Linux)
+    timeout-minutes: 75
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -132,6 +75,7 @@ jobs:
   # macOS 26, so an older runner could not load it in the self-test.
   desktop-macos:
     name: Desktop (macOS)
+    timeout-minutes: 75
     # Not on pull requests: Apple Silicon DMGs are checked nightly and by hand (CI-LOCAL-PLAN.md).
     if: github.event_name != 'pull_request'
     runs-on: macos-26
@@ -171,6 +115,7 @@ jobs:
 
   desktop-windows:
     name: Desktop (Windows)
+    timeout-minutes: 75
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

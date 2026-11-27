@@ -1,7 +1,7 @@
 name: Desktop macOS package
 description: >
   Tests the desktop app, builds the Apple Silicon app bundle, signs it ad hoc, runs its --self-test,
-  and packs it into dist/TMPlayer-<version>-macos-arm64.dmg. Shared by ci.yml and release.yml; the
+  and packs it into dist/TMPlayer-<version>-macos-arm64.dmg. Shared by desktop-check.yml and release.yml; the
   caller checks out on an arm64 macOS 26 runner (the bundled TDLib needs macOS 26), sets up JDK 21
   and Gradle, and writes local.properties if the build should carry credentials.
 

@@ -11,6 +11,7 @@ Where the rest lives, read when the task touches it:
 | --- | --- |
 | Building, JDK, credentials, version pins, test devices | [docs/BUILDING.md](docs/BUILDING.md) |
 | Cutting a release | [docs/RELEASING.md](docs/RELEASING.md) |
+| What each CI workflow runs on and what publishes or deploys, reading a red run | [docs/CI.md](docs/CI.md) |
 | iPhone and iPad: the port, Mac setup, tests, Linux checks, apple-v releases | [docs/IOS.md](docs/IOS.md) |
 | How the code is laid out | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Stores, package managers, Telegram's terms | [docs/distribution/README.md](docs/distribution/README.md) |

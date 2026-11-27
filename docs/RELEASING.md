@@ -222,7 +222,7 @@ gh api repos/dracu-lah/TMPlayer/actions/runs/<run-id>/pending_deployments \
   -f "environment_ids[]=<id>" -f state=approved -f comment="release"
 ```
 
-Ordinary pushes and pull requests run `.github/workflows/ci.yml`, which tests and builds a
+Ordinary pushes and pull requests run `.github/workflows/android-check.yml` and `desktop-check.yml` (see docs/CI.md), which tests and builds a
 debug APK. That job never sees the signing key or the Telegram credentials, so a pull request
 from a stranger cannot reach them.
 

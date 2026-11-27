@@ -169,7 +169,7 @@ jobs:
           LOG_UPLOAD_URL=$LOG_UPLOAD_URL
           EOF
 
-      # CI runs the same tests on every push to main, so a tag on code CI has already passed
+      # The Android check runs the same tests (on a pull request, and nightly when main moved), so a tag on code CI has already passed
       # does not run them again: that took about an hour of the 1.25.0 run. The tests do run
       # when no passing CI run is found on an ancestor of the tag, or when anything since that
       # run touches more than the paths CI itself skips (plus the store listing text).
@@ -180,7 +180,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           safe='^(site/|docs/|fastlane/|desktop/packaging/aur/)|\.md$'
-          for sha in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" --jq '.workflow_runs[].head_sha'); do
+          for sha in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-check.yml/runs?branch=main&status=success&per_page=30" --jq '.workflow_runs[].head_sha'); do
             git merge-base --is-ancestor "$sha" HEAD 2>/dev/null || continue
             changed="$(git diff --name-only "$sha" HEAD | grep -Ev "$safe" || true)"
             if [ -z "$changed" ]; then

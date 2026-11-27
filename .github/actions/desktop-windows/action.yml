@@ -2,7 +2,7 @@ name: Desktop Windows packages
 description: >
   Tests the desktop app, builds the MSI into dist/, and runs --self-test from the installed MSI.
   With upgrade-from, an older MSI is built and
-  installed first, and the new one must replace it rather than install beside it. Shared by ci.yml
+  installed first, and the new one must replace it rather than install beside it. Shared by desktop-check.yml
   and release.yml; the caller checks out, sets up JDK 21 and Gradle, and writes local.properties
   if the build should carry credentials.
 

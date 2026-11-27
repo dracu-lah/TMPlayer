@@ -139,7 +139,7 @@ cmd_stop() {
 case "${1:-}" in
   status) cmd_status ;;
   start) cmd_start ;;
-  fetch-msi) cmd_fetch_msi "${2:?CI run id (gh run list -w ci.yml)}" ;;
+  fetch-msi) cmd_fetch_msi "${2:?CI run id (gh run list -w desktop-check.yml)}" ;;
   copy-msi) cmd_copy_msi "${2:?path to the .msi}" ;;
   copy-jars) cmd_copy_jars ;;
   queue-install) shift; cmd_queue_install "$@" ;;

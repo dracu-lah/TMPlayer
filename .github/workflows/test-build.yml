@@ -1,7 +1,7 @@
 name: Test build (macOS)
 
 # A DMG that can sign in, for trying a commit on a Mac without a tag or a release. The DMG that
-# ci.yml builds has no Telegram credentials (that workflow never touches secrets), so it stops at
+# desktop-check.yml builds has no Telegram credentials (that workflow never touches secrets), so it stops at
 # "No Telegram API credentials in this build". This one writes them the way release.yml does.
 #
 # Started by hand only (Actions, Test build (macOS), Run workflow), and the release environment
