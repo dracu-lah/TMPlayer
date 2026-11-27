@@ -39,6 +39,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # Robolectric downloads an Android jar per SDK from Maven Central the first time a test needs
+      # it, and a failed download failed 203 test classes at once (2026-11-27). Kept between runs.
+      - name: Restore Robolectric's Android jars
+        id: robolectric
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+
       # No credentials on this path. The app compiles fine without them and says so at runtime,
       # which is exactly what a fork or a pull request should get.
       # :core is the shared half (TDLib, settings, downloads, the streaming window) and :ui the
@@ -52,6 +61,14 @@ jobs:
       # the tested build type (debug) gets a unit test task at all, so this is every app test.
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest
+
+      - name: Save Robolectric's Android jars
+        if: always() && steps.robolectric.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
