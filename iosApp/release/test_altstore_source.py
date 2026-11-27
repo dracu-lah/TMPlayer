@@ -183,8 +183,8 @@ class AddTest(unittest.TestCase):
         with open(self.source, encoding="utf-8") as file:
             shots = json.load(file)["apps"][0]["screenshots"]
         base = "https://raw.githubusercontent.com/owner/TMPlayer/main/iosApp/screenshots"
-        self.assertEqual([f"{base}/iphone/1-home.png", f"{base}/iphone/2-player.png"], [s["url"] for s in shots["iphone"]])
-        self.assertEqual({"url": f"{base}/ipad/1%20home.png", "width": 2064, "height": 2752}, shots["ipad"][0])
+        self.assertEqual([f"{base}/iphone/1-home.png", f"{base}/iphone/2-player.png"], [s["imageURL"] for s in shots["iphone"]])
+        self.assertEqual({"imageURL": f"{base}/ipad/1%20home.png", "width": 2064, "height": 2752}, shots["ipad"][0])
         self.assertEqual((1290, 2796), (shots["iphone"][0]["width"], shots["iphone"][0]["height"]))
         # A published check finds each file in the checkout, and refuses one that is gone.
         self.add(make_ipa(self.folder), "--repo", "owner/TMPlayer", "--developer", "owner", "--root", root)

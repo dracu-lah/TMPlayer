@@ -24,9 +24,9 @@
     "colour": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
     "screenshot": {
       "type": "object",
-      "required": ["url"],
+      "required": ["imageURL"],
       "properties": {
-        "url": { "$ref": "#/definitions/https" },
+        "imageURL": { "$ref": "#/definitions/https" },
         "width": { "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 }
       }

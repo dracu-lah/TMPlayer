@@ -189,7 +189,7 @@ def screenshots_of(root, repo, branch, folder=SCREENSHOTS_PATH):
             if size is None:
                 fail(f"{folder}/{device}/{name} is not a PNG or JPEG whose size can be read")
             url = f"{raw_base(repo, branch)}/{folder}/{device}/{urllib.parse.quote(name)}"
-            pictures.append({"url": url, "width": size[0], "height": size[1]})
+            pictures.append({"imageURL": url, "width": size[0], "height": size[1]})
         found[device] = pictures
     return found
 
@@ -468,7 +468,7 @@ def problems(source, published, root=None):
                     if not isinstance(picture, dict):
                         found.append(f"{where}: {device} screenshot {number} is not an object")
                         continue
-                    address(f"{where}: {device} screenshot {number}", picture, "url", True)
+                    address(f"{where}: {device} screenshot {number}", picture, "imageURL", True)
                     for key in ("width", "height"):
                         if key in picture and not (isinstance(picture[key], int) and picture[key] > 0):
                             found.append(f"{where}: {device} screenshot {number} has a bad {key}")
