@@ -136,9 +136,6 @@ g_web() {
   "${GRADLE[@]}" -q :core:webRules || return 1
   local pm; pm=$(grep -oP '"packageManager": "pnpm@\K[0-9.]+' webapp/package.json)
   local projects="--project=chromium"; [ "$FULL" = 1 ] && projects="--project=chromium --project=webkit --project=webkit-iphone"
-  # sync.spec.ts rewrites the tracked design shots in design/web-sync; put them back unless they
-  # had edits of their own before the run.
-  local shots_clean=0; git diff --quiet -- design/web-sync && shots_clean=1
   # Install, type check and the node tests run in the same image as the e2e, with node_modules in a
   # volume so the host's copy is not touched. HOME is set for the browsers (the CI image needs it too).
   local rc=0
@@ -160,7 +157,6 @@ g_web() {
       pnpm -C webapp test:src
       pnpm -C webapp exec playwright test $projects
     " || rc=$?
-  [ "$shots_clean" = 1 ] && git checkout -- design/web-sync
   return $rc
 }
 
