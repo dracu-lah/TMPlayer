@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as f from './anime-fixtures.ts'
 import { ANIME_CALLS, createHandler, type Deps } from './handler.ts'
-import { readAnswer } from './animeGuide.ts'
+import { readAnswer } from '../shared/animeGuide.ts'
 
 const KEY = 'test-key-123'
 const ORIGIN = 'https://web.example'

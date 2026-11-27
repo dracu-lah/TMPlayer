@@ -56,7 +56,7 @@
 import { GROUP_ID, applySplit, buildSplit, chooseGroup, episodeGroups, extras, splitEpisode, type Extras, type SeasonStop } from './extras.ts'
 import { mergeChoices } from './choices.ts'
 import { best, accepts, normalise, parseHints, trusted, type Ask, type Candidate } from './match.ts'
-import * as guide from './animeGuide.ts'
+import * as guide from '../shared/animeGuide.ts'
 import * as src from './anime-sources.ts'
 import * as skipSrc from './skiptimes.ts'
 import { BASE as ANILIST, DEFAULT_WAIT_MS as ANILIST_WAIT, EXTRAS_QUERY, SEARCH_QUERY, candidates as aniCandidates, extrasOf as aniExtras, imageAddress } from './anilist.ts'

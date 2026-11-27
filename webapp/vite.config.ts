@@ -141,10 +141,8 @@ function tmdbProxy(): Plugin {
         fetch: (request) => fetch(request),
         cache: { match: async (r) => kept.get(r.url)?.clone(), put: async (r, res) => void kept.set(r.url, res) },
     })
-    const mount = (use: (path: string, fn: (req: any, res: any, next: () => void) => void) => void) =>
-        use('/tmdb', (req, res, next) => {
-            // The page imports tmdb/animeGuide.ts and its siblings as modules: those are files, not proxy calls.
-            if (/\.tsx?(\?|$)/.test(req.url ?? '')) return next()
+    const mount = (use: (path: string, fn: (req: any, res: any) => void) => void) =>
+        use('/tmdb', (req, res) => {
             const url = new URL(req.originalUrl ?? req.url, `http://${req.headers.host ?? 'localhost'}`)
             handle(new Request(url, { method: req.method, headers: req.headers }), { TMDB_API_KEY: secret('TMDB_API_KEY') }).then(
                 async (r) => {

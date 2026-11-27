@@ -6,7 +6,7 @@
 // Also SeasonSplit (a show TMDB lists as one season that an episode group splits, Blue Box: 37 as
 // 25 + 12), the part of the apps' season guide the worker has to do: extras.test.ts holds the cases of
 // the apps' SeasonSplitTest and the garbage of GarbageInputTest.
-import { MAX_EPISODES, MAX_NUMBER, MAX_SEASONS, placeholder, type GroupEpisode, type ListedEpisode } from './animeGuide.ts'
+import { MAX_EPISODES, MAX_NUMBER, MAX_SEASONS, placeholder, type GroupEpisode, type ListedEpisode } from '../shared/animeGuide.ts'
 
 /** MetaRules.MIN_VOTES, CAST_LIMIT. */
 const MIN_VOTES = 25
